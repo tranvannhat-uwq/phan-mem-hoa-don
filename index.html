@@ -19,7 +19,7 @@
 </head>
 <body>
 
-  <div class="app-container">
+  <div class="app-container auth-hidden" id="app-layout">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
@@ -95,9 +95,16 @@
             <span class="db-status-badge status-local" id="db-status-badge">Cục bộ (LocalStorage)</span>
           </div>
         </div>
-        <div style="display: flex; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div id="user-info-header" style="display: none; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--text-secondary); background: rgba(255, 255, 255, 0.05); padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <i data-lucide="user" style="width: 14px; height: 14px; color: var(--color-primary);"></i>
+            <span id="header-user-display" style="font-weight: 500;"></span>
+          </div>
           <button class="btn btn-secondary" id="btn-quick-order">
             <i data-lucide="plus-circle"></i> Lên đơn nhanh
+          </button>
+          <button class="btn btn-danger" id="btn-logout" title="Đăng xuất" style="display: none; padding: 0.625rem 0.875rem;">
+            <i data-lucide="log-out"></i>
           </button>
         </div>
       </header>
@@ -777,6 +784,12 @@
               <!-- Dynamic price list options -->
             </select>
           </div>
+          <div class="form-group" id="cust-managed-by-section" style="margin-bottom: 0;">
+            <label class="form-label" for="cust-managed-by">Nhân viên quản lý (Kinh doanh)</label>
+            <select class="form-control" id="cust-managed-by" style="width: 100%;">
+              <!-- Dynamic user options filled by JS -->
+            </select>
+          </div>
           <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
             <input type="checkbox" id="cust-shipping-support" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--color-primary);">
             <label for="cust-shipping-support" style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; font-weight: 500; user-select: none;">
@@ -1022,6 +1035,30 @@
           <i data-lucide="check"></i> Lưu vào hệ thống
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Login Screen Overlay -->
+  <div id="login-screen" class="login-overlay">
+    <div class="login-card">
+      <div class="login-header">
+        <i data-lucide="shield-check" class="login-logo" style="width: 48px; height: 48px; color: var(--color-primary); margin-bottom: 0.5rem; display: block; margin-left: auto; margin-right: auto;"></i>
+        <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff; text-align: center; margin-bottom: 0.25rem;">HỆ THỐNG ĐĂNG NHẬP</h2>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); text-align: center; margin-bottom: 1.5rem;">Phần mềm Quản lý Bán hàng & Hóa đơn</p>
+      </div>
+      <form id="login-form" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div class="form-group">
+          <label class="form-label" for="login-username">Tên đăng nhập</label>
+          <input type="text" class="form-control" id="login-username" placeholder="Nhập tài khoản" required autocomplete="username" style="width: 100%;">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="login-password">Mật khẩu</label>
+          <input type="password" class="form-control" id="login-password" placeholder="Nhập mật khẩu" required autocomplete="current-password" style="width: 100%;">
+        </div>
+        <button type="submit" class="btn btn-primary" style="padding: 0.75rem; margin-top: 0.5rem; width: 100%; font-weight: 600;">
+          <i data-lucide="log-in"></i> ĐĂNG NHẬP
+        </button>
+      </form>
     </div>
   </div>
 

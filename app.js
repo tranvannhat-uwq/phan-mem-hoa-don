@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Cấu hình kết nối Supabase dùng chung cho cả công ty (Nhập thông tin bên dưới để tự động đăng nhập)
 const COMPANY_SUPABASE_URL = "https://coebrkerpcgwckkwxlfo.supabase.co"; 
-const COMPANY_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvZWJya2VycGNnd2Nra3d4bGZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNTA2MDAsImV4cCI6MjA5NzcyNjYwMH0.3Y5ECisaADSefH8il1ECWGC1sd1Mh-PzWXM1CV2xTXw";
+const COMPANY_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvZWJya2VycGNnd2Nra3d4bGZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNTA2MDAsImV4cCI6MjA5NzcyNjYwMH0.3Y5ECisaADSefH8il1ECWGC1sd1Mh-PzWXM1CV2xTXw"; 
 
 // App State
 let state = {
@@ -26,6 +26,8 @@ let state = {
   savedOrders: [],
   customers: [],
   pricelists: [],
+  users: [],
+  currentUser: null,
   activeCustomerId: '',
   activeCustomerBrand: 'Tất cả',
   currentTab: 'dashboard-panel',
@@ -39,6 +41,7 @@ let tableProductsName = 'products';
 let tableOrdersName = 'orders';
 let tableCustomersName = 'customers';
 let tablePricelistsName = 'pricelists';
+let tableUsersName = 'users';
 
 // Default Mock Products (Simplified to Code and Name)
 const defaultProducts = [
@@ -216,6 +219,39 @@ async function initApp() {
     updateDbStatusUI('local');
   }
   
+  // Set up Login form submit listener
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', handleLogin);
+  }
+
+  // Set up Logout button listener
+  const logoutBtn = document.getElementById('btn-logout');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+  }
+
+  // Check auth session
+  const isAuth = sessionStorage.getItem('billing_system_auth') === 'true';
+  const username = sessionStorage.getItem('billing_system_username');
+  
+  if (isAuth && username) {
+    const user = state.users.find(u => u.username === username);
+    if (user) {
+      state.currentUser = user;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-layout').classList.remove('auth-hidden');
+      document.getElementById('user-info-header').style.display = 'flex';
+      document.getElementById('btn-logout').style.display = 'inline-flex';
+      document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+      applyUserPermissions(user);
+    } else {
+      showLoginGate();
+    }
+  } else {
+    showLoginGate();
+  }
+
   // Initial renders
   populatePricelistsDropdowns();
   renderAll();
@@ -243,7 +279,10 @@ function loadLocalStorageBackup() {
   }
   
   if (storedOrders) {
-    state.savedOrders = JSON.parse(storedOrders);
+    state.savedOrders = JSON.parse(storedOrders).map(o => ({
+      ...o,
+      createdBy: o.createdBy || 'admin'
+    }));
   } else {
     state.savedOrders = [];
     localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
@@ -253,11 +292,27 @@ function loadLocalStorageBackup() {
   if (storedCustomers) {
     state.customers = JSON.parse(storedCustomers).map(c => ({
       ...c,
-      pricelistId: c.pricelistId || 'custom'
+      pricelistId: c.pricelistId || 'custom',
+      managedBy: c.managedBy || 'nhat'
     }));
   } else {
     state.customers = [];
     localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  }
+
+  const storedUsers = localStorage.getItem('billing_system_users');
+  if (storedUsers) {
+    state.users = JSON.parse(storedUsers);
+  } else {
+    // Default offline fallback accounts
+    state.users = [
+      { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
+      { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
+      { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
+      { id: 'u-sale1', username: 'sale1', password: '123', displayName: 'Sale Nguyễn Văn A', role: 'sale' },
+      { id: 'u-sale2', username: 'sale2', password: '123', displayName: 'Sale Lê Văn B', role: 'sale' }
+    ];
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
   }
 
   const storedPricelists = localStorage.getItem('billing_system_pricelists');
@@ -315,6 +370,7 @@ async function connectSupabase(url, key, verbose = true) {
       tableOrdersName = 'orders';
       tableCustomersName = 'customers';
       tablePricelistsName = 'pricelists';
+      tableUsersName = 'users';
       console.log('Using tables: products, orders, and customers');
     } else if (testWlErr) {
       throw testWlErr;
@@ -323,6 +379,7 @@ async function connectSupabase(url, key, verbose = true) {
       tableOrdersName = 'wl_orders';
       tableCustomersName = 'wl_customers';
       tablePricelistsName = 'wl_pricelists';
+      tableUsersName = 'wl_users';
       console.log('Using tables: wl_products, wl_orders, and wl_customers');
     }
     
@@ -411,7 +468,9 @@ async function fetchCloudData() {
       totalDiscount: parseFloat(order.total_discount),
       shippingSupport: order.shipping_support || false,
       shippingDiscount: parseFloat(order.shipping_discount || 0),
-      totalPayable: parseFloat(order.total_payable)
+      totalPayable: parseFloat(order.total_payable),
+      pricelistId: order.pricelist_id || 'retail',
+      createdBy: order.created_by || 'admin'
     }));
 
     // 3. Fetch Customers
@@ -434,7 +493,8 @@ async function fetchCloudData() {
         debt: parseFloat(cust.debt || 0),
         totalTransaction: parseFloat(cust.total_transaction || 0),
         notes: cust.notes || '',
-        pricelistId: cust.pricelist_id || 'custom'
+        pricelistId: cust.pricelist_id || 'custom',
+        managedBy: cust.managed_by || 'nhat'
       }));
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
     } catch (custErr) {
@@ -480,6 +540,45 @@ async function fetchCloudData() {
       localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
     } catch (plErr) {
       console.warn("Could not load pricelists from Supabase:", plErr.message);
+    }
+
+    // 5. Fetch Users
+    try {
+      const { data: userData, error: userErr } = await supabaseClient
+        .from(tableUsersName)
+        .select('*');
+
+      if (userErr) throw userErr;
+
+      state.users = (userData || []).map(u => ({
+        id: u.id,
+        username: u.username,
+        password: u.password,
+        displayName: u.display_name,
+        role: u.role || 'sale'
+      }));
+
+      // Seed default users if empty on Supabase
+      if (state.users.length === 0) {
+        state.users = [
+          { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
+          { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
+          { id: 'u-sale1', username: 'sale1', password: '123', displayName: 'Sale Nguyễn Văn A', role: 'sale' },
+          { id: 'u-sale2', username: 'sale2', password: '123', displayName: 'Sale Lê Văn B', role: 'sale' }
+        ];
+        for (const u of state.users) {
+          await supabaseClient.from(tableUsersName).upsert({
+            id: u.id,
+            username: u.username,
+            password: u.password,
+            display_name: u.displayName,
+            role: u.role
+          });
+        }
+      }
+      localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+    } catch (uErr) {
+      console.warn("Could not load users from Supabase:", uErr.message);
     }
     
   } catch(err) {
@@ -590,7 +689,8 @@ async function dbSaveCustomer(customer) {
         debt: customer.debt,
         total_transaction: customer.totalTransaction,
         notes: customer.notes,
-        pricelist_id: customer.pricelistId || 'custom'
+        pricelist_id: customer.pricelistId || 'custom',
+        managed_by: customer.managedBy || 'nhat'
       };
       
       const { error } = await supabaseClient
@@ -742,7 +842,9 @@ async function dbSaveOrder(order) {
         shipping_support: order.shippingSupport || false,
         shipping_discount: order.shippingDiscount || 0,
         total_payable: order.totalPayable,
-        created_at: order.date
+        created_at: order.date,
+        pricelist_id: order.pricelistId || 'retail',
+        created_by: order.createdBy || 'admin'
       };
       
       const { error } = await supabaseClient
@@ -855,14 +957,18 @@ async function syncLocalToCloud() {
     if (localOrders.length > 0) {
       const dbRows = localOrders.map(o => ({
         id: o.id,
+        customer_id: o.customerId || null,
         customer_name: o.customerName,
         notes: o.notes,
         items: o.items,
         total_market: o.totalMarket,
         total_discount: o.totalDiscount,
+        shipping_support: o.shippingSupport || false,
+        shipping_discount: o.shippingDiscount || 0,
         total_payable: o.totalPayable,
         created_at: o.date,
-        pricelist_id: o.pricelistId || 'retail'
+        pricelist_id: o.pricelistId || 'retail',
+        created_by: o.createdBy || 'admin'
       }));
       
       const { error } = await supabaseClient
@@ -888,7 +994,8 @@ async function syncLocalToCloud() {
           debt: c.debt,
           total_transaction: c.totalTransaction,
           notes: c.notes,
-          pricelist_id: c.pricelistId || 'custom'
+          pricelist_id: c.pricelistId || 'custom',
+          managed_by: c.managedBy || 'nhat'
         }));
         
         const { error } = await supabaseClient
@@ -1077,15 +1184,23 @@ function switchTab(panelId) {
 }
 
 function updateDashboardStats() {
+  let userOrders = state.savedOrders;
+  let userCustomers = state.customers;
+
+  if (state.currentUser && state.currentUser.role === 'sale') {
+    userOrders = state.savedOrders.filter(o => o.createdBy === state.currentUser.username);
+    userCustomers = state.customers.filter(c => c.managedBy === state.currentUser.username);
+  }
+
   document.getElementById('stat-total-products').innerText = state.products.length;
-  document.getElementById('stat-total-orders').innerText = state.savedOrders.length;
+  document.getElementById('stat-total-orders').innerText = userOrders.length;
   
-  const totalRevenue = state.savedOrders.reduce((sum, order) => sum + (order.totalPayable || 0), 0);
+  const totalRevenue = userOrders.reduce((sum, order) => sum + (order.totalPayable || 0), 0);
   document.getElementById('stat-total-revenue').innerText = formatCurrency(totalRevenue);
   
   let totalItemsCount = 0;
   let totalDiscountSum = 0;
-  state.savedOrders.forEach(order => {
+  userOrders.forEach(order => {
     (order.items || []).forEach(item => {
       totalItemsCount += Number(item.quantity || 1);
       totalDiscountSum += Number(item.discountPercent || 0) * Number(item.quantity || 1);
@@ -1097,7 +1212,7 @@ function updateDashboardStats() {
   document.getElementById('stat-avg-discount').innerText = `${avgDiscount}%`;
 
   const recentOrdersBody = document.getElementById('dashboard-recent-orders-body');
-  if (state.savedOrders.length === 0) {
+  if (userOrders.length === 0) {
     recentOrdersBody.innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
@@ -1108,7 +1223,7 @@ function updateDashboardStats() {
     return;
   }
 
-  const sortedOrders = [...state.savedOrders]
+  const sortedOrders = [...userOrders]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 5);
 
@@ -1618,6 +1733,10 @@ function openCustomerModal(index = -1) {
     if (plSelect) plSelect.value = 'custom';
     const discSection = document.getElementById('cust-brand-discounts-section');
     if (discSection) discSection.style.display = 'block';
+    const mBySelect = document.getElementById('cust-managed-by');
+    if (mBySelect) {
+      mBySelect.value = state.currentUser ? state.currentUser.username : 'nhat';
+    }
   } else {
     title.innerText = 'Chỉnh sửa khách hàng';
     const customer = state.customers[index];
@@ -1646,6 +1765,11 @@ function openCustomerModal(index = -1) {
       const brand = input.getAttribute('data-brand');
       input.value = (customer.brandDiscounts && customer.brandDiscounts[brand] !== undefined) ? customer.brandDiscounts[brand] : 0;
     });
+
+    const mBySelect = document.getElementById('cust-managed-by');
+    if (mBySelect) {
+      mBySelect.value = customer.managedBy || 'nhat';
+    }
   }
 }
 
@@ -1666,6 +1790,19 @@ async function saveCustomer() {
   const debt = parseFloat(document.getElementById('cust-debt').value) || 0;
   const notes = document.getElementById('cust-notes').value.trim();
   const pricelistId = document.getElementById('cust-pricelist').value;
+  
+  let managedBy = 'nhat';
+  if (state.currentUser) {
+    if (state.currentUser.role === 'sale') {
+      if (index === -1) {
+        managedBy = state.currentUser.username;
+      } else {
+        managedBy = state.customers[index].managedBy || state.currentUser.username;
+      }
+    } else {
+      managedBy = document.getElementById('cust-managed-by').value;
+    }
+  }
   
   // Validate duplicate code
   const duplicateCode = state.customers.some((c, idx) => c.code === code && idx !== index);
@@ -1694,7 +1831,8 @@ async function saveCustomer() {
     debt,
     totalTransaction: index === -1 ? 0 : state.customers[index].totalTransaction || 0,
     notes,
-    pricelistId
+    pricelistId,
+    managedBy
   };
   
   const saved = await dbSaveCustomer(customerData);
@@ -1752,6 +1890,9 @@ function renderCustomersTable() {
   const searchVal = document.getElementById('customer-search-input').value.toLowerCase().trim();
   
   const filtered = state.customers.filter(c => {
+    if (state.currentUser && state.currentUser.role === 'sale') {
+      if (c.managedBy !== state.currentUser.username) return false;
+    }
     return c.code.toLowerCase().includes(searchVal) || 
            c.name.toLowerCase().includes(searchVal) || 
            (c.phone && c.phone.includes(searchVal));
@@ -2321,11 +2462,14 @@ function setupInvoiceCreator() {
         return;
       }
       
-      const matches = state.customers.filter(c => 
-        c.code.toLowerCase().includes(val) || 
-        c.name.toLowerCase().includes(val) || 
-        (c.phone && c.phone.includes(val))
-      );
+      const matches = state.customers.filter(c => {
+        if (state.currentUser && state.currentUser.role === 'sale') {
+          if (c.managedBy !== state.currentUser.username) return false;
+        }
+        return c.code.toLowerCase().includes(val) || 
+               c.name.toLowerCase().includes(val) || 
+               (c.phone && c.phone.includes(val));
+      });
       
       if (matches.length === 0) {
         custSuggestions.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Không tìm thấy khách hàng</li>`;
@@ -2950,7 +3094,8 @@ async function saveActiveOrder() {
       debt: 0,
       totalTransaction: 0,
       notes: 'Thêm nhanh từ màn hình lên đơn',
-      pricelistId: 'custom'
+      pricelistId: 'custom',
+      managedBy: state.currentUser ? state.currentUser.username : 'nhat'
     };
     
     const custSaved = await dbSaveCustomer(newCustomer);
@@ -3023,6 +3168,7 @@ async function saveActiveOrder() {
   const pricelistId = plSelect ? plSelect.value : 'retail';
 
   const orderId = `HD-${Date.now().toString().slice(-6)}`;
+  const createdBy = state.currentUser ? state.currentUser.username : 'admin';
   const newOrder = {
     id: orderId,
     customerId,
@@ -3037,7 +3183,8 @@ async function saveActiveOrder() {
     shippingSupport: isShippingSupport,
     shippingDiscount,
     totalPayable: finalPayable,
-    pricelistId
+    pricelistId,
+    createdBy
   };
 
   const saved = await dbSaveOrder(newOrder);
@@ -3184,9 +3331,12 @@ function renderHistoryOrders() {
   const container = document.getElementById('history-orders-container');
   const searchVal = document.getElementById('history-search-input').value.toLowerCase().trim();
 
-  const filtered = state.savedOrders.filter(o => 
-    o.id.toLowerCase().includes(searchVal) || o.customerName.toLowerCase().includes(searchVal)
-  );
+  const filtered = state.savedOrders.filter(o => {
+    if (state.currentUser && state.currentUser.role === 'sale') {
+      if (o.createdBy !== state.currentUser.username) return false;
+    }
+    return o.id.toLowerCase().includes(searchVal) || o.customerName.toLowerCase().includes(searchVal);
+  });
 
   if (filtered.length === 0) {
     container.innerHTML = `
@@ -3635,4 +3785,142 @@ function downloadExcelTemplate() {
   XLSX.utils.book_append_sheet(wb, ws, "Danh Sach San Pham");
   XLSX.writeFile(wb, "Mau_Danh_Sach_San_Pham.xlsx");
   showToast("Đã tải xuống file Excel mẫu thành công!");
+}
+
+// --- Authentication & Role-Based Access Control ---
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
+  const passwordInput = document.getElementById('login-password').value.trim();
+
+  // Find user in state
+  const user = state.users.find(u => u.username === usernameInput && u.password === passwordInput);
+  if (user) {
+    state.currentUser = user;
+    sessionStorage.setItem('billing_system_auth', 'true');
+    sessionStorage.setItem('billing_system_username', user.username);
+    
+    // Hide login screen and show app layout
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-layout').classList.remove('auth-hidden');
+    
+    // Show header info & logout button
+    document.getElementById('user-info-header').style.display = 'flex';
+    document.getElementById('btn-logout').style.display = 'inline-flex';
+    document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+    
+    // Apply role-based visibility permissions
+    applyUserPermissions(user);
+    
+    // Re-render components with filtered data
+    renderAll();
+    
+    showToast(`Chào mừng ${user.displayName} quay trở lại!`, 'success');
+  } else {
+    showToast('Tên đăng nhập hoặc mật khẩu không chính xác!', 'danger');
+  }
+}
+
+function handleLogout() {
+  sessionStorage.removeItem('billing_system_auth');
+  sessionStorage.removeItem('billing_system_username');
+  state.currentUser = null;
+  location.reload();
+}
+
+function showLoginGate() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-layout').classList.add('auth-hidden');
+  document.getElementById('user-info-header').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+}
+
+function applyUserPermissions(user) {
+  if (!user) return;
+  const role = user.role;
+
+  // Toggle nav links visibility
+  const navLinks = document.querySelectorAll('.nav-link');
+  navLinks.forEach(link => {
+    const target = link.getAttribute('data-target');
+    const navItem = link.parentElement;
+    
+    if (role === 'sale') {
+      // Sale: Only allow 'invoice-panel' and 'customers-panel'
+      if (target === 'invoice-panel' || target === 'customers-panel') {
+        navItem.style.display = 'block';
+      } else {
+        navItem.style.display = 'none';
+      }
+    } else if (role === 'accounting') {
+      // Accountant: Allow everything except 'settings-panel' (Db config)
+      if (target === 'settings-panel') {
+        navItem.style.display = 'none';
+      } else {
+        navItem.style.display = 'block';
+      }
+    } else {
+      // Admin: Allow everything
+      navItem.style.display = 'block';
+    }
+  });
+
+  // If sale, auto switch tab to invoice-panel
+  if (role === 'sale') {
+    switchTab('invoice-panel');
+  }
+
+  // Populate "managed-by" dropdown in customer modal
+  populateManagedByDropdown();
+
+  // Hide/Show "managed-by" field in customer modal based on role
+  const managedBySection = document.getElementById('cust-managed-by-section');
+  if (managedBySection) {
+    if (role === 'sale') {
+      managedBySection.style.display = 'none'; // Sale doesn't see or assign this field
+    } else {
+      managedBySection.style.display = 'block';
+    }
+  }
+
+  // Adjust delete buttons visibility globally
+  const styleTagId = 'role-based-css-rules';
+  let styleTag = document.getElementById(styleTagId);
+  if (!styleTag) {
+    styleTag = document.createElement('style');
+    styleTag.id = styleTagId;
+    document.head.appendChild(styleTag);
+  }
+
+  if (role === 'sale') {
+    styleTag.innerHTML = `
+      .delete-cust-btn, .edit-cust-btn { display: none !important; }
+      #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: none !important; }
+      .delete-order-btn { display: none !important; }
+    `;
+  } else if (role === 'accounting') {
+    styleTag.innerHTML = `
+      .delete-cust-btn { display: inline-flex !important; }
+      .edit-cust-btn { display: inline-flex !important; }
+      #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: none !important; }
+      .delete-order-btn { display: none !important; }
+    `;
+  } else {
+    styleTag.innerHTML = `
+      .delete-cust-btn, .edit-cust-btn { display: inline-flex !important; }
+      #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: inline-flex !important; }
+      .delete-order-btn { display: inline-flex !important; }
+    `;
+  }
+}
+
+function populateManagedByDropdown() {
+  const select = document.getElementById('cust-managed-by');
+  if (!select) return;
+  
+  // Populate with all users
+  select.innerHTML = state.users.map(u => `
+    <option value="${u.username}">${u.displayName} (${u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale'})</option>
+  `).join('');
 }

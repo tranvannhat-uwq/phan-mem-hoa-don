@@ -74,3 +74,32 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS pricelist_id text;
 -- Thêm cột pricelist_id lưu vết bảng giá đã chọn cho đơn hàng
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS pricelist_id text;
 
+
+-- 5. BẢNG NGƯỜI DÙNG & PHÂN QUYỀN (users)
+CREATE TABLE IF NOT EXISTS users (
+    id text PRIMARY KEY,
+    username text NOT NULL UNIQUE,       -- Tên đăng nhập (VD: admin, ketoan, nhat)
+    password text NOT NULL,              -- Mật khẩu
+    display_name text NOT NULL,          -- Tên hiển thị (VD: Kế toán A, Sale B)
+    role text DEFAULT 'sale',            -- Quyền: admin, accounting, sale
+    created_at timestamptz DEFAULT now()
+);
+
+-- Tắt cơ chế bảo mật dòng (RLS):
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+
+-- Nhập sẵn tài khoản đại diện cho 3 vai trò
+INSERT INTO users (id, username, password, display_name, role)
+VALUES 
+  ('u-nhat', 'nhat', '1307', 'Trần Văn Nhật', 'admin'),
+  ('u-ketoan', 'ketoan', 'ketoan123', 'Kế toán Công ty', 'accounting'),
+  ('u-sale1', 'sale1', '123', 'Sale Nguyễn Văn A', 'sale'),
+  ('u-sale2', 'sale2', '123', 'Sale Lê Văn B', 'sale')
+ON CONFLICT (username) DO NOTHING;
+
+-- Thêm cột người quản lý vào bảng khách hàng
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS managed_by text;
+
+-- Thêm cột người tạo đơn vào bảng đơn hàng
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_by text;
+
