@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ thống Quản lý Sản phẩm & Lên đơn hàng</title>
+  <!-- Google Fonts: Inter & Lexend -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lexend:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons via CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- SheetJS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Style CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">🎨</div>
+        <span class="brand-name">WebLendon</span>
+      </div>
+
+      <nav class="nav-menu">
+        <li class="nav-item">
+          <a class="nav-link active" data-target="dashboard-panel">
+            <i data-lucide="layout-dashboard"></i>
+            Tổng quan
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-target="products-panel">
+            <i data-lucide="package"></i>
+            Sản phẩm
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-target="invoice-panel">
+            <i data-lucide="file-spreadsheet"></i>
+            Lên đơn hàng
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-target="customers-panel">
+            <i data-lucide="users"></i>
+            Khách hàng
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-target="pricelists-panel">
+            <i data-lucide="tags"></i>
+            Quản lý bảng giá
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-target="history-panel">
+            <i data-lucide="history"></i>
+            Lịch sử đơn
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-target="settings-panel">
+            <i data-lucide="settings"></i>
+            Cấu hình Cloud
+          </a>
+        </li>
+      </nav>
+
+      <div class="sidebar-footer">
+        <p>Hệ thống Quản lý Bán hàng</p>
+        <p class="mt-1">v1.2.0 • Premium Edition</p>
+      </div>
+    </aside>
+
+    <!-- Sidebar Overlay (mobile backdrop) -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Header -->
+      <header class="top-header">
+        <button class="hamburger-btn" id="hamburger-btn">
+          <i data-lucide="menu"></i>
+        </button>
+        <div>
+          <h1 class="page-title" id="page-title-heading">Tổng quan hệ thống</h1>
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Hôm nay: <span id="current-date-lbl">23/06/2026</span></p>
+            <span class="db-status-badge status-local" id="db-status-badge">Cục bộ (LocalStorage)</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+          <button class="btn btn-secondary" id="btn-quick-order">
+            <i data-lucide="plus-circle"></i> Lên đơn nhanh
+          </button>
+        </div>
+      </header>
+
+      <!-- Dashboard Panel -->
+      <section id="dashboard-panel" class="panel active">
+        <!-- Widgets Grid -->
+        <div class="widgets-grid">
+          <div class="widget-card">
+            <div class="widget-info">
+              <span class="widget-label">Tổng số sản phẩm</span>
+              <span class="widget-value" id="stat-total-products">0</span>
+            </div>
+            <div class="widget-icon-wrapper widget-icon-emerald">
+              <i data-lucide="box"></i>
+            </div>
+          </div>
+
+          <div class="widget-card">
+            <div class="widget-info">
+              <span class="widget-label">Tổng số đơn hàng</span>
+              <span class="widget-value" id="stat-total-orders">0</span>
+            </div>
+            <div class="widget-icon-wrapper widget-icon-indigo">
+              <i data-lucide="shopping-cart"></i>
+            </div>
+          </div>
+
+          <div class="widget-card">
+            <div class="widget-info">
+              <span class="widget-label">Doanh thu tích lũy</span>
+              <span class="widget-value" id="stat-total-revenue">0 ₫</span>
+            </div>
+            <div class="widget-icon-wrapper widget-icon-emerald">
+              <i data-lucide="banknote"></i>
+            </div>
+          </div>
+
+          <div class="widget-card">
+            <div class="widget-info">
+              <span class="widget-label">Chiết khấu trung bình</span>
+              <span class="widget-value" id="stat-avg-discount">0%</span>
+            </div>
+            <div class="widget-icon-wrapper widget-icon-danger">
+              <i data-lucide="percent"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activities & Mini Form -->
+        <div class="dashboard-grid">
+          <div class="glass-panel" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="panel-header" style="margin-bottom: 0;">
+              <h2 class="panel-title"><i data-lucide="trending-up"></i> Đơn hàng gần đây</h2>
+              <button class="btn btn-secondary btn-sm" id="btn-view-all-history">Xem tất cả</button>
+            </div>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Mã đơn</th>
+                    <th>Thời gian</th>
+                    <th>Sản phẩm</th>
+                    <th>Thành tiền</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboard-recent-orders-body">
+                  <!-- JS dynamically fills -->
+                  <tr>
+                    <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                      Không có đơn hàng nào gần đây
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="glass-panel" style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h2 class="panel-title" style="margin-bottom: 0.5rem;"><i data-lucide="zap"></i> Thao tác nhanh</h2>
+              <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
+                Hệ thống hỗ trợ lưu thông tin tự động trên thiết bị của bạn.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <button class="btn btn-primary" id="dash-btn-add-product" style="justify-content: flex-start; padding: 0.85rem 1.25rem;">
+                  <i data-lucide="plus"></i> Thêm sản phẩm mới
+                </button>
+                <button class="btn btn-indigo" id="dash-btn-new-order" style="justify-content: flex-start; padding: 0.85rem 1.25rem;">
+                  <i data-lucide="file-plus"></i> Tạo hóa đơn bán hàng
+                </button>
+                <button class="btn btn-secondary" id="dash-btn-clear-cache" style="justify-content: flex-start; padding: 0.85rem 1.25rem; color: var(--color-danger);">
+                  <i data-lucide="trash-2"></i> Reset dữ liệu mẫu
+                </button>
+              </div>
+            </div>
+            <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text-muted);">
+              Sản phẩm đóng gói theo Thùng, Lon, Hộp tiêu chuẩn.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Products Panel -->
+      <section id="products-panel" class="panel">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2 class="panel-title"><i data-lucide="package-search"></i> Danh sách sản phẩm</h2>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" id="btn-download-excel-template">
+                <i data-lucide="download"></i> Tải file mẫu
+              </button>
+              <button class="btn btn-indigo btn-sm" id="btn-open-excel-modal">
+                <i data-lucide="file-up"></i> Nhập Excel
+              </button>
+              <button class="btn btn-primary btn-sm" id="btn-open-add-product-modal">
+                <i data-lucide="plus"></i> Thêm sản phẩm
+              </button>
+            </div>
+          </div>
+
+          <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div class="search-wrapper" style="flex: 1; min-width: 250px;">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" class="form-control-search" id="product-search-input" placeholder="Tìm kiếm sản phẩm theo tên, mã...">
+            </div>
+            <div class="filter-wrapper" style="width: 200px;">
+              <select class="form-control" id="product-brand-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
+                <option value="">-- Tất cả hãng sơn --</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table" style="table-layout: fixed; min-width: 1150px;">
+              <colgroup>
+                <col style="width: 45px;">   <!-- STT -->
+                <col style="width: 95px;">   <!-- Mã SP -->
+                <col style="width: auto;">   <!-- Tên sản phẩm (flexible) -->
+                <col style="width: 120px;">  <!-- Hãng sơn -->
+                <col style="width: 125px;">  <!-- Giá Thùng -->
+                <col style="width: 125px;">  <!-- Giá Lon -->
+                <col style="width: 125px;">  <!-- Giá Hộp -->
+                <col style="width: 125px;">  <!-- Giá Bao -->
+                <col style="width: 125px;">  <!-- Giá Túi -->
+                <col style="width: 55px;">   <!-- Xóa -->
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style="text-align: center;">STT</th>
+                  <th>Mã SP</th>
+                  <th>Tên sản phẩm</th>
+                  <th>Hãng sơn</th>
+                  <th style="text-align: right;">Giá Thùng</th>
+                  <th style="text-align: right;">Giá Lon</th>
+                  <th style="text-align: right;">Giá Hộp</th>
+                  <th style="text-align: right;">Giá Bao</th>
+                  <th style="text-align: right;">Giá Túi</th>
+                  <th style="text-align: center;">Xóa</th>
+                </tr>
+              </thead>
+              <tbody id="products-table-body">
+                <!-- Dynamic load -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Invoice / Order Panel -->
+      <section id="invoice-panel" class="panel">
+        <div class="invoice-grid">
+          <!-- Left side: Items builder -->
+          <div class="invoice-builder">
+            <div class="glass-panel">
+              <h2 class="panel-title" style="margin-bottom: 1.25rem;"><i data-lucide="shopping-bag"></i> Chọn sản phẩm vào hóa đơn</h2>
+              
+              <div class="product-select-row" style="max-width: 550px; display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+                <div class="product-dropdown-container" style="flex: 1;">
+                  <div class="custom-input-group">
+                    <i data-lucide="search" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
+                    <input type="text" class="form-control" id="invoice-product-search" placeholder="Nhập mã hoặc tên sản phẩm để tìm kiếm..." autocomplete="off">
+                  </div>
+                  <ul class="suggestions-list" id="invoice-product-suggestions" style="display: none;">
+                    <!-- Auto populated suggestions -->
+                  </ul>
+                </div>
+                <button class="btn btn-primary" id="btn-add-to-invoice-table">
+                  <i data-lucide="plus"></i> Thêm
+                </button>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table invoice-items-table" style="table-layout: fixed; min-width: 900px;">
+                  <colgroup>
+                    <col style="width: 85px;">   <!-- Mã SP -->
+                    <col style="width: auto;">   <!-- Tên SP (flexible, includes màu sắc) -->
+                    <col style="width: 95px;">   <!-- Quy cách -->
+                    <col style="width: 65px;">   <!-- SL -->
+                    <col style="width: 80px;">   <!-- % CK -->
+                    <col style="width: 130px;">  <!-- Thành tiền -->
+                    <col style="width: 46px;">   <!-- Xóa -->
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Mã SP</th>
+                      <th>Tên sản phẩm (kèm màu sắc)</th>
+                      <th>Quy cách</th>
+                      <th style="text-align: center;">SL</th>
+                      <th style="text-align: center;">% CK</th>
+                      <th style="text-align: right;">Thành tiền</th>
+                      <th style="text-align: center;">Xóa</th>
+                    </tr>
+                  </thead>
+                  <tbody id="invoice-items-body">
+                    <!-- Dynamic invoice rows -->
+                    <tr id="invoice-empty-row">
+                      <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                        Chưa chọn sản phẩm nào. Tìm kiếm sản phẩm ở trên để thêm vào hóa đơn.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right side: Bill summary -->
+          <div class="glass-panel summary-card">
+            <h2 class="summary-heading"><i data-lucide="receipt"></i> Tổng quan đơn hàng</h2>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
+              <div class="form-group" style="position: relative; margin-bottom: 0.75rem;" id="invoice-customer-search-group">
+                <label class="form-label">Tìm khách hàng (Tên hoặc SĐT) *</label>
+                <div class="custom-input-group">
+                  <i data-lucide="user" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
+                  <input type="text" class="form-control" id="invoice-customer-search" placeholder="Nhập tên hoặc số điện thoại..." autocomplete="off">
+                </div>
+                <ul class="suggestions-list" id="invoice-customer-suggestions" style="display: none; position: absolute; z-index: 1000; width: 100%; top: 100%; left: 0;">
+                  <!-- Auto populated customer suggestions -->
+                </ul>
+                <input type="hidden" id="invoice-customer-id" value="">
+              </div>
+
+              <!-- Toggle to Quick Customer Form -->
+              <div style="text-align: right; margin-top: -0.5rem; margin-bottom: 0.75rem;" id="invoice-quick-customer-toggle-container">
+                <button type="button" class="btn-link" id="btn-quick-customer-toggle" style="background: none; border: none; font-size: 0.75rem; color: var(--color-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-family: inherit; font-weight: 500;">
+                  <i data-lucide="user-plus" style="width: 12px; height: 12px;"></i> Khách hàng mới (Thêm nhanh)
+                </button>
+              </div>
+
+              <!-- Quick Customer Form Fields -->
+              <div id="invoice-quick-customer-fields" style="display: none; background: rgba(255, 255, 255, 0.03); border: 1px dashed var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; flex-direction: column; gap: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                  <span style="font-size: 0.8rem; font-weight: 600; color: var(--color-primary); display: inline-flex; align-items: center; gap: 4px;">
+                    <i data-lucide="user-plus" style="width: 14px; height: 14px;"></i> Thêm nhanh khách mới
+                  </span>
+                  <button type="button" id="btn-quick-customer-cancel" style="background: none; border: none; font-size: 0.75rem; color: var(--text-muted); cursor: pointer; padding: 0; font-family: inherit;">Hủy</button>
+                </div>
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                  <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Tên khách hàng *</label>
+                  <input type="text" class="form-control" id="quick-cust-name" placeholder="Ví dụ: Nguyễn Văn A">
+                </div>
+                <div class="form-row-2" style="margin-bottom: 0.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Số điện thoại</label>
+                    <input type="text" class="form-control" id="quick-cust-phone" placeholder="Ví dụ: 0909123456">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Nhãn đại lý độc quyền</label>
+                    <select class="form-control" id="quick-cust-assigned-brand">
+                      <option value="Tất cả">Tất cả (Đại lý tổng hợp/Khách lẻ)</option>
+                      <option value="Nano10*">Nano10*</option>
+                      <option value="Hatacco nano">Hatacco nano</option>
+                      <option value="mutsutec">mutsutec</option>
+                      <option value="tdkaw">tdkaw</option>
+                      <option value="cova">cova</option>
+                      <option value="festivanano">festivanano</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                  <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Địa chỉ</label>
+                  <input type="text" class="form-control" id="quick-cust-address" placeholder="Ví dụ: 123 Đường ABC, Quận 1">
+                </div>
+                <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
+                  <input type="checkbox" id="quick-cust-shipping-support" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary);">
+                  <label for="quick-cust-shipping-support" style="font-size: 0.75rem; color: var(--text-primary); cursor: pointer; font-weight: 500; user-select: none;">
+                    Hỗ trợ vận chuyển (3%)
+                  </label>
+                </div>
+              </div>
+
+
+              <!-- Thẻ thông tin khách hàng đã chọn -->
+              <div id="invoice-customer-info-card" class="glass-panel" style="display: none; padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; font-size: 0.8rem; line-height: 1.4;">
+                <div style="font-weight: 600; color: #fff; margin-bottom: 0.25rem;" id="selected-customer-name-lbl">Khách hàng vãng lai</div>
+                <div style="color: var(--text-secondary);">SĐT: <span id="selected-customer-phone-lbl">N/A</span></div>
+                <div style="color: var(--text-secondary);">Địa chỉ: <span id="selected-customer-address-lbl">N/A</span></div>
+                <div style="color: var(--text-secondary);">Đại lý nhãn: <span id="selected-customer-brand-lbl" style="font-weight: 600; color: var(--color-primary);">Tất cả</span></div>
+                <div style="color: var(--text-secondary);">Nợ hiện tại: <span id="selected-customer-debt-lbl" style="color: var(--color-danger); font-weight: 600;">0 ₫</span></div>
+              </div>
+
+              <!-- Price List Selector (KiotViet style) -->
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                  <label class="form-label" style="margin-bottom: 0;">Bảng giá bán áp dụng</label>
+                  <span id="invoice-pricelist-source-lbl" style="font-size: 0.7rem; font-weight: 600; color: var(--color-primary); background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px;">Nhập tay</span>
+                </div>
+                <div class="custom-input-group">
+                  <i data-lucide="tags" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
+                  <select class="form-control" id="invoice-pricelist-select" style="width: 100%;">
+                    <option value="retail">Nhập tay (Khách lẻ)</option>
+                    <option value="custom">Chiết khấu riêng của đại lý</option>
+                    <!-- Dynamic price lists will be loaded here -->
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label class="form-label">Ghi chú đơn hàng</label>
+                <input type="text" class="form-control" id="invoice-notes" placeholder="Giao hàng tận nơi...">
+              </div>
+            </div>
+
+            <div class="summary-row">
+              <span class="label">Tổng số lượng SP:</span>
+              <span class="value" id="summary-total-qty">0</span>
+            </div>
+            
+            <div class="summary-row">
+              <span class="label">Tổng giá thị trường:</span>
+              <span class="value" id="summary-market-total">0 ₫</span>
+            </div>
+
+            <div class="summary-row">
+              <span class="label">Tổng tiền chiết khấu:</span>
+              <span class="value" style="color: var(--color-danger); font-weight: 500;" id="summary-discount-total">-0 ₫</span>
+            </div>
+
+            <!-- Hỗ trợ vận chuyển Checkbox -->
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 0; padding: 0.5rem; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 6px;">
+              <input type="checkbox" id="invoice-shipping-support" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary);">
+              <label for="invoice-shipping-support" style="font-size: 0.8rem; color: var(--text-primary); cursor: pointer; user-select: none; font-weight: 500;">
+                Hỗ trợ vận chuyển (3%)
+              </label>
+            </div>
+
+            <!-- Hỗ trợ vận chuyển Dòng hiển thị -->
+            <div class="summary-row" id="summary-shipping-discount-row" style="display: none;">
+              <span class="label">Hỗ trợ vận chuyển (3%):</span>
+              <span class="value" style="color: var(--color-danger); font-weight: 500;" id="summary-shipping-discount-total">-0 ₫</span>
+            </div>
+
+            <div class="saving-badge" id="summary-saving-badge" style="display: none; margin-bottom: 1rem;">
+              Tiết kiệm được 0%
+            </div>
+
+            <div class="summary-row total-row">
+              <span class="label">Tổng thanh toán:</span>
+              <div style="text-align: right;">
+                <span class="value-market" id="summary-final-market-crossed"></span>
+                <span class="value-final" id="summary-final-total">0 ₫</span>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <button class="btn btn-primary" id="btn-save-order" style="width: 100%;">
+                <i data-lucide="save"></i> Lưu đơn hàng
+              </button>
+              <button class="btn btn-indigo" id="btn-print-order" style="width: 100%;">
+                <i data-lucide="printer"></i> In & Xuất hóa đơn
+              </button>
+              <button class="btn btn-secondary" id="btn-reset-order" style="width: 100%;">
+                <i data-lucide="rotate-ccw"></i> Làm mới đơn
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- History Panel -->
+      <section id="history-panel" class="panel">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2 class="panel-title"><i data-lucide="clock"></i> Lịch sử hóa đơn đã lập</h2>
+            <button class="btn btn-danger btn-sm" id="btn-clear-history">
+              <i data-lucide="trash"></i> Xóa tất cả lịch sử
+            </button>
+          </div>
+
+          <div class="controls-row">
+            <div class="search-wrapper" style="flex: 1;">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" class="form-control-search" id="history-search-input" placeholder="Tìm đơn hàng theo mã hóa đơn, tên khách hàng...">
+            </div>
+          </div>
+
+          <div class="history-grid" id="history-orders-container">
+            <!-- Dynamic order cards will go here -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Customers Panel -->
+      <section id="customers-panel" class="panel">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2 class="panel-title"><i data-lucide="users"></i> Danh sách khách hàng & Đại lý</h2>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-open-add-customer-modal">
+                <i data-lucide="user-plus"></i> Thêm khách hàng
+              </button>
+            </div>
+          </div>
+
+          <div class="controls-row">
+            <div class="search-wrapper" style="flex: 1;">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" class="form-control-search" id="customer-search-input" placeholder="Tìm kiếm theo mã, tên hoặc số điện thoại...">
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table" style="table-layout: fixed; min-width: 1100px;">
+              <colgroup>
+                <col style="width: 90px;">   <!-- Mã KH -->
+                <col style="width: 180px;">  <!-- Tên KH -->
+                <col style="width: 120px;">  <!-- SĐT -->
+                <col style="width: auto;">   <!-- Địa chỉ -->
+                <col style="width: 130px;">  <!-- Nhãn đại lý -->
+                <col style="width: 180px;">  <!-- Bảng giá áp dụng -->
+                <col style="width: 120px;">  <!-- Công nợ -->
+                <col style="width: 120px;">  <!-- Doanh số -->
+                <col style="width: 85px;">   <!-- Thao tác -->
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Mã KH</th>
+                  <th>Tên khách hàng</th>
+                  <th>Số điện thoại</th>
+                  <th>Địa chỉ</th>
+                  <th>Nhãn đại lý</th>
+                  <th>Bảng giá áp dụng</th>
+                  <th style="text-align: right;">Công nợ</th>
+                  <th style="text-align: right;">Doanh số</th>
+                  <th style="text-align: center;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="customers-table-body">
+                <!-- Dynamic load -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Price Lists Panel -->
+      <section id="pricelists-panel" class="panel">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2 class="panel-title"><i data-lucide="tags"></i> Danh sách Bảng giá & Chiết khấu Đại lý</h2>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-open-add-pricelist-modal">
+                <i data-lucide="plus-circle"></i> Thêm bảng giá mới
+              </button>
+            </div>
+          </div>
+
+          <div class="controls-row">
+            <div class="search-wrapper" style="flex: 1;">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" class="form-control-search" id="pricelist-search-input" placeholder="Tìm kiếm bảng giá theo tên...">
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Tên bảng giá</th>
+                  <th style="text-align: center;">Nano10* (%)</th>
+                  <th style="text-align: center;">Hatacco nano (%)</th>
+                  <th style="text-align: center;">mutsutec (%)</th>
+                  <th style="text-align: center;">tdkaw (%)</th>
+                  <th style="text-align: center;">cova (%)</th>
+                  <th style="text-align: center;">festivanano (%)</th>
+                  <th style="text-align: center;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="pricelists-table-body">
+                <!-- Dynamic load -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings Panel -->
+      <section id="settings-panel" class="panel">
+        <div class="glass-panel" style="max-width: 650px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
+          <div>
+            <h2 class="panel-title" style="margin-bottom: 0.5rem;"><i data-lucide="cloud-lightning"></i> Cấu hình kết nối đám mây (Supabase)</h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem;">
+              Kết nối ứng dụng với dự án Supabase của bạn để đồng bộ hóa dữ liệu thời gian thực giữa nhiều thiết bị và bảo lưu dữ liệu an toàn trên đám mây.
+            </p>
+          </div>
+
+          <form id="supabase-config-form" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="db-url">Supabase Project URL *</label>
+              <input type="url" class="form-control" id="db-url" placeholder="https://xxxxxxxxxxxxxx.supabase.co" required style="width: 100%;">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="db-anon-key">Supabase Public Anon Key *</label>
+              <input type="password" class="form-control" id="db-anon-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." required style="width: 100%;">
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
+              <button type="submit" class="btn btn-primary" id="btn-save-db-config">
+                <i data-lucide="link"></i> Kết nối & Lưu cấu hình
+              </button>
+              <button type="button" class="btn btn-danger" id="btn-disconnect-db" style="display: none;">
+                <i data-lucide="link-2"></i> Ngắt kết nối đám mây
+              </button>
+            </div>
+          </form>
+
+          <div id="sync-section" style="display: none; border-top: 1px dashed var(--border-color); margin-top: 1rem; padding-top: 1.5rem;">
+            <h3 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--color-primary); display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="refresh-cw"></i> Công cụ đồng bộ hóa dữ liệu (Migration)
+            </h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
+              Bạn đang có dữ liệu sản phẩm mẫu hoặc hóa đơn lưu cục bộ? Hãy đồng bộ chúng lên cơ sở dữ liệu Supabase mới kết nối của bạn.
+            </p>
+            <div style="display: flex; gap: 0.75rem;">
+              <button type="button" class="btn btn-indigo" id="btn-sync-to-cloud">
+                <i data-lucide="upload-cloud"></i> Đẩy toàn bộ dữ liệu lên Cloud
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Add/Edit Product Modal -->
+  <div class="modal-overlay" id="product-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="product-modal-title">Thêm sản phẩm mới</h3>
+        <button class="modal-close" id="btn-close-product-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="product-form">
+        <input type="hidden" id="product-edit-index" value="-1">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="prod-code">Mã sản phẩm *</label>
+            <input type="text" class="form-control" id="prod-code" required placeholder="Ví dụ: SP001" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="prod-name">Tên sản phẩm *</label>
+            <input type="text" class="form-control" id="prod-name" required placeholder="Ví dụ: Sơn Dulux EasyClean" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="prod-brand">Hãng sơn</label>
+            <select class="form-control" id="prod-brand" style="width: 100%;">
+              <option value="Nano10*">Nano10*</option>
+              <option value="mutsutec">mutsutec</option>
+              <option value="tdkaw">tdkaw</option>
+              <option value="cova">cova</option>
+              <option value="festivanano">festivanano</option>
+              <option value="Hatacco nano">Hatacco nano</option>
+              <option value="Khác">Khác</option>
+            </select>
+          </div>
+          <div class="form-group" id="prod-brand-custom-group" style="margin-bottom: 0; display: none;">
+            <label class="form-label" for="prod-brand-custom">Nhập tên hãng sơn khác *</label>
+            <input type="text" class="form-control" id="prod-brand-custom" placeholder="Ví dụ: Dulux, Jotun..." style="width: 100%;">
+          </div>
+          <div class="form-row-3">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-price-thung">Giá Thùng *</label>
+              <input type="number" class="form-control" id="prod-price-thung" required min="0" placeholder="Ví dụ: 1250000" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-price-lon">Giá Lon *</label>
+              <input type="number" class="form-control" id="prod-price-lon" required min="0" placeholder="Ví dụ: 350000" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-price-hop">Giá Hộp *</label>
+              <input type="number" class="form-control" id="prod-price-hop" required min="0" placeholder="Ví dụ: 100000" style="width: 100%;">
+            </div>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-price-bao">Giá Bao *</label>
+              <input type="number" class="form-control" id="prod-price-bao" required min="0" placeholder="Ví dụ: 280000" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-price-tui">Giá Túi *</label>
+              <input type="number" class="form-control" id="prod-price-tui" required min="0" placeholder="Ví dụ: 50000" style="width: 100%;">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-product">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-product-submit">Lưu sản phẩm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add/Edit Customer Modal -->
+  <div class="modal-overlay" id="customer-modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="customer-modal-title">Thêm khách hàng mới</h3>
+        <button class="modal-close" id="btn-close-customer-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="customer-form">
+        <input type="hidden" id="customer-edit-index" value="-1">
+        <input type="hidden" id="customer-edit-id" value="">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cust-code">Mã khách hàng *</label>
+              <input type="text" class="form-control" id="cust-code" required placeholder="Ví dụ: KH001" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cust-name">Tên khách hàng *</label>
+              <input type="text" class="form-control" id="cust-name" required placeholder="Ví dụ: Nguyễn Văn A" style="width: 100%;">
+            </div>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cust-phone">Số điện thoại *</label>
+              <input type="text" class="form-control" id="cust-phone" required placeholder="Ví dụ: 0909123456" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cust-assigned-brand">Nhãn đại lý độc quyền</label>
+              <select class="form-control" id="cust-assigned-brand" style="width: 100%;">
+                <option value="Tất cả">Tất cả (Đại lý tổng hợp/Khách lẻ)</option>
+                <option value="Nano10*">Nano10*</option>
+                <option value="Hatacco nano">Hatacco nano</option>
+                <option value="mutsutec">mutsutec</option>
+                <option value="tdkaw">tdkaw</option>
+                <option value="cova">cova</option>
+                <option value="festivanano">festivanano</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cust-debt">Công nợ hiện tại (đ)</label>
+              <input type="number" class="form-control" id="cust-debt" value="0" min="0" placeholder="Ví dụ: 5000000" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="cust-address">Địa chỉ</label>
+              <input type="text" class="form-control" id="cust-address" placeholder="Ví dụ: 123 Đường ABC, Quận 1" style="width: 100%;">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="cust-notes">Ghi chú</label>
+            <input type="text" class="form-control" id="cust-notes" placeholder="Ví dụ: Đại lý cấp 1, giao hàng buổi sáng..." style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="cust-pricelist">Bảng giá mặc định áp dụng *</label>
+            <select class="form-control" id="cust-pricelist" style="width: 100%;">
+              <option value="custom">Chiết khấu riêng (Tự thiết lập bên dưới)</option>
+              <!-- Dynamic price list options -->
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
+            <input type="checkbox" id="cust-shipping-support" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--color-primary);">
+            <label for="cust-shipping-support" style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; font-weight: 500; user-select: none;">
+              Được hỗ trợ vận chuyển (Chiết khấu 3% giá trị đơn hàng sau chiết khấu nhãn sơn)
+            </label>
+          </div>
+          
+          <div style="border-top: 1px dashed var(--border-color); margin-top: 0.5rem; padding-top: 0.75rem;" id="cust-brand-discounts-section">
+            <h4 style="font-size: 0.85rem; font-weight: 600; color: var(--color-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="percent" style="width: 16px;"></i> Thiết lập tỷ lệ chiết khấu (%) theo nhãn sơn
+            </h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu Nano10* (%)</label>
+                <input type="number" class="form-control cust-brand-disc" data-brand="Nano10*" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu Hatacco nano (%)</label>
+                <input type="number" class="form-control cust-brand-disc" data-brand="Hatacco nano" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu mutsutec (%)</label>
+                <input type="number" class="form-control cust-brand-disc" data-brand="mutsutec" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu tdkaw (%)</label>
+                <input type="number" class="form-control cust-brand-disc" data-brand="tdkaw" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu cova (%)</label>
+                <input type="number" class="form-control cust-brand-disc" data-brand="cova" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu festivanano (%)</label>
+                <input type="number" class="form-control cust-brand-disc" data-brand="festivanano" value="0" min="0" max="100" step="any">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-customer">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-customer-submit">Lưu thông tin</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add/Edit Price List Modal -->
+  <div class="modal-overlay" id="pricelist-modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="pricelist-modal-title">Thêm bảng giá mới</h3>
+        <button class="modal-close" id="btn-close-pricelist-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="pricelist-form">
+        <input type="hidden" id="pricelist-edit-index" value="-1">
+        <input type="hidden" id="pricelist-edit-id" value="">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="pl-name">Tên bảng giá *</label>
+            <input type="text" class="form-control" id="pl-name" required placeholder="Ví dụ: Bảng giá 02, Bảng giá Đại lý..." style="width: 100%;">
+          </div>
+          
+          <div style="border-top: 1px dashed var(--border-color); margin-top: 0.5rem; padding-top: 0.75rem;">
+            <h4 style="font-size: 0.85rem; font-weight: 600; color: var(--color-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="percent" style="width: 16px;"></i> Thiết lập tỷ lệ chiết khấu (%) theo nhãn sơn
+            </h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu Nano10* (%)</label>
+                <input type="number" class="form-control pl-brand-disc" data-brand="Nano10*" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu Hatacco nano (%)</label>
+                <input type="number" class="form-control pl-brand-disc" data-brand="Hatacco nano" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu mutsutec (%)</label>
+                <input type="number" class="form-control pl-brand-disc" data-brand="mutsutec" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu tdkaw (%)</label>
+                <input type="number" class="form-control pl-brand-disc" data-brand="tdkaw" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu cova (%)</label>
+                <input type="number" class="form-control pl-brand-disc" data-brand="cova" value="0" min="0" max="100" step="any">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Chiết khấu festivanano (%)</label>
+                <input type="number" class="form-control pl-brand-disc" data-brand="festivanano" value="0" min="0" max="100" step="any">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-pricelist">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-pricelist-submit">Lưu thông tin</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Printable Invoice Template (Hidden on Screen, visible in Print mode) -->
+  <div id="print-invoice-template">
+    <div class="print-header">
+      <h1>HÓA ĐƠN BÁN HÀNG</h1>
+      <p style="margin-top: 5px;">Mã hóa đơn: <span id="print-invoice-id">HD-000000</span></p>
+      <p>Ngày lập: <span id="print-invoice-date">23/06/2026</span></p>
+    </div>
+
+    <div class="print-info-grid">
+      <div>
+        <p><strong>Đơn vị bán hàng:</strong> CÔNG TY TNHH WEBLENDON</p>
+        <p><strong>Địa chỉ:</strong> Lầu 8, Tòa nhà tài chính, TP. Hồ Chí Minh</p>
+        <p><strong>Điện thoại:</strong> 0909.123.456</p>
+      </div>
+      <div>
+        <p><strong>Khách hàng:</strong> <span id="print-customer-name">Khách hàng vãng lai</span></p>
+        <div id="print-customer-info-extra" style="font-size: 11pt; color: #000; line-height: 1.4;"></div>
+        <p><strong>Ghi chú:</strong> <span id="print-invoice-notes">N/A</span></p>
+      </div>
+    </div>
+
+    <table class="print-table">
+      <thead>
+        <tr>
+          <th style="width: 5%; text-align: center;">STT</th>
+          <th style="width: 10%; text-align: center;">Mã SP</th>
+          <th style="width: 40%;">Tên sản phẩm</th>
+          <th style="width: 10%; text-align: center;">Quy cách</th>
+          <th style="width: 5%; text-align: center;">SL</th>
+          <th style="width: 12%; text-align: right;">Đơn giá</th>
+          <th style="width: 6%; text-align: center;">% CK</th>
+          <th style="width: 12%; text-align: right;">Thành tiền</th>
+        </tr>
+      </thead>
+      <tbody id="print-invoice-items-body">
+        <!-- Rendered by JS -->
+      </tbody>
+    </table>
+
+    <div class="print-summary">
+      <div class="print-summary-row">
+        <span>Tổng giá trị gốc:</span>
+        <span id="print-total-market">0 ₫</span>
+      </div>
+      <div class="print-summary-row">
+        <span id="print-discount-label">Tổng tiền chiết khấu:</span>
+        <span id="print-total-discount">-0 ₫</span>
+      </div>
+      <div class="print-summary-row" id="print-shipping-discount-row" style="display: none;">
+        <span>Hỗ trợ vận chuyển (3%):</span>
+        <span id="print-shipping-discount">-0 ₫</span>
+      </div>
+      <div class="print-summary-row grand-total">
+        <span>TỔNG THANH TOÁN:</span>
+        <span id="print-total-payable">0 ₫</span>
+      </div>
+    </div>
+
+    <div class="print-signatures">
+      <div class="print-sig-col">
+        <p><strong>Người lập hóa đơn</strong></p>
+        <p style="font-size: 9pt; color: #555;">(Ký, ghi rõ họ tên)</p>
+        <div class="print-sig-space"></div>
+        <p style="text-decoration: underline;">Nhân viên bán hàng</p>
+      </div>
+      <div class="print-sig-col">
+        <p><strong>Khách hàng nhận hàng</strong></p>
+        <p style="font-size: 9pt; color: #555;">(Ký, ghi rõ họ tên)</p>
+        <div class="print-sig-space"></div>
+        <p id="print-customer-sign-name">Khách hàng</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Excel Import Modal -->
+  <div class="modal-overlay" id="excel-modal">
+    <div class="modal-content" style="max-width: 800px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Nhập sản phẩm từ file Excel</h3>
+        <button class="modal-close" id="btn-close-excel-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="excel-dropzone" class="upload-dropzone">
+          <i data-lucide="file-spreadsheet" class="upload-icon" style="width: 48px; height: 48px; color: var(--color-primary); margin-bottom: 0.75rem;"></i>
+          <p class="upload-text" style="font-weight: 600; margin-bottom: 0.25rem;">Kéo thả tệp Excel (.xlsx, .xls) hoặc CSV vào đây</p>
+          <p class="upload-subtext" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Hoặc nhấp chuột để chọn tệp từ máy tính</p>
+          <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-excel">Chọn tệp</button>
+        </div>
+        
+        <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap;">
+          <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+            <input type="radio" name="import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
+            Gộp thêm (Giữ lại sản phẩm cũ, trùng mã sẽ cập nhật)
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+            <input type="radio" name="import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
+            Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
+          </label>
+        </div>
+        
+        <div id="excel-preview-container" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+          <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--color-primary); display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="eye" style="width:16px;"></i> Xem trước dữ liệu:
+          </h4>
+          <div class="table-responsive" style="max-height: 220px;">
+            <table class="table" style="font-size: 0.8rem;">
+              <thead>
+                <tr>
+                  <th style="width: 50px; text-align: center;">STT</th>
+                  <th>Mã SP</th>
+                  <th>Tên sản phẩm</th>
+                  <th>Hãng sơn</th>
+                  <th style="text-align: right;">Giá Thùng</th>
+                  <th style="text-align: right;">Giá Lon</th>
+                  <th style="text-align: right;">Giá Hộp</th>
+                  <th style="text-align: right;">Giá Bao</th>
+                  <th style="text-align: right;">Giá Túi</th>
+                </tr>
+              </thead>
+              <tbody id="excel-preview-table-body">
+                <!-- JS dynamically fills -->
+              </tbody>
+            </table>
+          </div>
+          <p id="excel-preview-summary" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; font-style: italic;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-excel">Hủy bỏ</button>
+        <button type="button" class="btn btn-primary" id="btn-save-excel-submit" disabled>
+          <i data-lucide="check"></i> Lưu vào hệ thống
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App logic -->
+  <script src="app.js"></script>
+</body>
+</html>
