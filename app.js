@@ -16,8 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Cấu hình kết nối Supabase dùng chung cho cả công ty (Nhập thông tin bên dưới để tự động đăng nhập)
-const COMPANY_SUPABASE_URL = "https://your-project-id.supabase.co"; 
-const COMPANY_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-key-here...";
+const COMPANY_SUPABASE_URL = "https://coebrkerpcgwckkwxlfo.supabase.co"; 
+const COMPANY_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvZWJya2VycGNnd2Nra3d4bGZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNTA2MDAsImV4cCI6MjA5NzcyNjYwMH0.3Y5ECisaADSefH8il1ECWGC1sd1Mh-PzWXM1CV2xTXw";
 
 // App State
 let state = {
