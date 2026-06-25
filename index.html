@@ -35,15 +35,15 @@
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-target="products-panel">
-            <i data-lucide="package"></i>
-            Sản phẩm
-          </a>
-        </li>
-        <li class="nav-item">
           <a class="nav-link" data-target="invoice-panel">
             <i data-lucide="file-spreadsheet"></i>
             Lên đơn hàng
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-target="history-panel">
+            <i data-lucide="history"></i>
+            Lịch sử đơn
           </a>
         </li>
         <li class="nav-item">
@@ -53,15 +53,21 @@
           </a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" data-target="products-panel">
+            <i data-lucide="package"></i>
+            Sản phẩm
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" data-target="pricelists-panel">
             <i data-lucide="tags"></i>
             Quản lý bảng giá
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-target="history-panel">
-            <i data-lucide="history"></i>
-            Lịch sử đơn
+          <a class="nav-link" data-target="users-panel">
+            <i data-lucide="user-cog"></i>
+            Quản lý tài khoản
           </a>
         </li>
         <li class="nav-item">
@@ -197,9 +203,7 @@
                 <button class="btn btn-indigo" id="dash-btn-new-order" style="justify-content: flex-start; padding: 0.85rem 1.25rem;">
                   <i data-lucide="file-plus"></i> Tạo hóa đơn bán hàng
                 </button>
-                <button class="btn btn-secondary" id="dash-btn-clear-cache" style="justify-content: flex-start; padding: 0.85rem 1.25rem; color: var(--color-danger);">
-                  <i data-lucide="trash-2"></i> Reset dữ liệu mẫu
-                </button>
+
               </div>
             </div>
             <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text-muted);">
@@ -335,7 +339,12 @@
 
           <!-- Right side: Bill summary -->
           <div class="glass-panel summary-card">
-            <h2 class="summary-heading"><i data-lucide="receipt"></i> Tổng quan đơn hàng</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+              <h2 class="summary-heading" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: inline-flex; align-items: center; gap: 0.5rem;"><i data-lucide="receipt"></i> Tổng quan đơn hàng</h2>
+              <button class="btn btn-secondary btn-circle btn-sm" id="btn-reset-order" title="Làm mới đơn" style="width: 28px; height: 28px;">
+                <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
+              </button>
+            </div>
             
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
               <div class="form-group" style="position: relative; margin-bottom: 0.75rem;" id="invoice-customer-search-group">
@@ -474,13 +483,13 @@
 
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
               <button class="btn btn-primary" id="btn-save-order" style="width: 100%;">
-                <i data-lucide="save"></i> Lưu đơn hàng
+                <i data-lucide="credit-card"></i> Thanh toán
+              </button>
+              <button class="btn btn-secondary" id="btn-draft-order" style="width: 100%;">
+                <i data-lucide="file-text"></i> Lưu đơn nháp
               </button>
               <button class="btn btn-indigo" id="btn-print-order" style="width: 100%;">
-                <i data-lucide="printer"></i> In & Xuất hóa đơn
-              </button>
-              <button class="btn btn-secondary" id="btn-reset-order" style="width: 100%;">
-                <i data-lucide="rotate-ccw"></i> Làm mới đơn
+                <i data-lucide="printer"></i> In đơn
               </button>
             </div>
           </div>
@@ -522,10 +531,33 @@
             </div>
           </div>
 
-          <div class="controls-row">
-            <div class="search-wrapper" style="flex: 1;">
+          <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div class="search-wrapper" style="flex: 1; min-width: 250px;">
               <i data-lucide="search" class="search-icon"></i>
               <input type="text" class="form-control-search" id="customer-search-input" placeholder="Tìm kiếm theo mã, tên hoặc số điện thoại...">
+            </div>
+            <div class="filter-wrapper" style="width: 220px;" id="cust-managed-filter-wrapper">
+              <select class="form-control" id="customer-managed-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer; width: 100%;">
+                <option value="">-- Tất cả nhân viên --</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Customer Summary Statistics -->
+          <div id="customer-summary-bar" style="display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 10px; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Tổng công nợ nhóm</div>
+                <div id="cust-summary-total-debt" style="font-size: 1.2rem; font-weight: 700; color: var(--color-danger); margin-top: 0.25rem;">0 ₫</div>
+              </div>
+              <i data-lucide="alert-circle" style="color: var(--color-danger); width: 24px; height: 24px;"></i>
+            </div>
+            <div style="flex: 1; min-width: 200px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 10px; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Tổng doanh số nhóm</div>
+                <div id="cust-summary-total-sales" style="font-size: 1.2rem; font-weight: 700; color: var(--color-primary); margin-top: 0.25rem;">0 ₫</div>
+              </div>
+              <i data-lucide="trending-up" style="color: var(--color-primary); width: 24px; height: 24px;"></i>
             </div>
           </div>
 
@@ -540,7 +572,7 @@
                 <col style="width: 180px;">  <!-- Bảng giá áp dụng -->
                 <col style="width: 120px;">  <!-- Công nợ -->
                 <col style="width: 120px;">  <!-- Doanh số -->
-                <col style="width: 85px;">   <!-- Thao tác -->
+                <col style="width: 135px;">   <!-- Thao tác -->
               </colgroup>
               <thead>
                 <tr>
@@ -597,6 +629,51 @@
                 </tr>
               </thead>
               <tbody id="pricelists-table-body">
+                <!-- Dynamic load -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Users Management Panel -->
+      <section id="users-panel" class="panel">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2 class="panel-title"><i data-lucide="user-cog"></i> Danh sách tài khoản người dùng</h2>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-open-add-user-modal">
+                <i data-lucide="user-plus"></i> Thêm tài khoản
+              </button>
+            </div>
+          </div>
+
+          <div class="controls-row">
+            <div class="search-wrapper" style="flex: 1;">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" class="form-control-search" id="user-search-input" placeholder="Tìm kiếm tài khoản theo tên đăng nhập, tên hiển thị...">
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table" style="table-layout: fixed; min-width: 800px;">
+              <colgroup>
+                <col style="width: 60px;">   <!-- STT -->
+                <col style="width: 180px;">  <!-- Tên đăng nhập -->
+                <col style="width: auto;">   <!-- Tên hiển thị -->
+                <col style="width: 150px;">  <!-- Quyền hạn -->
+                <col style="width: 150px;">  <!-- Thao tác -->
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style="text-align: center;">STT</th>
+                  <th>Tên đăng nhập</th>
+                  <th>Tên hiển thị</th>
+                  <th>Quyền hạn</th>
+                  <th style="text-align: center;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="users-table-body">
                 <!-- Dynamic load -->
               </tbody>
             </table>
@@ -691,26 +768,26 @@
           </div>
           <div class="form-row-3">
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-thung">Giá Thùng *</label>
-              <input type="number" class="form-control" id="prod-price-thung" required min="0" placeholder="Ví dụ: 1250000" style="width: 100%;">
+              <label class="form-label" for="prod-price-thung">Giá Thùng</label>
+              <input type="number" class="form-control" id="prod-price-thung" min="0" placeholder="Ví dụ: 1250000" style="width: 100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-lon">Giá Lon *</label>
-              <input type="number" class="form-control" id="prod-price-lon" required min="0" placeholder="Ví dụ: 350000" style="width: 100%;">
+              <label class="form-label" for="prod-price-lon">Giá Lon</label>
+              <input type="number" class="form-control" id="prod-price-lon" min="0" placeholder="Ví dụ: 350000" style="width: 100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-hop">Giá Hộp *</label>
-              <input type="number" class="form-control" id="prod-price-hop" required min="0" placeholder="Ví dụ: 100000" style="width: 100%;">
+              <label class="form-label" for="prod-price-hop">Giá Hộp</label>
+              <input type="number" class="form-control" id="prod-price-hop" min="0" placeholder="Ví dụ: 100000" style="width: 100%;">
             </div>
           </div>
           <div class="form-row-2">
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-bao">Giá Bao *</label>
-              <input type="number" class="form-control" id="prod-price-bao" required min="0" placeholder="Ví dụ: 280000" style="width: 100%;">
+              <label class="form-label" for="prod-price-bao">Giá Bao</label>
+              <input type="number" class="form-control" id="prod-price-bao" min="0" placeholder="Ví dụ: 280000" style="width: 100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-tui">Giá Túi *</label>
-              <input type="number" class="form-control" id="prod-price-tui" required min="0" placeholder="Ví dụ: 50000" style="width: 100%;">
+              <label class="form-label" for="prod-price-tui">Giá Túi</label>
+              <input type="number" class="form-control" id="prod-price-tui" min="0" placeholder="Ví dụ: 50000" style="width: 100%;">
             </div>
           </div>
         </div>
@@ -837,6 +914,42 @@
     </div>
   </div>
 
+  <!-- Collect/Pay Debt Modal -->
+  <div class="modal-overlay" id="pay-debt-modal">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Thu nợ khách hàng</h3>
+        <button class="modal-close" id="btn-close-pay-debt-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="pay-debt-form">
+        <input type="hidden" id="pay-debt-customer-id" value="">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div style="font-size: 0.9rem; line-height: 1.5; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem;">
+            <div><strong>Khách hàng:</strong> <span id="pay-debt-cust-name" style="color: #fff; font-weight: 600;"></span></div>
+            <div style="margin-top: 0.25rem;"><strong>Công nợ hiện tại:</strong> <span id="pay-debt-cust-current-debt" style="color: var(--color-danger); font-weight: 700;">0 ₫</span></div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="pay-debt-amount">Số tiền khách trả *</label>
+            <div class="custom-input-group">
+              <i data-lucide="banknote" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
+              <input type="number" class="form-control" id="pay-debt-amount" required min="1" placeholder="Ví dụ: 2000000" style="width: 100%;">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="pay-debt-notes">Ghi chú thu nợ</label>
+            <input type="text" class="form-control" id="pay-debt-notes" placeholder="Ví dụ: Chuyển khoản, tiền mặt..." style="width: 100%;">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-pay-debt">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary" style="background-color: var(--color-primary);">Xác nhận thu nợ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Add/Edit Price List Modal -->
   <div class="modal-overlay" id="pricelist-modal">
     <div class="modal-content" style="max-width: 600px;">
@@ -908,15 +1021,19 @@
 
     <div class="print-info-grid">
       <div>
-        <p><strong>Đơn vị bán hàng:</strong> CÔNG TY TNHH WEBLENDON</p>
-        <p><strong>Địa chỉ:</strong> Lầu 8, Tòa nhà tài chính, TP. Hồ Chí Minh</p>
-        <p><strong>Điện thoại:</strong> 0909.123.456</p>
+        <p><strong>Đơn vị bán hàng:</strong> TẬP ĐOÀN SƠN NANO</p>
+        <p><strong>Địa chỉ:</strong> Cầu Giao, Phúc Thuận, Thái Nguyên</p>
+        <p><strong>Điện thoại:</strong> 0886037878</p>
       </div>
       <div>
         <p><strong>Khách hàng:</strong> <span id="print-customer-name">Khách hàng vãng lai</span></p>
         <div id="print-customer-info-extra" style="font-size: 11pt; color: #000; line-height: 1.4;"></div>
         <p><strong>Ghi chú:</strong> <span id="print-invoice-notes">N/A</span></p>
       </div>
+    </div>
+
+    <div style="font-size: 11pt; margin-top: 10px; margin-bottom: 10px; color: #000;">
+      <strong>Hãng sơn:</strong> <span id="print-order-brand" style="text-transform: uppercase; font-weight: bold;">N/A</span>
     </div>
 
     <table class="print-table">
@@ -969,6 +1086,48 @@
         <div class="print-sig-space"></div>
         <p id="print-customer-sign-name">Khách hàng</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit User Modal -->
+  <div class="modal-overlay" id="user-modal">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="user-modal-title">Thêm tài khoản mới</h3>
+        <button class="modal-close" id="btn-close-user-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="user-form">
+        <input type="hidden" id="user-edit-id" value="">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="user-username">Tên đăng nhập *</label>
+            <input type="text" class="form-control" id="user-username" required placeholder="Ví dụ: sale3, ketoan2" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="user-displayname">Tên hiển thị *</label>
+            <input type="text" class="form-control" id="user-displayname" required placeholder="Ví dụ: Nguyễn Văn C" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="user-password">Mật khẩu *</label>
+            <input type="text" class="form-control" id="user-password" required placeholder="Nhập mật khẩu" style="width: 100%;">
+            <small id="user-password-help" style="color: var(--text-muted); font-size: 0.75rem; display: none;">Để trống nếu không muốn thay đổi mật khẩu.</small>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="user-role">Quyền hạn / Vai trò *</label>
+            <select class="form-control" id="user-role" required style="width: 100%;">
+              <option value="sale">Nhân viên Sale (Chỉ lập đơn & xem KH được giao)</option>
+              <option value="accounting">Kế toán (Lập đơn, xem tất cả đơn, SP, KH, bảng giá)</option>
+              <option value="admin">Admin (Toàn quyền hệ thống)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-user">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-user-submit">Lưu thông tin</button>
+        </div>
+      </form>
     </div>
   </div>
 

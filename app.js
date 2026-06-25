@@ -189,6 +189,7 @@ async function initApp() {
   setupDashboardQuickActions();
   setupExcelImportAndTemplate();
   setupSupabaseSettings();
+  setupUserManagement();
 
   // Try to connect to Supabase on startup with automatic retries (handles startup network delay)
   const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
@@ -281,7 +282,8 @@ function loadLocalStorageBackup() {
   if (storedOrders) {
     state.savedOrders = JSON.parse(storedOrders).map(o => ({
       ...o,
-      createdBy: o.createdBy || 'admin'
+      createdBy: o.createdBy || 'admin',
+      status: o.status || 'settled'
     }));
   } else {
     state.savedOrders = [];
@@ -457,21 +459,30 @@ async function fetchCloudData() {
       
     if (orderErr) throw orderErr;
     
-    state.savedOrders = (orderData || []).map(order => ({
-      id: order.id,
-      customerId: order.customer_id || null,
-      customerName: order.customer_name,
-      notes: order.notes,
-      items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
-      date: order.created_at,
-      totalMarket: parseFloat(order.total_market),
-      totalDiscount: parseFloat(order.total_discount),
-      shippingSupport: order.shipping_support || false,
-      shippingDiscount: parseFloat(order.shipping_discount || 0),
-      totalPayable: parseFloat(order.total_payable),
-      pricelistId: order.pricelist_id || 'retail',
-      createdBy: order.created_by || 'admin'
-    }));
+    state.savedOrders = (orderData || []).map(order => {
+      let status = order.status;
+      let notes = order.notes || '';
+      if (!status && notes.startsWith('[DRAFT] ')) {
+        status = 'draft';
+        notes = notes.substring(8);
+      }
+      return {
+        id: order.id,
+        customerId: order.customer_id || null,
+        customerName: order.customer_name,
+        notes: notes,
+        items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
+        date: order.created_at,
+        totalMarket: parseFloat(order.total_market),
+        totalDiscount: parseFloat(order.total_discount),
+        shippingSupport: order.shipping_support || false,
+        shippingDiscount: parseFloat(order.shipping_discount || 0),
+        totalPayable: parseFloat(order.total_payable),
+        pricelistId: order.pricelist_id || 'retail',
+        createdBy: order.created_by || 'admin',
+        status: status || 'settled'
+      };
+    });
 
     // 3. Fetch Customers
     try {
@@ -621,13 +632,20 @@ async function dbSaveProduct(product) {
         price_tui: product.priceTui || 0
       };
       
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from(tableProductsName)
-        .upsert(dbRow, { onConflict: 'code' });
+        .upsert(dbRow, { onConflict: 'code,brand' });
+        
+      if (error && (error.code === '42P10' || error.message.includes('constraint'))) {
+        const fallbackRes = await supabaseClient
+          .from(tableProductsName)
+          .upsert(dbRow, { onConflict: 'code' });
+        error = fallbackRes.error;
+      }
         
       if (error) throw error;
       
-      const idx = state.products.findIndex(p => p.code === product.code);
+      const idx = state.products.findIndex(p => p.code === product.code && p.brand === product.brand);
       if (idx > -1) state.products[idx] = product;
       else state.products.push(product);
       
@@ -640,7 +658,7 @@ async function dbSaveProduct(product) {
       return false;
     }
   } else {
-    const idx = state.products.findIndex(p => p.code === product.code);
+    const idx = state.products.findIndex(p => p.code === product.code && p.brand === product.brand);
     if (idx > -1) state.products[idx] = product;
     else state.products.push(product);
     localStorage.setItem('billing_system_products', JSON.stringify(state.products));
@@ -648,17 +666,18 @@ async function dbSaveProduct(product) {
   }
 }
 
-async function dbDeleteProduct(code) {
+async function dbDeleteProduct(code, brand) {
   if (isCloudActive && supabaseClient) {
     try {
       const { error } = await supabaseClient
         .from(tableProductsName)
         .delete()
-        .eq('code', code);
+        .eq('code', code)
+        .eq('brand', brand || '');
         
       if (error) throw error;
       
-      state.products = state.products.filter(p => p.code !== code);
+      state.products = state.products.filter(p => !(p.code === code && p.brand === brand));
       // Mirror to localStorage
       localStorage.setItem('billing_system_products', JSON.stringify(state.products));
       return true;
@@ -668,7 +687,7 @@ async function dbDeleteProduct(code) {
       return false;
     }
   } else {
-    state.products = state.products.filter(p => p.code !== code);
+    state.products = state.products.filter(p => !(p.code === code && p.brand === brand));
     localStorage.setItem('billing_system_products', JSON.stringify(state.products));
     return true;
   }
@@ -844,14 +863,29 @@ async function dbSaveOrder(order) {
         total_payable: order.totalPayable,
         created_at: order.date,
         pricelist_id: order.pricelistId || 'retail',
-        created_by: order.createdBy || 'admin'
+        created_by: order.createdBy || 'admin',
+        status: order.status || 'settled'
       };
       
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from(tableOrdersName)
         .insert(dbRow);
         
-      if (error) throw error;
+      if (error) {
+        if (error.message && (error.message.includes('status') || error.message.includes('column') || error.code === '42703')) {
+          console.warn("Supabase orders table missing status column. Retrying without it.");
+          delete dbRow.status;
+          if (order.status === 'draft') {
+            dbRow.notes = `[DRAFT] ${dbRow.notes || ''}`.trim();
+          }
+          const retryResult = await supabaseClient
+            .from(tableOrdersName)
+            .insert(dbRow);
+          if (retryResult.error) throw retryResult.error;
+        } else {
+          throw error;
+        }
+      }
       
       state.savedOrders.unshift(order);
       return true;
@@ -861,7 +895,7 @@ async function dbSaveOrder(order) {
       return false;
     }
   } else {
-    state.savedOrders.push(order);
+    state.savedOrders.unshift(order);
     localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
     return true;
   }
@@ -902,8 +936,9 @@ async function syncLocalToCloud() {
   const localOrders = JSON.parse(localStorage.getItem('billing_system_orders') || '[]');
   const localCustomers = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
   const localPricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
+  const localUsers = JSON.parse(localStorage.getItem('billing_system_users') || '[]');
   
-  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0) {
+  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0) {
     showToast('Không tìm thấy dữ liệu LocalStorage nào để đồng bộ!', 'warning');
     return;
   }
@@ -968,14 +1003,40 @@ async function syncLocalToCloud() {
         total_payable: o.totalPayable,
         created_at: o.date,
         pricelist_id: o.pricelistId || 'retail',
-        created_by: o.createdBy || 'admin'
+        created_by: o.createdBy || 'admin',
+        status: o.status || 'settled'
       }));
       
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from(tableOrdersName)
         .upsert(dbRows, { onConflict: 'id' });
         
-      if (error) throw error;
+      if (error) {
+        if (error.message && (error.message.includes('status') || error.message.includes('column') || error.code === '42703')) {
+          console.warn("Supabase orders table missing status column during sync. Retrying fallback notes encoding.");
+          const fallbackRows = localOrders.map(o => ({
+            id: o.id,
+            customer_id: o.customerId || null,
+            customer_name: o.customerName,
+            notes: o.status === 'draft' ? `[DRAFT] ${o.notes || ''}`.trim() : o.notes,
+            items: o.items,
+            total_market: o.totalMarket,
+            total_discount: o.totalDiscount,
+            shipping_support: o.shippingSupport || false,
+            shipping_discount: o.shippingDiscount || 0,
+            total_payable: o.totalPayable,
+            created_at: o.date,
+            pricelist_id: o.pricelistId || 'retail',
+            created_by: o.createdBy || 'admin'
+          }));
+          const retryResult = await supabaseClient
+            .from(tableOrdersName)
+            .upsert(fallbackRows, { onConflict: 'id' });
+          if (retryResult.error) throw retryResult.error;
+        } else {
+          throw error;
+        }
+      }
       ordersSynced = localOrders.length;
     }
 
@@ -1028,11 +1089,33 @@ async function syncLocalToCloud() {
         console.warn("Could not sync pricelists to Supabase, table might not exist yet:", plErr.message);
       }
     }
+    // 5. Sync Users
+    let usersSynced = 0;
+    if (localUsers.length > 0) {
+      try {
+        const dbRows = localUsers.map(u => ({
+          id: u.id,
+          username: u.username,
+          password: u.password,
+          display_name: u.displayName,
+          role: u.role
+        }));
+        
+        const { error } = await supabaseClient
+          .from(tableUsersName)
+          .upsert(dbRows, { onConflict: 'id' });
+          
+        if (error) throw error;
+        usersSynced = localUsers.length;
+      } catch (uErr) {
+        console.warn("Could not sync users to Supabase, table might not exist yet:", uErr.message);
+      }
+    }
     
     await fetchCloudData();
     renderAll();
     
-    showToast(`Đồng bộ thành công ${productsSynced} SP, ${ordersSynced} đơn hàng, ${customersSynced} khách hàng và ${pricelistsSynced} bảng giá lên Cloud!`);
+    showToast(`Đồng bộ thành công ${productsSynced} SP, ${ordersSynced} đơn hàng, ${customersSynced} khách hàng, ${pricelistsSynced} bảng giá và ${usersSynced} tài khoản lên Cloud!`);
   } catch(err) {
     console.error('Migration failed:', err);
     showToast('Lỗi đồng bộ dữ liệu: ' + err.message, 'danger');
@@ -1090,6 +1173,8 @@ function renderAll() {
   populatePricelistsDropdowns();
   renderPricelistsTable();
   renderHistoryOrders();
+  renderUsersTable();
+  populateCustomerEmployeeFilter();
   safeCreateIcons();
 }
 
@@ -1176,6 +1261,7 @@ function switchTab(panelId) {
   else if (panelId === 'history-panel') heading.innerText = 'Lịch sử giao dịch';
   else if (panelId === 'customers-panel') heading.innerText = 'Danh sách khách hàng & Đại lý';
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
+  else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
   
   if (panelId === 'dashboard-panel') {
@@ -1273,62 +1359,7 @@ function setupDashboardQuickActions() {
     switchTab('history-panel');
   });
 
-  document.getElementById('dash-btn-clear-cache').addEventListener('click', async () => {
-    if (confirm('Bạn có chắc chắn muốn khôi phục lại danh sách sản phẩm mẫu ban đầu và xóa hết lịch sử không?')) {
-      if (isCloudActive && supabaseClient) {
-        try {
-          updateDbStatusUI('connecting');
-          const { error: err1 } = await supabaseClient.from(tableProductsName).delete().neq('code', 'TEMP_NONE');
-          if (err1) throw err1;
-          const { error: err2 } = await supabaseClient.from(tableOrdersName).delete().neq('id', 'TEMP_NONE');
-          if (err2) throw err2;
-          
-          const dbRows = defaultProducts.map(p => ({
-            code: p.code,
-            name: p.name,
-            brand: p.brand || '',
-            price: p.priceThung || p.priceBao || p.priceLon || p.priceHop || p.priceTui || 0,
-            price_thung: p.priceThung || 0,
-            price_lon: p.priceLon || 0,
-            price_hop: p.priceHop || 0,
-            price_bao: p.priceBao || 0,
-            price_tui: p.priceTui || 0
-          }));
-          let { error: err3 } = await supabaseClient.from(tableProductsName).insert(dbRows);
-          if (err3) {
-            if (err3.message && (err3.message.includes('column') || err3.message.includes('not exist') || err3.code === '42703')) {
-              const fallbackRows = defaultProducts.map(p => ({
-                code: p.code,
-                name: p.name,
-                price: p.priceThung || 0
-              }));
-              const { error: errFallback } = await supabaseClient.from(tableProductsName).insert(fallbackRows);
-              if (errFallback) throw errFallback;
-            } else {
-              throw err3;
-            }
-          }
-          
-          await fetchCloudData();
-          updateDbStatusUI('cloud');
-          showToast('Đã khôi phục dữ liệu mẫu trên Cloud thành công!');
-        } catch(err) {
-          console.error(err);
-          showToast('Không thể khôi phục dữ liệu trên Cloud: ' + err.message, 'danger');
-          updateDbStatusUI('cloud');
-        }
-      } else {
-        localStorage.removeItem('billing_system_products');
-        localStorage.removeItem('billing_system_orders');
-        state.products = [...defaultProducts];
-        state.savedOrders = [];
-        localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-        localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
-        showToast('Đã khôi phục dữ liệu mẫu cục bộ thành công!');
-      }
-      renderAll();
-    }
-  });
+
 }
 
 function setupProductManagement() {
@@ -1473,10 +1504,15 @@ async function saveProduct() {
   const priceBao = parseFloat(document.getElementById('prod-price-bao').value) || 0;
   const priceTui = parseFloat(document.getElementById('prod-price-tui').value) || 0;
 
+  if (priceThung <= 0 && priceLon <= 0 && priceHop <= 0 && priceBao <= 0 && priceTui <= 0) {
+    showToast('Vui lòng nhập ít nhất một mức giá lớn hơn 0 cho sản phẩm!', 'danger');
+    return;
+  }
+
   if (index === -1) {
-    const exists = state.products.some(p => p.code === code);
+    const exists = state.products.some(p => p.code === code && p.brand === brand);
     if (exists) {
-      showToast(`Mã sản phẩm "${code}" đã tồn tại! Vui lòng chọn mã khác.`, 'danger');
+      showToast(`Mã sản phẩm "${code}" thuộc hãng "${brand}" đã tồn tại!`, 'danger');
       return;
     }
   }
@@ -1505,7 +1541,7 @@ async function saveProduct() {
 async function deleteProduct(index) {
   const prod = state.products[index];
   if (confirm(`Bạn có chắc chắn muốn xóa sản phẩm "${prod.name}" (${prod.code})?`)) {
-    const deleted = await dbDeleteProduct(prod.code);
+    const deleted = await dbDeleteProduct(prod.code, prod.brand);
     if (deleted) {
       renderAll();
       showToast('Xóa sản phẩm thành công!', 'warning');
@@ -1576,7 +1612,7 @@ function renderProductsTable() {
   }
 
   tableBody.innerHTML = filtered.map((p, idx) => {
-    const actualIndex = state.products.findIndex(prod => prod.code === p.code);
+    const actualIndex = state.products.findIndex(prod => prod.code === p.code && prod.brand === p.brand);
     
     const knownBrands = ['Nano10*', 'mutsutec', 'tdkaw', 'cova', 'festivanano', 'Hatacco nano'];
     const currentBrand = p.brand || 'Nano10*';
@@ -1677,6 +1713,21 @@ function setupCustomerManagement() {
   
   if (searchInput) {
     searchInput.addEventListener('input', renderCustomersTable);
+  }
+  
+  const filterSelect = document.getElementById('customer-managed-filter');
+  if (filterSelect) {
+    filterSelect.addEventListener('change', renderCustomersTable);
+  }
+  
+  const closePayDebtBtn = document.getElementById('btn-close-pay-debt-modal');
+  const cancelPayDebtBtn = document.getElementById('btn-cancel-pay-debt');
+  const payDebtForm = document.getElementById('pay-debt-form');
+  
+  if (closePayDebtBtn) closePayDebtBtn.addEventListener('click', closePayDebtModal);
+  if (cancelPayDebtBtn) cancelPayDebtBtn.addEventListener('click', closePayDebtModal);
+  if (payDebtForm) {
+    payDebtForm.addEventListener('submit', handlePayDebtSubmit);
   }
 
   // Toggle brand discounts section display when default pricelist is changed
@@ -1888,15 +1939,28 @@ function renderCustomersTable() {
   if (!tableBody) return;
   
   const searchVal = document.getElementById('customer-search-input').value.toLowerCase().trim();
+  const filterSelect = document.getElementById('customer-managed-filter');
+  const filterEmployee = filterSelect ? filterSelect.value : '';
   
   const filtered = state.customers.filter(c => {
     if (state.currentUser && state.currentUser.role === 'sale') {
       if (c.managedBy !== state.currentUser.username) return false;
+    } else if (filterEmployee) {
+      if (c.managedBy !== filterEmployee) return false;
     }
     return c.code.toLowerCase().includes(searchVal) || 
            c.name.toLowerCase().includes(searchVal) || 
            (c.phone && c.phone.includes(searchVal));
   });
+  
+  // Calculate and display summary statistics for the filtered group of customers
+  const totalDebt = filtered.reduce((sum, c) => sum + (parseFloat(c.debt) || 0), 0);
+  const totalSales = filtered.reduce((sum, c) => sum + (parseFloat(c.totalTransaction) || 0), 0);
+  
+  const debtEl = document.getElementById('cust-summary-total-debt');
+  const salesEl = document.getElementById('cust-summary-total-sales');
+  if (debtEl) debtEl.innerText = formatCurrency(totalDebt);
+  if (salesEl) salesEl.innerText = formatCurrency(totalSales);
   
   // Sort alphabetically by name
   filtered.sort((a, b) => a.name.localeCompare(b.name));
@@ -1977,6 +2041,9 @@ function renderCustomersTable() {
             <button class="btn btn-secondary btn-sm btn-circle edit-cust-btn" data-index="${actualIndex}" title="Sửa">
               <i data-lucide="edit-2" style="width: 13px; height: 13px;"></i>
             </button>
+            <button class="btn btn-primary btn-sm btn-circle pay-debt-btn" data-index="${actualIndex}" title="Thu nợ" style="background-color: var(--color-primary); color: #fff;">
+              <i data-lucide="banknote" style="width: 13px; height: 13px;"></i>
+            </button>
             <button class="btn btn-danger btn-sm btn-circle delete-cust-btn" data-index="${actualIndex}" title="Xóa">
               <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
             </button>
@@ -1990,6 +2057,13 @@ function renderCustomersTable() {
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.getAttribute('data-index'));
       openCustomerModal(idx);
+    });
+  });
+  
+  document.querySelectorAll('.pay-debt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.getAttribute('data-index'));
+      openPayDebtModal(idx);
     });
   });
   
@@ -2298,6 +2372,7 @@ function setupInvoiceCreator() {
   const addBtn = document.getElementById('btn-add-to-invoice-table');
   const resetBtn = document.getElementById('btn-reset-order');
   const saveBtn = document.getElementById('btn-save-order');
+  const draftBtn = document.getElementById('btn-draft-order');
   const printBtn = document.getElementById('btn-print-order');
 
   searchInput.addEventListener('focus', () => {
@@ -2392,16 +2467,25 @@ function setupInvoiceCreator() {
   });
 
   saveBtn.addEventListener('click', async () => {
-    const order = await saveActiveOrder();
+    const order = await saveActiveOrder('settled');
     if (order) {
       switchTab('history-panel');
     }
   });
 
-  printBtn.addEventListener('click', async () => {
-    const order = await saveActiveOrder();
+  if (draftBtn) {
+    draftBtn.addEventListener('click', async () => {
+      const order = await saveActiveOrder('draft');
+      if (order) {
+        switchTab('history-panel');
+      }
+    });
+  }
+
+  printBtn.addEventListener('click', () => {
+    const order = compileActiveOrder();
     if (order) {
-      printOrderById(order.id);
+      renderAndPrintOrder(order);
     }
   });
 
@@ -3046,7 +3130,7 @@ function calculateInvoiceTotals() {
   }
 }
 
-async function saveActiveOrder() {
+function compileActiveOrder() {
   if (state.invoiceItems.length === 0) {
     showToast('Hóa đơn chưa có sản phẩm nào! Vui lòng chọn sản phẩm.', 'danger');
     return null;
@@ -3063,51 +3147,9 @@ async function saveActiveOrder() {
       showToast('Vui lòng nhập tên khách hàng mới!', 'danger');
       return null;
     }
-    
-    // Auto-generate code
-    let nextNum = 1;
-    if (state.customers.length > 0) {
-      const nums = state.customers.map(c => {
-        const match = c.code.match(/\d+/);
-        return match ? parseInt(match[0]) : 0;
-      }).filter(Boolean);
-      if (nums.length > 0) {
-        nextNum = Math.max(...nums) + 1;
-      }
-    }
-    const qCode = `KH-${nextNum.toString().padStart(3, '0')}`;
-    const qPhone = document.getElementById('quick-cust-phone').value.trim();
-    const qAddress = document.getElementById('quick-cust-address').value.trim();
-    const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
-    const qShippingSupport = document.getElementById('quick-cust-shipping-support').checked;
-    
-    const newCustId = `cust-${Date.now()}`;
-    const newCustomer = {
-      id: newCustId,
-      code: qCode,
-      name: qName,
-      phone: qPhone,
-      address: qAddress,
-      assignedBrand: qAssignedBrand,
-      brandDiscounts: {},
-      shippingSupport: qShippingSupport,
-      debt: 0,
-      totalTransaction: 0,
-      notes: 'Thêm nhanh từ màn hình lên đơn',
-      pricelistId: 'custom',
-      managedBy: state.currentUser ? state.currentUser.username : 'nhat'
-    };
-    
-    const custSaved = await dbSaveCustomer(newCustomer);
-    if (!custSaved) {
-      showToast('Không thể tạo thông tin khách hàng mới. Vui lòng thử lại!', 'danger');
-      return null;
-    }
-    
-    customerId = newCustId;
     customerName = qName;
-    customerPhone = qPhone;
-    customerAddress = qAddress;
+    customerPhone = document.getElementById('quick-cust-phone').value.trim();
+    customerAddress = document.getElementById('quick-cust-address').value.trim();
   } else if (customerId) {
     const cust = state.customers.find(c => c.id === customerId);
     if (cust) {
@@ -3153,7 +3195,6 @@ async function saveActiveOrder() {
     };
   });
 
-  // Tính chiết khấu vận chuyển 3% nếu được chọn
   const shipCheck = document.getElementById('invoice-shipping-support');
   const isShippingSupport = shipCheck ? shipCheck.checked : false;
   
@@ -3169,7 +3210,8 @@ async function saveActiveOrder() {
 
   const orderId = `HD-${Date.now().toString().slice(-6)}`;
   const createdBy = state.currentUser ? state.currentUser.username : 'admin';
-  const newOrder = {
+  
+  return {
     id: orderId,
     customerId,
     customerName,
@@ -3186,17 +3228,79 @@ async function saveActiveOrder() {
     pricelistId,
     createdBy
   };
+}
 
-  const saved = await dbSaveOrder(newOrder);
-  if (saved) {
-    showToast(`Đã lưu đơn hàng ${orderId} thành công!`);
+async function saveActiveOrder(status = 'settled') {
+  let customerId = state.activeCustomerId || null;
+  if (state.isQuickCustomerMode) {
+    const qName = document.getElementById('quick-cust-name').value.trim();
+    if (!qName) {
+      showToast('Vui lòng nhập tên khách hàng mới!', 'danger');
+      return null;
+    }
     
-    // Update customer total transaction
-    if (customerId) {
-      const cust = state.customers.find(c => c.id === customerId);
-      if (cust) {
-        cust.totalTransaction = (cust.totalTransaction || 0) + finalPayable;
-        await dbSaveCustomer(cust);
+    let nextNum = 1;
+    if (state.customers.length > 0) {
+      const nums = state.customers.map(c => {
+        const match = c.code.match(/\d+/);
+        return match ? parseInt(match[0]) : 0;
+      }).filter(Boolean);
+      if (nums.length > 0) {
+        nextNum = Math.max(...nums) + 1;
+      }
+    }
+    const qCode = `KH-${nextNum.toString().padStart(3, '0')}`;
+    const qPhone = document.getElementById('quick-cust-phone').value.trim();
+    const qAddress = document.getElementById('quick-cust-address').value.trim();
+    const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
+    const qShippingSupport = document.getElementById('quick-cust-shipping-support').checked;
+    
+    const newCustId = `cust-${Date.now()}`;
+    const newCustomer = {
+      id: newCustId,
+      code: qCode,
+      name: qName,
+      phone: qPhone,
+      address: qAddress,
+      assignedBrand: qAssignedBrand,
+      brandDiscounts: {},
+      shippingSupport: qShippingSupport,
+      debt: 0,
+      totalTransaction: 0,
+      notes: 'Thêm nhanh từ màn hình lên đơn',
+      pricelistId: 'custom',
+      managedBy: state.currentUser ? state.currentUser.username : 'nhat'
+    };
+    
+    const custSaved = await dbSaveCustomer(newCustomer);
+    if (!custSaved) {
+      showToast('Không thể tạo thông tin khách hàng mới. Vui lòng thử lại!', 'danger');
+      return null;
+    }
+    state.activeCustomerId = newCustId;
+    customerId = newCustId;
+  }
+
+  const order = compileActiveOrder();
+  if (!order) return null;
+  
+  order.status = status;
+
+  const saved = await dbSaveOrder(order);
+  if (saved) {
+    if (status === 'draft') {
+      showToast(`Đã lưu đơn nháp ${order.id} thành công!`);
+    } else {
+      showToast(`Đã thanh toán và lưu đơn hàng ${order.id} thành công!`);
+      
+      // Update customer total transaction & debt for settled orders
+      if (order.customerId) {
+        const cust = state.customers.find(c => c.id === order.customerId);
+        if (cust) {
+          cust.totalTransaction = (cust.totalTransaction || 0) + order.totalPayable;
+          cust.debt = (cust.debt || 0) + order.totalPayable;
+          await dbSaveCustomer(cust);
+        }
       }
     }
     
@@ -3210,26 +3314,25 @@ async function saveActiveOrder() {
     renderInvoiceTable();
     renderAll();
     
-    return newOrder;
+    return order;
   }
   return null;
 }
 
-// --- Print order functions ---
-function printOrderById(orderId) {
-  const order = state.savedOrders.find(o => o.id === orderId);
-  if (!order) {
-    showToast(`Không tìm thấy đơn hàng "${orderId}"!`, 'danger');
-    return;
-  }
-
+function renderAndPrintOrder(order) {
   document.getElementById('print-invoice-id').innerText = order.id;
   document.getElementById('print-invoice-date').innerText = formatDateOnly(order.date);
   document.getElementById('print-customer-name').innerText = order.customerName;
   document.getElementById('print-customer-sign-name').innerText = order.customerName;
   document.getElementById('print-invoice-notes').innerText = order.notes;
 
-  // Print phone and address if present in order
+  const uniqueBrands = [...new Set(order.items.map(item => item.brand).filter(Boolean))];
+  const brandsText = uniqueBrands.length > 0 ? uniqueBrands.join(', ') : 'N/A';
+  const printOrderBrandEl = document.getElementById('print-order-brand');
+  if (printOrderBrandEl) {
+    printOrderBrandEl.innerText = brandsText;
+  }
+
   const customerInfoDiv = document.getElementById('print-customer-info-extra');
   if (customerInfoDiv) {
     let extraHtml = '';
@@ -3254,6 +3357,10 @@ function printOrderById(orderId) {
     const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
       ? `<div style="font-size: 8.5pt; color: #555; font-weight: normal; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})</div>` 
       : '';
+      
+    const brandHtml = item.brand 
+      ? `<div style="font-size: 8.5pt; color: #666; font-weight: normal; margin-top: 2px;">Hãng sơn: ${item.brand}</div>` 
+      : '';
     
     return `
       <tr>
@@ -3261,6 +3368,7 @@ function printOrderById(orderId) {
         <td class="print-text-center"><strong>${item.product.code}</strong></td>
         <td>
           <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
+          ${brandHtml}
           ${colorCodeHtml}
         </td>
         <td class="print-text-center">${item.package || 'Thùng'}</td>
@@ -3275,7 +3383,6 @@ function printOrderById(orderId) {
   document.getElementById('print-total-market').innerText = formatCurrency(order.totalMarket);
   document.getElementById('print-total-discount').innerText = `-${formatCurrency(order.totalDiscount)}`;
   
-  // Hiển thị chiết khấu vận chuyển trên bản in
   const printShipRow = document.getElementById('print-shipping-discount-row');
   const printShipVal = document.getElementById('print-shipping-discount');
   if (printShipRow && printShipVal) {
@@ -3289,7 +3396,6 @@ function printOrderById(orderId) {
 
   document.getElementById('print-total-payable').innerText = formatCurrency(order.totalPayable);
 
-  // Set the global discount percentage in the summary label
   const totalCombinedDiscount = (order.totalDiscount || 0) + (order.shippingDiscount || 0);
   const discountPercent = (order.totalMarket > 0) ? Math.round((totalCombinedDiscount / order.totalMarket) * 100) : 0;
   const discountLabel = document.getElementById('print-discount-label');
@@ -3303,7 +3409,16 @@ function printOrderById(orderId) {
 
   setTimeout(() => {
     window.print();
-  }, 100);
+  }, 350);
+}
+
+function printOrderById(orderId) {
+  const order = state.savedOrders.find(o => o.id === orderId);
+  if (!order) {
+    showToast(`Không tìm thấy đơn hàng "${orderId}"!`, 'danger');
+    return;
+  }
+  renderAndPrintOrder(order);
 }
 
 
@@ -3354,11 +3469,18 @@ function renderHistoryOrders() {
 
   container.innerHTML = sorted.map(order => {
     const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
-    
+    const statusClass = order.status === 'draft' ? 'status-draft' : 'status-settled';
+    const statusBadge = order.status === 'draft' ? 
+      `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>` : 
+      `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
+      
     return `
-      <div class="invoice-card" data-id="${order.id}">
+      <div class="invoice-card ${statusClass}" data-id="${order.id}">
         <div class="invoice-card-header">
-          <div class="invoice-card-id">${order.id}</div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="invoice-card-id">${order.id}</div>
+            ${statusBadge}
+          </div>
           <div class="invoice-card-date">${formatDateTime(order.date)}</div>
         </div>
         <div class="invoice-card-details">
@@ -3437,7 +3559,7 @@ function loadOrderToInvoiceBuilder(orderId) {
     }
 
     state.invoiceItems = order.items.map(item => {
-      const currentProduct = state.products.find(p => p.code === item.product.code) || item.product;
+      const currentProduct = state.products.find(p => p.code === item.product.code && p.brand === item.brand) || item.product;
       return {
         product: currentProduct,
         brand: item.brand || 'Nano10*',
@@ -3590,27 +3712,25 @@ function setupExcelImportAndTemplate() {
             price_tui: p.priceTui || 0
           }));
           
-          const { error } = await supabaseClient.from(tableProductsName).upsert(dbRows, { onConflict: 'code' });
+          let { error } = await supabaseClient.from(tableProductsName).upsert(dbRows, { onConflict: 'code,brand' });
+          if (error && (error.code === '42P10' || error.message.includes('constraint'))) {
+            const fallbackRows = excelImportData.map(p => ({
+              code: p.code,
+              name: p.name,
+              price: p.priceThung || 0
+            }));
+            const fallbackRes = await supabaseClient.from(tableProductsName).upsert(fallbackRows, { onConflict: 'code' });
+            error = fallbackRes.error;
+          }
           if (error) {
-            if (error.message && (error.message.includes('column') || error.message.includes('not exist') || error.code === '42703')) {
-              const fallbackRows = excelImportData.map(p => ({
-                code: p.code,
-                name: p.name,
-                price: p.priceThung || 0
-              }));
-              const { error: fallbackErr } = await supabaseClient.from(tableProductsName).upsert(fallbackRows, { onConflict: 'code' });
-              if (fallbackErr) throw fallbackErr;
-              showToast(`Đã gộp thành công ${excelImportData.length} sản phẩm lên Cloud (không có hãng sơn/quy cách do thiếu cột ở Supabase).`, 'warning');
-            } else {
-              throw error;
-            }
+            throw error;
           } else {
             showToast(`Đã gộp thành công ${excelImportData.length} sản phẩm lên đám mây Supabase!`);
           }
           
           // Mirror to localStorage first
           excelImportData.forEach(item => {
-            const existingIdx = state.products.findIndex(p => p.code === item.code);
+            const existingIdx = state.products.findIndex(p => p.code === item.code && p.brand === item.brand);
             if (existingIdx > -1) {
               state.products[existingIdx] = item;
             } else {
@@ -3633,7 +3753,7 @@ function setupExcelImportAndTemplate() {
         let updated = 0;
         
         excelImportData.forEach(item => {
-          const existingIdx = state.products.findIndex(p => p.code === item.code);
+          const existingIdx = state.products.findIndex(p => p.code === item.code && p.brand === item.brand);
           if (existingIdx > -1) {
             state.products[existingIdx] = item;
             updated++;
@@ -3854,8 +3974,8 @@ function applyUserPermissions(user) {
         navItem.style.display = 'none';
       }
     } else if (role === 'accounting') {
-      // Accountant: Allow everything except 'settings-panel' (Db config)
-      if (target === 'settings-panel') {
+      // Accountant: Allow everything except 'settings-panel' (Db config) and 'users-panel'
+      if (target === 'settings-panel' || target === 'users-panel') {
         navItem.style.display = 'none';
       } else {
         navItem.style.display = 'block';
@@ -3923,4 +4043,373 @@ function populateManagedByDropdown() {
   select.innerHTML = state.users.map(u => `
     <option value="${u.username}">${u.displayName} (${u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale'})</option>
   `).join('');
+}
+
+// --- User Management Logic ---
+function setupUserManagement() {
+  const addBtn = document.getElementById('btn-open-add-user-modal');
+  const closeBtn = document.getElementById('btn-close-user-modal');
+  const cancelBtn = document.getElementById('btn-cancel-user');
+  const userForm = document.getElementById('user-form');
+  const searchInput = document.getElementById('user-search-input');
+  
+  if (addBtn) addBtn.addEventListener('click', () => openUserModal());
+  if (closeBtn) closeBtn.addEventListener('click', closeUserModal);
+  if (cancelBtn) cancelBtn.addEventListener('click', closeUserModal);
+  
+  if (userForm) {
+    userForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await saveUser();
+    });
+  }
+  
+  if (searchInput) {
+    searchInput.addEventListener('input', renderUsersTable);
+  }
+}
+
+function openUserModal(userId = '') {
+  const modal = document.getElementById('user-modal');
+  const title = document.getElementById('user-modal-title');
+  const form = document.getElementById('user-form');
+  const usernameInput = document.getElementById('user-username');
+  const passwordInput = document.getElementById('user-password');
+  const passwordHelp = document.getElementById('user-password-help');
+  
+  if (!modal) return;
+  modal.classList.add('active');
+  form.reset();
+  
+  if (!userId) {
+    title.innerText = 'Thêm tài khoản mới';
+    document.getElementById('user-edit-id').value = '';
+    usernameInput.removeAttribute('disabled');
+    passwordInput.setAttribute('required', 'true');
+    passwordHelp.style.display = 'none';
+  } else {
+    title.innerText = 'Chỉnh sửa tài khoản';
+    document.getElementById('user-edit-id').value = userId;
+    
+    const user = state.users.find(u => u.id === userId);
+    if (user) {
+      usernameInput.value = user.username;
+      usernameInput.removeAttribute('disabled'); // Allow editing of username
+      document.getElementById('user-displayname').value = user.displayName;
+      document.getElementById('user-role').value = user.role;
+      passwordInput.value = '';
+      passwordInput.removeAttribute('required');
+      passwordHelp.style.display = 'block';
+    }
+  }
+}
+
+function closeUserModal() {
+  const modal = document.getElementById('user-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function saveUser() {
+  const editId = document.getElementById('user-edit-id').value;
+  const username = document.getElementById('user-username').value.trim().toLowerCase();
+  const displayName = document.getElementById('user-displayname').value.trim();
+  const password = document.getElementById('user-password').value.trim();
+  const role = document.getElementById('user-role').value;
+  
+  if (!username || !displayName) {
+    showToast('Tên đăng nhập và Tên hiển thị là bắt buộc!', 'danger');
+    return;
+  }
+  
+  let user;
+  if (!editId) {
+    // Adding new user
+    // Check if username already exists
+    const exists = state.users.some(u => u.username === username);
+    if (exists) {
+      showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
+      return;
+    }
+    if (!password) {
+      showToast('Mật khẩu là bắt buộc cho tài khoản mới!', 'danger');
+      return;
+    }
+    
+    user = {
+      id: 'u-' + Date.now(),
+      username,
+      displayName,
+      password,
+      role
+    };
+  } else {
+    // Editing user
+    const existingUser = state.users.find(u => u.id === editId);
+    if (!existingUser) return;
+    
+    // Check if new username conflicts with another user's username
+    const exists = state.users.some(u => u.username === username && u.id !== editId);
+    if (exists) {
+      showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
+      return;
+    }
+    
+    user = {
+      ...existingUser,
+      username,
+      displayName,
+      role
+    };
+    if (password) {
+      user.password = password;
+    }
+  }
+  
+  const saved = await dbSaveUser(user);
+  if (saved) {
+    // If the saved user is the currently logged-in user, update header, session & role dynamically
+    if (state.currentUser && state.currentUser.id === user.id) {
+      state.currentUser = user;
+      sessionStorage.setItem('billing_system_username', user.username); // Keep session in sync
+      document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+      applyUserPermissions(user);
+    }
+    
+    closeUserModal();
+    renderAll();
+    showToast('Lưu thông tin tài khoản thành công!', 'success');
+  }
+}
+
+async function deleteUser(userId) {
+  const user = state.users.find(u => u.id === userId);
+  if (!user) return;
+  
+  if (state.currentUser && state.currentUser.id === userId) {
+    showToast('Không thể tự xóa tài khoản của chính bạn đang đăng nhập!', 'danger');
+    return;
+  }
+  
+  if (user.username === 'admin' || user.username === 'nhat') {
+    if (state.users.filter(u => u.role === 'admin').length <= 1) {
+      showToast('Phải giữ lại ít nhất một tài khoản Admin hệ thống!', 'danger');
+      return;
+    }
+  }
+  
+  if (confirm(`Bạn có chắc chắn muốn xóa tài khoản "${user.displayName}" (${user.username})?`)) {
+    const deleted = await dbDeleteUser(userId);
+    if (deleted) {
+      renderAll();
+      showToast('Xóa tài khoản thành công!', 'warning');
+    }
+  }
+}
+
+function renderUsersTable() {
+  const tableBody = document.getElementById('users-table-body');
+  if (!tableBody) return;
+  
+  const searchVal = document.getElementById('user-search-input').value.toLowerCase().trim();
+  
+  const filtered = state.users.filter(u => {
+    return u.username.toLowerCase().includes(searchVal) || 
+           u.displayName.toLowerCase().includes(searchVal);
+  });
+  
+  if (filtered.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          Không tìm thấy tài khoản người dùng nào
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
+  tableBody.innerHTML = filtered.map((u, index) => {
+    const roleText = u.role === 'admin' ? 'Admin (Toàn quyền)' : 
+                     u.role === 'accounting' ? 'Kế toán' : 'Sale (Kinh doanh)';
+    const roleColor = u.role === 'admin' ? 'var(--color-danger)' : 
+                      u.role === 'accounting' ? 'var(--color-secondary)' : 'var(--color-primary)';
+                      
+    return `
+      <tr>
+        <td style="text-align: center; color: var(--text-muted);">${index + 1}</td>
+        <td style="font-weight: 600; color: #fff;">${u.username}</td>
+        <td>${u.displayName}</td>
+        <td>
+          <span style="color: ${roleColor}; font-weight: 500;">${roleText}</span>
+        </td>
+        <td style="text-align: center;">
+          <div style="display: inline-flex; gap: 0.5rem; justify-content: center;">
+            <button class="btn btn-secondary btn-sm btn-circle edit-user-btn" data-id="${u.id}" title="Sửa">
+              <i data-lucide="edit-2" style="width: 13px; height: 13px;"></i>
+            </button>
+            <button class="btn btn-danger btn-sm btn-circle delete-user-btn" data-id="${u.id}" title="Xóa">
+              <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  
+  document.querySelectorAll('.edit-user-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      openUserModal(id);
+    });
+  });
+  
+  document.querySelectorAll('.delete-user-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      deleteUser(id);
+    });
+  });
+  
+  safeCreateIcons();
+}
+
+async function dbSaveUser(user) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: user.id,
+        username: user.username,
+        password: user.password,
+        display_name: user.displayName,
+        role: user.role
+      };
+      
+      const { error } = await supabaseClient
+        .from(tableUsersName)
+        .upsert(dbRow, { onConflict: 'id' });
+        
+      if (error) throw error;
+      
+      const idx = state.users.findIndex(u => u.id === user.id);
+      if (idx !== -1) {
+        state.users[idx] = user;
+      } else {
+        state.users.push(user);
+      }
+      localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể lưu người dùng trên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  } else {
+    const idx = state.users.findIndex(u => u.id === user.id);
+    if (idx !== -1) {
+      state.users[idx] = user;
+    } else {
+      state.users.push(user);
+    }
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+    return true;
+  }
+}
+
+async function dbDeleteUser(id) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableUsersName)
+        .delete()
+        .eq('id', id);
+        
+      if (error) throw error;
+      
+      state.users = state.users.filter(u => u.id !== id);
+      localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể xóa người dùng trên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  } else {
+    state.users = state.users.filter(u => u.id !== id);
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+    return true;
+  }
+}
+
+function populateCustomerEmployeeFilter() {
+  const select = document.getElementById('customer-managed-filter');
+  const wrapper = document.getElementById('cust-managed-filter-wrapper');
+  if (!select) return;
+  
+  if (state.currentUser && state.currentUser.role === 'sale') {
+    if (wrapper) wrapper.style.display = 'none';
+    return;
+  } else {
+    if (wrapper) wrapper.style.display = 'block';
+  }
+  
+  const currentVal = select.value;
+  
+  select.innerHTML = `
+    <option value="">-- Tất cả nhân viên --</option>
+    ${state.users.map(u => `
+      <option value="${u.username}">${u.displayName} (${u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale'})</option>
+    `).join('')}
+  `;
+  
+  select.value = currentVal;
+}
+
+// --- Debt Payment Logic ---
+function openPayDebtModal(customerIndex) {
+  const modal = document.getElementById('pay-debt-modal');
+  const form = document.getElementById('pay-debt-form');
+  const cust = state.customers[customerIndex];
+  if (!modal || !cust) return;
+  
+  modal.classList.add('active');
+  form.reset();
+  
+  document.getElementById('pay-debt-customer-id').value = cust.id;
+  document.getElementById('pay-debt-cust-name').innerText = `${cust.name} (${cust.code})`;
+  document.getElementById('pay-debt-cust-current-debt').innerText = formatCurrency(cust.debt);
+}
+
+function closePayDebtModal() {
+  const modal = document.getElementById('pay-debt-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function handlePayDebtSubmit(e) {
+  e.preventDefault();
+  const customerId = document.getElementById('pay-debt-customer-id').value;
+  const amountPaid = parseFloat(document.getElementById('pay-debt-amount').value);
+  const notes = document.getElementById('pay-debt-notes').value.trim() || 'Thu nợ khách hàng';
+  
+  if (!customerId || isNaN(amountPaid) || amountPaid <= 0) {
+    showToast('Số tiền trả không hợp lệ!', 'danger');
+    return;
+  }
+  
+  const cust = state.customers.find(c => c.id === customerId);
+  if (!cust) return;
+  
+  if (amountPaid > cust.debt) {
+    if (!confirm(`Số tiền khách trả (${formatCurrency(amountPaid)}) lớn hơn số công nợ hiện tại (${formatCurrency(cust.debt)}). Bạn có muốn tiếp tục?`)) {
+      return;
+    }
+  }
+  
+  cust.debt = Math.max(0, cust.debt - amountPaid);
+  
+  const saved = await dbSaveCustomer(cust);
+  if (saved) {
+    closePayDebtModal();
+    renderAll();
+    showToast(`Đã thu nợ ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}!`, 'success');
+  }
 }

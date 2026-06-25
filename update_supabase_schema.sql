@@ -29,6 +29,7 @@ ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id text;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_support boolean DEFAULT false;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_discount numeric DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS status text DEFAULT 'settled';
 ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
 
 -- (Tham khảo) Script tạo bảng orders nếu chưa có từ đầu:
@@ -102,4 +103,10 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS managed_by text;
 
 -- Thêm cột người tạo đơn vào bảng đơn hàng
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_by text;
+
+
+-- 6. NÂNG CẤP KHÓA CHÍNH BẢNG SẢN PHẨM (products) SANG KHÓA KÉP (code, brand)
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_pkey CASCADE;
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_code_key CASCADE;
+ALTER TABLE products ADD CONSTRAINT products_pk PRIMARY KEY (code, brand);
 
