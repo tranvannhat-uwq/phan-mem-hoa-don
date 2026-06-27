@@ -31,8 +31,17 @@ let state = {
   activeCustomerId: '',
   activeCustomerBrand: 'Tất cả',
   currentTab: 'dashboard-panel',
-  isQuickCustomerMode: false
+  isQuickCustomerMode: false,
+  dashboardFilter: {
+    timeRange: 'month',
+    startDate: '',
+    endDate: '',
+    saleUser: 'all'
+  },
+  dashboardChartView: 'month' // 'day', 'week', 'month', 'year'
 };
+
+let revenueChartInstance = null;
 
 // Supabase Global Client Reference
 let supabaseClient = null;
@@ -187,6 +196,7 @@ async function initApp() {
   setupInvoiceCreator();
   setupHistoryPanel();
   setupDashboardQuickActions();
+  setupDashboardFilters();
   setupExcelImportAndTemplate();
   setupSupabaseSettings();
   setupUserManagement();
@@ -1269,74 +1279,475 @@ function switchTab(panelId) {
   }
 }
 
-function updateDashboardStats() {
-  let userOrders = state.savedOrders;
-  let userCustomers = state.customers;
+function getFilteredDashboardOrders() {
+  // Exclude draft orders from dashboard calculations
+  let orders = state.savedOrders.filter(o => o.status !== 'draft');
 
+  // 1. Filter by sale user if applicable
   if (state.currentUser && state.currentUser.role === 'sale') {
-    userOrders = state.savedOrders.filter(o => o.createdBy === state.currentUser.username);
-    userCustomers = state.customers.filter(c => c.managedBy === state.currentUser.username);
+    orders = orders.filter(o => o.createdBy === state.currentUser.username);
+  } else if (state.dashboardFilter.saleUser && state.dashboardFilter.saleUser !== 'all') {
+    orders = orders.filter(o => o.createdBy === state.dashboardFilter.saleUser);
   }
 
-  document.getElementById('stat-total-products').innerText = state.products.length;
-  document.getElementById('stat-total-orders').innerText = userOrders.length;
+  // 2. Filter by date range
+  const timeRange = state.dashboardFilter.timeRange;
+  const now = new Date();
   
-  const totalRevenue = userOrders.reduce((sum, order) => sum + (order.totalPayable || 0), 0);
-  document.getElementById('stat-total-revenue').innerText = formatCurrency(totalRevenue);
+  return orders.filter(order => {
+    if (!order.date) return false;
+    const orderDate = new Date(order.date);
+    
+    switch (timeRange) {
+      case 'day': {
+        return orderDate.toDateString() === now.toDateString();
+      }
+      case 'week': {
+        // Current week (Monday to Sunday)
+        const startOfWeek = new Date(now);
+        const day = startOfWeek.getDay();
+        const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+        startOfWeek.setDate(diff);
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        endOfWeek.setHours(23, 59, 59, 999);
+        
+        return orderDate >= startOfWeek && orderDate <= endOfWeek;
+      }
+      case 'month': {
+        return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+      }
+      case 'year': {
+        return orderDate.getFullYear() === now.getFullYear();
+      }
+      case 'custom': {
+        const startStr = state.dashboardFilter.startDate;
+        const endStr = state.dashboardFilter.endDate;
+        if (!startStr || !endStr) return true;
+        const start = new Date(startStr);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endStr);
+        end.setHours(23, 59, 59, 999);
+        return orderDate >= start && orderDate <= end;
+      }
+      default:
+        return true;
+    }
+  });
+}
+
+function renderRevenueChart(orders) {
+  const chartCanvas = document.getElementById('revenue-chart');
+  if (!chartCanvas) return;
+  const ctx = chartCanvas.getContext('2d');
   
-  let totalItemsCount = 0;
-  let totalDiscountSum = 0;
-  userOrders.forEach(order => {
+  if (revenueChartInstance) {
+    revenueChartInstance.destroy();
+  }
+
+  let labels = [];
+  let dataPoints = [];
+  const now = new Date();
+  const view = state.dashboardChartView;
+  
+  if (view === 'day') {
+    // Show hourly revenue for today
+    labels = Array.from({ length: 12 }, (_, i) => `${(i * 2).toString().padStart(2, '0')}:00`);
+    dataPoints = Array(12).fill(0);
+    
+    orders.forEach(o => {
+      const d = new Date(o.date);
+      if (d.toDateString() === now.toDateString()) {
+        const hour = d.getHours();
+        const bucket = Math.floor(hour / 2);
+        if (bucket >= 0 && bucket < 12) {
+          dataPoints[bucket] += (o.totalPayable || 0);
+        }
+      }
+    });
+  } else if (view === 'week') {
+    // Show daily revenue for this week (Monday to Sunday)
+    labels = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+    dataPoints = Array(7).fill(0);
+    
+    const startOfWeek = new Date(now);
+    const day = startOfWeek.getDay();
+    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+    startOfWeek.setDate(diff);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    orders.forEach(o => {
+      const d = new Date(o.date);
+      const dayDiff = Math.floor((d - startOfWeek) / (1000 * 60 * 60 * 24));
+      if (dayDiff >= 0 && dayDiff < 7) {
+        dataPoints[dayDiff] += (o.totalPayable || 0);
+      }
+    });
+  } else if (view === 'month') {
+    // Show daily revenue for this month
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const numDays = new Date(year, month + 1, 0).getDate();
+    
+    labels = Array.from({ length: numDays }, (_, i) => `${i + 1}`);
+    dataPoints = Array(numDays).fill(0);
+    
+    orders.forEach(o => {
+      const d = new Date(o.date);
+      if (d.getMonth() === month && d.getFullYear() === year) {
+        const dateNum = d.getDate();
+        if (dateNum >= 1 && dateNum <= numDays) {
+          dataPoints[dateNum - 1] += (o.totalPayable || 0);
+        }
+      }
+    });
+  } else if (view === 'year') {
+    // Show monthly revenue for current year
+    labels = ['Th 1', 'Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7', 'Th 8', 'Th 9', 'Th 10', 'Th 11', 'Th 12'];
+    dataPoints = Array(12).fill(0);
+    
+    const year = now.getFullYear();
+    orders.forEach(o => {
+      const d = new Date(o.date);
+      if (d.getFullYear() === year) {
+        const monthNum = d.getMonth();
+        if (monthNum >= 0 && monthNum < 12) {
+          dataPoints[monthNum] += (o.totalPayable || 0);
+        }
+      }
+    });
+  }
+
+  // Create Neon Gradient
+  const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+  gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)'); // Emerald transparent
+  gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+  revenueChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Doanh thu',
+        data: dataPoints,
+        borderColor: '#10b981',
+        borderWidth: 3,
+        pointBackgroundColor: '#10b981',
+        pointBorderColor: 'rgba(255,255,255,0.8)',
+        pointBorderWidth: 1,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.35,
+        fill: true,
+        backgroundColor: gradient
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: '#111827',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          padding: 10,
+          displayColors: false,
+          callbacks: {
+            label: function(context) {
+              return `Doanh thu: ${formatCurrency(context.raw)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: 'rgba(0, 0, 0, 0.05)',
+            borderColor: 'rgba(0, 0, 0, 0.08)'
+          },
+          ticks: {
+            color: '#64748b',
+            font: {
+              family: "'Inter', sans-serif",
+              size: 11
+            }
+          }
+        },
+        y: {
+          grid: {
+            color: 'rgba(0, 0, 0, 0.05)',
+            borderColor: 'rgba(0, 0, 0, 0.08)'
+          },
+          ticks: {
+            color: '#64748b',
+            font: {
+              family: "'Inter', sans-serif",
+              size: 11
+            },
+            callback: function(value) {
+              if (value >= 1e6) {
+                return (value / 1e6).toFixed(1) + 'M ₫';
+              }
+              if (value >= 1e3) {
+                return (value / 1e3).toFixed(0) + 'k ₫';
+              }
+              return value + ' ₫';
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderTopProducts(orders) {
+  const topProductsList = document.getElementById('top-products-list');
+  if (!topProductsList) return;
+
+  const salesMap = {};
+  orders.forEach(order => {
     (order.items || []).forEach(item => {
-      totalItemsCount += Number(item.quantity || 1);
-      totalDiscountSum += Number(item.discountPercent || 0) * Number(item.quantity || 1);
+      const key = (item.product && item.product.code) || item.productCode || item.code || item.name || 'Unknown';
+      const name = (item.product && item.product.name) || item.productName || item.name || 'Sản phẩm không tên';
+      const qty = Number(item.quantity || 0);
+      const price = Number(item.price || 0);
+      const disc = Number(item.discountPercent || 0);
+      const revenue = qty * price * (1 - disc / 100);
+
+      if (!salesMap[key]) {
+        salesMap[key] = {
+          code: key,
+          name: name,
+          quantity: 0,
+          revenue: 0
+        };
+      }
+      salesMap[key].quantity += qty;
+      salesMap[key].revenue += revenue;
     });
   });
-  const avgDiscount = totalItemsCount > 0 
-    ? (totalDiscountSum / totalItemsCount).toFixed(1) 
-    : '0';
-  document.getElementById('stat-avg-discount').innerText = `${avgDiscount}%`;
 
-  const recentOrdersBody = document.getElementById('dashboard-recent-orders-body');
-  if (userOrders.length === 0) {
-    recentOrdersBody.innerHTML = `
-      <tr>
-        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-          Chưa có đơn hàng nào được tạo
-        </td>
-      </tr>
+  const salesList = Object.values(salesMap);
+
+  if (salesList.length === 0) {
+    topProductsList.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 3rem; font-size: 0.9rem;">
+        Chưa có dữ liệu bán hàng trong khoảng thời gian này
+      </div>
     `;
     return;
   }
 
-  const sortedOrders = [...userOrders]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 5);
+  salesList.sort((a, b) => b.quantity - a.quantity);
+  const top5 = salesList.slice(0, 5);
+  const maxQty = top5[0].quantity || 1;
 
-  recentOrdersBody.innerHTML = sortedOrders.map(order => {
-    const totalItems = (order.items || []).reduce((sum, item) => sum + Number(item.quantity), 0);
+  topProductsList.innerHTML = top5.map(p => {
+    const percent = Math.round((p.quantity / maxQty) * 100);
     return `
+      <div class="top-product-item">
+        <div class="top-product-info">
+          <span class="top-product-name" title="${p.name}">${p.name}</span>
+          <span class="top-product-sales">${p.quantity} đã bán</span>
+        </div>
+        <div class="top-product-progress-bg">
+          <div class="top-product-progress-bar" style="width: ${percent}%;"></div>
+        </div>
+        <div class="top-product-meta">
+          <span>Mã: ${p.code}</span>
+          <span style="font-weight: 500; color: #fff;">${formatCurrency(p.revenue)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function setupDashboardFilters() {
+  const timeFilter = document.getElementById('dashboard-time-filter');
+  const customDates = document.getElementById('dashboard-custom-dates');
+  const startDateInput = document.getElementById('dashboard-start-date');
+  const endDateInput = document.getElementById('dashboard-end-date');
+  const saleFilter = document.getElementById('dashboard-sale-filter');
+
+  if (timeFilter) {
+    timeFilter.addEventListener('change', () => {
+      const val = timeFilter.value;
+      state.dashboardFilter.timeRange = val;
+      if (val === 'custom') {
+        customDates.style.display = 'flex';
+        const today = new Date();
+        const past30 = new Date();
+        past30.setDate(today.getDate() - 30);
+        
+        startDateInput.value = past30.toISOString().split('T')[0];
+        endDateInput.value = today.toISOString().split('T')[0];
+        state.dashboardFilter.startDate = startDateInput.value;
+        state.dashboardFilter.endDate = endDateInput.value;
+      } else {
+        customDates.style.display = 'none';
+        state.dashboardFilter.startDate = '';
+        state.dashboardFilter.endDate = '';
+      }
+      
+      // Update chart granularity to match time filter
+      let newView = 'month';
+      if (val === 'day') newView = 'day';
+      else if (val === 'week') newView = 'week';
+      else if (val === 'year') newView = 'year';
+      else if (val === 'custom') {
+        const days = (new Date(state.dashboardFilter.endDate) - new Date(state.dashboardFilter.startDate)) / (1000 * 60 * 60 * 24);
+        newView = days <= 60 ? 'month' : 'year';
+      }
+      updateChartViewActiveButton(newView);
+      state.dashboardChartView = newView;
+      
+      updateDashboardStats();
+    });
+  }
+
+  if (startDateInput) {
+    startDateInput.addEventListener('change', () => {
+      state.dashboardFilter.startDate = startDateInput.value;
+      updateDashboardStats();
+    });
+  }
+
+  if (endDateInput) {
+    endDateInput.addEventListener('change', () => {
+      state.dashboardFilter.endDate = endDateInput.value;
+      updateDashboardStats();
+    });
+  }
+
+  if (saleFilter) {
+    saleFilter.addEventListener('change', () => {
+      state.dashboardFilter.saleUser = saleFilter.value;
+      updateDashboardStats();
+    });
+  }
+
+  document.querySelectorAll('.chart-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.getAttribute('data-view');
+      state.dashboardChartView = view;
+      updateChartViewActiveButton(view);
+      
+      const filteredOrders = getFilteredDashboardOrders();
+      renderRevenueChart(filteredOrders);
+    });
+  });
+}
+
+function updateChartViewActiveButton(view) {
+  document.querySelectorAll('.chart-view-btn').forEach(btn => {
+    if (btn.getAttribute('data-view') === view) {
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn-primary');
+    } else {
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-secondary');
+    }
+  });
+}
+
+function updateDashboardStats() {
+  const filteredOrders = getFilteredDashboardOrders();
+
+  let userCustomers = state.customers;
+  if (state.currentUser && state.currentUser.role === 'sale') {
+    userCustomers = state.customers.filter(c => c.managedBy === state.currentUser.username);
+  } else if (state.dashboardFilter.saleUser && state.dashboardFilter.saleUser !== 'all') {
+    userCustomers = state.customers.filter(c => c.managedBy === state.dashboardFilter.saleUser);
+  }
+
+  const labelSuffix = state.dashboardFilter.timeRange === 'custom' 
+    ? '(Tùy chỉnh)' 
+    : state.dashboardFilter.timeRange === 'day' 
+      ? '(Hôm nay)' 
+      : state.dashboardFilter.timeRange === 'week' 
+        ? '(Tuần này)' 
+        : state.dashboardFilter.timeRange === 'year' 
+          ? '(Năm nay)' 
+          : '(Tháng này)';
+  
+  const revLabel = document.getElementById('stat-revenue-label');
+  if (revLabel) revLabel.innerText = `Doanh thu tích lũy ${labelSuffix}`;
+  
+  const soldLabel = document.getElementById('stat-sold-products-label');
+  if (soldLabel) soldLabel.innerText = `Sản phẩm đã bán ${labelSuffix}`;
+
+  const totalRevenue = filteredOrders.reduce((sum, order) => sum + (order.totalPayable || 0), 0);
+  const totalOrders = filteredOrders.length;
+  const totalDebt = userCustomers.reduce((sum, c) => sum + (c.debt || 0), 0);
+  
+  let totalSoldProducts = 0;
+  filteredOrders.forEach(order => {
+    (order.items || []).forEach(item => {
+      totalSoldProducts += Number(item.quantity || 0);
+    });
+  });
+
+  const revEl = document.getElementById('stat-total-revenue');
+  if (revEl) revEl.innerText = formatCurrency(totalRevenue);
+  
+  const ordEl = document.getElementById('stat-total-orders');
+  if (ordEl) ordEl.innerText = totalOrders;
+  
+  const debtEl = document.getElementById('stat-total-debt');
+  if (debtEl) debtEl.innerText = formatCurrency(totalDebt);
+  
+  const soldEl = document.getElementById('stat-total-sold-products');
+  if (soldEl) soldEl.innerText = totalSoldProducts;
+
+  const recentOrdersBody = document.getElementById('dashboard-recent-orders-body');
+  if (filteredOrders.length === 0) {
+    recentOrdersBody.innerHTML = `
       <tr>
-        <td style="font-weight:600; color: #fff;">${order.id}</td>
-        <td>${formatDateTime(order.date)}</td>
-        <td>${totalItems} sản phẩm</td>
-        <td style="color: var(--color-primary); font-weight: 600;">${formatCurrency(order.totalPayable)}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm btn-circle quick-print-btn" data-id="${order.id}" title="In đơn hàng">
-            <i data-lucide="printer" style="width: 14px; height: 14px;"></i>
-          </button>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          Không có đơn hàng nào trong khoảng thời gian này
         </td>
       </tr>
     `;
-  }).join('');
+  } else {
+    const sortedOrders = [...filteredOrders]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5);
 
-  document.querySelectorAll('.quick-print-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const orderId = btn.getAttribute('data-id');
-      printOrderById(orderId);
+    recentOrdersBody.innerHTML = sortedOrders.map(order => {
+      const totalItems = (order.items || []).reduce((sum, item) => sum + Number(item.quantity), 0);
+      return `
+        <tr>
+          <td style="font-weight:600; color: #fff;">${order.id}</td>
+          <td>${formatDateTime(order.date)}</td>
+          <td>${totalItems} sản phẩm</td>
+          <td style="color: var(--color-primary); font-weight: 600;">${formatCurrency(order.totalPayable)}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm btn-circle quick-print-btn" data-id="${order.id}" title="In đơn hàng">
+              <i data-lucide="printer" style="width: 14px; height: 14px;"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    document.querySelectorAll('.quick-print-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const orderId = btn.getAttribute('data-id');
+        printOrderById(orderId);
+      });
     });
-  });
+  }
+
+  renderRevenueChart(filteredOrders);
+  renderTopProducts(filteredOrders);
   
   safeCreateIcons();
 }
@@ -1393,6 +1804,11 @@ function setupProductManagement() {
   tableBody.addEventListener('change', async (e) => {
     const target = e.target;
     if (target.classList.contains('table-brand-select') && target.value !== 'Khác') {
+      if (state.currentUser && state.currentUser.role === 'sale') {
+        showToast('Tài khoản của bạn không có quyền sửa sản phẩm!', 'danger');
+        renderProductsTable();
+        return;
+      }
       const idx = parseInt(target.getAttribute('data-index'));
       const product = state.products[idx];
       product.brand = target.value;
@@ -1489,6 +1905,10 @@ function closeProductModal() {
 }
 
 async function saveProduct() {
+  if (state.currentUser && state.currentUser.role === 'sale') {
+    showToast('Tài khoản của bạn không có quyền sửa sản phẩm!', 'danger');
+    return;
+  }
   const index = parseInt(document.getElementById('product-edit-index').value);
   const code = document.getElementById('prod-code').value.trim().toUpperCase();
   const name = document.getElementById('prod-name').value.trim();
@@ -1539,6 +1959,10 @@ async function saveProduct() {
 }
 
 async function deleteProduct(index) {
+  if (state.currentUser && state.currentUser.role === 'sale') {
+    showToast('Tài khoản của bạn không có quyền xóa sản phẩm!', 'danger');
+    return;
+  }
   const prod = state.products[index];
   if (confirm(`Bạn có chắc chắn muốn xóa sản phẩm "${prod.name}" (${prod.code})?`)) {
     const deleted = await dbDeleteProduct(prod.code, prod.brand);
@@ -1611,6 +2035,9 @@ function renderProductsTable() {
     return;
   }
 
+  const isSale = state.currentUser && state.currentUser.role === 'sale';
+  const isDisabledAttr = isSale ? 'disabled' : '';
+
   tableBody.innerHTML = filtered.map((p, idx) => {
     const actualIndex = state.products.findIndex(prod => prod.code === p.code && prod.brand === p.brand);
     
@@ -1630,25 +2057,25 @@ function renderProductsTable() {
         <td style="font-weight: 600; color: #fff;">${p.code}</td>
         <td style="font-weight: 500; font-size: 0.85rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${p.name}">${p.name}</td>
         <td>
-          <select class="table-inline-select table-brand-select" data-index="${actualIndex}">
+          <select class="table-inline-select table-brand-select" data-index="${actualIndex}" ${isDisabledAttr}>
             ${brandSelectOptions}
             <option value="Khác">-- Tự nhập --</option>
           </select>
         </td>
         <td>
-          <input type="number" class="table-inline-input table-price-thung" data-index="${actualIndex}" value="${p.priceThung || 0}" min="0">
+          <input type="number" class="table-inline-input table-price-thung" data-index="${actualIndex}" value="${p.priceThung || 0}" min="0" ${isDisabledAttr}>
         </td>
         <td>
-          <input type="number" class="table-inline-input table-price-lon" data-index="${actualIndex}" value="${p.priceLon || 0}" min="0">
+          <input type="number" class="table-inline-input table-price-lon" data-index="${actualIndex}" value="${p.priceLon || 0}" min="0" ${isDisabledAttr}>
         </td>
         <td>
-          <input type="number" class="table-inline-input table-price-hop" data-index="${actualIndex}" value="${p.priceHop || 0}" min="0">
+          <input type="number" class="table-inline-input table-price-hop" data-index="${actualIndex}" value="${p.priceHop || 0}" min="0" ${isDisabledAttr}>
         </td>
         <td>
-          <input type="number" class="table-inline-input table-price-bao" data-index="${actualIndex}" value="${p.priceBao || 0}" min="0">
+          <input type="number" class="table-inline-input table-price-bao" data-index="${actualIndex}" value="${p.priceBao || 0}" min="0" ${isDisabledAttr}>
         </td>
         <td>
-          <input type="number" class="table-inline-input table-price-tui" data-index="${actualIndex}" value="${p.priceTui || 0}" min="0">
+          <input type="number" class="table-inline-input table-price-tui" data-index="${actualIndex}" value="${p.priceTui || 0}" min="0" ${isDisabledAttr}>
         </td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center;">
@@ -2876,12 +3303,27 @@ function renderInvoiceTable() {
     const discountAmount = marketPriceTotal * (item.discountPercent / 100);
     const finalPriceTotal = marketPriceTotal - discountAmount;
 
-    const defaultPackages = ['Thùng', 'Lon', 'Hộp', 'Bao', 'Túi'];
-    const currentPackage = item.package || 'Thùng';
-    const packageOptions = [...defaultPackages];
+    const packageOptions = [];
+    const prod = item.product;
+
+    if (prod) {
+      if (prod.priceThung && Number(prod.priceThung) > 0) packageOptions.push('Thùng');
+      if (prod.priceLon && Number(prod.priceLon) > 0) packageOptions.push('Lon');
+      if (prod.priceHop && Number(prod.priceHop) > 0) packageOptions.push('Hộp');
+      if (prod.priceBao && Number(prod.priceBao) > 0) packageOptions.push('Bao');
+      if (prod.priceTui && Number(prod.priceTui) > 0) packageOptions.push('Túi');
+    }
+
+    const currentPackage = item.package || (packageOptions.length > 0 ? packageOptions[0] : 'Thùng');
+    
     if (currentPackage && !packageOptions.includes(currentPackage)) {
       packageOptions.push(currentPackage);
     }
+
+    if (packageOptions.length === 0) {
+      packageOptions.push('Thùng');
+    }
+
     const packageSelectOptions = packageOptions.map(pkg => 
       `<option value="${pkg}" ${currentPackage === pkg ? 'selected' : ''}>${pkg}</option>`
     ).join('');
@@ -3632,6 +4074,10 @@ function setupExcelImportAndTemplate() {
   });
 
   saveImportBtn.addEventListener('click', async () => {
+    if (state.currentUser && state.currentUser.role === 'sale') {
+      showToast('Tài khoản của bạn không có quyền nhập sản phẩm!', 'danger');
+      return;
+    }
     if (excelImportData.length === 0) return;
     
     const importMode = document.querySelector('input[name="import-mode"]:checked').value;
@@ -3967,8 +4413,8 @@ function applyUserPermissions(user) {
     const navItem = link.parentElement;
     
     if (role === 'sale') {
-      // Sale: Only allow 'invoice-panel' and 'customers-panel'
-      if (target === 'invoice-panel' || target === 'customers-panel') {
+      // Sale: Allow 'invoice-panel', 'customers-panel', and 'products-panel'
+      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel') {
         navItem.style.display = 'block';
       } else {
         navItem.style.display = 'none';
@@ -4016,7 +4462,9 @@ function applyUserPermissions(user) {
   if (role === 'sale') {
     styleTag.innerHTML = `
       .delete-cust-btn, .edit-cust-btn { display: none !important; }
-      #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: none !important; }
+      #btn-open-add-product-modal, #btn-open-excel-modal, #btn-download-excel-template, .edit-product-btn, .delete-prod-btn { display: none !important; }
+      #products-panel th:last-child, #products-panel td:last-child { display: none !important; }
+      .col-delete-prod { display: none !important; }
       .delete-order-btn { display: none !important; }
     `;
   } else if (role === 'accounting') {
@@ -4032,6 +4480,27 @@ function applyUserPermissions(user) {
       #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: inline-flex !important; }
       .delete-order-btn { display: inline-flex !important; }
     `;
+  }
+
+  // Handle Dashboard Sale Filter dropdown visibility and population
+  const dashSaleFilterGroup = document.getElementById('dashboard-sale-filter-group');
+  const dashSaleFilter = document.getElementById('dashboard-sale-filter');
+  
+  if (dashSaleFilterGroup && dashSaleFilter) {
+    if (role === 'admin' || role === 'accounting') {
+      dashSaleFilterGroup.style.display = 'flex';
+      
+      const saleUsers = state.users.filter(u => u.role === 'sale');
+      dashSaleFilter.innerHTML = `
+        <option value="all">-- Tất cả nhân viên --</option>
+        ${saleUsers.map(u => `<option value="${u.username}">${u.displayName}</option>`).join('')}
+      `;
+      dashSaleFilter.value = 'all';
+      state.dashboardFilter.saleUser = 'all';
+    } else {
+      dashSaleFilterGroup.style.display = 'none';
+      state.dashboardFilter.saleUser = user.username;
+    }
   }
 }
 

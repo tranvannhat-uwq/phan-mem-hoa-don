@@ -14,6 +14,8 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -24,7 +26,7 @@
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-logo">🎨</div>
-        <span class="brand-name">WebLendon</span>
+        <span class="brand-name" style="font-size: 1.05rem; white-space: nowrap;">Tập đoàn sơn NANO</span>
       </div>
 
       <nav class="nav-menu">
@@ -117,15 +119,42 @@
 
       <!-- Dashboard Panel -->
       <section id="dashboard-panel" class="panel active">
+        <!-- Dashboard Filter Toolbar -->
+        <div class="dashboard-toolbar glass-panel">
+          <div class="filter-group">
+            <label class="filter-label"><i data-lucide="calendar"></i> Khoảng thời gian:</label>
+            <select class="form-control" id="dashboard-time-filter" style="width: auto; height: 38px; min-width: 130px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color);">
+              <option value="month" selected>Tháng này</option>
+              <option value="day">Hôm nay</option>
+              <option value="week">Tuần này</option>
+              <option value="year">Năm nay</option>
+              <option value="custom">Tùy chỉnh...</option>
+            </select>
+          </div>
+          
+          <div id="dashboard-custom-dates" style="display: none; align-items: center; gap: 0.5rem;">
+            <input type="date" class="form-control" id="dashboard-start-date" style="width: auto; height: 38px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 0.5rem;">
+            <span style="color: var(--text-secondary); font-size: 0.85rem;">đến</span>
+            <input type="date" class="form-control" id="dashboard-end-date" style="width: auto; height: 38px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 0.5rem;">
+          </div>
+
+          <div class="filter-group" id="dashboard-sale-filter-group" style="display: none; align-items: center; gap: 0.5rem; margin-left: auto;">
+            <label class="filter-label"><i data-lucide="users"></i> Nhân viên Sale:</label>
+            <select class="form-control" id="dashboard-sale-filter" style="width: auto; height: 38px; min-width: 185px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color);">
+              <option value="all">-- Tất cả nhân viên --</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Widgets Grid -->
         <div class="widgets-grid">
           <div class="widget-card">
             <div class="widget-info">
-              <span class="widget-label">Tổng số sản phẩm</span>
-              <span class="widget-value" id="stat-total-products">0</span>
+              <span class="widget-label" id="stat-revenue-label">Doanh thu tích lũy</span>
+              <span class="widget-value" id="stat-total-revenue">0 ₫</span>
             </div>
             <div class="widget-icon-wrapper widget-icon-emerald">
-              <i data-lucide="box"></i>
+              <i data-lucide="banknote"></i>
             </div>
           </div>
 
@@ -141,21 +170,51 @@
 
           <div class="widget-card">
             <div class="widget-info">
-              <span class="widget-label">Doanh thu tích lũy</span>
-              <span class="widget-value" id="stat-total-revenue">0 ₫</span>
+              <span class="widget-label">Tổng công nợ</span>
+              <span class="widget-value" id="stat-total-debt">0 ₫</span>
             </div>
-            <div class="widget-icon-wrapper widget-icon-emerald">
-              <i data-lucide="banknote"></i>
+            <div class="widget-icon-wrapper widget-icon-danger">
+              <i data-lucide="credit-card"></i>
             </div>
           </div>
 
           <div class="widget-card">
             <div class="widget-info">
-              <span class="widget-label">Chiết khấu trung bình</span>
-              <span class="widget-value" id="stat-avg-discount">0%</span>
+              <span class="widget-label" id="stat-sold-products-label">Sản phẩm đã bán</span>
+              <span class="widget-value" id="stat-total-sold-products">0</span>
             </div>
-            <div class="widget-icon-wrapper widget-icon-danger">
-              <i data-lucide="percent"></i>
+            <div class="widget-icon-wrapper widget-icon-primary" style="background: rgba(16, 185, 129, 0.15); color: var(--color-primary);">
+              <i data-lucide="package"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts and Top Products Section -->
+        <div class="dashboard-charts-row">
+          <div class="glass-panel chart-panel">
+            <div class="panel-header" style="margin-bottom: 1.25rem;">
+              <h2 class="panel-title"><i data-lucide="trending-up"></i> Biểu đồ doanh thu</h2>
+              <div class="chart-controls" style="display: flex; gap: 0.35rem; background: rgba(0,0,0,0.2); padding: 0.2rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                <button class="btn btn-secondary btn-xs chart-view-btn" data-view="day" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 6px;">Ngày</button>
+                <button class="btn btn-secondary btn-xs chart-view-btn" data-view="week" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 6px;">Tuần</button>
+                <button class="btn btn-primary btn-xs chart-view-btn" data-view="month" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 6px;">Tháng</button>
+                <button class="btn btn-secondary btn-xs chart-view-btn" data-view="year" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 6px;">Năm</button>
+              </div>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="revenue-chart"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-panel top-products-panel">
+            <div class="panel-header" style="margin-bottom: 1.25rem;">
+              <h2 class="panel-title"><i data-lucide="award"></i> Sản phẩm bán chạy nhất</h2>
+            </div>
+            <div class="top-products-list" id="top-products-list">
+              <!-- Dynamically populated top products -->
+              <div style="text-align: center; color: var(--text-muted); padding: 3rem; font-size: 0.9rem;">
+                Chưa có dữ liệu bán hàng
+              </div>
             </div>
           </div>
         </div>
@@ -255,7 +314,7 @@
                 <col style="width: 125px;">  <!-- Giá Hộp -->
                 <col style="width: 125px;">  <!-- Giá Bao -->
                 <col style="width: 125px;">  <!-- Giá Túi -->
-                <col style="width: 55px;">   <!-- Xóa -->
+                <col style="width: 55px;" class="col-delete-prod">   <!-- Xóa -->
               </colgroup>
               <thead>
                 <tr>

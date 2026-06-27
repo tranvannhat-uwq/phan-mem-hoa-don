@@ -6,37 +6,37 @@
 }
 
 :root {
-  /* Color Palette (Deep Slate & Emerald Theme) */
-  --bg-primary: #0b0f19;
-  --bg-secondary: #111827;
-  --bg-surface: rgba(31, 41, 55, 0.45);
-  --bg-surface-hover: rgba(31, 41, 55, 0.7);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(16, 185, 129, 0.5);
+  /* Color Palette (Bright Light & Emerald/Indigo Theme) */
+  --bg-primary: #f1f5f9; /* Soft light slate background */
+  --bg-secondary: #ffffff; /* Solid white sidebar background */
+  --bg-surface: rgba(255, 255, 255, 0.7); /* Translucent white card surface */
+  --bg-surface-hover: rgba(255, 255, 255, 0.95);
+  --border-color: rgba(0, 0, 0, 0.08); /* Soft dark border color */
+  --border-focus: rgba(16, 185, 129, 0.4);
   
-  --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  --text-primary: #0f172a; /* Slate 900 for primary text */
+  --text-secondary: #475569; /* Slate 600 for secondary text */
+  --text-muted: #64748b; /* Slate 500 for muted text */
   
   --color-primary: #10b981; /* Emerald */
   --color-primary-hover: #059669;
-  --color-primary-light: rgba(16, 185, 129, 0.15);
+  --color-primary-light: rgba(16, 185, 129, 0.1);
   
   --color-secondary: #6366f1; /* Indigo */
   --color-secondary-hover: #4f46e5;
-  --color-secondary-light: rgba(99, 102, 241, 0.15);
+  --color-secondary-light: rgba(99, 102, 241, 0.1);
   
   --color-danger: #ef4444; /* Red */
   --color-danger-hover: #dc2626;
-  --color-danger-light: rgba(239, 68, 68, 0.15);
-
+  --color-danger-light: rgba(239, 68, 68, 0.1);
+  
   --color-warning: #f59e0b; /* Yellow/Amber */
   
   /* Glassmorphism details */
   --glass-blur: blur(12px);
-  --shadow-sm: 0 2px 8px -1px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-heading: 'Lexend', var(--font-sans);
@@ -1141,6 +1141,134 @@ select option {
   opacity: 1;
 }
 
+/* Dashboard Filter Toolbar */
+.dashboard-toolbar {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.5rem;
+  border-radius: 16px;
+}
+.dashboard-toolbar .filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.dashboard-toolbar .filter-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0;
+}
+
+/* Charts and Top Products Section */
+.dashboard-charts-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr);
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart-panel {
+  padding: 1.5rem;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+  height: 320px;
+}
+
+.top-products-panel {
+  padding: 1.5rem;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1;
+}
+
+.top-product-item {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.85rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.top-product-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+.top-product-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.top-product-name {
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 68%;
+}
+
+.top-product-sales {
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.top-product-progress-bg {
+  background: rgba(255, 255, 255, 0.05);
+  height: 6px;
+  border-radius: 3px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.top-product-progress-bar {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease-out;
+}
+
+.top-product-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.775rem;
+  color: var(--text-secondary);
+  margin-top: -0.1rem;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-charts-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Dashboard Grid (replaces inline style) */
 .dashboard-grid {
   display: grid;
@@ -1758,6 +1886,20 @@ select option {
   box-shadow: 0 0 0 2px var(--border-focus);
 }
 
+.table-inline-input:disabled,
+.table-inline-select:disabled {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: var(--text-primary) !important;
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+.table-inline-select:disabled {
+  background-image: none !important;
+  padding-right: 0.5rem !important;
+}
+
 /* Authentication & Login Screen Styles */
 #app-layout.auth-hidden {
   display: none !important;
@@ -1800,6 +1942,147 @@ select option {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ========================================
+   LIGHT MODE OVERRIDES
+   ======================================== */
+.brand-name {
+  background: linear-gradient(120deg, var(--text-primary), var(--text-secondary)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Ensure headings and important values inherit primary text color */
+.panel-title, .page-title, .widget-value, .invoice-card-id, .summary-heading, .empty-state-title {
+  color: var(--text-primary) !important;
+}
+
+/* Override inline white text colors */
+td[style*="color: #fff"], 
+td[style*="color:#fff"], 
+span[style*="color: #fff"], 
+span[style*="color:#fff"], 
+strong[style*="color: #fff"], 
+strong[style*="color:#fff"], 
+div[style*="color: #fff"], 
+div[style*="color:#fff"], 
+h2[style*="color: #fff"],
+h2[style*="color:#fff"] {
+  color: var(--text-primary) !important;
+}
+
+/* Ensure buttons still have white text on primary/indigo/danger backgrounds */
+.btn-primary, .btn-indigo, .btn-danger, .btn-success, .pay-debt-btn, .quick-print-btn, .history-print-btn {
+  color: #ffffff !important;
+}
+
+/* Secondary buttons: proper dark text and light gray background */
+.btn-secondary, .history-load-btn {
+  background-color: #e2e8f0 !important;
+  color: var(--text-primary) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+.btn-secondary:hover, .history-load-btn:hover {
+  background-color: #cbd5e1 !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Form controls light overrides */
+.form-control, .form-control-search {
+  background-color: #ffffff !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+.form-control:focus, .form-control-search:focus {
+  background-color: #ffffff !important;
+  border-color: var(--color-primary) !important;
+}
+
+/* Input group wrapper background fix */
+.custom-input-group {
+  background-color: #ffffff !important;
+  border: 1px solid var(--border-color) !important;
+}
+.custom-input-group:focus-within {
+  border-color: var(--color-primary) !important;
+}
+.custom-input-group .form-control {
+  background-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+}
+.custom-input-group .form-control:focus {
+  background-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Table light mode overrides */
+.table-responsive {
+  background-color: #ffffff !important;
+  border: 1px solid var(--border-color) !important;
+}
+.table th {
+  background-color: #f8fafc !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+.table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.015) !important;
+}
+
+/* Suggestion dropdown override */
+.suggestions-list {
+  background-color: #ffffff !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+.suggestion-item:hover {
+  background-color: var(--bg-primary) !important;
+}
+
+/* Modal and Dropzone overrides */
+.modal-content {
+  background-color: #ffffff !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+.upload-dropzone {
+  background-color: var(--bg-primary) !important;
+  border: 2px dashed var(--border-color) !important;
+}
+.upload-text {
+  color: var(--text-primary) !important;
+}
+
+/* Chart view controls override */
+.chart-controls {
+  background: var(--bg-primary) !important;
+  border-color: var(--border-color) !important;
+}
+.chart-view-btn.btn-secondary {
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+  border: none !important;
+}
+.chart-view-btn.btn-primary {
+  color: #ffffff !important;
+  background: var(--color-primary) !important;
+}
+
+/* Selected customer panel info card */
+#invoice-customer-info-card {
+  background: rgba(79, 70, 229, 0.05) !important;
+  border-color: rgba(79, 70, 229, 0.15) !important;
+}
+#selected-customer-name-lbl {
+  color: var(--text-primary) !important;
+}
+
+/* Quick customer form background */
+#invoice-quick-customer-fields {
+  background: rgba(0, 0, 0, 0.02) !important;
 }
 
 
