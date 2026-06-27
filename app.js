@@ -974,9 +974,17 @@ async function syncLocalToCloud() {
         price_tui: p.priceTui || 0
       }));
       
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from(tableProductsName)
-        .upsert(dbRows, { onConflict: 'code' });
+        .upsert(dbRows, { onConflict: 'code,brand' });
+        
+      if (error && (error.code === '42P10' || error.message.includes('constraint'))) {
+        console.warn("Sync products: primary key might be code instead of code,brand. Retrying with code constraint.");
+        const fallbackRes = await supabaseClient
+          .from(tableProductsName)
+          .upsert(dbRows, { onConflict: 'code' });
+        error = fallbackRes.error;
+      }
         
       if (error) {
         if (error.message && (error.message.includes('column') || error.message.includes('not exist') || error.code === '42703')) {
@@ -986,9 +994,17 @@ async function syncLocalToCloud() {
             name: p.name,
             price: p.priceThung || 0
           }));
-          const { error: fallbackErr } = await supabaseClient
+          let { error: fallbackErr } = await supabaseClient
             .from(tableProductsName)
-            .upsert(fallbackRows, { onConflict: 'code' });
+            .upsert(fallbackRows, { onConflict: 'code,brand' });
+            
+          if (fallbackErr && (fallbackErr.code === '42P10' || fallbackErr.message.includes('constraint'))) {
+            const retryRes = await supabaseClient
+              .from(tableProductsName)
+              .upsert(fallbackRows, { onConflict: 'code' });
+            fallbackErr = retryRes.error;
+          }
+          
           if (fallbackErr) throw fallbackErr;
           showToast('Đồng bộ sản phẩm thành công (không gồm hãng sơn/giá riêng biệt do thiếu cột ở Supabase).', 'warning');
         } else {

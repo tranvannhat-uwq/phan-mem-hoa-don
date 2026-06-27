@@ -1954,7 +1954,7 @@ select option {
 }
 
 /* Ensure headings and important values inherit primary text color */
-.panel-title, .page-title, .widget-value, .invoice-card-id, .summary-heading, .empty-state-title {
+.panel-title, .page-title, .widget-value, .invoice-card-id, .summary-heading, .empty-state-title, .top-product-name {
   color: var(--text-primary) !important;
 }
 
@@ -2030,6 +2030,9 @@ h2[style*="color:#fff"] {
 }
 .table tbody tr:hover {
   background-color: rgba(0, 0, 0, 0.015) !important;
+}
+.top-product-progress-bg {
+  background-color: rgba(0, 0, 0, 0.05) !important;
 }
 
 /* Suggestion dropdown override */
