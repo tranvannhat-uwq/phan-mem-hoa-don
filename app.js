@@ -3816,9 +3816,7 @@ function renderAndPrintOrder(order) {
       ? `<div style="font-size: 8.5pt; color: #555; font-weight: normal; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})</div>` 
       : '';
       
-    const brandHtml = item.brand 
-      ? `<div style="font-size: 8.5pt; color: #666; font-weight: normal; margin-top: 2px;">Hãng sơn: ${item.brand}</div>` 
-      : '';
+    const brandHtml = '';
     
     return `
       <tr>
@@ -3826,7 +3824,6 @@ function renderAndPrintOrder(order) {
         <td class="print-text-center"><strong>${item.product.code}</strong></td>
         <td>
           <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
-          ${brandHtml}
           ${colorCodeHtml}
         </td>
         <td class="print-text-center">${item.package || 'Thùng'}</td>
