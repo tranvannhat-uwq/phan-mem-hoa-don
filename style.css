@@ -14,9 +14,9 @@
   --border-color: rgba(0, 0, 0, 0.08); /* Soft dark border color */
   --border-focus: rgba(16, 185, 129, 0.4);
   
-  --text-primary: #0f172a; /* Slate 900 for primary text */
-  --text-secondary: #475569; /* Slate 600 for secondary text */
-  --text-muted: #64748b; /* Slate 500 for muted text */
+  --text-primary: #000000; /* True black for maximum readability and contrast */
+  --text-secondary: #1e293b; /* Slate 800 for secondary text */
+  --text-muted: #475569; /* Slate 600 for muted text */
   
   --color-primary: #10b981; /* Emerald */
   --color-primary-hover: #059669;
@@ -386,6 +386,8 @@ body {
 }
 
 .form-control {
+  width: 100%;
+  max-width: 100%;
   padding: 0.625rem 0.875rem;
   background-color: rgba(17, 24, 39, 0.8);
   border: 1px solid var(--border-color);
@@ -404,13 +406,13 @@ body {
 
 .form-row-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
 .form-row-3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -422,6 +424,11 @@ select.form-control {
   background-position: right 0.75rem center;
   background-size: 1.25rem;
   padding-right: 2.25rem;
+  width: 100%;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 select option {
@@ -1351,25 +1358,50 @@ select option {
   /* Main content full width */
   .main-content {
     margin-left: 0;
-    padding: 1.25rem;
-    gap: 1.25rem;
+    padding: 1rem;
+    gap: 1rem;
   }
 
-  /* Header adjustments */
+  /* Header adjustments for grid spacing on mobile */
   .top-header {
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: auto 1fr;
     align-items: center;
     gap: 0.75rem;
-    flex-wrap: wrap;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
   }
 
-  .top-header > div:first-child {
-    flex: 1;
+  .top-header > button.hamburger-btn {
+    grid-column: 1;
+    margin-right: 0.25rem;
+  }
+
+  .top-header > div:first-of-type {
+    grid-column: 2;
     min-width: 0;
   }
 
+  .top-header > div:last-child {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: 0.25rem;
+  }
+
+  .top-header > div:last-child .btn,
+  .top-header > div:last-child #user-info-header {
+    flex: 1;
+    min-width: 120px;
+    justify-content: center;
+  }
+
   .page-title {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
   }
 
   /* Dashboard */
@@ -1379,28 +1411,28 @@ select option {
 
   .widgets-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .widget-card {
-    padding: 1.125rem;
-    border-radius: 12px;
+    padding: 1rem;
+    border-radius: 10px;
   }
 
   .widget-value {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
   }
 
   .widget-icon-wrapper {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
   }
 
   /* Glass panels */
   .glass-panel {
-    padding: 1.25rem;
-    border-radius: 12px;
+    padding: 1rem;
+    border-radius: 10px;
   }
 
   /* Panel header wrap */
@@ -1412,12 +1444,21 @@ select option {
   }
 
   .panel-title {
-    font-size: 1.1rem;
+    font-size: 1rem;
   }
 
-  /* Controls */
+  /* Controls - stack search and filters vertically */
   .controls-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem;
     margin-bottom: 1rem;
+  }
+
+  .controls-row > div,
+  .controls-row .filter-wrapper {
+    width: 100% !important;
+    min-width: 100% !important;
   }
 
   .search-wrapper {
@@ -1464,15 +1505,44 @@ select option {
     gap: 1rem;
   }
 
-  /* Form rows */
+  /* Form rows - force 1 column and override inline grid styles */
   .form-row-2, .form-row-3 {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
   }
 
-  /* Tables */
+  /* Tables: scroll responsive with styled scrollbar */
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-responsive::-webkit-scrollbar {
+    height: 6px;
+  }
+  .table-responsive::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(59, 130, 246, 0.3);
+    border-radius: 4px;
+  }
+
   .table th, .table td {
-    padding: 0.75rem 0.625rem;
-    font-size: 0.825rem;
+    padding: 0.625rem 0.5rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  /* Allow name columns to wrap but maintain minimum width */
+  .table td.col-name, 
+  .table td:nth-child(2), 
+  .table td:nth-child(3) {
+    white-space: normal;
+    min-width: 180px;
+    max-width: 300px;
+    line-height: 1.4;
   }
 
   /* Toasts */
@@ -1487,16 +1557,29 @@ select option {
     width: 100%;
   }
 
-  /* Modals */
+  /* Modals - Bottom sheet behavior */
   .modal-overlay {
-    padding: 1rem;
+    padding: 1rem 0.5rem;
     align-items: flex-end;
   }
 
   .modal-content {
     border-radius: 16px 16px 0 0;
-    max-height: 90vh;
+    max-height: 85vh;
     overflow-y: auto;
+    width: 100%;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+    margin: 0 !important;
   }
 }
 
@@ -1505,27 +1588,27 @@ select option {
    ======================================== */
 @media (max-width: 480px) {
   .main-content {
-    padding: 1rem;
-    gap: 1rem;
+    padding: 0.75rem;
+    gap: 0.75rem;
   }
 
   .page-title {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
   }
 
   .db-status-badge {
-    font-size: 0.65rem;
-    padding: 0.1rem 0.35rem;
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
   }
 
   /* Widgets single column */
   .widgets-grid {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .widget-card {
-    padding: 1rem;
+    padding: 0.875rem;
   }
 
   .widget-value {
@@ -1534,12 +1617,12 @@ select option {
 
   /* Glass panels tighter */
   .glass-panel {
-    padding: 1rem;
-    border-radius: 10px;
+    padding: 0.75rem;
+    border-radius: 8px;
   }
 
   .panel-title {
-    font-size: 1rem;
+    font-size: 0.95rem;
   }
 
   /* Invoice items even tighter */
@@ -1555,37 +1638,24 @@ select option {
 
   /* Summary final total */
   .summary-row.total-row .value-final {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
   }
 
   /* Buttons */
   .btn {
-    font-size: 0.825rem;
-    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    padding: 0.45rem 0.875rem;
   }
 
   .btn-sm {
-    font-size: 0.75rem;
-    padding: 0.3rem 0.625rem;
-  }
-
-  /* Header buttons stack */
-  .top-header {
-    gap: 0.5rem;
-  }
-
-  .top-header > div:last-child {
-    width: 100%;
-  }
-
-  .top-header > div:last-child .btn {
-    width: 100%;
+    font-size: 0.725rem;
+    padding: 0.25rem 0.5rem;
   }
 
   /* Invoice card */
   .invoice-card {
-    padding: 1rem;
-    border-radius: 10px;
+    padding: 0.875rem;
+    border-radius: 8px;
   }
 
   /* Modal full screen on small mobile */
@@ -1601,15 +1671,15 @@ select option {
   }
 
   .modal-body {
-    padding: 1rem;
+    padding: 0.875rem;
   }
 
   .modal-header {
-    padding: 1rem;
+    padding: 0.875rem;
   }
 
   .modal-footer {
-    padding: 0.75rem 1rem;
+    padding: 0.75rem 0.875rem;
   }
 }
 
@@ -2086,6 +2156,102 @@ h2[style*="color:#fff"] {
 /* Quick customer form background */
 #invoice-quick-customer-fields {
   background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* ========================================
+   ACCESSIBILITY: BOLD TEXT & HIGH CONTRAST
+   (Tối ưu cho người mắt kém / Cao tuổi)
+   ======================================== */
+body {
+  font-weight: 500;
+}
+
+/* Tiêu đề siêu đậm */
+h1, h2, h3, h4, h5, h6, .panel-title, .page-title, .summary-heading {
+  font-weight: 800 !important;
+  color: #000000 !important;
+}
+
+/* Nhãn biểu mẫu (Labels) cực kỳ nổi bật */
+.form-label, label {
+  font-weight: 700 !important;
+  color: #000000 !important;
+  font-size: 0.95rem !important;
+}
+
+/* Tiêu đề cột và ô trong bảng (Tables) đậm nét */
+.table th {
+  font-weight: 800 !important;
+  color: #000000 !important;
+  font-size: 0.95rem !important;
+}
+
+.table td {
+  font-weight: 600 !important;
+  color: #000000 !important;
+  font-size: 0.925rem !important;
+}
+
+.table td strong {
+  font-weight: 800 !important;
+  color: #000000 !important;
+}
+
+/* Các trường nhập liệu (Inputs, Select, Search) chữ đen, đậm */
+.form-control, .form-control-search, select.form-control {
+  font-weight: 700 !important;
+  color: #000000 !important;
+}
+
+/* Chữ gợi ý (Placeholders) tối màu hơn, dễ đọc */
+input::placeholder,
+textarea::placeholder,
+.form-control::placeholder,
+.form-control-search::placeholder {
+  color: #475569 !important; /* Slate 600 thay vì xám nhạt */
+  font-weight: 600 !important;
+  opacity: 1 !important;
+}
+
+/* Tóm tắt đơn hàng và thanh toán */
+.summary-row .label {
+  color: #1e293b !important;
+  font-weight: 700 !important;
+}
+
+.summary-row .value {
+  color: #000000 !important;
+  font-weight: 800 !important;
+}
+
+.summary-row.total-row .label {
+  color: #000000 !important;
+  font-weight: 800 !important;
+}
+
+.summary-row.total-row .value-final {
+  font-weight: 800 !important;
+}
+
+/* Thẻ thông tin khách hàng đã chọn */
+#invoice-customer-info-card div {
+  color: #000000 !important;
+  font-weight: 700 !important;
+}
+
+#invoice-customer-info-card span {
+  font-weight: 800 !important;
+}
+
+/* Menu điều hướng bên trái (Sidebar) */
+.nav-link {
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+
+.nav-link.active {
+  font-weight: 800 !important;
+  color: var(--color-primary) !important;
 }
 
 

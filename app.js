@@ -3929,6 +3929,9 @@ function renderHistoryOrders() {
       `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>` : 
       `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
       
+    const creator = state.users.find(u => u.username === order.createdBy);
+    const creatorName = creator ? creator.displayName : order.createdBy;
+
     return `
       <div class="invoice-card ${statusClass}" data-id="${order.id}">
         <div class="invoice-card-header">
@@ -3940,6 +3943,7 @@ function renderHistoryOrders() {
         </div>
         <div class="invoice-card-details">
           <div><strong style="color: #fff;">Khách hàng:</strong> ${order.customerName}</div>
+          <div><strong style="color: #fff;">NV lên đơn:</strong> ${creatorName}</div>
           <div><strong style="color: #fff;">Số lượng SP:</strong> ${totalItemsCount} sản phẩm</div>
           <div style="font-size: 0.8rem; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="${order.notes}">
             <strong>Ghi chú:</strong> ${order.notes}
@@ -4426,8 +4430,8 @@ function applyUserPermissions(user) {
     const navItem = link.parentElement;
     
     if (role === 'sale') {
-      // Sale: Allow 'invoice-panel', 'customers-panel', and 'products-panel'
-      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel') {
+      // Sale: Allow 'invoice-panel', 'customers-panel', 'products-panel', 'history-panel', and 'pricelists-panel'
+      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'pricelists-panel') {
         navItem.style.display = 'block';
       } else {
         navItem.style.display = 'none';
@@ -4463,7 +4467,17 @@ function applyUserPermissions(user) {
     }
   }
 
-  // Adjust delete buttons visibility globally
+  // Enable/Disable customer debt field edit based on role
+  const custDebtInput = document.getElementById('cust-debt');
+  if (custDebtInput) {
+    if (role === 'sale') {
+      custDebtInput.setAttribute('disabled', 'true');
+    } else {
+      custDebtInput.removeAttribute('disabled');
+    }
+  }
+
+  // Adjust delete and debt payment buttons visibility globally
   const styleTagId = 'role-based-css-rules';
   let styleTag = document.getElementById(styleTagId);
   if (!styleTag) {
@@ -4474,22 +4488,28 @@ function applyUserPermissions(user) {
 
   if (role === 'sale') {
     styleTag.innerHTML = `
-      .delete-cust-btn, .edit-cust-btn { display: none !important; }
+      .delete-cust-btn, .pay-debt-btn { display: none !important; }
+      .edit-cust-btn { display: inline-flex !important; }
       #btn-open-add-product-modal, #btn-open-excel-modal, #btn-download-excel-template, .edit-product-btn, .delete-prod-btn { display: none !important; }
       #products-panel th:last-child, #products-panel td:last-child { display: none !important; }
       .col-delete-prod { display: none !important; }
       .delete-order-btn { display: none !important; }
+      #btn-clear-history { display: none !important; }
+      #btn-open-add-pricelist-modal { display: none !important; }
+      #pricelists-panel th:last-child, #pricelists-panel td:last-child { display: none !important; }
     `;
   } else if (role === 'accounting') {
     styleTag.innerHTML = `
       .delete-cust-btn { display: inline-flex !important; }
       .edit-cust-btn { display: inline-flex !important; }
+      .pay-debt-btn { display: inline-flex !important; }
       #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: none !important; }
       .delete-order-btn { display: none !important; }
     `;
   } else {
     styleTag.innerHTML = `
       .delete-cust-btn, .edit-cust-btn { display: inline-flex !important; }
+      .pay-debt-btn { display: inline-flex !important; }
       #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: inline-flex !important; }
       .delete-order-btn { display: inline-flex !important; }
     `;
