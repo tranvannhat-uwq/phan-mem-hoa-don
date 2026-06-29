@@ -951,6 +951,48 @@ async function dbDeleteAllOrders() {
   }
 }
 
+async function dbDeleteOrder(id) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableOrdersName)
+        .delete()
+        .eq('id', id);
+        
+      if (error) throw error;
+      
+      state.savedOrders = state.savedOrders.filter(o => o.id !== id);
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể xóa hóa đơn trên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  } else {
+    state.savedOrders = state.savedOrders.filter(o => o.id !== id);
+    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+    return true;
+  }
+}
+
+async function deleteOrder(id) {
+  const order = state.savedOrders.find(o => o.id === id);
+  if (!order) return;
+  
+  if (order.status === 'settled' && state.currentUser && state.currentUser.role === 'sale') {
+    showToast('Nhân viên kinh doanh không có quyền xóa đơn đã thanh toán!', 'danger');
+    return;
+  }
+  
+  if (confirm(`Bạn có chắc chắn muốn xóa đơn hàng "${id}" không?`)) {
+    const deleted = await dbDeleteOrder(id);
+    if (deleted) {
+      renderAll();
+      showToast(`Đã xóa đơn hàng ${id} thành công!`, 'warning');
+    }
+  }
+}
+
 // Sync LocalStorage data to Supabase (Migration Tool)
 async function syncLocalToCloud() {
   if (!isCloudActive || !supabaseClient) {
@@ -2371,6 +2413,15 @@ async function saveCustomer() {
   const notes = document.getElementById('cust-notes').value.trim();
   const pricelistId = document.getElementById('cust-pricelist').value;
   
+  if (!assignedBrand) {
+    showToast('Vui lòng chọn nhãn đại lý độc quyền!', 'warning');
+    return;
+  }
+  if (!pricelistId) {
+    showToast('Vui lòng chọn bảng giá mặc định áp dụng!', 'warning');
+    return;
+  }
+  
   let managedBy = 'nhat';
   if (state.currentUser) {
     if (state.currentUser.role === 'sale') {
@@ -2612,16 +2663,17 @@ function populatePricelistsDropdowns() {
   if (select) {
     const currentVal = select.value;
     select.innerHTML = `
+      <option value="">-- Chọn bảng giá --</option>
+      ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
       <option value="retail">Nhập tay (Khách lẻ)</option>
       <option value="custom">Chiết khấu riêng của đại lý</option>
-      ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
     `;
     
     const exists = Array.from(select.options).some(opt => opt.value === currentVal);
     if (exists) {
       select.value = currentVal;
     } else {
-      select.value = 'retail';
+      select.value = '';
     }
   }
 
@@ -2630,14 +2682,15 @@ function populatePricelistsDropdowns() {
   if (custPlSelect) {
     const currentCustPlVal = custPlSelect.value;
     custPlSelect.innerHTML = `
-      <option value="custom">Chiết khấu riêng (Tự thiết lập bên dưới)</option>
+      <option value="">-- Chọn bảng giá --</option>
       ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
+      <option value="custom">Chiết khấu riêng (Tự thiết lập bên dưới)</option>
     `;
     const exists = Array.from(custPlSelect.options).some(opt => opt.value === currentCustPlVal);
     if (exists) {
       custPlSelect.value = currentCustPlVal;
     } else {
-      custPlSelect.value = 'custom';
+      custPlSelect.value = '';
     }
   }
 }
@@ -2819,7 +2872,7 @@ async function deletePricelist(index) {
       
       const plSelect = document.getElementById('invoice-pricelist-select');
       if (plSelect && plSelect.value === pl.id) {
-        plSelect.value = 'retail';
+        plSelect.value = '';
         applyActivePriceListToInvoice();
       }
       
@@ -2862,7 +2915,7 @@ function applyActivePriceListToInvoice() {
   
   if (plVal === 'custom' && !state.activeCustomerId) {
     showToast('Vui lòng chọn khách hàng để dùng chiết khấu riêng!', 'warning');
-    plSelect.value = 'retail';
+    plSelect.value = '';
     applyActivePriceListToInvoice();
     return;
   }
@@ -2875,7 +2928,11 @@ function applyActivePriceListToInvoice() {
   // Update KiotViet style header source badge
   const label = document.getElementById('invoice-pricelist-source-lbl');
   if (label) {
-    if (plVal === 'retail') {
+    if (plVal === '') {
+      label.innerText = 'Chưa chọn';
+      label.style.background = 'rgba(156, 163, 175, 0.1)';
+      label.style.color = '#9ca3af';
+    } else if (plVal === 'retail') {
       label.innerText = 'Nhập tay';
       label.style.background = 'rgba(16, 185, 129, 0.1)';
       label.style.color = '#10b981';
@@ -3211,7 +3268,7 @@ function resetInvoiceCustomer() {
   
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
-    plSelect.value = 'retail';
+    plSelect.value = '';
     plSelect.disabled = false; // Enable price list selection when customer is cleared
   }
   
@@ -3271,6 +3328,13 @@ function enableQuickCustomerMode() {
     item.discountPercent = 0;
   });
   
+  // Move the price list selector inside quick customer fields (above the shipping support container)
+  const plGroup = document.getElementById('invoice-pricelist-group');
+  const shipContainer = document.getElementById('quick-cust-shipping-support-container');
+  if (plGroup && quickFields && shipContainer) {
+    quickFields.insertBefore(plGroup, shipContainer);
+  }
+  
   renderInvoiceTable();
 }
 
@@ -3298,6 +3362,13 @@ function disableQuickCustomerMode() {
   if (qBrand) qBrand.value = 'Tất cả';
   const qShip = document.getElementById('quick-cust-shipping-support');
   if (qShip) qShip.checked = false;
+  
+  // Restore the price list selector back to the placeholder
+  const placeholder = document.getElementById('invoice-pricelist-placeholder');
+  const plGroup = document.getElementById('invoice-pricelist-group');
+  if (placeholder && plGroup) {
+    placeholder.appendChild(plGroup);
+  }
   
   resetInvoiceCustomer();
 }
@@ -3795,6 +3866,11 @@ function compileActiveOrder() {
   const plSelect = document.getElementById('invoice-pricelist-select');
   const pricelistId = plSelect ? plSelect.value : 'retail';
 
+  if (!pricelistId) {
+    showToast('Vui lòng chọn bảng giá bán áp dụng!', 'warning');
+    return null;
+  }
+
   const orderId = `HD-${Date.now().toString().slice(-6)}`;
   const createdBy = state.currentUser ? state.currentUser.username : 'admin';
   
@@ -3840,7 +3916,16 @@ async function saveActiveOrder(status = 'settled') {
     const qPhone = document.getElementById('quick-cust-phone').value.trim();
     const qAddress = document.getElementById('quick-cust-address').value.trim();
     const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
+    
+    if (!qAssignedBrand) {
+      showToast('Vui lòng chọn nhãn đại lý độc quyền!', 'warning');
+      return null;
+    }
+    
     const qShippingSupport = document.getElementById('quick-cust-shipping-support').checked;
+    
+    const plSelect = document.getElementById('invoice-pricelist-select');
+    const qPricelistId = plSelect && plSelect.value ? plSelect.value : 'custom';
     
     const newCustId = `cust-${Date.now()}`;
     const newCustomer = {
@@ -3855,7 +3940,7 @@ async function saveActiveOrder(status = 'settled') {
       debt: 0,
       totalTransaction: 0,
       notes: 'Thêm nhanh từ màn hình lên đơn',
-      pricelistId: 'custom',
+      pricelistId: qPricelistId,
       managedBy: state.currentUser ? state.currentUser.username : 'nhat'
     };
     
@@ -3870,6 +3955,11 @@ async function saveActiveOrder(status = 'settled') {
 
   const order = compileActiveOrder();
   if (!order) return null;
+  
+  if (status === 'settled' && state.currentUser && state.currentUser.role === 'sale') {
+    showToast('Nhân viên kinh doanh không có quyền thực hiện thanh toán!', 'danger');
+    return null;
+  }
   
   order.status = status;
 
@@ -4201,6 +4291,12 @@ function renderHistoryOrders() {
     const creator = state.users.find(u => u.username === order.createdBy);
     const creatorName = creator ? creator.displayName : order.createdBy;
 
+    let showDeleteBtn = true;
+    if (order.status === 'settled' && state.currentUser && state.currentUser.role === 'sale') {
+      showDeleteBtn = false;
+    }
+    const gridCols = showDeleteBtn ? '1fr 1fr 1fr' : '1fr 1fr';
+
     return `
       <div class="invoice-card ${statusClass}" data-id="${order.id}">
         <div class="invoice-card-header">
@@ -4222,13 +4318,18 @@ function renderHistoryOrders() {
           <span class="invoice-card-total-lbl">Thanh toán:</span>
           <span class="invoice-card-total-val">${formatCurrency(order.totalPayable)}</span>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.25rem;">
+        <div style="display: grid; grid-template-columns: ${gridCols}; gap: 0.5rem; margin-top: 0.25rem;">
           <button class="btn btn-indigo btn-sm history-print-btn" data-id="${order.id}">
             <i data-lucide="printer" style="width: 13px; height: 13px;"></i> In lại
           </button>
           <button class="btn btn-secondary btn-sm history-load-btn" data-id="${order.id}">
             <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Nạp lại
           </button>
+          ${showDeleteBtn ? `
+          <button class="btn btn-danger btn-sm history-delete-btn" data-id="${order.id}">
+            <i data-lucide="trash" style="width: 13px; height: 13px;"></i> Xóa
+          </button>
+          ` : ''}
         </div>
       </div>
     `;
@@ -4247,6 +4348,14 @@ function renderHistoryOrders() {
       e.stopPropagation();
       const id = btn.getAttribute('data-id');
       loadOrderToInvoiceBuilder(id);
+    });
+  });
+
+  document.querySelectorAll('.history-delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      deleteOrder(id);
     });
   });
 
@@ -4796,6 +4905,8 @@ function applyUserPermissions(user) {
 
   if (role === 'sale') {
     styleTag.innerHTML = `
+      #btn-save-order { display: none !important; }
+      #btn-print-type-warehouse { display: none !important; }
       .delete-cust-btn, .pay-debt-btn { display: none !important; }
       .edit-cust-btn { display: inline-flex !important; }
       #btn-open-add-product-modal, #btn-open-excel-modal, #btn-download-excel-template, .edit-product-btn, .delete-prod-btn { display: none !important; }
@@ -5269,6 +5380,10 @@ function setupPrintTypeModal() {
   
   document.getElementById('btn-print-type-warehouse').addEventListener('click', () => {
     if (currentOrderToPrint) {
+      if (state.currentUser && state.currentUser.role === 'sale') {
+        showToast('Nhân viên kinh doanh không có quyền in hóa đơn kho!', 'danger');
+        return;
+      }
       renderAndPrintOrder(currentOrderToPrint, 'warehouse');
       modal.classList.remove('active');
     }

@@ -447,6 +447,7 @@
                   <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Nhãn đại lý độc quyền</label>
                     <select class="form-control" id="quick-cust-assigned-brand">
+                      <option value="">-- Chọn nhãn sơn --</option>
                       <option value="Tất cả">Tất cả (Đại lý tổng hợp/Khách lẻ)</option>
                       <option value="Nano10*">Nano10*</option>
                       <option value="Hatacco nano">Hatacco nano</option>
@@ -461,7 +462,7 @@
                   <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Địa chỉ</label>
                   <input type="text" class="form-control" id="quick-cust-address" placeholder="Ví dụ: 123 Đường ABC, Quận 1">
                 </div>
-                <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
+                <div class="form-group" id="quick-cust-shipping-support-container" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
                   <input type="checkbox" id="quick-cust-shipping-support" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary);">
                   <label for="quick-cust-shipping-support" style="font-size: 0.75rem; color: var(--text-primary); cursor: pointer; font-weight: 500; user-select: none;">
                     Hỗ trợ vận chuyển (3%)
@@ -480,18 +481,21 @@
               </div>
  
               <!-- Price List Selector (KiotViet style) -->
-              <div class="form-group" id="invoice-pricelist-group" style="margin-bottom: 0.75rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-                  <label class="form-label" style="margin-bottom: 0;">Bảng giá bán áp dụng</label>
-                  <span id="invoice-pricelist-source-lbl" style="font-size: 0.7rem; font-weight: 600; color: var(--color-primary); background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px;">Nhập tay</span>
-                </div>
-                <div class="custom-input-group">
-                  <i data-lucide="tags" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
-                  <select class="form-control" id="invoice-pricelist-select" style="width: 100%;">
-                    <option value="retail">Nhập tay (Khách lẻ)</option>
-                    <option value="custom">Chiết khấu riêng của đại lý</option>
-                    <!-- Dynamic price lists will be loaded here -->
-                  </select>
+              <div id="invoice-pricelist-placeholder">
+                <div class="form-group" id="invoice-pricelist-group" style="margin-bottom: 0.75rem;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                    <label class="form-label" style="margin-bottom: 0;">Bảng giá bán áp dụng</label>
+                    <span id="invoice-pricelist-source-lbl" style="font-size: 0.7rem; font-weight: 600; color: var(--color-primary); background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px;">Nhập tay</span>
+                  </div>
+                  <div class="custom-input-group">
+                    <i data-lucide="tags" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
+                    <select class="form-control" id="invoice-pricelist-select" style="width: 100%;">
+                      <option value="">-- Chọn bảng giá --</option>
+                      <option value="retail">Nhập tay (Khách lẻ)</option>
+                      <option value="custom">Chiết khấu riêng của đại lý</option>
+                      <!-- Dynamic price lists will be loaded here -->
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -915,6 +919,7 @@
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-assigned-brand">Nhãn đại lý độc quyền</label>
               <select class="form-control" id="cust-assigned-brand" style="width: 100%;">
+                <option value="">-- Chọn nhãn sơn --</option>
                 <option value="Tất cả">Tất cả (Đại lý tổng hợp/Khách lẻ)</option>
                 <option value="Nano10*">Nano10*</option>
                 <option value="Hatacco nano">Hatacco nano</option>
