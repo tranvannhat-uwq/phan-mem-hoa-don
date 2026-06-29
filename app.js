@@ -200,6 +200,7 @@ async function initApp() {
   setupExcelImportAndTemplate();
   setupSupabaseSettings();
   setupUserManagement();
+  setupPrintTypeModal();
 
   // Try to connect to Supabase on startup with automatic retries (handles startup network delay)
   const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
@@ -282,7 +283,12 @@ function loadLocalStorageBackup() {
       priceLon: p.priceLon !== undefined ? p.priceLon : 0,
       priceHop: p.priceHop !== undefined ? p.priceHop : 0,
       priceBao: p.priceBao !== undefined ? p.priceBao : 0,
-      priceTui: p.priceTui !== undefined ? p.priceTui : 0
+      priceTui: p.priceTui !== undefined ? p.priceTui : 0,
+      weightThung: p.weightThung || '',
+      weightBao: p.weightBao || '',
+      weightLon: p.weightLon || '',
+      weightHop: p.weightHop || '',
+      weightTui: p.weightTui || ''
     }));
   } else {
     state.products = [...defaultProducts];
@@ -454,7 +460,12 @@ async function fetchCloudData() {
         priceLon: row.price_lon !== undefined && row.price_lon !== null ? row.price_lon : (local && local.priceLon !== undefined ? local.priceLon : 0),
         priceHop: row.price_hop !== undefined && row.price_hop !== null ? row.price_hop : (local && local.priceHop !== undefined ? local.priceHop : 0),
         priceBao: row.price_bao !== undefined && row.price_bao !== null ? row.price_bao : (local && local.priceBao !== undefined ? local.priceBao : 0),
-        priceTui: row.price_tui !== undefined && row.price_tui !== null ? row.price_tui : (local && local.priceTui !== undefined ? local.priceTui : 0)
+        priceTui: row.price_tui !== undefined && row.price_tui !== null ? row.price_tui : (local && local.priceTui !== undefined ? local.priceTui : 0),
+        weightThung: row.weight_thung !== undefined && row.weight_thung !== null ? row.weight_thung : (local && local.weightThung !== undefined ? local.weightThung : ''),
+        weightBao: row.weight_bao !== undefined && row.weight_bao !== null ? row.weight_bao : (local && local.weightBao !== undefined ? local.weightBao : ''),
+        weightLon: row.weight_lon !== undefined && row.weight_lon !== null ? row.weight_lon : (local && local.weightLon !== undefined ? local.weightLon : ''),
+        weightHop: row.weight_hop !== undefined && row.weight_hop !== null ? row.weight_hop : (local && local.weightHop !== undefined ? local.weightHop : ''),
+        weightTui: row.weight_tui !== undefined && row.weight_tui !== null ? row.weight_tui : (local && local.weightTui !== undefined ? local.weightTui : '')
       };
     });
     
@@ -639,7 +650,12 @@ async function dbSaveProduct(product) {
         price_lon: product.priceLon || 0,
         price_hop: product.priceHop || 0,
         price_bao: product.priceBao || 0,
-        price_tui: product.priceTui || 0
+        price_tui: product.priceTui || 0,
+        weight_thung: product.weightThung || '',
+        weight_bao: product.weightBao || '',
+        weight_lon: product.weightLon || '',
+        weight_hop: product.weightHop || '',
+        weight_tui: product.weightTui || ''
       };
       
       let { error } = await supabaseClient
@@ -1205,6 +1221,15 @@ function renderAll() {
 }
 
 function setupNavigation() {
+  // Load sidebar collapsed state on startup (desktop only)
+  if (window.innerWidth > 768) {
+    const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+    const appLayout = document.getElementById('app-layout');
+    if (appLayout && isCollapsed) {
+      appLayout.classList.add('sidebar-collapsed');
+    }
+  }
+
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
@@ -1222,7 +1247,16 @@ function setupNavigation() {
 
   if (hamburgerBtn) {
     hamburgerBtn.addEventListener('click', () => {
-      toggleMobileSidebar();
+      if (window.innerWidth <= 768) {
+        toggleMobileSidebar();
+      } else {
+        const appLayout = document.getElementById('app-layout');
+        if (appLayout) {
+          appLayout.classList.toggle('sidebar-collapsed');
+          const isCollapsed = appLayout.classList.contains('sidebar-collapsed');
+          localStorage.setItem('sidebar_collapsed', isCollapsed);
+        }
+      }
     });
   }
 
@@ -1838,9 +1872,9 @@ function setupProductManagement() {
     if (target.classList.contains('table-price-thung') || target.classList.contains('table-price-lon') || target.classList.contains('table-price-hop') || target.classList.contains('table-price-bao') || target.classList.contains('table-price-tui')) {
       const idx = parseInt(target.getAttribute('data-index'));
       const product = state.products[idx];
-      const val = parseFloat(target.value) || 0;
       
       let changed = false;
+      const val = parseFloat(target.value) || 0;
       if (target.classList.contains('table-price-thung') && product.priceThung !== val) {
         product.priceThung = val;
         changed = true;
@@ -1886,6 +1920,11 @@ function openProductModal(index = -1) {
     title.innerText = 'Thêm sản phẩm mới';
     document.getElementById('product-edit-index').value = '-1';
     document.getElementById('prod-code').disabled = false;
+    document.getElementById('prod-weight-thung').value = '';
+    document.getElementById('prod-weight-lon').value = '';
+    document.getElementById('prod-weight-hop').value = '';
+    document.getElementById('prod-weight-bao').value = '';
+    document.getElementById('prod-weight-tui').value = '';
   } else {
     title.innerText = 'Chỉnh sửa sản phẩm';
     document.getElementById('product-edit-index').value = index;
@@ -1910,6 +1949,11 @@ function openProductModal(index = -1) {
     document.getElementById('prod-price-hop').value = prod.priceHop !== undefined ? prod.priceHop : 0;
     document.getElementById('prod-price-bao').value = prod.priceBao !== undefined ? prod.priceBao : 0;
     document.getElementById('prod-price-tui').value = prod.priceTui !== undefined ? prod.priceTui : 0;
+    document.getElementById('prod-weight-thung').value = prod.weightThung !== undefined ? prod.weightThung : '';
+    document.getElementById('prod-weight-lon').value = prod.weightLon !== undefined ? prod.weightLon : '';
+    document.getElementById('prod-weight-hop').value = prod.weightHop !== undefined ? prod.weightHop : '';
+    document.getElementById('prod-weight-bao').value = prod.weightBao !== undefined ? prod.weightBao : '';
+    document.getElementById('prod-weight-tui').value = prod.weightTui !== undefined ? prod.weightTui : '';
   }
   
   modal.classList.add('active');
@@ -1918,6 +1962,16 @@ function openProductModal(index = -1) {
 
 function closeProductModal() {
   document.getElementById('product-modal').classList.remove('active');
+}
+
+function formatWeightInput(val) {
+  if (!val) return '';
+  const cleaned = String(val).trim();
+  if (cleaned === '') return '';
+  if (/[0-9]$/.test(cleaned)) {
+    return cleaned + 'kg';
+  }
+  return cleaned;
 }
 
 async function saveProduct() {
@@ -1939,6 +1993,12 @@ async function saveProduct() {
   const priceHop = parseFloat(document.getElementById('prod-price-hop').value) || 0;
   const priceBao = parseFloat(document.getElementById('prod-price-bao').value) || 0;
   const priceTui = parseFloat(document.getElementById('prod-price-tui').value) || 0;
+  
+  const weightThung = formatWeightInput(document.getElementById('prod-weight-thung').value);
+  const weightLon = formatWeightInput(document.getElementById('prod-weight-lon').value);
+  const weightHop = formatWeightInput(document.getElementById('prod-weight-hop').value);
+  const weightBao = formatWeightInput(document.getElementById('prod-weight-bao').value);
+  const weightTui = formatWeightInput(document.getElementById('prod-weight-tui').value);
 
   if (priceThung <= 0 && priceLon <= 0 && priceHop <= 0 && priceBao <= 0 && priceTui <= 0) {
     showToast('Vui lòng nhập ít nhất một mức giá lớn hơn 0 cho sản phẩm!', 'danger');
@@ -1961,7 +2021,12 @@ async function saveProduct() {
     priceLon,
     priceHop,
     priceBao,
-    priceTui
+    priceTui,
+    weightThung,
+    weightBao,
+    weightLon,
+    weightHop,
+    weightTui
   };
 
   const saved = await dbSaveProduct(productData);
@@ -2043,7 +2108,7 @@ function renderProductsTable() {
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không tìm thấy sản phẩm phù hợp.
         </td>
       </tr>
@@ -2067,6 +2132,14 @@ function renderProductsTable() {
       `<option value="${b}" ${currentBrand === b ? 'selected' : ''}>${b}</option>`
     ).join('');
 
+    const wParts = [];
+    if (p.weightThung) wParts.push(`T: ${p.weightThung}`);
+    if (p.weightLon) wParts.push(`L: ${p.weightLon}`);
+    if (p.weightBao) wParts.push(`B: ${p.weightBao}`);
+    if (p.weightHop) wParts.push(`H: ${p.weightHop}`);
+    if (p.weightTui) wParts.push(`Túi: ${p.weightTui}`);
+    const combinedWeight = wParts.join(' | ') || '-';
+
     return `
       <tr>
         <td style="text-align: center; color: var(--text-muted); font-weight: 500;">${idx + 1}</td>
@@ -2077,6 +2150,9 @@ function renderProductsTable() {
             ${brandSelectOptions}
             <option value="Khác">-- Tự nhập --</option>
           </select>
+        </td>
+        <td style="font-size: 0.75rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap;">
+          ${combinedWeight}
         </td>
         <td>
           <input type="number" class="table-inline-input table-price-thung" data-index="${actualIndex}" value="${p.priceThung || 0}" min="0" ${isDisabledAttr}>
@@ -2095,6 +2171,9 @@ function renderProductsTable() {
         </td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center;">
+            <button class="btn btn-primary btn-sm btn-circle edit-prod-btn" data-index="${actualIndex}" title="Sửa" style="background: var(--color-primary); margin-right: 4px;">
+              <i data-lucide="pencil" style="width: 14px; height: 14px;"></i>
+            </button>
             <button class="btn btn-danger btn-sm btn-circle delete-prod-btn" data-index="${actualIndex}" title="Xóa">
               <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
             </button>
@@ -2121,6 +2200,13 @@ function renderProductsTable() {
           renderProductsTable();
         }
       }
+    });
+  });
+
+  document.querySelectorAll('.edit-prod-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.getAttribute('data-index'));
+      openProductModal(idx);
     });
   });
 
@@ -2883,7 +2969,7 @@ function setupInvoiceCreator() {
         searchInput.value = item.getAttribute('data-code');
         searchInput.setAttribute('data-selected-brand', item.getAttribute('data-brand'));
         suggestionsList.style.display = 'none';
-        searchInput.focus();
+        addProductToInvoice();
       });
     });
   });
@@ -2904,8 +2990,16 @@ function setupInvoiceCreator() {
   addBtn.addEventListener('click', addProductToInvoice);
 
   resetBtn.addEventListener('click', () => {
-    if (state.invoiceItems.length > 0 && confirm('Bạn có chắc muốn xóa tất cả sản phẩm đang lập trên hóa đơn?')) {
-      resetInvoiceBuilder();
+    const hasItems = state.invoiceItems.length > 0;
+    const hasCustomer = state.activeCustomerId !== '' || state.isQuickCustomerMode;
+    const hasNotes = document.getElementById('invoice-notes') && document.getElementById('invoice-notes').value.trim() !== '';
+    
+    if (hasItems || hasCustomer || hasNotes) {
+      if (confirm('Bạn có chắc chắn muốn làm mới toàn bộ đơn hàng đang lập không?')) {
+        resetInvoiceBuilder();
+      }
+    } else {
+      showToast('Đơn hàng hiện tại đã trống!', 'info');
     }
   });
 
@@ -2928,7 +3022,7 @@ function setupInvoiceCreator() {
   printBtn.addEventListener('click', () => {
     const order = compileActiveOrder();
     if (order) {
-      renderAndPrintOrder(order);
+      openPrintTypeModal(order);
     }
   });
 
@@ -3017,6 +3111,7 @@ function setupInvoiceCreator() {
         item.addEventListener('click', () => {
           const id = item.getAttribute('data-id');
           selectInvoiceCustomer(id);
+          custSuggestions.style.display = 'none';
         });
       });
     });
@@ -3068,13 +3163,28 @@ function selectInvoiceCustomer(id) {
   
   // Set default price list
   const plSelect = document.getElementById('invoice-pricelist-select');
+  let pricelistName = 'Nhập tay (Khách lẻ)';
   if (plSelect) {
     if (customer.pricelistId) {
       plSelect.value = customer.pricelistId;
+      const pl = state.pricelists.find(p => p.id === customer.pricelistId);
+      pricelistName = pl ? pl.name : 'Bảng giá';
     } else {
       const isRetail = customer.assignedBrand === 'Tất cả' || customer.name.toLowerCase().includes('khách lẻ');
       plSelect.value = isRetail ? 'retail' : 'custom';
+      pricelistName = isRetail ? 'Nhập tay (Khách lẻ)' : 'Chiết khấu riêng của đại lý';
     }
+    plSelect.disabled = true; // Lock price list selection for existing customers
+  }
+  
+  const plLbl = document.getElementById('selected-customer-pricelist-lbl');
+  if (plLbl) {
+    plLbl.innerText = pricelistName;
+  }
+  
+  const plGroup = document.getElementById('invoice-pricelist-group');
+  if (plGroup) {
+    plGroup.style.display = 'none'; // Hide selector group since it is now shown inside customer card
   }
   
   applyActivePriceListToInvoice();
@@ -3102,6 +3212,12 @@ function resetInvoiceCustomer() {
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
     plSelect.value = 'retail';
+    plSelect.disabled = false; // Enable price list selection when customer is cleared
+  }
+  
+  const plGroup = document.getElementById('invoice-pricelist-group');
+  if (plGroup) {
+    plGroup.style.display = 'block'; // Show selector group again
   }
   
   applyActivePriceListToInvoice();
@@ -3271,7 +3387,8 @@ function addProductToInvoice() {
     colorPercent: 0,
     quantity: 1,
     discountPercent: discountPercent,
-    price: defaultPrice
+    price: defaultPrice,
+    note: ''
   });
   showToast(`Đã thêm sản phẩm "${product.name}" vào hóa đơn!`);
   
@@ -3303,7 +3420,7 @@ function renderInvoiceTable() {
   if (state.invoiceItems.length === 0) {
     body.innerHTML = `
       <tr id="invoice-empty-row">
-        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Chưa chọn sản phẩm nào. Tìm kiếm sản phẩm ở trên để thêm vào hóa đơn.
         </td>
       </tr>
@@ -3372,6 +3489,9 @@ function renderInvoiceTable() {
         <td style="text-align: center;">
           ${discountColHtml}
         </td>
+        <td>
+          <input type="text" class="form-control item-note-input" data-index="${idx}" value="${item.note || ''}" placeholder="Nhập ghi chú..." style="width: 100%; padding: 0.15rem 0.35rem; font-size: 0.8rem; height: 24px; border-radius: 4px; background-color: rgba(17,24,39,0.8); border: 1px solid var(--border-color); color: var(--text-primary);">
+        </td>
         <td class="price-discounted" style="text-align: right; font-weight: 600; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
           ${formatCurrency(finalPriceTotal)}
         </td>
@@ -3406,6 +3526,14 @@ function renderInvoiceTable() {
       
       renderInvoiceTable();
       showToast(`Đã nạp đơn giá quy cách "${sel.value}" cho sản phẩm ${product.code}!`);
+    });
+  });
+
+  // Register note input listener (live local update)
+  document.querySelectorAll('.item-note-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = parseInt(input.getAttribute('data-index'));
+      state.invoiceItems[idx].note = input.value;
     });
   });
 
@@ -3647,6 +3775,7 @@ function compileActiveOrder() {
       quantity: item.quantity,
       discountPercent: itemDiscPercent,
       price: item.price,
+      note: item.note || '',
       marketSub,
       discSub,
       payableSub
@@ -3777,7 +3906,7 @@ async function saveActiveOrder(status = 'settled') {
   return null;
 }
 
-function renderAndPrintOrder(order) {
+function renderAndPrintOrder(order, type = 'retail') {
   document.getElementById('print-invoice-id').innerText = order.id;
   document.getElementById('print-invoice-date').innerText = formatDateOnly(order.date);
   document.getElementById('print-customer-name').innerText = order.customerName;
@@ -3803,62 +3932,202 @@ function renderAndPrintOrder(order) {
     customerInfoDiv.innerHTML = extraHtml;
   }
 
-  const printItemsBody = document.getElementById('print-invoice-items-body');
-  printItemsBody.innerHTML = order.items.map((item, idx) => {
-    const unitPrice = item.price || 0;
-    const colorPct = item.colorPercent || 0;
-    const unitPriceWithColor = unitPrice * (1 + colorPct / 100);
-    const rowMarketSub = unitPriceWithColor * item.quantity;
-    const discPct = item.discountPercent || 0;
-    const rowPayableSub = item.payableSub !== undefined ? item.payableSub : (rowMarketSub * (1 - discPct / 100));
+  const printTable = document.getElementById('print-invoice-table');
+  if (printTable) {
+    let tableHtml = '';
     
-    const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
-      ? `<div style="font-size: 8.5pt; color: #555; font-weight: normal; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})</div>` 
-      : '';
+    if (type === 'retail') {
+      tableHtml += `
+        <thead>
+          <tr>
+            <th style="width: 5%; text-align: center;">STT</th>
+            <th style="width: 10%; text-align: center;">Mã SP</th>
+            <th style="width: 40%;">Tên sản phẩm</th>
+            <th style="width: 10%; text-align: center;">Quy cách</th>
+            <th style="width: 5%; text-align: center;">SL</th>
+            <th style="width: 12%; text-align: right;">Đơn giá</th>
+            <th style="width: 6%; text-align: center;">% CK</th>
+            <th style="width: 12%; text-align: right;">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+      `;
       
-    const brandHtml = '';
+      order.items.forEach((item, idx) => {
+        const unitPrice = item.price || 0;
+        const colorPct = item.colorPercent || 0;
+        const unitPriceWithColor = unitPrice * (1 + colorPct / 100);
+        const rowMarketSub = unitPriceWithColor * item.quantity;
+        const discPct = item.discountPercent || 0;
+        const rowPayableSub = item.payableSub !== undefined ? item.payableSub : (rowMarketSub * (1 - discPct / 100));
+        
+        const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
+          ? `<div style="font-size: 10pt; color: #000; font-weight: bold; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})</div>` 
+          : '';
+        const noteHtml = (item.note && item.note.trim() !== '')
+          ? `<div style="font-size: 9pt; color: #555; margin-top: 2px; font-style: italic;">Ghi chú: ${item.note}</div>`
+          : '';
+          
+        tableHtml += `
+          <tr>
+            <td class="print-text-center">${idx + 1}</td>
+            <td class="print-text-center"><strong>${item.product.code}</strong></td>
+            <td>
+              <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
+              ${colorCodeHtml}
+              ${noteHtml}
+            </td>
+            <td class="print-text-center">${item.package || 'Thùng'}</td>
+            <td class="print-text-center">${item.quantity}</td>
+            <td class="print-text-right">${formatCurrency(unitPriceWithColor)}</td>
+            <td class="print-text-center" style="font-weight:500;">${discPct}%</td>
+            <td class="print-text-right" style="font-weight:bold;">${formatCurrency(rowPayableSub)}</td>
+          </tr>
+        `;
+      });
+      
+      tableHtml += `</tbody>`;
+      
+    } else if (type === 'agent') {
+      tableHtml += `
+        <thead>
+          <tr>
+            <th style="width: 5%; text-align: center;">STT</th>
+            <th style="width: 10%; text-align: center;">Mã SP</th>
+            <th style="width: 45%;">Tên sản phẩm</th>
+            <th style="width: 10%; text-align: center;">Quy cách</th>
+            <th style="width: 6%; text-align: center;">SL</th>
+            <th style="width: 12%; text-align: right;">Đơn giá</th>
+            <th style="width: 12%; text-align: right;">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+      `;
+      
+      order.items.forEach((item, idx) => {
+        const unitPrice = item.price || 0;
+        const colorPct = item.colorPercent || 0;
+        const unitPriceWithColor = unitPrice * (1 + colorPct / 100);
+        const rowMarketSub = unitPriceWithColor * item.quantity;
+        const discPct = item.discountPercent || 0;
+        const rowPayableSub = item.payableSub !== undefined ? item.payableSub : (rowMarketSub * (1 - discPct / 100));
+        const unitPriceAfterDiscount = unitPriceWithColor * (1 - discPct / 100);
+        
+        const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
+          ? `<div style="font-size: 10pt; color: #000; font-weight: bold; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})</div>` 
+          : '';
+        const noteHtml = (item.note && item.note.trim() !== '')
+          ? `<div style="font-size: 9pt; color: #555; margin-top: 2px; font-style: italic;">Ghi chú: ${item.note}</div>`
+          : '';
+          
+        tableHtml += `
+          <tr>
+            <td class="print-text-center">${idx + 1}</td>
+            <td class="print-text-center"><strong>${item.product.code}</strong></td>
+            <td>
+              <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
+              ${colorCodeHtml}
+              ${noteHtml}
+            </td>
+            <td class="print-text-center">${item.package || 'Thùng'}</td>
+            <td class="print-text-center">${item.quantity}</td>
+            <td class="print-text-right">${formatCurrency(unitPriceAfterDiscount)}</td>
+            <td class="print-text-right" style="font-weight:bold;">${formatCurrency(rowPayableSub)}</td>
+          </tr>
+        `;
+      });
+      
+      tableHtml += `</tbody>`;
+      
+    } else if (type === 'warehouse') {
+      tableHtml += `
+        <thead>
+          <tr>
+            <th style="width: 5%; text-align: center;">STT</th>
+            <th style="width: 12%; text-align: center;">Mã SP</th>
+            <th style="width: 48%;">Tên sản phẩm</th>
+            <th style="width: 15%; text-align: center;">Khối lượng</th>
+            <th style="width: 8%; text-align: center;">SL</th>
+            <th style="width: 12%; text-align: center;">Ghi chú</th>
+          </tr>
+        </thead>
+        <tbody>
+      `;
+      
+      order.items.forEach((item, idx) => {
+        const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
+          ? `<div style="font-size: 10pt; color: #000; font-weight: bold; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode}</div>` 
+          : '';
+          
+        const prod = state.products.find(p => p.code === item.product.code && p.brand === item.brand);
+        let weightValue = '';
+        if (prod) {
+          const pkg = item.package || 'Thùng';
+          if (pkg === 'Thùng') weightValue = prod.weightThung || '';
+          else if (pkg === 'Lon') weightValue = prod.weightLon || '';
+          else if (pkg === 'Bao') weightValue = prod.weightBao || '';
+          else if (pkg === 'Hộp') weightValue = prod.weightHop || '';
+          else if (pkg === 'Túi') weightValue = prod.weightTui || '';
+        }
+        
+        tableHtml += `
+          <tr>
+            <td class="print-text-center">${idx + 1}</td>
+            <td class="print-text-center"><strong>${item.product.code}</strong></td>
+            <td>
+              <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
+              ${colorCodeHtml}
+            </td>
+            <td class="print-text-center">${weightValue}</td>
+            <td class="print-text-center">${item.quantity}</td>
+            <td>${item.note || ''}</td>
+          </tr>
+        `;
+      });
+      
+      tableHtml += `</tbody>`;
+    }
     
-    return `
-      <tr>
-        <td class="print-text-center">${idx + 1}</td>
-        <td class="print-text-center"><strong>${item.product.code}</strong></td>
-        <td>
-          <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
-          ${colorCodeHtml}
-        </td>
-        <td class="print-text-center">${item.package || 'Thùng'}</td>
-        <td class="print-text-center">${item.quantity}</td>
-        <td class="print-text-right">${formatCurrency(unitPriceWithColor)}</td>
-        <td class="print-text-center" style="font-weight:500;">${discPct}%</td>
-        <td class="print-text-right" style="font-weight:bold;">${formatCurrency(rowPayableSub)}</td>
-      </tr>
-    `;
-  }).join('');
+    printTable.innerHTML = tableHtml;
+  }
 
-  document.getElementById('print-total-market').innerText = formatCurrency(order.totalMarket);
-  document.getElementById('print-total-discount').innerText = `-${formatCurrency(order.totalDiscount)}`;
-  
-  const printShipRow = document.getElementById('print-shipping-discount-row');
-  const printShipVal = document.getElementById('print-shipping-discount');
-  if (printShipRow && printShipVal) {
-    if (order.shippingDiscount && order.shippingDiscount > 0) {
-      printShipVal.innerText = `-${formatCurrency(order.shippingDiscount)}`;
-      printShipRow.style.display = 'flex';
+  const summaryDiv = document.querySelector('.print-summary');
+  if (summaryDiv) {
+    if (type === 'warehouse') {
+      summaryDiv.style.display = 'none';
     } else {
-      printShipRow.style.display = 'none';
+      summaryDiv.style.display = 'block';
     }
   }
 
-  document.getElementById('print-total-payable').innerText = formatCurrency(order.totalPayable);
+  if (type !== 'warehouse') {
+    document.getElementById('print-total-market').innerText = formatCurrency(order.totalMarket);
+    document.getElementById('print-total-discount').innerText = `-${formatCurrency(order.totalDiscount)}`;
+    
+    const printShipRow = document.getElementById('print-shipping-discount-row');
+    const printShipVal = document.getElementById('print-shipping-discount');
+    if (printShipRow && printShipVal) {
+      if (order.shippingDiscount && order.shippingDiscount > 0) {
+        printShipVal.innerText = `-${formatCurrency(order.shippingDiscount)}`;
+        printShipRow.style.display = 'flex';
+      } else {
+        printShipRow.style.display = 'none';
+      }
+    }
 
-  const totalCombinedDiscount = (order.totalDiscount || 0) + (order.shippingDiscount || 0);
-  const discountPercent = (order.totalMarket > 0) ? Math.round((totalCombinedDiscount / order.totalMarket) * 100) : 0;
-  const discountLabel = document.getElementById('print-discount-label');
-  if (discountLabel) {
-    if (discountPercent > 0) {
-      discountLabel.innerText = `Tổng tiền chiết khấu (~${discountPercent}%):`;
-    } else {
-      discountLabel.innerText = `Tổng tiền chiết khấu:`;
+    document.getElementById('print-total-payable').innerText = formatCurrency(order.totalPayable);
+
+    const totalCombinedDiscount = (order.totalDiscount || 0) + (order.shippingDiscount || 0);
+    const discountPercent = (order.totalMarket > 0) ? Math.round((totalCombinedDiscount / order.totalMarket) * 100) : 0;
+    const discountLabel = document.getElementById('print-discount-label');
+    if (discountLabel) {
+      if (type === 'agent') {
+        discountLabel.innerText = `Tổng tiền chiết khấu:`;
+      } else if (discountPercent > 0) {
+        discountLabel.innerText = `Tổng tiền chiết khấu (~${discountPercent}%):`;
+      } else {
+        discountLabel.innerText = `Tổng tiền chiết khấu:`;
+      }
     }
   }
 
@@ -3873,7 +4142,7 @@ function printOrderById(orderId) {
     showToast(`Không tìm thấy đơn hàng "${orderId}"!`, 'danger');
     return;
   }
-  renderAndPrintOrder(order);
+  openPrintTypeModal(order);
 }
 
 
@@ -4027,7 +4296,8 @@ function loadOrderToInvoiceBuilder(orderId) {
         colorPercent: item.colorPercent !== undefined ? item.colorPercent : 0,
         quantity: item.quantity,
         discountPercent: item.discountPercent !== undefined ? item.discountPercent : 0,
-        price: item.price !== undefined ? item.price : 0
+        price: item.price !== undefined ? item.price : 0,
+        note: item.note || ''
       };
     });
 
@@ -4116,7 +4386,12 @@ function setupExcelImportAndTemplate() {
               price_lon: p.priceLon || 0,
               price_hop: p.priceHop || 0,
               price_bao: p.priceBao || 0,
-              price_tui: p.priceTui || 0
+              price_tui: p.priceTui || 0,
+              weight_thung: p.weightThung || '',
+              weight_bao: p.weightBao || '',
+              weight_lon: p.weightLon || '',
+              weight_hop: p.weightHop || '',
+              weight_tui: p.weightTui || ''
             }));
             
             const { error: insErr } = await supabaseClient.from(tableProductsName).insert(dbRows);
@@ -4172,7 +4447,12 @@ function setupExcelImportAndTemplate() {
             price_lon: p.priceLon || 0,
             price_hop: p.priceHop || 0,
             price_bao: p.priceBao || 0,
-            price_tui: p.priceTui || 0
+            price_tui: p.priceTui || 0,
+            weight_thung: p.weightThung || '',
+            weight_bao: p.weightBao || '',
+            weight_lon: p.weightLon || '',
+            weight_hop: p.weightHop || '',
+            weight_tui: p.weightTui || ''
           }));
           
           let { error } = await supabaseClient.from(tableProductsName).upsert(dbRows, { onConflict: 'code,brand' });
@@ -4268,6 +4548,12 @@ function handleExcelFile(file) {
         const priceHop = row[5] ? parseFloat(row[5]) : 0;
         const priceBao = row[6] ? parseFloat(row[6]) : 0;
         const priceTui = row[7] ? parseFloat(row[7]) : 0;
+        
+        const weightThung = formatWeightInput(row[8]);
+        const weightLon = formatWeightInput(row[9]);
+        const weightHop = formatWeightInput(row[10]);
+        const weightBao = formatWeightInput(row[11]);
+        const weightTui = formatWeightInput(row[12]);
 
         if (!code || !name) {
           skipErrorsCount++;
@@ -4282,17 +4568,23 @@ function handleExcelFile(file) {
           priceLon: isNaN(priceLon) ? 0 : priceLon,
           priceHop: isNaN(priceHop) ? 0 : priceHop,
           priceBao: isNaN(priceBao) ? 0 : priceBao,
-          priceTui: isNaN(priceTui) ? 0 : priceTui
+          priceTui: isNaN(priceTui) ? 0 : priceTui,
+          weightThung,
+          weightBao,
+          weightLon,
+          weightHop,
+          weightTui
         });
       });
 
-      // Loại bỏ các mã sản phẩm trùng lặp trong file Excel để tránh lỗi SQL
+      // Loại bỏ các mã sản phẩm trùng lặp (cùng mã SP và cùng hãng sơn) trong file Excel để tránh lỗi SQL
       const uniqueData = [];
-      const seenCodes = new Set();
+      const seenKeys = new Set();
       let duplicateCount = 0;
       excelImportData.forEach(item => {
-        if (!seenCodes.has(item.code)) {
-          seenCodes.add(item.code);
+        const key = `${item.code}||${item.brand}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
           uniqueData.push(item);
         } else {
           duplicateCount++;
@@ -4308,19 +4600,30 @@ function handleExcelFile(file) {
 
       // Render Preview Table (STT, Mã SP, Tên sản phẩm, Hãng sơn, Giá Thùng, Giá Lon, Giá Hộp, Giá Bao, Giá Túi)
       const previewBody = document.getElementById('excel-preview-table-body');
-      previewBody.innerHTML = excelImportData.map((item, idx) => `
-        <tr>
-          <td style="text-align: center; color: var(--text-muted); font-weight: 500;">${idx + 1}</td>
-          <td style="font-weight:600; color:#fff;">${item.code}</td>
-          <td>${item.name}</td>
-          <td>${item.brand || 'Khác'}</td>
-          <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceThung || 0)}</td>
-          <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceLon || 0)}</td>
-          <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceHop || 0)}</td>
-          <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceBao || 0)}</td>
-          <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceTui || 0)}</td>
-        </tr>
-      `).join('');
+      previewBody.innerHTML = excelImportData.map((item, idx) => {
+        const wParts = [];
+        if (item.weightThung) wParts.push(`T: ${item.weightThung}`);
+        if (item.weightLon) wParts.push(`L: ${item.weightLon}`);
+        if (item.weightBao) wParts.push(`B: ${item.weightBao}`);
+        if (item.weightHop) wParts.push(`H: ${item.weightHop}`);
+        if (item.weightTui) wParts.push(`Túi: ${item.weightTui}`);
+        const combinedWeight = wParts.join(' | ') || '-';
+        
+        return `
+          <tr>
+            <td style="text-align: center; color: var(--text-muted); font-weight: 500;">${idx + 1}</td>
+            <td style="font-weight:600; color:#fff;">${item.code}</td>
+            <td>${item.name}</td>
+            <td>${item.brand || 'Khác'}</td>
+            <td style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap;">${combinedWeight}</td>
+            <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceThung || 0)}</td>
+            <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceLon || 0)}</td>
+            <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceHop || 0)}</td>
+            <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceBao || 0)}</td>
+            <td style="text-align: right; color: var(--color-primary); font-weight: 600;">${formatCurrency(item.priceTui || 0)}</td>
+          </tr>
+        `;
+      }).join('');
 
       document.getElementById('excel-preview-container').style.display = 'block';
       document.getElementById('excel-preview-summary').innerText = `Tìm thấy ${excelImportData.length} sản phẩm hợp lệ.${skipErrorsCount > 0 ? ` Bỏ qua ${skipErrorsCount} dòng lỗi.` : ''}${duplicateCount > 0 ? ` Bỏ qua ${duplicateCount} sản phẩm trùng mã trong file.` : ''}`;
@@ -4340,13 +4643,13 @@ function handleExcelFile(file) {
 
 function downloadExcelTemplate() {
   const headers = [
-    ['Mã SP', 'Tên sản phẩm', 'Hãng sơn', 'Giá Thùng', 'Giá Lon', 'Giá Hộp', 'Giá Bao', 'Giá Túi']
+    ['Mã SP', 'Tên sản phẩm', 'Hãng sơn', 'Giá Thùng', 'Giá Lon', 'Giá Hộp', 'Giá Bao', 'Giá Túi', 'KL Thùng', 'KL Lon', 'KL Hộp', 'KL Bao', 'KL Túi']
   ];
   
   const sampleRows = [
-    ['SP001', 'Sơn bóng ngoại thất WeatherShield', 'Nano10*', 1250000, 380000, 120000, 0, 0],
-    ['SP006', 'Bột bả tường cao cấp Nano10*', 'Nano10*', 0, 0, 0, 280000, 60000],
-    ['SP007', 'Chống thấm chuyên dụng Sika Latex', 'Hatacco nano', 850000, 250000, 0, 0, 75000]
+    ['SP001', 'Sơn bóng ngoại thất WeatherShield', 'Nano10*', 1250000, 380000, 120000, 0, 0, '19kg', '5kg', '1kg', '', ''],
+    ['SP006', 'Bột bả tường cao cấp Nano10*', 'Nano10*', 0, 0, 0, 280000, 60000, '', '', '', '40kg', '5kg'],
+    ['SP007', 'Chống thấm chuyên dụng Sika Latex', 'Hatacco nano', 850000, 250000, 0, 0, 75000, '23kg', '7kg', '', '', '0.5kg']
   ];
 
   const sheetData = headers.concat(sampleRows);
@@ -4362,7 +4665,12 @@ function downloadExcelTemplate() {
     { wch: 15 }, // Giá Lon
     { wch: 15 }, // Giá Hộp
     { wch: 15 }, // Giá Bao
-    { wch: 15 }  // Giá Túi
+    { wch: 15 }, // Giá Túi
+    { wch: 12 }, // KL Thùng
+    { wch: 12 }, // KL Lon
+    { wch: 12 }, // KL Hộp
+    { wch: 12 }, // KL Bao
+    { wch: 12 }  // KL Túi
   ];
   
   XLSX.utils.book_append_sheet(wb, ws, "Danh Sach San Pham");
@@ -4914,4 +5222,55 @@ async function handlePayDebtSubmit(e) {
     renderAll();
     showToast(`Đã thu nợ ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}!`, 'success');
   }
+}
+
+// --- Print Type Selection Modal Controller ---
+let currentOrderToPrint = null;
+
+function openPrintTypeModal(order) {
+  currentOrderToPrint = order;
+  const modal = document.getElementById('print-type-modal');
+  if (modal) {
+    modal.classList.add('active');
+  }
+}
+
+function setupPrintTypeModal() {
+  const modal = document.getElementById('print-type-modal');
+  const closeBtn = document.getElementById('btn-close-print-type-modal');
+  
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+  }
+  
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.remove('active');
+      }
+    });
+  }
+
+  document.getElementById('btn-print-type-retail').addEventListener('click', () => {
+    if (currentOrderToPrint) {
+      renderAndPrintOrder(currentOrderToPrint, 'retail');
+      modal.classList.remove('active');
+    }
+  });
+  
+  document.getElementById('btn-print-type-agent').addEventListener('click', () => {
+    if (currentOrderToPrint) {
+      renderAndPrintOrder(currentOrderToPrint, 'agent');
+      modal.classList.remove('active');
+    }
+  });
+  
+  document.getElementById('btn-print-type-warehouse').addEventListener('click', () => {
+    if (currentOrderToPrint) {
+      renderAndPrintOrder(currentOrderToPrint, 'warehouse');
+      modal.classList.remove('active');
+    }
+  });
 }

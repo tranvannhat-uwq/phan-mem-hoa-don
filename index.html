@@ -303,18 +303,19 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table" style="table-layout: fixed; min-width: 1150px;">
+            <table class="table" style="table-layout: fixed; min-width: 1240px;">
               <colgroup>
                 <col style="width: 45px;">   <!-- STT -->
-                <col style="width: 95px;">   <!-- Mã SP -->
-                <col style="width: auto;">   <!-- Tên sản phẩm (flexible) -->
-                <col style="width: 120px;">  <!-- Hãng sơn -->
-                <col style="width: 125px;">  <!-- Giá Thùng -->
-                <col style="width: 125px;">  <!-- Giá Lon -->
-                <col style="width: 125px;">  <!-- Giá Hộp -->
-                <col style="width: 125px;">  <!-- Giá Bao -->
-                <col style="width: 125px;">  <!-- Giá Túi -->
-                <col style="width: 55px;" class="col-delete-prod">   <!-- Xóa -->
+                <col style="width: 90px;">   <!-- Mã SP -->
+                <col style="width: 280px;">  <!-- Tên sản phẩm -->
+                <col style="width: 100px;">  <!-- Hãng sơn -->
+                <col style="width: 110px;">  <!-- Khối lượng -->
+                <col style="width: 105px;">  <!-- Giá Thùng -->
+                <col style="width: 105px;">  <!-- Giá Lon -->
+                <col style="width: 105px;">  <!-- Giá Hộp -->
+                <col style="width: 105px;">  <!-- Giá Bao -->
+                <col style="width: 105px;">  <!-- Giá Túi -->
+                <col style="width: 90px;">   <!-- Hành động -->
               </colgroup>
               <thead>
                 <tr>
@@ -322,12 +323,13 @@
                   <th>Mã SP</th>
                   <th>Tên sản phẩm</th>
                   <th>Hãng sơn</th>
+                  <th>Khối lượng</th>
                   <th style="text-align: right;">Giá Thùng</th>
                   <th style="text-align: right;">Giá Lon</th>
                   <th style="text-align: right;">Giá Hộp</th>
                   <th style="text-align: right;">Giá Bao</th>
                   <th style="text-align: right;">Giá Túi</th>
-                  <th style="text-align: center;">Xóa</th>
+                  <th style="text-align: center;">Hành động</th>
                 </tr>
               </thead>
               <tbody id="products-table-body">
@@ -362,13 +364,14 @@
               </div>
 
               <div class="table-responsive">
-                <table class="table invoice-items-table" style="table-layout: fixed; min-width: 900px;">
+                <table class="table invoice-items-table" style="table-layout: fixed; min-width: 980px;">
                   <colgroup>
                     <col style="width: 85px;">   <!-- Mã SP -->
                     <col style="width: auto;">   <!-- Tên SP (flexible, includes màu sắc) -->
                     <col style="width: 95px;">   <!-- Quy cách -->
                     <col style="width: 65px;">   <!-- SL -->
                     <col style="width: 80px;">   <!-- % CK -->
+                    <col style="width: 120px;">  <!-- Ghi chú -->
                     <col style="width: 130px;">  <!-- Thành tiền -->
                     <col style="width: 46px;">   <!-- Xóa -->
                   </colgroup>
@@ -379,6 +382,7 @@
                       <th>Quy cách</th>
                       <th style="text-align: center;">SL</th>
                       <th style="text-align: center;">% CK</th>
+                      <th style="text-align: center;">Ghi chú</th>
                       <th style="text-align: right;">Thành tiền</th>
                       <th style="text-align: center;">Xóa</th>
                     </tr>
@@ -386,7 +390,7 @@
                   <tbody id="invoice-items-body">
                     <!-- Dynamic invoice rows -->
                     <tr id="invoice-empty-row">
-                      <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                      <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 3rem;">
                         Chưa chọn sản phẩm nào. Tìm kiếm sản phẩm ở trên để thêm vào hóa đơn.
                       </td>
                     </tr>
@@ -407,7 +411,12 @@
             
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
               <div class="form-group" style="position: relative; margin-bottom: 0.75rem;" id="invoice-customer-search-group">
-                <label class="form-label">Tìm khách hàng (Tên hoặc SĐT) *</label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                  <label class="form-label" style="margin-bottom: 0;">Tìm khách hàng (Tên hoặc SĐT) *</label>
+                  <button type="button" class="btn btn-secondary btn-circle btn-sm" id="btn-quick-customer-toggle" title="Thêm khách hàng mới (Thêm nhanh)" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0;">
+                    <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+                  </button>
+                </div>
                 <div class="custom-input-group">
                   <i data-lucide="user" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
                   <input type="text" class="form-control" id="invoice-customer-search" placeholder="Nhập tên hoặc số điện thoại..." autocomplete="off">
@@ -416,13 +425,6 @@
                   <!-- Auto populated customer suggestions -->
                 </ul>
                 <input type="hidden" id="invoice-customer-id" value="">
-              </div>
-
-              <!-- Toggle to Quick Customer Form -->
-              <div style="text-align: right; margin-top: -0.5rem; margin-bottom: 0.75rem;" id="invoice-quick-customer-toggle-container">
-                <button type="button" class="btn-link" id="btn-quick-customer-toggle" style="background: none; border: none; font-size: 0.75rem; color: var(--color-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; font-family: inherit; font-weight: 500;">
-                  <i data-lucide="user-plus" style="width: 12px; height: 12px;"></i> Khách hàng mới (Thêm nhanh)
-                </button>
               </div>
 
               <!-- Quick Customer Form Fields -->
@@ -467,18 +469,18 @@
                 </div>
               </div>
 
-
               <!-- Thẻ thông tin khách hàng đã chọn -->
               <div id="invoice-customer-info-card" class="glass-panel" style="display: none; padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; font-size: 0.8rem; line-height: 1.4;">
                 <div style="font-weight: 600; color: #fff; margin-bottom: 0.25rem;" id="selected-customer-name-lbl">Khách hàng vãng lai</div>
                 <div style="color: var(--text-secondary);">SĐT: <span id="selected-customer-phone-lbl">N/A</span></div>
                 <div style="color: var(--text-secondary);">Địa chỉ: <span id="selected-customer-address-lbl">N/A</span></div>
                 <div style="color: var(--text-secondary);">Đại lý nhãn: <span id="selected-customer-brand-lbl" style="font-weight: 600; color: var(--color-primary);">Tất cả</span></div>
+                <div style="color: var(--text-secondary);">Bảng giá: <span id="selected-customer-pricelist-lbl" style="font-weight: 600; color: var(--color-warning);">N/A</span></div>
                 <div style="color: var(--text-secondary);">Nợ hiện tại: <span id="selected-customer-debt-lbl" style="color: var(--color-danger); font-weight: 600;">0 ₫</span></div>
               </div>
-
+ 
               <!-- Price List Selector (KiotViet style) -->
-              <div class="form-group" style="margin-bottom: 0.75rem;">
+              <div class="form-group" id="invoice-pricelist-group" style="margin-bottom: 0.75rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
                   <label class="form-label" style="margin-bottom: 0;">Bảng giá bán áp dụng</label>
                   <span id="invoice-pricelist-source-lbl" style="font-size: 0.7rem; font-weight: 600; color: var(--color-primary); background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px;">Nhập tay</span>
@@ -849,6 +851,30 @@
               <input type="number" class="form-control" id="prod-price-tui" min="0" placeholder="Ví dụ: 50000" style="width: 100%;">
             </div>
           </div>
+          <div class="form-row-3" style="margin-top: 0.75rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-weight-thung">KL Thùng</label>
+              <input type="text" class="form-control" id="prod-weight-thung" placeholder="VD: 19kg" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-weight-lon">KL Lon</label>
+              <input type="text" class="form-control" id="prod-weight-lon" placeholder="VD: 5kg" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-weight-hop">KL Hộp</label>
+              <input type="text" class="form-control" id="prod-weight-hop" placeholder="VD: 1kg" style="width: 100%;">
+            </div>
+          </div>
+          <div class="form-row-2" style="margin-top: 0.75rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-weight-bao">KL Bao</label>
+              <input type="text" class="form-control" id="prod-weight-bao" placeholder="VD: 25kg" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="prod-weight-tui">KL Túi</label>
+              <input type="text" class="form-control" id="prod-weight-tui" placeholder="VD: 0.5kg" style="width: 100%;">
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-product">Hủy bỏ</button>
@@ -1095,22 +1121,8 @@
       <strong>Hãng sơn:</strong> <span id="print-order-brand" style="text-transform: uppercase; font-weight: bold;">N/A</span>
     </div>
 
-    <table class="print-table">
-      <thead>
-        <tr>
-          <th style="width: 5%; text-align: center;">STT</th>
-          <th style="width: 10%; text-align: center;">Mã SP</th>
-          <th style="width: 40%;">Tên sản phẩm</th>
-          <th style="width: 10%; text-align: center;">Quy cách</th>
-          <th style="width: 5%; text-align: center;">SL</th>
-          <th style="width: 12%; text-align: right;">Đơn giá</th>
-          <th style="width: 6%; text-align: center;">% CK</th>
-          <th style="width: 12%; text-align: right;">Thành tiền</th>
-        </tr>
-      </thead>
-      <tbody id="print-invoice-items-body">
-        <!-- Rendered by JS -->
-      </tbody>
+    <table class="print-table" id="print-invoice-table">
+      <!-- Dynamically rendered by JS depending on print mode -->
     </table>
 
     <div class="print-summary">
@@ -1190,6 +1202,41 @@
     </div>
   </div>
 
+  <!-- Print Type Selection Modal -->
+  <div class="modal-overlay" id="print-type-modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header" style="justify-content: center; position: relative;">
+        <h3 class="modal-title">Chọn loại hóa đơn cần in</h3>
+        <button class="modal-close" id="btn-close-print-type-modal" style="position: absolute; right: 1rem;">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem 0;">
+        <button class="btn btn-indigo" id="btn-print-type-retail" style="padding: 1rem; font-size: 1rem; justify-content: flex-start; gap: 1rem; width: 100%;">
+          <i data-lucide="user" style="width: 24px; height: 24px;"></i>
+          <div style="text-align: left;">
+            <div style="font-weight: bold; color: #fff;">Hóa đơn khách lẻ</div>
+            <div style="font-size: 0.8rem; color: #ccc; font-weight: normal; margin-top: 2px;">Hiển thị đầy đủ thông tin đơn giá, % chiết khấu và thành tiền</div>
+          </div>
+        </button>
+        <button class="btn btn-primary" id="btn-print-type-agent" style="padding: 1rem; font-size: 1rem; justify-content: flex-start; gap: 1rem; width: 100%;">
+          <i data-lucide="users" style="width: 24px; height: 24px;"></i>
+          <div style="text-align: left;">
+            <div style="font-weight: bold; color: #fff;">Hóa đơn đại lý, đối tác</div>
+            <div style="font-size: 0.8rem; color: #ccc; font-weight: normal; margin-top: 2px;">Ẩn tỷ lệ % chiết khấu ở dòng tổng, bỏ cột % chiết khấu</div>
+          </div>
+        </button>
+        <button class="btn btn-secondary" id="btn-print-type-warehouse" style="padding: 1rem; font-size: 1rem; justify-content: flex-start; gap: 1rem; width: 100%; color: var(--text-primary);">
+          <i data-lucide="package" style="width: 24px; height: 24px;"></i>
+          <div style="text-align: left;">
+            <div style="font-weight: bold; color: var(--text-primary);">Hóa đơn nhân viên kho</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal; margin-top: 2px;">Ẩn toàn bộ giá tiền, đổi cột Quy cách thành Khối lượng, thêm cột Ghi chú</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Excel Import Modal -->
   <div class="modal-overlay" id="excel-modal">
     <div class="modal-content" style="max-width: 800px;">
@@ -1232,6 +1279,7 @@
                   <th>Mã SP</th>
                   <th>Tên sản phẩm</th>
                   <th>Hãng sơn</th>
+                  <th>Khối lượng</th>
                   <th style="text-align: right;">Giá Thùng</th>
                   <th style="text-align: right;">Giá Lon</th>
                   <th style="text-align: right;">Giá Hộp</th>
