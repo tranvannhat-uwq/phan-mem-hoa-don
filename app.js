@@ -74,6 +74,10 @@ function formatCurrency(amount) {
   }).format(amount);
 }
 
+function formatNumber(amount) {
+  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.round(amount));
+}
+
 // Get color percent markup from color code suffix (P: 0%, T: 15%, D: 20%, A: 25%)
 function getColorPercentFromCode(colorCode) {
   if (!colorCode) return 0;
@@ -4036,9 +4040,9 @@ function renderAndPrintOrder(order, type = 'retail') {
             <th style="width: 15%; text-align: center;">Mã màu</th>
             <th style="width: 8%; text-align: center;">Quy cách</th>
             <th style="width: 5%; text-align: center;">SL</th>
-            <th style="width: 10%; text-align: right;">Đơn giá</th>
+            <th style="width: 10%; text-align: right;">Đơn giá (₫)</th>
             <th style="width: 5%; text-align: center;">% CK</th>
-            <th style="width: 10%; text-align: right;">Thành tiền</th>
+            <th style="width: 10%; text-align: right;">Thành tiền (₫)</th>
           </tr>
         </thead>
         <tbody>
@@ -4056,23 +4060,23 @@ function renderAndPrintOrder(order, type = 'retail') {
           ? `${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})` 
           : '';
         const noteHtml = (item.note && item.note.trim() !== '')
-          ? `<div style="font-size: 9pt; color: #555; margin-top: 2px; font-style: italic;">Ghi chú: ${item.note}</div>`
+          ? `<div style="font-size: 10.5pt; color: #000; margin-top: 2px; font-style: italic; font-weight: bold;">Ghi chú: ${item.note}</div>`
           : '';
           
         tableHtml += `
           <tr>
             <td class="print-text-center">${idx + 1}</td>
-            <td class="print-text-center"><strong>${item.product.code}</strong></td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${item.product.code}</td>
             <td>
               <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
               ${noteHtml}
             </td>
-            <td class="print-text-center" style="font-size: 11pt; font-weight: bold;">${colorCodeText}</td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${colorCodeText}</td>
             <td class="print-text-center">${item.package || 'Thùng'}</td>
-            <td class="print-text-center">${item.quantity}</td>
-            <td class="print-text-right">${formatCurrency(unitPriceWithColor)}</td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${item.quantity}</td>
+            <td class="print-text-right">${formatNumber(unitPriceWithColor)}</td>
             <td class="print-text-center" style="font-weight:500;">${discPct}%</td>
-            <td class="print-text-right" style="font-weight:bold;">${formatCurrency(rowPayableSub)}</td>
+            <td class="print-text-right" style="font-weight:bold;">${formatNumber(rowPayableSub)}</td>
           </tr>
         `;
       });
@@ -4089,8 +4093,8 @@ function renderAndPrintOrder(order, type = 'retail') {
             <th style="width: 15%; text-align: center;">Mã màu</th>
             <th style="width: 8%; text-align: center;">Quy cách</th>
             <th style="width: 5%; text-align: center;">SL</th>
-            <th style="width: 10%; text-align: right;">Đơn giá</th>
-            <th style="width: 10%; text-align: right;">Thành tiền</th>
+            <th style="width: 10%; text-align: right;">Đơn giá (₫)</th>
+            <th style="width: 10%; text-align: right;">Thành tiền (₫)</th>
           </tr>
         </thead>
         <tbody>
@@ -4109,25 +4113,41 @@ function renderAndPrintOrder(order, type = 'retail') {
           ? `${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})` 
           : '';
         const noteHtml = (item.note && item.note.trim() !== '')
-          ? `<div style="font-size: 9pt; color: #555; margin-top: 2px; font-style: italic;">Ghi chú: ${item.note}</div>`
+          ? `<div style="font-size: 10.5pt; color: #000; margin-top: 2px; font-style: italic; font-weight: bold;">Ghi chú: ${item.note}</div>`
           : '';
           
         tableHtml += `
           <tr>
             <td class="print-text-center">${idx + 1}</td>
-            <td class="print-text-center"><strong>${item.product.code}</strong></td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${item.product.code}</td>
             <td>
               <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
               ${noteHtml}
             </td>
-            <td class="print-text-center" style="font-size: 11pt; font-weight: bold;">${colorCodeText}</td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${colorCodeText}</td>
             <td class="print-text-center">${item.package || 'Thùng'}</td>
-            <td class="print-text-center">${item.quantity}</td>
-            <td class="print-text-right">${formatCurrency(unitPriceAfterDiscount)}</td>
-            <td class="print-text-right" style="font-weight:bold;">${formatCurrency(rowPayableSub)}</td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${item.quantity}</td>
+            <td class="print-text-right">${formatNumber(unitPriceAfterDiscount)}</td>
+            <td class="print-text-right" style="font-weight:bold;">${formatNumber(rowPayableSub)}</td>
           </tr>
         `;
       });
+      
+      if (order.shippingDiscount && order.shippingDiscount > 0) {
+        tableHtml += `
+          <tr>
+            <td colspan="7" style="text-align: right; font-weight: bold; font-size: 12pt; padding: 8px 10px;">Hỗ trợ vận chuyển (3%):</td>
+            <td style="text-align: right; font-weight: bold; font-size: 12pt; padding: 8px 10px;">-${formatNumber(order.shippingDiscount)}</td>
+          </tr>
+        `;
+      }
+      
+      tableHtml += `
+        <tr>
+          <td colspan="7" style="text-align: right; font-weight: bold; font-size: 13pt; text-transform: uppercase; padding: 8px 10px;">TỔNG THANH TOÁN:</td>
+          <td style="text-align: right; font-weight: bold; font-size: 13pt; padding: 8px 10px;">${formatNumber(order.totalPayable)}</td>
+        </tr>
+      `;
       
       tableHtml += `</tbody>`;
       
@@ -4166,13 +4186,13 @@ function renderAndPrintOrder(order, type = 'retail') {
         tableHtml += `
           <tr>
             <td class="print-text-center">${idx + 1}</td>
-            <td class="print-text-center"><strong>${item.product.code}</strong></td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${item.product.code}</td>
             <td>
               <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
             </td>
-            <td class="print-text-center" style="font-size: 11pt; font-weight: bold;">${colorCodeText}</td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${colorCodeText}</td>
             <td class="print-text-center">${weightValue}</td>
-            <td class="print-text-center">${item.quantity}</td>
+            <td class="print-text-center" style="font-size: 13pt; font-weight: bold;">${item.quantity}</td>
             <td>${item.note || ''}</td>
           </tr>
         `;
@@ -4186,14 +4206,14 @@ function renderAndPrintOrder(order, type = 'retail') {
 
   const summaryDiv = document.querySelector('.print-summary');
   if (summaryDiv) {
-    if (type === 'warehouse') {
+    if (type === 'warehouse' || type === 'agent') {
       summaryDiv.style.display = 'none';
     } else {
       summaryDiv.style.display = 'block';
     }
   }
 
-  if (type !== 'warehouse') {
+  if (type !== 'warehouse' && type !== 'agent') {
     document.getElementById('print-total-market').innerText = formatCurrency(order.totalMarket);
     document.getElementById('print-total-discount').innerText = `-${formatCurrency(order.totalDiscount)}`;
     

@@ -1105,8 +1105,10 @@
   <div id="print-invoice-template">
     <div class="print-header">
       <h1>HÓA ĐƠN BÁN HÀNG</h1>
-      <p style="margin-top: 5px;">Mã hóa đơn: <span id="print-invoice-id">HD-000000</span></p>
-      <p>Ngày lập: <span id="print-invoice-date">23/06/2026</span></p>
+      <div class="print-header-meta" style="text-align: right; font-size: 12pt; font-weight: bold; line-height: 1.4; color: #000;">
+        <p style="margin: 0;">Mã hóa đơn: <span id="print-invoice-id">HD-000000</span></p>
+        <p style="margin: 0; margin-top: 4px;">Ngày lập: <span id="print-invoice-date">23/06/2026</span></p>
+      </div>
     </div>
 
     <div class="print-info-grid">
@@ -1117,12 +1119,12 @@
       </div>
       <div>
         <p><strong>Khách hàng:</strong> <span id="print-customer-name">Khách hàng vãng lai</span></p>
-        <div id="print-customer-info-extra" style="font-size: 11pt; color: #000; line-height: 1.4;"></div>
+        <div id="print-customer-info-extra" style="font-size: 13pt; color: #000; line-height: 1.4;"></div>
         <p><strong>Ghi chú:</strong> <span id="print-invoice-notes">N/A</span></p>
       </div>
     </div>
 
-    <div style="font-size: 11pt; margin-top: 10px; margin-bottom: 10px; color: #000;">
+    <div style="font-size: 13pt; margin-top: 10px; margin-bottom: 10px; color: #000;">
       <strong>Hãng sơn:</strong> <span id="print-order-brand" style="text-transform: uppercase; font-weight: bold;">N/A</span>
     </div>
 
@@ -1152,13 +1154,13 @@
     <div class="print-signatures">
       <div class="print-sig-col">
         <p><strong>Người lập hóa đơn</strong></p>
-        <p style="font-size: 9pt; color: #555;">(Ký, ghi rõ họ tên)</p>
+        <p style="font-size: 10pt; color: #000; font-style: italic;">(Ký, ghi rõ họ tên)</p>
         <div class="print-sig-space"></div>
         <p style="text-decoration: underline;">Nhân viên bán hàng</p>
       </div>
       <div class="print-sig-col">
         <p><strong>Khách hàng nhận hàng</strong></p>
-        <p style="font-size: 9pt; color: #555;">(Ký, ghi rõ họ tên)</p>
+        <p style="font-size: 10pt; color: #000; font-style: italic;">(Ký, ghi rõ họ tên)</p>
         <div class="print-sig-space"></div>
         <p id="print-customer-sign-name">Khách hàng</p>
       </div>
