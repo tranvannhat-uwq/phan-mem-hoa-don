@@ -4032,12 +4032,13 @@ function renderAndPrintOrder(order, type = 'retail') {
           <tr>
             <th style="width: 5%; text-align: center;">STT</th>
             <th style="width: 10%; text-align: center;">Mã SP</th>
-            <th style="width: 40%;">Tên sản phẩm</th>
-            <th style="width: 10%; text-align: center;">Quy cách</th>
+            <th style="width: 32%;">Tên sản phẩm</th>
+            <th style="width: 15%; text-align: center;">Mã màu</th>
+            <th style="width: 8%; text-align: center;">Quy cách</th>
             <th style="width: 5%; text-align: center;">SL</th>
-            <th style="width: 12%; text-align: right;">Đơn giá</th>
-            <th style="width: 6%; text-align: center;">% CK</th>
-            <th style="width: 12%; text-align: right;">Thành tiền</th>
+            <th style="width: 10%; text-align: right;">Đơn giá</th>
+            <th style="width: 5%; text-align: center;">% CK</th>
+            <th style="width: 10%; text-align: right;">Thành tiền</th>
           </tr>
         </thead>
         <tbody>
@@ -4051,8 +4052,8 @@ function renderAndPrintOrder(order, type = 'retail') {
         const discPct = item.discountPercent || 0;
         const rowPayableSub = item.payableSub !== undefined ? item.payableSub : (rowMarketSub * (1 - discPct / 100));
         
-        const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
-          ? `<div style="font-size: 10pt; color: #000; font-weight: bold; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})</div>` 
+        const colorCodeText = (item.colorCode && item.colorCode.trim() !== '') 
+          ? `${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})` 
           : '';
         const noteHtml = (item.note && item.note.trim() !== '')
           ? `<div style="font-size: 9pt; color: #555; margin-top: 2px; font-style: italic;">Ghi chú: ${item.note}</div>`
@@ -4064,9 +4065,9 @@ function renderAndPrintOrder(order, type = 'retail') {
             <td class="print-text-center"><strong>${item.product.code}</strong></td>
             <td>
               <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
-              ${colorCodeHtml}
               ${noteHtml}
             </td>
+            <td class="print-text-center" style="font-size: 11pt; font-weight: bold;">${colorCodeText}</td>
             <td class="print-text-center">${item.package || 'Thùng'}</td>
             <td class="print-text-center">${item.quantity}</td>
             <td class="print-text-right">${formatCurrency(unitPriceWithColor)}</td>
@@ -4084,11 +4085,12 @@ function renderAndPrintOrder(order, type = 'retail') {
           <tr>
             <th style="width: 5%; text-align: center;">STT</th>
             <th style="width: 10%; text-align: center;">Mã SP</th>
-            <th style="width: 45%;">Tên sản phẩm</th>
-            <th style="width: 10%; text-align: center;">Quy cách</th>
-            <th style="width: 6%; text-align: center;">SL</th>
-            <th style="width: 12%; text-align: right;">Đơn giá</th>
-            <th style="width: 12%; text-align: right;">Thành tiền</th>
+            <th style="width: 37%;">Tên sản phẩm</th>
+            <th style="width: 15%; text-align: center;">Mã màu</th>
+            <th style="width: 8%; text-align: center;">Quy cách</th>
+            <th style="width: 5%; text-align: center;">SL</th>
+            <th style="width: 10%; text-align: right;">Đơn giá</th>
+            <th style="width: 10%; text-align: right;">Thành tiền</th>
           </tr>
         </thead>
         <tbody>
@@ -4103,8 +4105,8 @@ function renderAndPrintOrder(order, type = 'retail') {
         const rowPayableSub = item.payableSub !== undefined ? item.payableSub : (rowMarketSub * (1 - discPct / 100));
         const unitPriceAfterDiscount = unitPriceWithColor * (1 - discPct / 100);
         
-        const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
-          ? `<div style="font-size: 10pt; color: #000; font-weight: bold; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})</div>` 
+        const colorCodeText = (item.colorCode && item.colorCode.trim() !== '') 
+          ? `${item.colorCode} (${colorPct > 0 ? '+' + colorPct + '%' : '0%'})` 
           : '';
         const noteHtml = (item.note && item.note.trim() !== '')
           ? `<div style="font-size: 9pt; color: #555; margin-top: 2px; font-style: italic;">Ghi chú: ${item.note}</div>`
@@ -4116,9 +4118,9 @@ function renderAndPrintOrder(order, type = 'retail') {
             <td class="print-text-center"><strong>${item.product.code}</strong></td>
             <td>
               <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
-              ${colorCodeHtml}
               ${noteHtml}
             </td>
+            <td class="print-text-center" style="font-size: 11pt; font-weight: bold;">${colorCodeText}</td>
             <td class="print-text-center">${item.package || 'Thùng'}</td>
             <td class="print-text-center">${item.quantity}</td>
             <td class="print-text-right">${formatCurrency(unitPriceAfterDiscount)}</td>
@@ -4134,19 +4136,20 @@ function renderAndPrintOrder(order, type = 'retail') {
         <thead>
           <tr>
             <th style="width: 5%; text-align: center;">STT</th>
-            <th style="width: 12%; text-align: center;">Mã SP</th>
-            <th style="width: 48%;">Tên sản phẩm</th>
-            <th style="width: 15%; text-align: center;">Khối lượng</th>
+            <th style="width: 10%; text-align: center;">Mã SP</th>
+            <th style="width: 40%;">Tên sản phẩm</th>
+            <th style="width: 15%; text-align: center;">Mã màu</th>
+            <th style="width: 12%; text-align: center;">Khối lượng</th>
             <th style="width: 8%; text-align: center;">SL</th>
-            <th style="width: 12%; text-align: center;">Ghi chú</th>
+            <th style="width: 10%; text-align: center;">Ghi chú</th>
           </tr>
         </thead>
         <tbody>
       `;
       
       order.items.forEach((item, idx) => {
-        const colorCodeHtml = (item.colorCode && item.colorCode.trim() !== '') 
-          ? `<div style="font-size: 10pt; color: #000; font-weight: bold; margin-top: 3px; font-style: italic;">Mã màu: ${item.colorCode}</div>` 
+        const colorCodeText = (item.colorCode && item.colorCode.trim() !== '') 
+          ? item.colorCode 
           : '';
           
         const prod = state.products.find(p => p.code === item.product.code && p.brand === item.brand);
@@ -4166,8 +4169,8 @@ function renderAndPrintOrder(order, type = 'retail') {
             <td class="print-text-center"><strong>${item.product.code}</strong></td>
             <td>
               <div style="font-weight:bold; line-height: 1.3;">${item.product.name}</div>
-              ${colorCodeHtml}
             </td>
+            <td class="print-text-center" style="font-size: 11pt; font-weight: bold;">${colorCodeText}</td>
             <td class="print-text-center">${weightValue}</td>
             <td class="print-text-center">${item.quantity}</td>
             <td>${item.note || ''}</td>
