@@ -205,6 +205,7 @@ async function initApp() {
   setupSupabaseSettings();
   setupUserManagement();
   setupPrintTypeModal();
+  setupBackupRestoreListeners();
 
   // Try to connect to Supabase on startup with automatic retries (handles startup network delay)
   const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
@@ -248,22 +249,40 @@ async function initApp() {
   }
 
   // Check auth session
-  const isAuth = sessionStorage.getItem('billing_system_auth') === 'true';
-  const username = sessionStorage.getItem('billing_system_username');
-  
-  if (isAuth && username) {
-    const user = state.users.find(u => u.username === username);
-    if (user) {
-      state.currentUser = user;
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app-layout').classList.remove('auth-hidden');
-      document.getElementById('user-info-header').style.display = 'flex';
-      document.getElementById('btn-logout').style.display = 'inline-flex';
-      document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
-      applyUserPermissions(user);
-    } else {
-      showLoginGate();
+  let activeUser = null;
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session && session.user) {
+        const username = session.user.email.split('@')[0];
+        const user = state.users.find(u => u.username === username);
+        if (user) {
+          activeUser = user;
+        }
+      }
+    } catch (err) {
+      console.error('Session recovery failed:', err);
     }
+  }
+  
+  if (!activeUser) {
+    const isAuth = sessionStorage.getItem('billing_system_auth') === 'true';
+    const username = sessionStorage.getItem('billing_system_username');
+    if (isAuth && username) {
+      activeUser = state.users.find(u => u.username === username);
+    }
+  }
+
+  if (activeUser) {
+    state.currentUser = activeUser;
+    sessionStorage.setItem('billing_system_auth', 'true');
+    sessionStorage.setItem('billing_system_username', activeUser.username);
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-layout').classList.remove('auth-hidden');
+    document.getElementById('user-info-header').style.display = 'flex';
+    document.getElementById('btn-logout').style.display = 'inline-flex';
+    document.getElementById('header-user-display').innerText = `${activeUser.displayName} (${activeUser.role === 'admin' ? 'Admin' : activeUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+    applyUserPermissions(activeUser);
   } else {
     showLoginGate();
   }
@@ -416,6 +435,9 @@ async function connectSupabase(url, key, verbose = true) {
     
     document.getElementById('btn-disconnect-db').style.display = 'inline-flex';
     document.getElementById('sync-section').style.display = 'block';
+    if (document.getElementById('backup-section')) {
+      document.getElementById('backup-section').style.display = 'block';
+    }
     updateDbStatusUI('cloud');
     
     await fetchCloudData();
@@ -634,6 +656,9 @@ function disconnectSupabase() {
   document.getElementById('supabase-config-form').reset();
   document.getElementById('btn-disconnect-db').style.display = 'none';
   document.getElementById('sync-section').style.display = 'none';
+  if (document.getElementById('backup-section')) {
+    document.getElementById('backup-section').style.display = 'none';
+  }
   
   loadLocalStorageBackup();
   updateDbStatusUI('local');
@@ -1229,6 +1254,9 @@ function setupSupabaseSettings() {
   if (savedUrl && savedKey) {
     disconnectBtn.style.display = 'inline-flex';
     document.getElementById('sync-section').style.display = 'block';
+    if (document.getElementById('backup-section')) {
+      document.getElementById('backup-section').style.display = 'block';
+    }
   }
 
   form.addEventListener('submit', async (e) => {
@@ -4817,38 +4845,75 @@ async function handleLogin(e) {
   const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
   const passwordInput = document.getElementById('login-password').value.trim();
 
-  // Find user in state
-  const user = state.users.find(u => u.username === usernameInput && u.password === passwordInput);
-  if (user) {
-    state.currentUser = user;
-    sessionStorage.setItem('billing_system_auth', 'true');
-    sessionStorage.setItem('billing_system_username', user.username);
-    
-    // Hide login screen and show app layout
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app-layout').classList.remove('auth-hidden');
-    
-    // Show header info & logout button
-    document.getElementById('user-info-header').style.display = 'flex';
-    document.getElementById('btn-logout').style.display = 'inline-flex';
-    document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
-    
-    // Apply role-based visibility permissions
-    applyUserPermissions(user);
-    
-    // Re-render components with filtered data
-    renderAll();
-    
-    showToast(`Chào mừng ${user.displayName} quay trở lại!`, 'success');
+  if (isCloudActive && supabaseClient) {
+    try {
+      const email = usernameInput.includes('@') ? usernameInput : `${usernameInput}@weblendon.com`;
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: passwordInput
+      });
+
+      if (error) throw error;
+
+      const usernamePart = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
+      const user = state.users.find(u => u.username === usernamePart);
+      if (user) {
+        state.currentUser = user;
+        sessionStorage.setItem('billing_system_auth', 'true');
+        sessionStorage.setItem('billing_system_username', user.username);
+        
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-layout').classList.remove('auth-hidden');
+        
+        document.getElementById('user-info-header').style.display = 'flex';
+        document.getElementById('btn-logout').style.display = 'inline-flex';
+        document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+        
+        applyUserPermissions(user);
+        renderAll();
+        showToast(`Đăng nhập đám mây thành công! Chào mừng ${user.displayName}!`, 'success');
+      } else {
+        showToast('Đăng nhập thành công nhưng không tìm thấy thông tin tài khoản trong cơ sở dữ liệu!', 'warning');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      showToast('Đăng nhập thất bại: ' + (err.message || 'Tài khoản hoặc mật khẩu không chính xác!'), 'danger');
+    }
   } else {
-    showToast('Tên đăng nhập hoặc mật khẩu không chính xác!', 'danger');
+    const user = state.users.find(u => u.username === usernameInput && u.password === passwordInput);
+    if (user) {
+      state.currentUser = user;
+      sessionStorage.setItem('billing_system_auth', 'true');
+      sessionStorage.setItem('billing_system_username', user.username);
+      
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-layout').classList.remove('auth-hidden');
+      
+      document.getElementById('user-info-header').style.display = 'flex';
+      document.getElementById('btn-logout').style.display = 'inline-flex';
+      document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+      
+      applyUserPermissions(user);
+      renderAll();
+      
+      showToast(`Chế độ ngoại tuyến: Chào mừng ${user.displayName}!`, 'success');
+    } else {
+      showToast('Tên đăng nhập hoặc mật khẩu không chính xác!', 'danger');
+    }
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
   sessionStorage.removeItem('billing_system_auth');
   sessionStorage.removeItem('billing_system_username');
   state.currentUser = null;
+  if (isCloudActive && supabaseClient) {
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
+  }
   location.reload();
 }
 
@@ -5220,10 +5285,17 @@ function renderUsersTable() {
 async function dbSaveUser(user) {
   if (isCloudActive && supabaseClient) {
     try {
+      const isNew = !state.users.some(u => u.id === user.id);
+      
+      // Nếu thêm tài khoản mới, tạo trên Supabase Auth trước
+      if (isNew) {
+        const authSuccess = await authRegisterOrUpdateUser(user, true);
+        if (!authSuccess) return false;
+      }
+      
       const dbRow = {
         id: user.id,
         username: user.username,
-        password: user.password,
         display_name: user.displayName,
         role: user.role
       };
@@ -5411,4 +5483,233 @@ function setupPrintTypeModal() {
       modal.classList.remove('active');
     }
   });
+}
+
+// --- Backup & Restore & Auth Helper Functions ---
+
+async function authRegisterOrUpdateUser(user, isNew) {
+  if (!isCloudActive || !supabaseClient) return true;
+  try {
+    const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
+    const savedKey = localStorage.getItem('billing_supabase_key') || COMPANY_SUPABASE_KEY;
+    
+    // Sử dụng client phụ để tránh làm mất session đăng nhập hiện tại của Admin
+    const tempClient = supabase.createClient(savedUrl, savedKey, {
+      auth: { persistSession: false }
+    });
+
+    const email = user.username.includes('@') ? user.username : `${user.username}@weblendon.com`;
+
+    if (isNew) {
+      const { data, error } = await tempClient.auth.signUp({
+        email: email,
+        password: user.password,
+        options: {
+          data: {
+            displayName: user.displayName,
+            role: user.role
+          }
+        }
+      });
+      if (error) throw error;
+      if (data && data.user) {
+        user.id = data.user.id; // Gán ID dạng UUID của Supabase Auth
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error('Auth registration error:', err);
+    showToast('Lỗi đăng ký tài khoản trên Cloud: ' + err.message, 'danger');
+    return false;
+  }
+}
+
+async function exportBackupToExcel() {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Vui lòng kết nối với Supabase trước!', 'warning');
+    return;
+  }
+  
+  try {
+    showToast('Đang khởi tạo file sao lưu dữ liệu...', 'info');
+    
+    const [
+      { data: products },
+      { data: customers },
+      { data: orders },
+      { data: pricelists },
+      { data: users }
+    ] = await Promise.all([
+      supabaseClient.from(tableProductsName).select('*'),
+      supabaseClient.from(tableCustomersName).select('*'),
+      supabaseClient.from(tableOrdersName).select('*'),
+      supabaseClient.from(tablePricelistsName).select('*'),
+      supabaseClient.from(tableUsersName).select('*')
+    ]);
+
+    const wb = XLSX.utils.book_new();
+
+    const sheets = [
+      { name: "San_Pham", data: products || [] },
+      { name: "Khach_Hang", data: customers || [] },
+      { name: "Don_Hang", data: orders || [] },
+      { name: "Bang_Gia", data: pricelists || [] },
+      { name: "Nguoi_Dung", data: users || [] }
+    ];
+
+    sheets.forEach(sheet => {
+      // Chuyển các trường object (như JSONB) thành string để lưu trong Excel
+      const processedData = sheet.data.map(row => {
+        const newRow = { ...row };
+        Object.keys(newRow).forEach(key => {
+          if (typeof newRow[key] === 'object' && newRow[key] !== null) {
+            newRow[key] = JSON.stringify(newRow[key]);
+          }
+        });
+        return newRow;
+      });
+      const ws = XLSX.utils.json_to_sheet(processedData);
+      XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+    });
+
+    const timestamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `weblendon_backup_${timestamp}.xlsx`);
+    showToast('Đã xuất và tải xuống file sao lưu Excel thành công!', 'success');
+  } catch (err) {
+    console.error('Backup export failed:', err);
+    showToast('Lỗi khi xuất file sao lưu: ' + err.message, 'danger');
+  }
+}
+
+async function importBackupFromExcel(file) {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Vui lòng kết nối với Supabase trước!', 'warning');
+    return;
+  }
+  
+  const restoreMode = document.querySelector('input[name="backup-restore-mode"]:checked').value;
+  const confirmMsg = restoreMode === 'overwrite'
+    ? 'CẢNH BÁO: Chế độ "Ghi đè" sẽ XÓA SẠCH dữ liệu hiện tại trên Cloud trước khi nạp. Bạn có chắc chắn muốn tiếp tục?'
+    : 'Bạn có chắc chắn muốn khôi phục dữ liệu từ file sao lưu này? (Chế độ Gộp thêm)';
+    
+  if (!confirm(confirmMsg)) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      showToast('Đang phân tích file sao lưu...', 'info');
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      const tablesMap = {
+        "San_Pham": tableProductsName,
+        "Khach_Hang": tableCustomersName,
+        "Don_Hang": tableOrdersName,
+        "Bang_Gia": tablePricelistsName,
+        "Nguoi_Dung": tableUsersName
+      };
+
+      const parseRow = (row) => {
+        const parsed = { ...row };
+        Object.keys(parsed).forEach(key => {
+          const val = parsed[key];
+          if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
+            try {
+              parsed[key] = JSON.parse(val);
+            } catch (e) {
+              // keep as string if not valid JSON
+            }
+          }
+        });
+        return parsed;
+      };
+
+      for (const sheetName of workbook.SheetNames) {
+        const tableName = tablesMap[sheetName];
+        if (!tableName) continue;
+        
+        const worksheet = workbook.Sheets[sheetName];
+        const rawRows = XLSX.utils.sheet_to_json(worksheet);
+        const rows = rawRows.map(parseRow);
+
+        if (restoreMode === 'overwrite') {
+          showToast(`Đang dọn sạch bảng ${sheetName}...`, 'info');
+          if (sheetName === "San_Pham") {
+            const { error: delErr } = await supabaseClient.from(tableName).delete().neq('code', 'temp_none');
+            if (delErr) throw delErr;
+          } else {
+            const { error: delErr } = await supabaseClient.from(tableName).delete().neq('id', 'temp_none');
+            if (delErr) throw delErr;
+          }
+        }
+
+        if (rows.length > 0) {
+          showToast(`Đang khôi phục ${rows.length} dòng cho bảng ${sheetName}...`, 'info');
+          
+          // Gửi dữ liệu theo các lô nhỏ để tránh lỗi vượt quá dung lượng
+          const chunkSize = 100;
+          for (let i = 0; i < rows.length; i += chunkSize) {
+            const chunk = rows.slice(i, i + chunkSize);
+            const { error: upsertErr } = await supabaseClient
+              .from(tableName)
+              .upsert(chunk);
+              
+            if (upsertErr) throw upsertErr;
+          }
+        }
+      }
+
+      showToast('Khôi phục dữ liệu từ file sao lưu thành công!', 'success');
+      
+      document.getElementById('backup-file-input').value = '';
+      document.getElementById('backup-file-name').innerText = 'Chưa chọn file';
+      document.getElementById('btn-restore-backup').style.display = 'none';
+
+      await fetchCloudData();
+      renderAll();
+    } catch (err) {
+      console.error('Restore failed:', err);
+      showToast('Lỗi khi khôi phục dữ liệu: ' + err.message, 'danger');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function setupBackupRestoreListeners() {
+  const exportBtn = document.getElementById('btn-export-backup');
+  const browseBtn = document.getElementById('btn-browse-backup');
+  const fileInput = document.getElementById('backup-file-input');
+  const fileNameSpan = document.getElementById('backup-file-name');
+  const restoreBtn = document.getElementById('btn-restore-backup');
+
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportBackupToExcel);
+  }
+
+  if (browseBtn && fileInput) {
+    browseBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        fileNameSpan.innerText = file.name;
+        restoreBtn.style.display = 'inline-flex';
+      } else {
+        fileNameSpan.innerText = 'Chưa chọn file';
+        restoreBtn.style.display = 'none';
+      }
+    });
+  }
+
+  if (restoreBtn && fileInput) {
+    restoreBtn.addEventListener('click', () => {
+      if (fileInput.files.length > 0) {
+        importBackupFromExcel(fileInput.files[0]);
+      }
+    });
+  }
 }
