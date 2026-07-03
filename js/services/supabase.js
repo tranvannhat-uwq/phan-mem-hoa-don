@@ -719,7 +719,13 @@ export async function authRegisterOrUpdateUser(user, isNew) {
     return true;
   } catch (err) {
     console.error('Auth registration error:', err);
-    showToast('Lỗi đăng ký tài khoản trên Cloud: ' + err.message, 'danger');
+    let errMsg = '';
+    if (typeof err === 'object' && err !== null) {
+      errMsg = err.message || err.error_description || JSON.stringify(err);
+    } else {
+      errMsg = String(err);
+    }
+    showToast('Lỗi đăng ký tài khoản trên Cloud: ' + errMsg, 'danger');
     return false;
   }
 }
@@ -727,12 +733,23 @@ export async function authRegisterOrUpdateUser(user, isNew) {
 export async function dbSaveUser(user) {
   if (isCloudActive && supabaseClient) {
     try {
-      const isNew = !state.users.some(u => u.id === user.id);
+      const oldId = user.id;
+      const isLocalId = String(oldId).startsWith('u-');
+      const isNew = !state.users.some(u => u.id === oldId) || isLocalId;
       
-      // Nếu thêm tài khoản mới, tạo trên Supabase Auth trước
+      // Nếu thêm tài khoản mới (hoặc tài khoản offline cũ chưa đăng ký auth), tạo trên Supabase Auth trước
       if (isNew) {
         const authSuccess = await authRegisterOrUpdateUser(user, true);
         if (!authSuccess) return false;
+        
+        // Nếu trước đó là ID offline dạng u-..., ta cần xóa dòng cũ có ID này trong CSDL
+        if (isLocalId && user.id !== oldId) {
+          const { error: delErr } = await supabaseClient
+            .from(tableUsersName)
+            .delete()
+            .eq('id', oldId);
+          if (delErr) console.warn("Could not delete old offline user row:", delErr.message);
+        }
       }
       
       const dbRow = {

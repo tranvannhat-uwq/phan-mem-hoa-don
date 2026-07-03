@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient } from '../services/supabase.js';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populateManagedByDropdown } from './customers.js';
 
@@ -238,13 +238,51 @@ export async function handleLogin(e) {
 
   if (isCloudActive && supabaseClient) {
     try {
-      const email = usernameInput.includes('@') ? usernameInput : `${usernameInput}@weblendon.com`;
-      const { data, error } = await supabaseClient.auth.signInWithPassword({
-        email: email,
-        password: passwordInput
-      });
+      let loginSuccess = false;
+      let loginError = null;
 
-      if (error) throw error;
+      if (usernameInput.includes('@')) {
+        const { error } = await supabaseClient.auth.signInWithPassword({
+          email: usernameInput,
+          password: passwordInput
+        });
+        if (error) {
+          loginError = error;
+        } else {
+          loginSuccess = true;
+        }
+      } else {
+        // Thử với tên miền công ty @weblendon.com trước (cho các tài khoản cũ tạo từ app)
+        const emailWl = `${usernameInput}@weblendon.com`;
+        const { error: err1 } = await supabaseClient.auth.signInWithPassword({
+          email: emailWl,
+          password: passwordInput
+        });
+        
+        if (!err1) {
+          loginSuccess = true;
+        } else {
+          // Nếu không được, thử với @gmail.com (cho tài khoản mới liên kết gmail)
+          const emailGmail = `${usernameInput}@gmail.com`;
+          const { error: err2 } = await supabaseClient.auth.signInWithPassword({
+            email: emailGmail,
+            password: passwordInput
+          });
+          
+          if (!err2) {
+            loginSuccess = true;
+          } else {
+            loginError = err2;
+          }
+        }
+      }
+
+      if (!loginSuccess) {
+        throw loginError || new Error('Tài khoản hoặc mật khẩu không chính xác!');
+      }
+
+      // Đồng bộ dữ liệu mới nhất (bao gồm hồ sơ tài khoản từ bảng users) sau khi đăng nhập thành công
+      await fetchCloudData();
 
       const usernamePart = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
       const user = state.users.find(u => u.username === usernamePart);
