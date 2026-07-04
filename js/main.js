@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { defaultProducts } from './config.js';
+import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
 import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient } from './services/supabase.js';
 import { setupBackupRestoreListeners } from './services/backup.js';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
@@ -284,8 +284,16 @@ async function initApp() {
   setupBrandsPanel();
   setupBackupRestoreListeners(renderAll);
 
-  const savedUrl = localStorage.getItem('billing_supabase_url');
-  const savedKey = localStorage.getItem('billing_supabase_key');
+  let savedUrl = localStorage.getItem('billing_supabase_url');
+  let savedKey = localStorage.getItem('billing_supabase_key');
+  
+  // Nếu chưa có cấu hình trong LocalStorage, tự động dùng cấu hình đám mây mặc định của công ty
+  if (!savedUrl || !savedKey) {
+    savedUrl = COMPANY_SUPABASE_URL;
+    savedKey = COMPANY_SUPABASE_KEY;
+    localStorage.setItem('billing_supabase_url', savedUrl);
+    localStorage.setItem('billing_supabase_key', savedKey);
+  }
   
   if (savedUrl && savedKey) {
     let connected = false;

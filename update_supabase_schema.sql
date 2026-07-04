@@ -331,6 +331,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Trigger tự động xác nhận email cho tài khoản mới (tránh lỗi bắt buộc xác nhận email từ Supabase)
+CREATE OR REPLACE FUNCTION public.auto_confirm_user()
+RETURNS trigger AS $$
+BEGIN
+  new.email_confirmed_at := COALESCE(new.email_confirmed_at, now());
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created_before ON auth.users;
+CREATE TRIGGER on_auth_user_created_before
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_user();
+
 -- Gán trigger tạo tài khoản
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
