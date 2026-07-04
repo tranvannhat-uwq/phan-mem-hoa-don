@@ -744,7 +744,7 @@ export async function authRegisterOrUpdateUser(user, isNew) {
     const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
     const savedKey = localStorage.getItem('billing_supabase_key') || COMPANY_SUPABASE_KEY;
     
-    const email = user.username.includes('@') ? user.username : `${user.username}@weblendon.com`;
+    const email = user.username.includes('@') ? user.username : `${user.username}@lendon.com`;
 
     if (isNew) {
       // Sử dụng client phụ để tránh làm mất session đăng nhập hiện tại của Admin
@@ -758,7 +758,8 @@ export async function authRegisterOrUpdateUser(user, isNew) {
         options: {
           data: {
             displayName: user.displayName,
-            role: user.role
+            role: user.role,
+            username: user.username
           }
         }
       });

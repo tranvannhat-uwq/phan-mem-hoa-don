@@ -115,9 +115,6 @@ export function closeUserModal() {
 export async function saveUser() {
   const editId = document.getElementById('user-edit-id').value;
   let username = document.getElementById('user-username').value.trim().toLowerCase();
-  if (username.includes('@')) {
-    username = username.split('@')[0];
-  }
   const displayName = document.getElementById('user-displayname').value.trim();
   const password = document.getElementById('user-password').value.trim();
   const role = document.getElementById('user-role').value;
@@ -146,7 +143,12 @@ export async function saveUser() {
   
   let user;
   if (!editId) {
-    const exists = state.users.some(u => u.username === username);
+    const exists = state.users.some(u => {
+      const uName = u.username.toLowerCase();
+      const uNamePart = uName.includes('@') ? uName.split('@')[0] : uName;
+      const targetPart = username.includes('@') ? username.split('@')[0] : username;
+      return uName === username || uNamePart === targetPart;
+    });
     if (exists) {
       showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
       return;
@@ -167,7 +169,13 @@ export async function saveUser() {
     const existingUser = state.users.find(u => u.id === editId);
     if (!existingUser) return;
     
-    const exists = state.users.some(u => u.username === username && u.id !== editId);
+    const exists = state.users.some(u => {
+      if (u.id === editId) return false;
+      const uName = u.username.toLowerCase();
+      const uNamePart = uName.includes('@') ? uName.split('@')[0] : uName;
+      const targetPart = username.includes('@') ? username.split('@')[0] : username;
+      return uName === username || uNamePart === targetPart;
+    });
     if (exists) {
       showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
       return;
@@ -281,27 +289,38 @@ export async function handleLogin(e) {
           loginSuccess = true;
         }
       } else {
-        // Thử với tên miền công ty @weblendon.com trước (cho các tài khoản cũ tạo từ app)
-        const emailWl = `${usernameInput}@weblendon.com`;
-        const { error: err1 } = await supabaseClient.auth.signInWithPassword({
-          email: emailWl,
+        // Thử với tên miền công ty @lendon.com trước (mặc định mới)
+        const emailLd = `${usernameInput}@lendon.com`;
+        const { error: errLd } = await supabaseClient.auth.signInWithPassword({
+          email: emailLd,
           password: passwordInput
         });
         
-        if (!err1) {
+        if (!errLd) {
           loginSuccess = true;
         } else {
-          // Nếu không được, thử với @gmail.com (cho tài khoản mới liên kết gmail)
-          const emailGmail = `${usernameInput}@gmail.com`;
-          const { error: err2 } = await supabaseClient.auth.signInWithPassword({
-            email: emailGmail,
+          // Thử với tên miền công ty cũ @weblendon.com (cho các tài khoản cũ tạo từ app)
+          const emailWl = `${usernameInput}@weblendon.com`;
+          const { error: errWl } = await supabaseClient.auth.signInWithPassword({
+            email: emailWl,
             password: passwordInput
           });
           
-          if (!err2) {
+          if (!errWl) {
             loginSuccess = true;
           } else {
-            loginError = err2;
+            // Nếu không được, thử với @gmail.com (cho tài khoản mới liên kết gmail)
+            const emailGmail = `${usernameInput}@gmail.com`;
+            const { error: errGmail } = await supabaseClient.auth.signInWithPassword({
+              email: emailGmail,
+              password: passwordInput
+            });
+            
+            if (!errGmail) {
+              loginSuccess = true;
+            } else {
+              loginError = errGmail;
+            }
           }
         }
       }
@@ -313,8 +332,13 @@ export async function handleLogin(e) {
       // Đồng bộ dữ liệu mới nhất (bao gồm hồ sơ tài khoản từ bảng users) sau khi đăng nhập thành công
       await fetchCloudData();
 
-      const usernamePart = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
-      const user = state.users.find(u => u.username === usernamePart);
+      const cleanInput = usernameInput.toLowerCase().trim();
+      const usernamePart = cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput;
+      const user = state.users.find(u => {
+        const uName = u.username.toLowerCase();
+        const uNamePart = uName.includes('@') ? uName.split('@')[0] : uName;
+        return uName === cleanInput || uName === usernamePart || uNamePart === cleanInput || uNamePart === usernamePart;
+      });
       if (user) {
         state.currentUser = user;
         sessionStorage.setItem('billing_system_auth', 'true');
@@ -338,7 +362,8 @@ export async function handleLogin(e) {
       showToast('Đăng nhập thất bại: ' + (err.message || 'Tài khoản hoặc mật khẩu không chính xác!'), 'danger');
     }
   } else {
-    const user = state.users.find(u => u.username === usernameInput && u.password === passwordInput);
+    const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
+    const user = state.users.find(u => u.username === cleanUsername && u.password === passwordInput);
     if (user) {
       state.currentUser = user;
       sessionStorage.setItem('billing_system_auth', 'true');

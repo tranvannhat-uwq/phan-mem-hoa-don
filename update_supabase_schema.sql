@@ -300,7 +300,7 @@ RETURNS trigger AS $$
 DECLARE
   u_username text;
 BEGIN
-  u_username := split_part(new.email, '@', 1);
+  u_username := COALESCE(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1));
 
   -- Xóa mọi tài khoản cũ trùng username nhưng khác ID (do local offline cũ hoặc tài khoản đã xóa trên Auth)
   DELETE FROM public.users WHERE username = u_username AND id <> new.id::text;
@@ -308,7 +308,7 @@ BEGIN
   INSERT INTO public.users (id, username, display_name, role, password)
   VALUES (
     new.id::text,
-    u_username, -- Tên đăng nhập cắt từ email (VD: nhat@weblendon.com -> nhat)
+    u_username, -- Tên đăng nhập gốc từ metadata hoặc email
     COALESCE(new.raw_user_meta_data->>'display_name', new.raw_user_meta_data->>'displayName', u_username),
     COALESCE(new.raw_user_meta_data->>'role', 'sale'),
     '' -- Không lưu mật khẩu dạng plain-text
