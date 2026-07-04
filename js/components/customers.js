@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
 import { dbSaveCustomer, dbDeleteCustomer } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
@@ -13,10 +13,14 @@ export function renderCustomersTable() {
   const filterEmployee = filterSelect ? filterSelect.value : '';
   
   const filtered = state.customers.filter(c => {
+    const cManager = c.managedBy ? (c.managedBy.includes('@') ? c.managedBy.split('@')[0] : c.managedBy) : '';
+    const currentUserUname = state.currentUser ? (state.currentUser.username.includes('@') ? state.currentUser.username.split('@')[0] : state.currentUser.username) : '';
+    const filterEmpUname = filterEmployee ? (filterEmployee.includes('@') ? filterEmployee.split('@')[0] : filterEmployee) : '';
+
     if (state.currentUser && state.currentUser.role === 'sale') {
-      if (c.managedBy !== state.currentUser.username) return false;
+      if (cManager !== currentUserUname) return false;
     } else if (filterEmployee) {
-      if (c.managedBy !== filterEmployee) return false;
+      if (cManager !== filterEmpUname) return false;
     }
     return c.code.toLowerCase().includes(searchVal) || 
            c.name.toLowerCase().includes(searchVal) || 
@@ -35,6 +39,52 @@ export function renderCustomersTable() {
   // Sắp xếp theo bảng chữ cái tên đại lý
   filtered.sort((a, b) => a.name.localeCompare(b.name));
   
+  const ITEMS_PER_PAGE = 20;
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+  
+  if (state.customersPage > totalPages) state.customersPage = totalPages;
+  if (state.customersPage < 1) state.customersPage = 1;
+  
+  const startIndex = (state.customersPage - 1) * ITEMS_PER_PAGE;
+  const paginatedCustomers = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  
+  // Vẽ các nút phân trang
+  const paginationContainer = document.getElementById('customers-pagination');
+  if (paginationContainer) {
+    paginationContainer.innerHTML = `
+      <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); width: 100%;">
+        <button class="btn btn-secondary btn-sm" id="customers-prev-page" ${state.customersPage === 1 ? 'disabled' : ''}>
+          <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i> Trước
+        </button>
+        <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">
+          Trang <strong>${state.customersPage}</strong> / ${totalPages} (${totalItems} đại lý)
+        </span>
+        <button class="btn btn-secondary btn-sm" id="customers-next-page" ${state.customersPage === totalPages ? 'disabled' : ''}>
+          Sau <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+    `;
+
+    const prevPageBtn = document.getElementById('customers-prev-page');
+    if (prevPageBtn) {
+      prevPageBtn.addEventListener('click', () => {
+        state.customersPage--;
+        renderCustomersTable();
+        document.getElementById('customers-panel').scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+
+    const nextPageBtn = document.getElementById('customers-next-page');
+    if (nextPageBtn) {
+      nextPageBtn.addEventListener('click', () => {
+        state.customersPage++;
+        renderCustomersTable();
+        document.getElementById('customers-panel').scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+  }
+
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
@@ -46,7 +96,7 @@ export function renderCustomersTable() {
     return;
   }
   
-  tableBody.innerHTML = filtered.map((c) => {
+  tableBody.innerHTML = paginatedCustomers.map((c) => {
     const actualIndex = state.customers.findIndex(cust => cust.id === c.id);
     
     let pricelistName = '';
@@ -246,7 +296,8 @@ export function openCustomerModal(index = -1) {
 
     const mBySelect = document.getElementById('cust-managed-by');
     if (mBySelect) {
-      mBySelect.value = customer.managedBy || 'nhat';
+      const mByVal = customer.managedBy || 'nhat';
+      mBySelect.value = mByVal.includes('@') ? mByVal.split('@')[0] : mByVal;
     }
   }
 }
@@ -299,6 +350,9 @@ export async function saveCustomer() {
     } else {
       managedBy = document.getElementById('cust-managed-by').value;
     }
+  }
+  if (managedBy && managedBy.includes('@')) {
+    managedBy = managedBy.split('@')[0];
   }
   
   const duplicateCode = state.customers.some((c, idx) => c.code === code && idx !== index);
@@ -462,10 +516,16 @@ export async function handlePayDebtSubmit(e) {
 
 export function setupCustomerManagement() {
   const searchInput = document.getElementById('customer-search-input');
-  if (searchInput) searchInput.addEventListener('input', renderCustomersTable);
+  
+  const onFilterChange = () => {
+    state.customersPage = 1;
+    renderCustomersTable();
+  };
+
+  if (searchInput) searchInput.addEventListener('input', onFilterChange);
 
   const managedFilter = document.getElementById('customer-managed-filter');
-  if (managedFilter) managedFilter.addEventListener('change', renderCustomersTable);
+  if (managedFilter) managedFilter.addEventListener('change', onFilterChange);
 
   const closeBtn = document.getElementById('btn-close-customer-modal');
   if (closeBtn) closeBtn.addEventListener('click', closeCustomerModal);
@@ -518,9 +578,14 @@ export function openCustomerDetailModal(index) {
   modal.classList.add('active');
 
   // Điền thông tin cơ bản
+  const modalTitle = document.getElementById('customer-detail-modal-title');
+  if (modalTitle) {
+    modalTitle.innerText = `Thông tin & Lịch sử công nợ của đại lý mã ${cust.code}`;
+  }
+
   document.getElementById('detail-cust-code').innerText = cust.code;
   document.getElementById('detail-cust-name').innerText = cust.name;
-  document.getElementById('detail-cust-phone').innerText = cust.phone || 'N/A';
+  document.getElementById('detail-cust-phone').innerText = formatPhoneNumber(cust.phone);
   document.getElementById('detail-cust-address').innerText = cust.address || 'N/A';
   
   const brandEl = document.getElementById('detail-cust-brand');
@@ -528,8 +593,9 @@ export function openCustomerDetailModal(index) {
     brandEl.innerHTML = `<span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: ${cust.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${cust.assignedBrand === 'Tất cả' ? '#10b981' : '#60a5fa'}; border: 1px solid ${cust.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.4)'};">${cust.assignedBrand}</span>`;
   }
   
-  const user = state.users.find(u => u.username === cust.managedBy);
-  document.getElementById('detail-cust-manager').innerText = user ? `${user.displayName} (${cust.managedBy})` : cust.managedBy;
+  const managerUsername = cust.managedBy ? (cust.managedBy.includes('@') ? cust.managedBy.split('@')[0] : cust.managedBy) : '';
+  const user = state.users.find(u => u.username === managerUsername);
+  document.getElementById('detail-cust-manager').innerText = user ? `${user.displayName} (${managerUsername})` : cust.managedBy;
   
   // Xác định tên bảng giá đang áp dụng
   let plName = '';

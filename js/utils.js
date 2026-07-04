@@ -104,3 +104,17 @@ export function updateDbStatusUI(status, message = '') {
   }
   safeCreateIcons();
 }
+
+// Định dạng số điện thoại ngăn cách bằng dấu chấm
+export function formatPhoneNumber(phone) {
+  if (!phone) return 'N/A';
+  const clean = phone.toString().replace(/\D/g, '');
+  if (clean.length === 10) {
+    return `${clean.slice(0, 4)}.${clean.slice(4, 7)}.${clean.slice(7)}`;
+  } else if (clean.length === 11) {
+    return `${clean.slice(0, 4)}.${clean.slice(4, 7)}.${clean.slice(7, 10)}.${clean.slice(10)}`;
+  } else if (clean.length === 9) {
+    return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
+  }
+  return phone;
+}

@@ -12,8 +12,12 @@ export function renderProductsTable() {
   const searchVal = document.getElementById('product-search-input').value.toLowerCase().trim();
   const brandFilter = document.getElementById('product-brand-filter').value;
   
+  const searchValNormalized = searchVal.replace(/[^a-z0-9]/g, '');
   const filtered = state.products.filter(p => {
-    const matchesSearch = p.code.toLowerCase().includes(searchVal) || p.name.toLowerCase().includes(searchVal);
+    const codeNormalized = p.code.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const matchesSearch = (searchValNormalized !== '' && codeNormalized.includes(searchValNormalized)) ||
+                          p.code.toLowerCase().includes(searchVal) || 
+                          p.name.toLowerCase().includes(searchVal);
     const matchesBrand = brandFilter === '' || p.brand === brandFilter;
     return matchesSearch && matchesBrand;
   });
@@ -22,7 +26,9 @@ export function renderProductsTable() {
   const filterSelect = document.getElementById('product-brand-filter');
   const activeBrandFilter = filterSelect.value;
   
-  const uniqueBrands = [...new Set(state.products.map(p => p.brand).filter(Boolean))];
+  const uniqueBrands = state.brands && state.brands.length > 0
+    ? state.brands.map(b => b.name)
+    : [...new Set(state.products.map(p => p.brand).filter(Boolean))];
   
   filterSelect.innerHTML = `
     <option value="">-- Tất cả hãng sơn --</option>
@@ -34,10 +40,13 @@ export function renderProductsTable() {
   const prodBrandSelect = document.getElementById('prod-brand');
   if (prodBrandSelect) {
     const currentVal = prodBrandSelect.value;
-    const staticBrands = ['Nano10*', 'mutsutec', 'tdkaw', 'cova', 'festivanano', 'Hatacco nano', 'Khác'];
     
-    // Gộp cả các hãng tự định nghĩa từ dữ liệu
-    const allBrands = [...new Set([...staticBrands.filter(b => b !== 'Khác'), ...uniqueBrands])];
+    // Gộp cả các hãng từ bảng brands và hãng thực tế từ sản phẩm
+    const brandList = state.brands && state.brands.length > 0
+      ? state.brands.map(b => b.name)
+      : ['Nano10*', 'mutsutec', 'tdkaw', 'cova', 'festivanano', 'Hatacco nano'];
+      
+    const allBrands = [...new Set([...brandList, ...uniqueBrands])];
     allBrands.push('Khác');
     
     prodBrandSelect.innerHTML = allBrands.map(b => `<option value="${b}">${b}</option>`).join('');
@@ -65,7 +74,17 @@ export function renderProductsTable() {
   // Sắp xếp sản phẩm theo mã
   filtered.sort((a, b) => a.code.localeCompare(b.code));
   
-  tableBody.innerHTML = filtered.map((p, index) => {
+  const ITEMS_PER_PAGE = 20;
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+  
+  if (state.productsPage > totalPages) state.productsPage = totalPages;
+  if (state.productsPage < 1) state.productsPage = 1;
+  
+  const startIndex = (state.productsPage - 1) * ITEMS_PER_PAGE;
+  const paginatedProducts = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  
+  tableBody.innerHTML = paginatedProducts.map((p, index) => {
     const getWeightStr = () => {
       const parts = [];
       if (p.weightThung) parts.push(`Thùng: ${p.weightThung}`);
@@ -76,9 +95,11 @@ export function renderProductsTable() {
       return parts.length > 0 ? parts.join('\n') : 'N/A';
     };
     
+    const rowNum = startIndex + index + 1;
+    
     return `
       <tr>
-        <td style="text-align: center; color: var(--text-muted);">${index + 1}</td>
+        <td style="text-align: center; color: var(--text-muted);">${rowNum}</td>
         <td style="font-weight: 600; color: #fff;">${p.code}</td>
         <td style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${p.name}">${p.name}</td>
         <td>
@@ -103,6 +124,42 @@ export function renderProductsTable() {
       </tr>
     `;
   }).join('');
+
+  // Vẽ các nút phân trang
+  const paginationContainer = document.getElementById('products-pagination');
+  if (paginationContainer) {
+    paginationContainer.innerHTML = `
+      <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); width: 100%;">
+        <button class="btn btn-secondary btn-sm" id="products-prev-page" ${state.productsPage === 1 ? 'disabled' : ''}>
+          <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i> Trước
+        </button>
+        <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">
+          Trang <strong>${state.productsPage}</strong> / ${totalPages} (${totalItems} sản phẩm)
+        </span>
+        <button class="btn btn-secondary btn-sm" id="products-next-page" ${state.productsPage === totalPages ? 'disabled' : ''}>
+          Sau <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+    `;
+
+    const prevPageBtn = document.getElementById('products-prev-page');
+    if (prevPageBtn) {
+      prevPageBtn.addEventListener('click', () => {
+        state.productsPage--;
+        renderProductsTable();
+        document.getElementById('products-panel').scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+
+    const nextPageBtn = document.getElementById('products-next-page');
+    if (nextPageBtn) {
+      nextPageBtn.addEventListener('click', () => {
+        state.productsPage++;
+        renderProductsTable();
+        document.getElementById('products-panel').scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+  }
   
   // Gán sự kiện cho các nút
   document.querySelectorAll('.edit-prod-btn').forEach(btn => {
@@ -353,15 +410,20 @@ export function setupExcelImportAndTemplate() {
     });
   }
 
+  const onFilterChange = () => {
+    state.productsPage = 1;
+    renderProductsTable();
+  };
+
   // Lắng nghe sự kiện đổi Hãng sơn trên bảng Sản phẩm
   const brandFilter = document.getElementById('product-brand-filter');
   if (brandFilter) {
-    brandFilter.addEventListener('change', renderProductsTable);
+    brandFilter.addEventListener('change', onFilterChange);
   }
 
   const searchInput = document.getElementById('product-search-input');
   if (searchInput) {
-    searchInput.addEventListener('input', renderProductsTable);
+    searchInput.addEventListener('input', onFilterChange);
   }
 
   const openAddModalBtn = document.getElementById('btn-open-add-product-modal');

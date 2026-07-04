@@ -9,6 +9,7 @@ import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvo
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js';
 import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 
 // Vẽ lại toàn bộ giao diện của tất cả các Tab
@@ -20,6 +21,7 @@ export function renderAll() {
   renderPricelistsTable();
   renderHistoryOrders();
   renderUsersTable();
+  renderBrandsTable();
   populateCustomerEmployeeFilter();
   safeCreateIcons();
 }
@@ -245,6 +247,21 @@ function loadLocalStorageBackup() {
     ];
     localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
   }
+
+  const storedBrands = localStorage.getItem('billing_system_brands');
+  if (storedBrands) {
+    state.brands = JSON.parse(storedBrands);
+  } else {
+    state.brands = [
+      { name: 'Nano10*', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
+      { name: 'Hatacco nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'hatacco.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
+      { name: 'Festiva nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'festiva.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
+      { name: 'mutsutec', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
+      { name: 'tdkaw', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
+      { name: 'cova', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' }
+    ];
+    localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
+  }
 }
 
 // Khởi chạy ứng dụng
@@ -264,6 +281,7 @@ async function initApp() {
   setupExcelImportAndTemplate();
   setupSupabaseSettings();
   setupUserManagement();
+  setupBrandsPanel();
   setupBackupRestoreListeners(renderAll);
 
   const savedUrl = localStorage.getItem('billing_supabase_url');

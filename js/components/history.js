@@ -6,10 +6,70 @@ import { openPrintTypeModal } from './invoice.js';
 
 export function setupHistoryPanel() {
   const searchInput = document.getElementById('history-search-input');
+  
+  const onFilterChange = () => {
+    state.historyPage = 1;
+    renderHistoryOrders();
+  };
+
   if (searchInput) {
-    searchInput.addEventListener('input', renderHistoryOrders);
+    searchInput.addEventListener('input', onFilterChange);
   }
   
+  // Thiết lập các bộ lọc thời gian, khách hàng, nhân viên
+  const dateModeSelect = document.getElementById('history-date-mode');
+  const filterDateInput = document.getElementById('history-filter-date');
+  const filterMonthInput = document.getElementById('history-filter-month');
+  const filterYearSelect = document.getElementById('history-filter-year');
+  const filterRangeDiv = document.getElementById('history-filter-range');
+  
+  if (dateModeSelect) {
+    // Khởi tạo năm động (năm hiện tại lùi về 5 năm)
+    const currentYear = new Date().getFullYear();
+    filterYearSelect.innerHTML = '<option value="">-- Chọn năm --</option>';
+    for (let y = currentYear; y >= currentYear - 5; y--) {
+      const opt = document.createElement('option');
+      opt.value = y.toString();
+      opt.textContent = y.toString();
+      filterYearSelect.appendChild(opt);
+    }
+    filterYearSelect.value = currentYear.toString();
+
+    dateModeSelect.addEventListener('change', () => {
+      const mode = dateModeSelect.value;
+      
+      // Ẩn tất cả trước
+      filterDateInput.style.display = 'none';
+      filterMonthInput.style.display = 'none';
+      filterYearSelect.style.display = 'none';
+      filterRangeDiv.style.display = 'none';
+      
+      // Hiện cái tương ứng
+      if (mode === 'date') filterDateInput.style.display = 'block';
+      else if (mode === 'month') filterMonthInput.style.display = 'block';
+      else if (mode === 'year') filterYearSelect.style.display = 'block';
+      else if (mode === 'range') filterRangeDiv.style.display = 'flex';
+      
+      onFilterChange();
+    });
+    
+    filterDateInput.addEventListener('input', onFilterChange);
+    filterMonthInput.addEventListener('input', onFilterChange);
+    filterYearSelect.addEventListener('change', onFilterChange);
+    document.getElementById('history-filter-from').addEventListener('input', onFilterChange);
+    document.getElementById('history-filter-to').addEventListener('input', onFilterChange);
+  }
+  
+  const customerFilter = document.getElementById('history-customer-filter');
+  if (customerFilter) {
+    customerFilter.addEventListener('input', onFilterChange);
+  }
+  
+  const creatorFilter = document.getElementById('history-creator-filter');
+  if (creatorFilter) {
+    creatorFilter.addEventListener('input', onFilterChange);
+  }
+
   const clearBtn = document.getElementById('btn-clear-history');
   if (clearBtn) {
     clearBtn.addEventListener('click', async () => {
@@ -58,17 +118,127 @@ export async function deleteOrder(id) {
   }
 }
 
+let lastCustomerLength = 0;
+let lastUserLength = 0;
+
+export function populateHistoryFilters() {
+  const customerList = document.getElementById('history-customer-list');
+  const creatorList = document.getElementById('history-creator-list');
+  
+  if (!customerList || !creatorList) return;
+  
+  // Chỉ cập nhật nếu số lượng khách hàng hoặc người dùng thay đổi
+  if (state.customers.length === lastCustomerLength && state.users.length === lastUserLength) {
+    return;
+  }
+  
+  lastCustomerLength = state.customers.length;
+  lastUserLength = state.users.length;
+  
+  customerList.innerHTML = '';
+  state.customers.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.name;
+    opt.textContent = `${c.code} - ${c.name}`;
+    customerList.appendChild(opt);
+  });
+  
+  creatorList.innerHTML = '';
+  state.users.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.displayName;
+    opt.textContent = `@${u.username}`;
+    creatorList.appendChild(opt);
+  });
+}
+
 export function renderHistoryOrders() {
   const container = document.getElementById('history-orders-container');
   if (!container) return;
   
+  populateHistoryFilters();
+  
   const searchVal = document.getElementById('history-search-input').value.toLowerCase().trim();
+  
+  const dateModeSelect = document.getElementById('history-date-mode');
+  const filterDateInput = document.getElementById('history-filter-date');
+  const filterMonthInput = document.getElementById('history-filter-month');
+  const filterYearSelect = document.getElementById('history-filter-year');
+  const filterFromInput = document.getElementById('history-filter-from');
+  const filterToInput = document.getElementById('history-filter-to');
+  const customerFilterSelect = document.getElementById('history-customer-filter');
+  const creatorFilterSelect = document.getElementById('history-creator-filter');
+  
+  const dateMode = dateModeSelect ? dateModeSelect.value : 'all';
+  const filterDate = filterDateInput ? filterDateInput.value : '';
+  const filterMonth = filterMonthInput ? filterMonthInput.value : '';
+  const filterYear = filterYearSelect ? filterYearSelect.value : '';
+  const filterFrom = filterFromInput ? filterFromInput.value : '';
+  const filterTo = filterToInput ? filterToInput.value : '';
+  const selectedCust = customerFilterSelect ? customerFilterSelect.value : '';
+  const selectedCreator = creatorFilterSelect ? creatorFilterSelect.value : '';
 
   const filtered = state.savedOrders.filter(o => {
+    // 1. Phân quyền hiển thị đơn của Sale
     if (state.currentUser && state.currentUser.role === 'sale') {
       if (o.createdBy !== state.currentUser.username) return false;
     }
-    return o.id.toLowerCase().includes(searchVal) || o.customerName.toLowerCase().includes(searchVal);
+    
+    // 2. Lọc theo tìm kiếm từ khóa
+    const matchesSearch = o.id.toLowerCase().includes(searchVal) || o.customerName.toLowerCase().includes(searchVal);
+    if (!matchesSearch) return false;
+    
+    // 3. Lọc theo khách hàng (Tìm kiếm tương đối)
+    if (selectedCust && !o.customerName.toLowerCase().includes(selectedCust.toLowerCase().trim())) return false;
+    
+    // 4. Lọc theo nhân viên lên đơn (Tìm kiếm tương đối)
+    if (selectedCreator) {
+      const creatorUname = o.createdBy ? (o.createdBy.includes('@') ? o.createdBy.split('@')[0] : o.createdBy) : '';
+      const creatorObj = state.users.find(u => u.username === creatorUname);
+      
+      const filterLower = selectedCreator.toLowerCase().trim();
+      const matchUsername = creatorUname.toLowerCase().includes(filterLower);
+      const matchDisplayName = creatorObj && creatorObj.displayName.toLowerCase().includes(filterLower);
+      
+      if (!matchUsername && !matchDisplayName) return false;
+    }
+    
+    // 5. Lọc theo thời gian
+    if (o.date) {
+      const oDate = new Date(o.date);
+      if (isNaN(oDate.getTime())) return true;
+      
+      if (dateMode === 'date') {
+        if (!filterDate) return true;
+        const orderDateStr = oDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
+        if (orderDateStr !== filterDate) return false;
+      } 
+      else if (dateMode === 'month') {
+        if (!filterMonth) return true;
+        const orderMonthStr = oDate.toISOString().slice(0, 7); // YYYY-MM
+        if (orderMonthStr !== filterMonth) return false;
+      } 
+      else if (dateMode === 'year') {
+        if (!filterYear) return true;
+        if (oDate.getFullYear().toString() !== filterYear) return false;
+      } 
+      else if (dateMode === 'range') {
+        const checkDate = new Date(oDate);
+        checkDate.setHours(0,0,0,0);
+        if (filterFrom) {
+          const fromDate = new Date(filterFrom);
+          fromDate.setHours(0,0,0,0);
+          if (checkDate < fromDate) return false;
+        }
+        if (filterTo) {
+          const toDate = new Date(filterTo);
+          toDate.setHours(23,59,59,999);
+          if (checkDate > toDate) return false;
+        }
+      }
+    }
+    
+    return true;
   });
 
   if (filtered.length === 0) {
@@ -85,13 +255,24 @@ export function renderHistoryOrders() {
 
   const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  container.innerHTML = sorted.map(order => {
+  const ITEMS_PER_PAGE = 20;
+  const totalItems = sorted.length;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+
+  if (state.historyPage > totalPages) state.historyPage = totalPages;
+  if (state.historyPage < 1) state.historyPage = 1;
+
+  const startIndex = (state.historyPage - 1) * ITEMS_PER_PAGE;
+  const paginatedItems = sorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  const cardsHtml = paginatedItems.map(order => {
     const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
     const statusBadge = order.status === 'draft' ? 
       `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>` : 
       `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
       
-    const creator = state.users.find(u => u.username === order.createdBy);
+    const creatorUname = order.createdBy ? (order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy) : '';
+    const creator = state.users.find(u => u.username === creatorUname);
     const creatorName = creator ? creator.displayName : order.createdBy;
 
     let showDeleteBtn = true;
@@ -160,6 +341,40 @@ export function renderHistoryOrders() {
       </div>
     `;
   }).join('');
+
+  const paginationHtml = `
+    <div class="pagination-controls" style="grid-column: 1 / -1; display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); width: 100%;">
+      <button class="btn btn-secondary btn-sm" id="history-prev-page" ${state.historyPage === 1 ? 'disabled' : ''}>
+        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i> Trước
+      </button>
+      <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">
+        Trang <strong>${state.historyPage}</strong> / ${totalPages} (${totalItems} đơn)
+      </span>
+      <button class="btn btn-secondary btn-sm" id="history-next-page" ${state.historyPage === totalPages ? 'disabled' : ''}>
+        Sau <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+      </button>
+    </div>
+  `;
+
+  container.innerHTML = cardsHtml + paginationHtml;
+
+  const prevPageBtn = document.getElementById('history-prev-page');
+  if (prevPageBtn) {
+    prevPageBtn.addEventListener('click', () => {
+      state.historyPage--;
+      renderHistoryOrders();
+      container.scrollIntoView({ behavior: 'smooth' });
+    });
+  }
+
+  const nextPageBtn = document.getElementById('history-next-page');
+  if (nextPageBtn) {
+    nextPageBtn.addEventListener('click', () => {
+      state.historyPage++;
+      renderHistoryOrders();
+      container.scrollIntoView({ behavior: 'smooth' });
+    });
+  }
 
   // Gán sự kiện click cho các nút hành động trong lịch sử
   document.querySelectorAll('.history-print-btn').forEach(btn => {

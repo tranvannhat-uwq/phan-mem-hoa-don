@@ -1,6 +1,7 @@
 // Đối tượng trạng thái toàn cục của ứng dụng (State)
 export const state = {
   products: [],
+  brands: [],
   invoiceItems: [], // [{ product, brand, package, colorCode, colorPercent, quantity, discountPercent, price }]
   savedOrders: [],
   customers: [],
@@ -17,5 +18,8 @@ export const state = {
     endDate: '',
     saleUser: 'all'
   },
-  dashboardChartView: 'month' // 'day', 'week', 'month', 'year'
+  dashboardChartView: 'month', // 'day', 'week', 'month', 'year'
+  historyPage: 1,
+  productsPage: 1,
+  customersPage: 1
 };

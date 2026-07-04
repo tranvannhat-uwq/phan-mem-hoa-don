@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatDateTime, getColorPercentFromCode } from '../utils.js';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode } from '../utils.js';
 import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
@@ -822,7 +822,51 @@ export function handleQuickCustomerBrandChange(newBrand) {
   renderInvoiceTable();
 }
 
-export function renderAndPrintOrder(order, type = 'retail') {
+export async function renderAndPrintOrder(order, type = 'retail') {
+  // Cập nhật tiêu đề hóa đơn và kích thước logo theo loại bản in
+  const titleEl = document.querySelector('#print-invoice-template h1');
+  const printLogoImg = document.querySelector('.print-logo-container img');
+  const printLogoSvg = document.getElementById('print-logo-svg');
+  const printLogoContainer = document.querySelector('.print-logo-container');
+  const printHeader = document.querySelector('.print-header');
+  if (printHeader) {
+    printHeader.style.display = type === 'warehouse' ? 'flex' : 'none';
+  }
+  
+  if (titleEl) {
+    if (type === 'warehouse') {
+      titleEl.innerText = 'PHIẾU XUẤT KHO';
+    } else {
+      titleEl.innerText = 'HÓA ĐƠN BÁN HÀNG';
+    }
+  }
+
+  if (type === 'warehouse') {
+    if (printLogoImg) {
+      printLogoImg.style.maxHeight = '205px';
+      printLogoImg.style.maxWidth = '450px';
+    }
+    if (printLogoSvg) {
+      printLogoSvg.setAttribute('width', '170');
+      printLogoSvg.setAttribute('height', '170');
+    }
+    if (printLogoContainer) {
+      printLogoContainer.style.minWidth = '190px';
+    }
+  } else {
+    if (printLogoImg) {
+      printLogoImg.style.maxHeight = '55px';
+      printLogoImg.style.maxWidth = '150px';
+    }
+    if (printLogoSvg) {
+      printLogoSvg.setAttribute('width', '45');
+      printLogoSvg.setAttribute('height', '45');
+    }
+    if (printLogoContainer) {
+      printLogoContainer.style.minWidth = '150px';
+    }
+  }
+
   document.getElementById('print-invoice-id').innerText = order.id;
   document.getElementById('print-invoice-date').innerText = formatDateTime(order.date);
   document.getElementById('print-customer-name').innerText = order.customerName;
@@ -844,9 +888,110 @@ export function renderAndPrintOrder(order, type = 'retail') {
   const notesEl = document.getElementById('print-invoice-notes');
   if (notesEl) notesEl.innerText = combinedNotes || 'N/A';
   
-  // Điền nhãn sơn
+  // Điền nhãn sơn và cập nhật thông tin nhà phân phối / công ty tương ứng
   const firstItem = order.items[0];
-  document.getElementById('print-order-brand').innerText = firstItem ? firstItem.brand : 'N/A';
+  let brandName = 'N/A';
+  if (firstItem) {
+    brandName = firstItem.brand || (firstItem.product && firstItem.product.brand) || 'N/A';
+  }
+  document.getElementById('print-order-brand').innerText = brandName;
+
+  // 1. Tìm cấu hình hãng sơn tương ứng trong danh sách state.brands
+  let brandConfig = state.brands ? state.brands.find(b => b.name.toLowerCase() === brandName.toLowerCase()) : null;
+  if (!brandConfig && state.brands) {
+    brandConfig = state.brands.find(b => brandName.toLowerCase().includes(b.name.toLowerCase()) || b.name.toLowerCase().includes(brandName.toLowerCase()));
+  }
+
+  // Cấu hình mặc định (fallback) nếu hoàn toàn không tìm thấy hãng sơn trong bảng dữ liệu
+  const defaultBrandConfig = {
+    name: brandName,
+    companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN',
+    logoFilename: 'absjapan.png',
+    hotline: '088.603.7878 - 0961.030.923',
+    cskh: '0868.055.866',
+    email: 'nhamaysonnano@gmail.com',
+    addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội',
+    addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên',
+    addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh'
+  };
+
+  const config = brandConfig || defaultBrandConfig;
+  const logoSrc = config.logoFilename;
+
+  let logoPromise = Promise.resolve();
+  if (printLogoImg) {
+    logoPromise = new Promise((resolve) => {
+      let resolved = false;
+      const done = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+
+      printLogoImg.onload = () => {
+        printLogoImg.style.display = 'block';
+        if (printLogoSvg) printLogoSvg.style.display = 'none';
+        done();
+      };
+
+      printLogoImg.onerror = () => {
+        printLogoImg.style.display = 'none';
+        if (printLogoSvg) printLogoSvg.style.display = 'block';
+        done();
+      };
+
+      printLogoImg.src = logoSrc;
+
+      // Nếu ảnh đã được cache và load xong từ trước
+      if (printLogoImg.complete && printLogoImg.naturalWidth !== 0) {
+        printLogoImg.style.display = 'block';
+        if (printLogoSvg) printLogoSvg.style.display = 'none';
+        done();
+      }
+
+      // Giới hạn thời gian tối đa 800ms để in luôn nếu mạng quá chậm
+      setTimeout(done, 800);
+    });
+  }
+
+  await logoPromise;
+
+  // Điền các trường thông tin chi tiết của công ty lên hóa đơn
+  const companyAddressMainEl = document.getElementById('print-company-address-main');
+  if (companyAddressMainEl) companyAddressMainEl.innerText = config.addressMain;
+
+  const companyAddressFactoryEl = document.getElementById('print-company-address-factory');
+  if (companyAddressFactoryEl) companyAddressFactoryEl.innerText = config.addressFactory;
+
+  const companyCskhEl = document.getElementById('print-company-cskh');
+  if (companyCskhEl) companyCskhEl.innerText = config.cskh;
+
+  const companyEmailEl = document.getElementById('print-company-email');
+  if (companyEmailEl) companyEmailEl.innerText = config.email;
+
+  const companyLargeEl = document.getElementById('print-company-name-large');
+  if (companyLargeEl) companyLargeEl.innerText = config.companyName;
+
+  const sellerNameEl = document.getElementById('print-seller-name');
+  if (sellerNameEl) sellerNameEl.innerText = config.companyName;
+
+  const hotlineEl = document.getElementById('print-company-hotline');
+  if (hotlineEl) hotlineEl.innerText = config.hotline;
+
+  const sellerHotlineEl = document.getElementById('print-seller-hotline');
+  if (sellerHotlineEl) sellerHotlineEl.innerText = config.hotline;
+
+  const ddkdEl = document.getElementById('print-company-ddkd');
+  if (ddkdEl) {
+    if (config.addressBusiness && config.addressBusiness.trim() !== '') {
+      ddkdEl.style.display = 'block';
+      const companyAddressBusinessEl = document.getElementById('print-company-address-business');
+      if (companyAddressBusinessEl) companyAddressBusinessEl.innerText = config.addressBusiness;
+    } else {
+      ddkdEl.style.display = 'none';
+    }
+  }
 
   const extraInfo = document.getElementById('print-customer-info-extra');
   if (order.customerId) {
@@ -854,7 +999,7 @@ export function renderAndPrintOrder(order, type = 'retail') {
     if (cust) {
       extraInfo.innerHTML = `
         <p style="margin: 0; margin-top: 4px;"><strong>Địa chỉ:</strong> ${cust.address || 'N/A'}</p>
-        <p style="margin: 0; margin-top: 4px;"><strong>Số điện thoại:</strong> ${cust.phone || 'N/A'}</p>
+        <p style="margin: 0; margin-top: 4px;"><strong>Số điện thoại:</strong> ${formatPhoneNumber(cust.phone)}</p>
       `;
     } else {
       extraInfo.innerHTML = '';
@@ -866,6 +1011,27 @@ export function renderAndPrintOrder(order, type = 'retail') {
   const table = document.getElementById('print-invoice-table');
   
   if (type === 'warehouse') {
+    // Tính tổng số lượng quy cách
+    const totals = {};
+    let totalQty = 0;
+    order.items.forEach(item => {
+      let pkg = item.package;
+      if (pkg === 'Thung') pkg = 'Thùng';
+      else if (pkg === 'Lon') pkg = 'Lon';
+      else if (pkg === 'Hop') pkg = 'Hộp';
+      else if (pkg === 'Bao') pkg = 'Bao';
+      else if (pkg === 'Tui') pkg = 'Túi';
+      
+      const qty = parseInt(item.quantity) || 0;
+      totalQty += qty;
+      if (qty > 0) {
+        totals[pkg] = (totals[pkg] || 0) + qty;
+      }
+    });
+    
+    const totalParts = Object.entries(totals).map(([pkg, qty]) => `${qty} ${pkg}`);
+    const totalsText = totalParts.length > 0 ? totalParts.join(', ') : '0';
+
     // Hoá đơn cho nhân viên kho (Ẩn giá tiền, thêm Mã màu, thu nhỏ Tên SP/Khối lượng/SL, tăng kích thước Mã hàng và Ghi chú)
     table.innerHTML = `
       <thead>
@@ -881,7 +1047,8 @@ export function renderAndPrintOrder(order, type = 'retail') {
       </thead>
       <tbody>
         ${order.items.map((item, idx) => {
-          const p = state.products.find(prod => prod.code === item.productCode && prod.brand === item.brand);
+          const itemBrand = item.brand || (item.product && item.product.brand);
+          const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
           
           let weight = 'N/A';
           if (p) {
@@ -897,13 +1064,18 @@ export function renderAndPrintOrder(order, type = 'retail') {
               <td style="text-align: center;">${idx + 1}</td>
               <td style="font-weight: bold; font-size: 14pt;">${item.productCode}</td>
               <td>${item.productName}</td>
-              <td style="text-align: center;">${item.colorCode || ''}</td>
+              <td style="text-align: center; font-weight: bold; font-size: 14pt;">${item.colorCode || ''}</td>
               <td style="text-align: center;">${weight}</td>
               <td style="text-align: center; font-weight: bold; font-size: 14pt;">${item.quantity}</td>
               <td style="font-size: 13pt; font-weight: 500;">${item.notes || ''}</td>
             </tr>
           `;
         }).join('')}
+        <tr style="background-color: #f5f5f5; font-weight: bold;">
+          <td colspan="5" style="text-align: right; padding-right: 15px; font-size: 13pt;">Tổng cộng:</td>
+          <td style="text-align: center; font-size: 14pt; color: #000;">${totalQty}</td>
+          <td style="font-size: 13pt; color: #000;">${totalsText}</td>
+        </tr>
       </tbody>
     `;
     
@@ -916,12 +1088,12 @@ export function renderAndPrintOrder(order, type = 'retail') {
         <tr>
           <th style="width: 5%;">STT</th>
           <th style="width: 10%;">Mã hàng</th>
-          <th style="width: 36%;">Tên sản phẩm</th>
-          <th style="width: 12%; text-align: center;">Mã màu</th>
-          <th style="width: 10%;">Đơn vị</th>
+          <th style="width: 30%;">Tên sản phẩm</th>
+          <th style="width: 15%; text-align: center;">Mã màu</th>
+          <th style="width: 10%;">Đơn vị (kg)</th>
           <th style="width: 5%; text-align: center;">SL</th>
-          <th style="width: 11%; text-align: right;">Đơn giá</th>
-          <th style="width: 11%; text-align: right;">Thành tiền</th>
+          <th style="width: 12%; text-align: right;">Đơn giá (đ)</th>
+          <th style="width: 13%; text-align: right;">Thành tiền (đ)</th>
         </tr>
       </thead>
       <tbody>
@@ -941,14 +1113,26 @@ export function renderAndPrintOrder(order, type = 'retail') {
           }
           
           let packageDisplay = item.package;
-          if (packageDisplay === 'Thung') packageDisplay = 'Thùng';
-          else if (packageDisplay === 'Lon') packageDisplay = 'Lon';
-          else if (packageDisplay === 'Hop') packageDisplay = 'Hộp';
-          else if (packageDisplay === 'Bao') packageDisplay = 'Bao';
-          else if (packageDisplay === 'Tui') packageDisplay = 'Túi';
+          let prefix = '';
+          if (packageDisplay === 'Thung') prefix = 'T';
+          else if (packageDisplay === 'Lon') prefix = 'L';
+          else if (packageDisplay === 'Hop') prefix = 'H';
+          else if (packageDisplay === 'Bao') prefix = 'B';
+          else if (packageDisplay === 'Tui') prefix = 'T';
           
           if (weight && weight !== 'N/A') {
-            packageDisplay = `${packageDisplay} (${weight})`;
+            let formattedWeight = weight.replace(/\s+/g, '').toLowerCase();
+            formattedWeight = formattedWeight.replace(/kg$/, '').replace(/l$/, '');
+            if (formattedWeight.endsWith('.0')) {
+              formattedWeight = formattedWeight.slice(0, -2);
+            }
+            packageDisplay = `${prefix}${formattedWeight}`;
+          } else {
+            if (packageDisplay === 'Thung') packageDisplay = 'Thùng';
+            else if (packageDisplay === 'Lon') packageDisplay = 'Lon';
+            else if (packageDisplay === 'Hop') packageDisplay = 'Hộp';
+            else if (packageDisplay === 'Bao') packageDisplay = 'Bao';
+            else if (packageDisplay === 'Tui') packageDisplay = 'Túi';
           }
           
           return `
@@ -956,11 +1140,14 @@ export function renderAndPrintOrder(order, type = 'retail') {
               <td style="text-align: center;">${idx + 1}</td>
               <td style="font-weight: bold;">${item.productCode}</td>
               <td>${item.productName}</td>
-              <td style="text-align: center;">${item.colorCode || ''}</td>
-              <td>${packageDisplay}</td>
+              <td style="text-align: center; font-weight: bold;">
+                ${item.colorCode || ''}
+                ${item.colorPercent > 0 ? `<div style="font-size: 8pt; font-weight: bold; margin-top: 2px;">(+${item.colorPercent}% màu)</div>` : ''}
+              </td>
+              <td style="text-align: center;">${packageDisplay}</td>
               <td style="text-align: center;">${item.quantity}</td>
-              <td style="text-align: right;">${formatCurrency(discountedPrice)}</td>
-              <td style="text-align: right; font-weight: bold;">${formatCurrency(subTotal)}</td>
+              <td style="text-align: right;">${formatNumber(discountedPrice)}</td>
+              <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
             </tr>
           `;
         }).join('')}
@@ -978,17 +1165,18 @@ export function renderAndPrintOrder(order, type = 'retail') {
         <tr>
           <th style="width: 5%;">STT</th>
           <th style="width: 15%;">Mã hàng</th>
-          <th style="width: 35%;">Tên sản phẩm (kèm màu sắc)</th>
-          <th style="width: 10%;">Đơn vị</th>
+          <th style="width: 30%;">Tên sản phẩm (kèm màu sắc)</th>
+          <th style="width: 10%;">Đơn vị (kg)</th>
           <th style="width: 7%; text-align: center;">SL</th>
-          <th style="width: 11%; text-align: right;">Giá niêm yết</th>
+          <th style="width: 12%; text-align: right;">Giá niêm yết (đ)</th>
           <th style="width: 8%; text-align: center;">% CK</th>
-          <th style="width: 11%; text-align: right;">Thành tiền</th>
+          <th style="width: 13%; text-align: right;">Thành tiền (đ)</th>
         </tr>
       </thead>
       <tbody>
         ${order.items.map((item, idx) => {
-          const colorSuffix = item.colorCode ? ` (Màu: ${item.colorCode})` : '';
+          const colorPctText = item.colorPercent > 0 ? `, +${item.colorPercent}% màu` : '';
+          const colorSuffix = item.colorCode ? ` (Màu: <strong>${item.colorCode}${colorPctText}</strong>)` : '';
           const subTotal = Math.round(item.quantity * item.price * (1 - item.discountPercent / 100));
           
           // Lấy khối lượng sản phẩm tương ứng với quy cách đóng gói
@@ -1003,14 +1191,26 @@ export function renderAndPrintOrder(order, type = 'retail') {
           }
           
           let packageDisplay = item.package;
-          if (packageDisplay === 'Thung') packageDisplay = 'Thùng';
-          else if (packageDisplay === 'Lon') packageDisplay = 'Lon';
-          else if (packageDisplay === 'Hop') packageDisplay = 'Hộp';
-          else if (packageDisplay === 'Bao') packageDisplay = 'Bao';
-          else if (packageDisplay === 'Tui') packageDisplay = 'Túi';
+          let prefix = '';
+          if (packageDisplay === 'Thung') prefix = 'T';
+          else if (packageDisplay === 'Lon') prefix = 'L';
+          else if (packageDisplay === 'Hop') prefix = 'H';
+          else if (packageDisplay === 'Bao') prefix = 'B';
+          else if (packageDisplay === 'Tui') prefix = 'T';
           
           if (weight && weight !== 'N/A') {
-            packageDisplay = `${packageDisplay} (${weight})`;
+            let formattedWeight = weight.replace(/\s+/g, '').toLowerCase();
+            formattedWeight = formattedWeight.replace(/kg$/, '').replace(/l$/, '');
+            if (formattedWeight.endsWith('.0')) {
+              formattedWeight = formattedWeight.slice(0, -2);
+            }
+            packageDisplay = `${prefix}${formattedWeight}`;
+          } else {
+            if (packageDisplay === 'Thung') packageDisplay = 'Thùng';
+            else if (packageDisplay === 'Lon') packageDisplay = 'Lon';
+            else if (packageDisplay === 'Hop') packageDisplay = 'Hộp';
+            else if (packageDisplay === 'Bao') packageDisplay = 'Bao';
+            else if (packageDisplay === 'Tui') packageDisplay = 'Túi';
           }
           
           return `
@@ -1018,11 +1218,11 @@ export function renderAndPrintOrder(order, type = 'retail') {
               <td style="text-align: center;">${idx + 1}</td>
               <td style="font-weight: bold;">${item.productCode}</td>
               <td>${item.productName}${colorSuffix}</td>
-              <td>${packageDisplay}</td>
+              <td style="text-align: center;">${packageDisplay}</td>
               <td style="text-align: center;">${item.quantity}</td>
-              <td style="text-align: right;">${formatCurrency(Math.round(item.price))}</td>
+              <td style="text-align: right;">${formatNumber(Math.round(item.price))}</td>
               <td style="text-align: center;">${item.discountPercent}%</td>
-              <td style="text-align: right; font-weight: bold;">${formatCurrency(subTotal)}</td>
+              <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
             </tr>
           `;
         }).join('')}
@@ -1054,8 +1254,44 @@ export function renderAndPrintOrder(order, type = 'retail') {
     document.getElementById('print-total-payable').innerText = formatCurrency(order.totalPayable);
   }
 
-  // Gán nhãn ký tên khách hàng
-  document.getElementById('print-customer-sign-name').innerText = order.customerName;
+  // Gán nhãn ký tên khách hàng và dựng các cột chữ ký
+  const sigsEl = document.querySelector('.print-signatures');
+  if (sigsEl) {
+    if (type === 'warehouse') {
+      sigsEl.innerHTML = `
+        <div class="print-sig-col" style="width: 30%;">
+          <p><strong>Người lập phiếu</strong></p>
+          <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+          <div class="print-sig-space"></div>
+        </div>
+        <div class="print-sig-col" style="width: 30%;">
+          <p><strong>Thủ kho</strong></p>
+          <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, đóng dấu xuất kho)</p>
+          <div class="print-sig-space"></div>
+        </div>
+        <div class="print-sig-col" style="width: 30%;">
+          <p><strong>Người nhận hàng</strong></p>
+          <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+          <div class="print-sig-space"></div>
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">${order.customerName}</p>
+        </div>
+      `;
+    } else {
+      sigsEl.innerHTML = `
+        <div class="print-sig-col" style="width: 45%;">
+          <p><strong>Người lập hóa đơn</strong></p>
+          <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+          <div class="print-sig-space"></div>
+        </div>
+        <div class="print-sig-col" style="width: 45%;">
+          <p><strong>Người nhận hàng</strong></p>
+          <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+          <div class="print-sig-space"></div>
+          <p id="print-customer-sign-name" style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">${order.customerName}</p>
+        </div>
+      `;
+    }
+  }
 
   // Gọi lệnh in của trình duyệt
   window.print();
@@ -1135,9 +1371,13 @@ export function setupInvoiceCreator() {
         return;
       }
 
-      let matches = state.products.filter(p => 
-        p.code.toLowerCase().includes(val) || p.name.toLowerCase().includes(val)
-      );
+      const valNormalized = val.replace(/[^a-z0-9]/g, '');
+      let matches = state.products.filter(p => {
+        const codeNormalized = p.code.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return (valNormalized !== '' && codeNormalized.includes(valNormalized)) ||
+               p.code.toLowerCase().includes(val) || 
+               p.name.toLowerCase().includes(val);
+      });
 
       if (state.activeCustomerBrand && state.activeCustomerBrand !== 'Tất cả') {
         matches = matches.filter(p => p.brand === state.activeCustomerBrand);
@@ -1311,7 +1551,9 @@ function setupInvoiceCustomerSearch() {
 
     const matches = state.customers.filter(c => {
       if (state.currentUser && state.currentUser.role === 'sale') {
-        if (c.managedBy !== state.currentUser.username) return false;
+        const cManager = c.managedBy ? (c.managedBy.includes('@') ? c.managedBy.split('@')[0] : c.managedBy) : '';
+        const currentUserUname = state.currentUser.username ? (state.currentUser.username.includes('@') ? state.currentUser.username.split('@')[0] : state.currentUser.username) : '';
+        if (cManager !== currentUserUname) return false;
       }
       return c.code.toLowerCase().includes(val) || c.name.toLowerCase().includes(val) || (c.phone && c.phone.includes(val));
     });

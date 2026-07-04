@@ -36,7 +36,7 @@ export function renderUsersTable() {
     return `
       <tr>
         <td style="text-align: center; color: var(--text-muted);">${index + 1}</td>
-        <td style="font-weight: 600; color: #fff;">${u.username}</td>
+        <td style="font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${u.username}">${u.username}</td>
         <td>${u.displayName}</td>
         <td>
           <span style="color: ${roleColor}; font-weight: 500;">${roleText}</span>
@@ -114,7 +114,10 @@ export function closeUserModal() {
 
 export async function saveUser() {
   const editId = document.getElementById('user-edit-id').value;
-  const username = document.getElementById('user-username').value.trim().toLowerCase();
+  let username = document.getElementById('user-username').value.trim().toLowerCase();
+  if (username.includes('@')) {
+    username = username.split('@')[0];
+  }
   const displayName = document.getElementById('user-displayname').value.trim();
   const password = document.getElementById('user-password').value.trim();
   const role = document.getElementById('user-role').value;
@@ -122,6 +125,23 @@ export async function saveUser() {
   if (!username || !displayName) {
     showToast('Tên đăng nhập và Tên hiển thị là bắt buộc!', 'danger');
     return;
+  }
+  
+  // Kiểm tra độ dài mật khẩu nếu có nhập (Supabase Auth yêu cầu >= 6 ký tự)
+  if (password && password.length < 6) {
+    showToast('Mật khẩu phải có độ dài tối thiểu 6 ký tự!', 'danger');
+    return;
+  }
+  
+  // Cảnh báo nếu admin cố đổi mật khẩu của tài khoản khác trong chế độ Cloud
+  if (isCloudActive && editId && state.currentUser && state.currentUser.id !== editId && password) {
+    const confirmSave = confirm(
+      "Lưu ý bảo mật (Chế độ Cloud):\n" +
+      "Bạn không thể trực tiếp đổi mật khẩu của người khác từ ứng dụng này.\n" +
+      "Mật khẩu của tài khoản này chỉ có thể được đặt lại trên trang quản trị Supabase Auth.\n\n" +
+      "Tên hiển thị và Vai trò vẫn sẽ được cập nhật. Bạn có muốn tiếp tục lưu không?"
+    );
+    if (!confirmSave) return;
   }
   
   let user;
@@ -166,6 +186,15 @@ export async function saveUser() {
   
   const saved = await dbSaveUser(user);
   if (saved) {
+    // Cập nhật State local và LocalStorage
+    const idx = state.users.findIndex(u => u.id === user.id);
+    if (idx !== -1) {
+      state.users[idx] = user;
+    } else {
+      state.users.push(user);
+    }
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+
     // Cập nhật lại UI Header nếu chỉnh sửa đúng tài khoản đang đăng nhập
     if (state.currentUser && state.currentUser.id === user.id) {
       state.currentUser = user;
@@ -367,7 +396,7 @@ export function applyUserPermissions(user) {
     const navItem = link.parentElement;
     
     if (role === 'sale') {
-      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'pricelists-panel') {
+      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'pricelists-panel' || target === 'brands-panel') {
         navItem.style.display = 'block';
       } else {
         navItem.style.display = 'none';
@@ -421,6 +450,8 @@ export function applyUserPermissions(user) {
       #btn-clear-history { display: none !important; }
       #btn-open-add-pricelist-modal { display: none !important; }
       #pricelists-panel th:last-child, #pricelists-panel td:last-child { display: none !important; }
+      #btn-open-add-brand-modal, .edit-brand-btn, .delete-brand-btn { display: none !important; }
+      #brands-panel th:last-child, #brands-panel td:last-child { display: none !important; }
     `;
   } else if (role === 'accounting') {
     styleTag.innerHTML = `

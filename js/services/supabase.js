@@ -12,6 +12,7 @@ export let tableDraftOrdersName = 'draft_orders';
 export let tableCustomersName = 'customers';
 export let tablePricelistsName = 'pricelists';
 export let tableUsersName = 'users';
+export let tableBrandsName = 'brands';
 
 export function setCloudActive(active) {
   isCloudActive = active;
@@ -35,6 +36,7 @@ export async function connectSupabase(url, key, verbose = true) {
       tableCustomersName = 'customers';
       tablePricelistsName = 'pricelists';
       tableUsersName = 'users';
+      tableBrandsName = 'brands';
     } else {
       tableProductsName = 'wl_products';
       tableOrdersName = 'wl_orders';
@@ -42,6 +44,7 @@ export async function connectSupabase(url, key, verbose = true) {
       tableCustomersName = 'wl_customers';
       tablePricelistsName = 'wl_pricelists';
       tableUsersName = 'wl_users';
+      tableBrandsName = 'wl_brands';
     }
     
     supabaseClient = client;
@@ -271,6 +274,32 @@ export async function fetchCloudData() {
     } catch (uErr) {
       console.warn("Could not load users from Supabase:", uErr.message);
     }
+
+    // 6. Fetch Brands
+    try {
+      const { data: brandData, error: brandErr } = await supabaseClient
+        .from(tableBrandsName)
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (brandErr) throw brandErr;
+
+      state.brands = (brandData || []).map(b => ({
+        name: b.name,
+        companyName: b.company_name,
+        logoFilename: b.logo_filename,
+        hotline: b.hotline,
+        cskh: b.cskh,
+        email: b.email,
+        addressMain: b.address_main,
+        addressFactory: b.address_factory,
+        addressBusiness: b.address_business || null
+      }));
+      localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
+    } catch (brandErr) {
+      console.warn("Could not load brands from Supabase:", brandErr.message);
+      state.brands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
+    }
   } catch(err) {
     console.error('Error fetching cloud data:', err);
     showToast('Lỗi đồng bộ dữ liệu đám mây!', 'danger');
@@ -289,8 +318,9 @@ export async function syncLocalToCloud() {
   const localCustomers = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
   const localPricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
   const localUsers = JSON.parse(localStorage.getItem('billing_system_users') || '[]');
+  const localBrands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
   
-  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0) {
+  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0) {
     showToast('Không tìm thấy dữ liệu LocalStorage nào để đồng bộ!', 'warning');
     return false;
   }
@@ -423,6 +453,27 @@ export async function syncLocalToCloud() {
       const { error } = await supabaseClient
         .from(tableUsersName)
         .upsert(dbRows, { onConflict: 'id' });
+        
+      if (error) throw error;
+    }
+
+    // 6. Sync Brands
+    if (localBrands.length > 0) {
+      const dbRows = localBrands.map(b => ({
+        name: b.name,
+        company_name: b.companyName,
+        logo_filename: b.logoFilename,
+        hotline: b.hotline,
+        cskh: b.cskh,
+        email: b.email,
+        address_main: b.addressMain,
+        address_factory: b.addressFactory,
+        address_business: b.addressBusiness || null
+      }));
+      
+      const { error } = await supabaseClient
+        .from(tableBrandsName)
+        .upsert(dbRows, { onConflict: 'name' });
         
       if (error) throw error;
     }
@@ -693,14 +744,14 @@ export async function authRegisterOrUpdateUser(user, isNew) {
     const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
     const savedKey = localStorage.getItem('billing_supabase_key') || COMPANY_SUPABASE_KEY;
     
-    // Sử dụng client phụ để tránh làm mất session đăng nhập hiện tại của Admin
-    const tempClient = supabase.createClient(savedUrl, savedKey, {
-      auth: { persistSession: false }
-    });
-
     const email = user.username.includes('@') ? user.username : `${user.username}@weblendon.com`;
 
     if (isNew) {
+      // Sử dụng client phụ để tránh làm mất session đăng nhập hiện tại của Admin
+      const tempClient = supabase.createClient(savedUrl, savedKey, {
+        auth: { persistSession: false }
+      });
+
       const { data, error } = await tempClient.auth.signUp({
         email: email,
         password: user.password,
@@ -715,17 +766,35 @@ export async function authRegisterOrUpdateUser(user, isNew) {
       if (data && data.user) {
         user.id = data.user.id; // Gán ID dạng UUID của Supabase Auth
       }
+    } else {
+      // Chỉnh sửa tài khoản đã có: Chỉ cho phép cập nhật password và metadata cho chính tài khoản đang đăng nhập
+      const { data: { user: authUser } } = await supabaseClient.auth.getUser();
+      if (authUser && authUser.id === user.id) {
+        const updateData = {
+          data: {
+            displayName: user.displayName,
+            role: user.role
+          }
+        };
+        if (user.password) {
+          updateData.password = user.password;
+        }
+        const { error } = await supabaseClient.auth.updateUser(updateData);
+        if (error) throw error;
+      } else {
+        console.warn("Chỉ có thể thay đổi thông tin xác thực cho chính tài khoản đang đăng nhập.");
+      }
     }
     return true;
   } catch (err) {
-    console.error('Auth registration error:', err);
+    console.error('Auth registration/update error:', err);
     let errMsg = '';
     if (typeof err === 'object' && err !== null) {
       errMsg = err.message || err.error_description || JSON.stringify(err);
     } else {
       errMsg = String(err);
     }
-    showToast('Lỗi đăng ký tài khoản trên Cloud: ' + errMsg, 'danger');
+    showToast('Lỗi đồng bộ tài khoản trên Cloud: ' + errMsg, 'danger');
     return false;
   }
 }
@@ -737,19 +806,17 @@ export async function dbSaveUser(user) {
       const isLocalId = String(oldId).startsWith('u-');
       const isNew = !state.users.some(u => u.id === oldId) || isLocalId;
       
-      // Nếu thêm tài khoản mới (hoặc tài khoản offline cũ chưa đăng ký auth), tạo trên Supabase Auth trước
-      if (isNew) {
-        const authSuccess = await authRegisterOrUpdateUser(user, true);
-        if (!authSuccess) return false;
-        
-        // Nếu trước đó là ID offline dạng u-..., ta cần xóa dòng cũ có ID này trong CSDL
-        if (isLocalId && user.id !== oldId) {
-          const { error: delErr } = await supabaseClient
-            .from(tableUsersName)
-            .delete()
-            .eq('id', oldId);
-          if (delErr) console.warn("Could not delete old offline user row:", delErr.message);
-        }
+      // Đồng bộ thông tin xác thực lên Supabase Auth
+      const authSuccess = await authRegisterOrUpdateUser(user, isNew);
+      if (!authSuccess) return false;
+      
+      // Nếu trước đó là ID offline dạng u-..., ta cần xóa dòng cũ có ID này trong CSDL
+      if (isNew && isLocalId && user.id !== oldId) {
+        const { error: delErr } = await supabaseClient
+          .from(tableUsersName)
+          .delete()
+          .eq('id', oldId);
+        if (delErr) console.warn("Could not delete old offline user row:", delErr.message);
       }
       
       const dbRow = {
@@ -788,6 +855,56 @@ export async function dbDeleteUser(id) {
     } catch(err) {
       console.error(err);
       showToast('Không thể xóa người dùng trên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+// --- Thao tác CSDL chi tiết (Hãng sơn) ---
+export async function dbSaveBrand(brand) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        name: brand.name,
+        company_name: brand.companyName,
+        logo_filename: brand.logoFilename,
+        hotline: brand.hotline,
+        cskh: brand.cskh,
+        email: brand.email,
+        address_main: brand.addressMain,
+        address_factory: brand.addressFactory,
+        address_business: brand.addressBusiness || null
+      };
+      
+      const { error } = await supabaseClient
+        .from(tableBrandsName)
+        .upsert(dbRow, { onConflict: 'name' });
+        
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể lưu hãng sơn lên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function dbDeleteBrand(name) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableBrandsName)
+        .delete()
+        .eq('name', name);
+        
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể xóa hãng sơn trên đám mây: ' + err.message, 'danger');
       return false;
     }
   }

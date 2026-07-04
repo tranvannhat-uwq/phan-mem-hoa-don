@@ -297,12 +297,19 @@ CREATE POLICY delete_draft_orders ON draft_orders FOR DELETE TO authenticated US
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
+DECLARE
+  u_username text;
 BEGIN
+  u_username := split_part(new.email, '@', 1);
+
+  -- Xóa mọi tài khoản cũ trùng username nhưng khác ID (do local offline cũ hoặc tài khoản đã xóa trên Auth)
+  DELETE FROM public.users WHERE username = u_username AND id <> new.id::text;
+
   INSERT INTO public.users (id, username, display_name, role, password)
   VALUES (
     new.id::text,
-    split_part(new.email, '@', 1), -- Tên đăng nhập cắt từ email (VD: nhat@weblendon.com -> nhat)
-    COALESCE(new.raw_user_meta_data->>'display_name', new.raw_user_meta_data->>'displayName', split_part(new.email, '@', 1)),
+    u_username, -- Tên đăng nhập cắt từ email (VD: nhat@weblendon.com -> nhat)
+    COALESCE(new.raw_user_meta_data->>'display_name', new.raw_user_meta_data->>'displayName', u_username),
     COALESCE(new.raw_user_meta_data->>'role', 'sale'),
     '' -- Không lưu mật khẩu dạng plain-text
   )
@@ -314,22 +321,47 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Gán trigger
+-- Gán trigger tạo tài khoản
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- TỰ ĐỘNG ĐỒNG BỘ CÁC TÀI KHOẢN ĐÃ CÓ TRƯỚC ĐÓ TỪ auth.users SANG public.users
+-- Trigger xóa tài khoản tự động
+CREATE OR REPLACE FUNCTION public.handle_deleted_user()
+RETURNS trigger AS $$
+BEGIN
+  DELETE FROM public.users WHERE id = old.id::text;
+  RETURN old;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Gán trigger xóa tài khoản
+DROP TRIGGER IF EXISTS on_auth_user_deleted ON auth.users;
+CREATE TRIGGER on_auth_user_deleted
+  AFTER DELETE ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_deleted_user();
+
+-- TỰ ĐỘNG ĐỒNG BỘ CÁC TÀI KHOẢN ĐÃ CÓ TRƯỚC ĐÓ TỪ auth.users SANG public.users (Tránh xung đột ràng buộc)
 INSERT INTO public.users (id, username, display_name, role, password)
-SELECT 
-  id::text,
-  split_part(email, '@', 1),
-  COALESCE(raw_user_meta_data->>'display_name', raw_user_meta_data->>'displayName', split_part(email, '@', 1)),
-  COALESCE(raw_user_meta_data->>'role', 'admin'), -- Các tài khoản tạo tay trực tiếp trên Supabase Auth mặc định làm Admin
+SELECT DISTINCT ON (uname)
+  u.id::text,
+  u.uname,
+  u.display_name,
+  u.role,
   ''
-FROM auth.users
-ON CONFLICT (id) DO NOTHING;
+FROM (
+  SELECT 
+    id,
+    split_part(email, '@', 1) as uname,
+    COALESCE(raw_user_meta_data->>'display_name', raw_user_meta_data->>'displayName', split_part(email, '@', 1)) as display_name,
+    COALESCE(raw_user_meta_data->>'role', 'admin') as role
+  FROM auth.users
+  WHERE email IS NOT NULL AND email <> ''
+) u
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.users p WHERE p.username = u.uname OR p.id = u.id::text
+);
 
 
 -- ====================================================================
@@ -345,4 +377,43 @@ SELECT cron.schedule(
   '0 0 * * *',
   $$ DELETE FROM public.draft_orders WHERE created_at < now() - interval '2 days' $$
 );
+
+-- ====================================================================
+-- 8. TẠO BẢNG HÃNG SƠN (brands) & PHÂN QUYỀN RLS
+-- ====================================================================
+
+-- Tạo bảng brands
+CREATE TABLE IF NOT EXISTS public.brands (
+    name text PRIMARY KEY,
+    company_name text NOT NULL,
+    logo_filename text NOT NULL,
+    hotline text NOT NULL,
+    cskh text NOT NULL,
+    email text NOT NULL,
+    address_main text NOT NULL,
+    address_factory text NOT NULL,
+    address_business text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Kích hoạt RLS
+ALTER TABLE public.brands ENABLE ROW LEVEL SECURITY;
+
+-- Tạo chính sách bảo mật
+DROP POLICY IF EXISTS select_brands ON brands;
+DROP POLICY IF EXISTS manage_brands ON brands;
+
+CREATE POLICY select_brands ON brands FOR SELECT TO authenticated USING (true);
+CREATE POLICY manage_brands ON brands FOR ALL TO authenticated USING (public.is_admin_or_accounting());
+
+-- Chèn dữ liệu hạt giống mẫu ban đầu (seeding)
+INSERT INTO public.brands (name, company_name, logo_filename, hotline, cskh, email, address_main, address_factory, address_business)
+VALUES 
+  ('Nano10*', 'CÔNG TY CỔ PHẦN ABS JAPAN', 'absjapan.png', '088.603.7878 - 0961.030.923', '0868.055.866', 'nhamaysonnano@gmail.com', 'Tiên Kha - Phúc Thịnh - Hà Nội', 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh'),
+  ('Hatacco nano', 'CÔNG TY CỔ PHẦN EMP HOA KỲ', 'hatacco.png', '0325.855.222 - 0985.769.689', '0868.055.866', 'nhamaysonnano@gmail.com', 'Tiên Kha - Phúc Thịnh - Hà Nội', 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', NULL),
+  ('Festiva nano', 'CÔNG TY CỔ PHẦN EMP HOA KỲ', 'festiva.png', '0325.855.222 - 0985.769.689', '0868.055.866', 'nhamaysonnano@gmail.com', 'Tiên Kha - Phúc Thịnh - Hà Nội', 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', NULL),
+  ('mutsutec', 'CÔNG TY CỔ PHẦN ABS JAPAN', 'absjapan.png', '088.603.7878 - 0961.030.923', '0868.055.866', 'nhamaysonnano@gmail.com', 'Tiên Kha - Phúc Thịnh - Hà Nội', 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh'),
+  ('tdkaw', 'CÔNG TY CỔ PHẦN ABS JAPAN', 'absjapan.png', '088.603.7878 - 0961.030.923', '0868.055.866', 'nhamaysonnano@gmail.com', 'Tiên Kha - Phúc Thịnh - Hà Nội', 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh'),
+  ('cova', 'CÔNG TY CỔ PHẦN ABS JAPAN', 'absjapan.png', '088.603.7878 - 0961.030.923', '0868.055.866', 'nhamaysonnano@gmail.com', 'Tiên Kha - Phúc Thịnh - Hà Nội', 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh')
+ON CONFLICT (name) DO NOTHING;
 

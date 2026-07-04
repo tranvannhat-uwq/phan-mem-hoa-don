@@ -9,10 +9,11 @@ import {
   tableDraftOrdersName,
   tablePricelistsName,
   tableUsersName,
+  tableBrandsName,
   fetchCloudData
 } from './supabase.js';
 
-// Xuất file sao lưu Excel (nhiều trang chứa dữ liệu 5 bảng)
+// Xuất file sao lưu Excel (nhiều trang chứa dữ liệu các bảng)
 export async function exportBackupToExcel() {
   if (!isCloudActive || !supabaseClient) {
     showToast('Vui lòng kết nối với Supabase trước!', 'warning');
@@ -28,14 +29,16 @@ export async function exportBackupToExcel() {
       { data: orders },
       { data: drafts },
       { data: pricelists },
-      { data: users }
+      { data: users },
+      { data: brands }
     ] = await Promise.all([
       supabaseClient.from(tableProductsName).select('*'),
       supabaseClient.from(tableCustomersName).select('*'),
       supabaseClient.from(tableOrdersName).select('*'),
       supabaseClient.from(tableDraftOrdersName).select('*'),
       supabaseClient.from(tablePricelistsName).select('*'),
-      supabaseClient.from(tableUsersName).select('*')
+      supabaseClient.from(tableUsersName).select('*'),
+      supabaseClient.from(tableBrandsName).select('*')
     ]);
 
     const wb = XLSX.utils.book_new();
@@ -46,7 +49,8 @@ export async function exportBackupToExcel() {
       { name: "Don_Hang", data: orders || [] },
       { name: "Don_Hang_Nhap", data: drafts || [] },
       { name: "Bang_Gia", data: pricelists || [] },
-      { name: "Nguoi_Dung", data: users || [] }
+      { name: "Nguoi_Dung", data: users || [] },
+      { name: "Hang_Son", data: brands || [] }
     ];
 
     sheets.forEach(sheet => {
@@ -100,7 +104,8 @@ export async function importBackupFromExcel(file, onCompleteCallback) {
         "Don_Hang": tableOrdersName,
         "Don_Hang_Nhap": tableDraftOrdersName,
         "Bang_Gia": tablePricelistsName,
-        "Nguoi_Dung": tableUsersName
+        "Nguoi_Dung": tableUsersName,
+        "Hang_Son": tableBrandsName
       };
 
       const parseRow = (row) => {
@@ -130,6 +135,9 @@ export async function importBackupFromExcel(file, onCompleteCallback) {
           showToast(`Đang dọn sạch bảng ${sheetName}...`, 'info');
           if (sheetName === "San_Pham") {
             const { error: delErr } = await supabaseClient.from(tableName).delete().neq('code', 'temp_none');
+            if (delErr) throw delErr;
+          } else if (sheetName === "Hang_Son") {
+            const { error: delErr } = await supabaseClient.from(tableName).delete().neq('name', 'temp_none');
             if (delErr) throw delErr;
           } else {
             const { error: delErr } = await supabaseClient.from(tableName).delete().neq('id', 'temp_none');

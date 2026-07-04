@@ -61,6 +61,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" data-target="brands-panel">
+            <i data-lucide="palette"></i>
+            Hãng sơn
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" data-target="pricelists-panel">
             <i data-lucide="tags"></i>
             Quản lý bảng giá
@@ -337,6 +343,7 @@
               </tbody>
             </table>
           </div>
+          <div id="products-pagination"></div>
         </div>
       </section>
 
@@ -578,10 +585,52 @@
             </button>
           </div>
 
-          <div class="controls-row">
-            <div class="search-wrapper" style="flex: 1;">
+          <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem;">
+            <!-- Tìm kiếm -->
+            <div class="search-wrapper" style="flex: 1.5; min-width: 250px;">
               <i data-lucide="search" class="search-icon"></i>
-              <input type="text" class="form-control-search" id="history-search-input" placeholder="Tìm đơn hàng theo mã hóa đơn, tên khách hàng...">
+              <input type="text" class="form-control-search" id="history-search-input" placeholder="Tìm kiếm theo mã, khách hàng...">
+            </div>
+            
+            <!-- Bộ lọc thời gian -->
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; flex: 2; min-width: 320px;">
+              <select class="form-control" id="history-date-mode" style="width: 140px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
+                <option value="all">Tất cả thời gian</option>
+                <option value="date">Theo ngày</option>
+                <option value="month">Theo tháng</option>
+                <option value="year">Theo năm</option>
+                <option value="range">Tùy chọn khoảng</option>
+              </select>
+              
+              <!-- Input cụ thể cho Ngày -->
+              <input type="date" class="form-control" id="history-filter-date" style="display: none; width: 140px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+              
+              <!-- Input cụ thể cho Tháng -->
+              <input type="month" class="form-control" id="history-filter-month" style="display: none; width: 140px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+              
+              <!-- Input cụ thể cho Năm -->
+              <select class="form-control" id="history-filter-year" style="display: none; width: 110px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
+                <!-- Tải động qua JS -->
+              </select>
+              
+              <!-- Input khoảng ngày (Từ ngày - Đến ngày) -->
+              <div id="history-filter-range" style="display: none; gap: 0.5rem; align-items: center;">
+                <input type="date" class="form-control" id="history-filter-from" style="width: 130px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+                <span style="color: var(--text-secondary); font-size: 0.85rem;">đến</span>
+                <input type="date" class="form-control" id="history-filter-to" style="width: 130px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+              </div>
+            </div>
+
+            <!-- Bộ lọc khách hàng (Tích hợp tìm kiếm) -->
+            <div style="width: 200px; min-width: 160px; position: relative;">
+              <input type="text" class="form-control" id="history-customer-filter" list="history-customer-list" placeholder="Tìm khách hàng..." style="width: 100%; height: 42px; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+              <datalist id="history-customer-list"></datalist>
+            </div>
+
+            <!-- Bộ lọc nhân viên lên đơn (Tích hợp tìm kiếm) -->
+            <div style="width: 180px; min-width: 150px; position: relative;">
+              <input type="text" class="form-control" id="history-creator-filter" list="history-creator-list" placeholder="Tìm nhân viên..." style="width: 100%; height: 42px; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+              <datalist id="history-creator-list"></datalist>
             </div>
           </div>
 
@@ -664,6 +713,7 @@
               </tbody>
             </table>
           </div>
+          <div id="customers-pagination"></div>
         </div>
       </section>
 
@@ -708,6 +758,42 @@
         </div>
       </section>
 
+      <!-- Brands Management Panel -->
+      <section id="brands-panel" class="panel">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2 class="panel-title"><i data-lucide="palette"></i> Danh sách hãng sơn & công ty quản lý</h2>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm admin-only" id="btn-open-add-brand-modal">
+                <i data-lucide="plus-circle"></i> Thêm hãng sơn
+              </button>
+            </div>
+          </div>
+
+          <div class="table-container" style="margin-top: 1rem;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Tên hãng sơn</th>
+                  <th>Công ty quản lý</th>
+                  <th>Tệp Logo</th>
+                  <th>Hotline</th>
+                  <th>Số CSKH</th>
+                  <th>Email</th>
+                  <th>Trụ sở chính</th>
+                  <th>Nhà máy sản xuất</th>
+                  <th>Địa điểm kinh doanh</th>
+                  <th class="admin-only" style="text-align: center; width: 100px;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="brands-table-body">
+                <!-- Dynamic load -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- Users Management Panel -->
       <section id="users-panel" class="panel">
         <div class="glass-panel">
@@ -731,7 +817,7 @@
             <table class="table" style="table-layout: fixed; min-width: 800px;">
               <colgroup>
                 <col style="width: 60px;">   <!-- STT -->
-                <col style="width: 180px;">  <!-- Tên đăng nhập -->
+                <col style="width: 240px;">  <!-- Tên đăng nhập -->
                 <col style="width: auto;">   <!-- Tên hiển thị -->
                 <col style="width: 150px;">  <!-- Quyền hạn -->
                 <col style="width: 150px;">  <!-- Thao tác -->
@@ -803,7 +889,7 @@
               <i data-lucide="database"></i> Sao lưu & Khôi phục dữ liệu
             </h3>
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
-              Xuất dữ liệu trên Cloud của công ty thành file Excel để lưu trữ dự phòng, hoặc khôi phục dữ liệu từ một file sao lưu trước đó.
+              Xuất/Khôi phục toàn bộ dữ liệu hệ thống bao gồm: Danh sách khách hàng, Sản phẩm, Đơn hàng (đã chốt & nháp), Bảng giá, Danh sách tài khoản và các Hãng sơn dưới dạng tệp Excel đa sheet (.xlsx).
             </p>
             <div style="display: flex; flex-direction: column; gap: 1rem;">
               <div style="display: flex; gap: 0.75rem;">
@@ -1093,48 +1179,61 @@
       </div>
       <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.5rem; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
         
-        <!-- Customer Info Summary Card -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; padding: 1.25rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px;">
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Mã đại lý</div>
-            <div id="detail-cust-code" style="font-weight: 700; color: #fff; font-size: 1.1rem; margin-top: 2px;"></div>
+        <!-- Customer Info Summary Card (Divided into 2 halves) -->
+        <div style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px;">
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+            <!-- Nửa 1: Thông tin liên hệ -->
+            <div style="display: flex; flex-direction: column; gap: 0.85rem; border-right: 1.5px solid var(--border-color); padding-right: 1.5rem;">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Mã đại lý</div>
+                <div id="detail-cust-code" style="font-weight: 700; color: #fff; font-size: 1.1rem; margin-top: 2px;"></div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Tên đại lý</div>
+                <div id="detail-cust-name" style="font-weight: 600; color: #fff; font-size: 1.1rem; margin-top: 2px;"></div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Số điện thoại</div>
+                <div id="detail-cust-phone" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px;"></div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Địa chỉ</div>
+                <div id="detail-cust-address" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px; line-height: 1.4;"></div>
+              </div>
+            </div>
+            
+            <!-- Nửa 2: Thông tin nghiệp vụ & Công nợ -->
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Bảng giá áp dụng</div>
+                <div id="detail-cust-pricelist" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px; font-size: 0.95rem;"></div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Nhãn sơn độc quyền</div>
+                <div id="detail-cust-brand" style="margin-top: 4px;"></div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Nhân viên quản lý</div>
+                <div id="detail-cust-manager" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px;"></div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Tổng doanh thu giao dịch</div>
+                <div id="detail-cust-sales" style="font-weight: 700; color: var(--color-primary); font-size: 1.1rem; margin-top: 2px;">0 ₫</div>
+              </div>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Công nợ hiện tại</div>
+                <div id="detail-cust-debt" style="font-weight: 700; color: var(--color-danger); font-size: 1.1rem; margin-top: 2px;">0 ₫</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Tên đại lý</div>
-            <div id="detail-cust-name" style="font-weight: 600; color: #fff; font-size: 1.1rem; margin-top: 2px;"></div>
-          </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Số điện thoại</div>
-            <div id="detail-cust-phone" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px;"></div>
-          </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Địa chỉ</div>
-            <div id="detail-cust-address" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px; line-height: 1.4;"></div>
-          </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Nhãn sơn độc quyền</div>
-            <div id="detail-cust-brand" style="margin-top: 4px;"></div>
-          </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Nhân viên quản lý</div>
-            <div id="detail-cust-manager" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px;"></div>
-          </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Bảng giá áp dụng</div>
-            <div id="detail-cust-pricelist" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px; font-size: 0.95rem;"></div>
-          </div>
-          <div>
+          
+          <!-- Dưới cùng: Ghi chú mặc định -->
+          <div style="border-top: 1.5px solid var(--border-color); padding-top: 0.85rem; margin-top: 0.5rem;">
             <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Ghi chú mặc định</div>
-            <div id="detail-cust-notes" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px; line-height: 1.4;"></div>
+            <div id="detail-cust-notes" style="font-weight: 500; color: var(--text-secondary); margin-top: 4px; line-height: 1.4; font-size: 0.95rem;"></div>
           </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Tổng doanh thu giao dịch</div>
-            <div id="detail-cust-sales" style="font-weight: 700; color: var(--color-primary); font-size: 1.1rem; margin-top: 2px;">0 ₫</div>
-          </div>
-          <div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Công nợ hiện tại</div>
-            <div id="detail-cust-debt" style="font-weight: 700; color: var(--color-danger); font-size: 1.1rem; margin-top: 2px;">0 ₫</div>
-          </div>
+          
         </div>
 
         <!-- Debt History Section -->
@@ -1233,19 +1332,40 @@
 
   <!-- Printable Invoice Template (Hidden on Screen, visible in Print mode) -->
   <div id="print-invoice-template">
-    <div class="print-header">
-      <h1>HÓA ĐƠN BÁN HÀNG</h1>
-      <div class="print-header-meta" style="text-align: right; font-size: 12pt; font-weight: bold; line-height: 1.4; color: #000;">
-        <p style="margin: 0;">Mã hóa đơn: <span id="print-invoice-id">HD-000000</span></p>
+    <div class="print-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2.5px solid #000; padding-bottom: 12px; margin-bottom: 20px;">
+      <div class="print-logo-container" style="display: flex; align-items: center; justify-content: flex-start; min-width: 150px;">
+        <!-- Logo ảnh, tự động ẩn nếu không tìm thấy tệp logo.png -->
+        <img src="logo.png" alt="Logo" onerror="this.style.display='none'; document.getElementById('print-logo-svg').style.display='block';" style="max-height: 55px; max-width: 150px; object-fit: contain; display: block;">
+        <!-- Logo SVG hình giọt nước/lon sơn nghệ thuật mặc định -->
+        <svg id="print-logo-svg" width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: none; color: #000;">
+          <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-11-7-11S5 10.7 5 15a7 7 0 0 0 7 7z" />
+        </svg>
+      </div>
+      <!-- Thông tin doanh nghiệp bên cạnh logo -->
+      <div style="line-height: 1.4; color: #000; font-size: 11pt; font-weight: 500; flex: 1; margin-left: 20px; text-align: left;">
+        <p style="margin: 0;">Trụ sở chính: <span id="print-company-address-main">Tiên Kha - Phúc Thịnh - Hà Nội</span></p>
+        <p style="margin: 0; margin-top: 2px;">Nhà máy SX: <span id="print-company-address-factory">TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên</span></p>
+        <p id="print-company-ddkd" style="margin: 0; margin-top: 2px;">ĐĐKD: <span id="print-company-address-business">228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh</span></p>
+        <p style="margin: 0; margin-top: 2px;">Hotline: <span id="print-company-hotline">088.603.7878 - 0961.030.923</span> &nbsp;&nbsp;&nbsp;&nbsp; CSKH: <span id="print-company-cskh">0868.055.866</span></p>
+        <p style="margin: 0; margin-top: 2px;">Email: <span id="print-company-email">nhamaysonnano@gmail.com</span></p>
+      </div>
+    </div>
+
+    <!-- Phần tiêu đề hóa đơn dưới đường gạch ngang -->
+    <div class="print-title-section" style="margin-top: 15px; margin-bottom: 25px; color: #000;">
+      <div id="print-company-name-large" style="font-size: 13pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5px;">CÔNG TY CỔ PHẦN ABS JAPAN</div>
+      <h1 id="print-invoice-title-large" style="text-align: center; font-size: 22pt; font-weight: bold; margin: 15px 0 5px 0; text-transform: uppercase; color: #000;">HÓA ĐƠN BÁN HÀNG</h1>
+      <div style="text-align: center; font-size: 12pt; line-height: 1.4;">
+        <p style="margin: 0; font-weight: bold;">Mã hóa đơn: <span id="print-invoice-id">HD-000000</span></p>
         <p style="margin: 0; margin-top: 4px;">Ngày lập: <span id="print-invoice-date">23/06/2026</span></p>
       </div>
     </div>
 
     <div class="print-info-grid">
       <div>
-        <p><strong>Đơn vị bán hàng:</strong> TẬP ĐOÀN SƠN NANO</p>
-        <p><strong>Địa chỉ:</strong> Cầu Giao, Phúc Thuận, Thái Nguyên</p>
-        <p><strong>Điện thoại:</strong> 0886037878</p>
+        <p><strong>Đơn vị bán hàng:</strong> <span id="print-seller-name">CÔNG TY CỔ PHẦN ABS JAPAN</span></p>
+        <p><strong>Hotline:</strong> <span id="print-seller-hotline">088.603.7878 - 0961.030.923</span></p>
+        <p><strong>Email:</strong> nhamaysonnano@gmail.com</p>
       </div>
       <div>
         <p><strong>Khách hàng:</strong> <span id="print-customer-name">Khách hàng vãng lai</span></p>
@@ -1294,6 +1414,63 @@
         <div class="print-sig-space"></div>
         <p id="print-customer-sign-name">Khách hàng</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Brand Modal -->
+  <div class="modal-overlay" id="brand-modal">
+    <div class="modal-content" style="max-width: 550px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="brand-modal-title">Thêm hãng sơn mới</h3>
+        <button class="modal-close" id="btn-close-brand-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="brand-form">
+        <input type="hidden" id="brand-edit-is-new" value="true">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-name">Tên hãng sơn *</label>
+            <input type="text" class="form-control" id="brand-name" required placeholder="Ví dụ: Hatacco nano, Nano10*" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-company-name">Tên công ty quản lý *</label>
+            <input type="text" class="form-control" id="brand-company-name" required placeholder="Ví dụ: CÔNG TY CỔ PHẦN ABS JAPAN" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-logo-filename">Tên tệp Logo *</label>
+            <input type="text" class="form-control" id="brand-logo-filename" required placeholder="Ví dụ: absjapan.png, hatacco.png" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-hotline">Hotline *</label>
+            <input type="text" class="form-control" id="brand-hotline" required placeholder="Ví dụ: 088.603.7878 - 0961.030.923" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-cskh">Số CSKH *</label>
+            <input type="text" class="form-control" id="brand-cskh" required placeholder="Ví dụ: 0868.055.866" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-email">Email *</label>
+            <input type="email" class="form-control" id="brand-email" required placeholder="Ví dụ: nhamaysonnano@gmail.com" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-address-main">Địa chỉ trụ sở chính *</label>
+            <input type="text" class="form-control" id="brand-address-main" required placeholder="Ví dụ: Tiên Kha - Phúc Thịnh - Hà Nội" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-address-factory">Địa chỉ nhà máy sản xuất *</label>
+            <input type="text" class="form-control" id="brand-address-factory" required placeholder="Ví dụ: TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="brand-address-business">Địa điểm kinh doanh (ĐĐKD)</label>
+            <input type="text" class="form-control" id="brand-address-business" placeholder="Nhập ĐĐKD (Để trống nếu muốn ẩn dòng này trên hóa đơn)" style="width: 100%;">
+          </div>
+        </div>
+        <div class="modal-footer" style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-brand-modal">Hủy</button>
+          <button type="submit" class="btn btn-primary btn-sm" id="btn-save-brand">Lưu</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -1359,14 +1536,14 @@
         <button class="print-type-option print-type-option-agent" id="btn-print-type-agent">
           <i data-lucide="users" style="width: 22px; height: 22px;"></i>
           <div style="flex: 1;">
-            <div class="option-title">Hóa đơn đại lý, đối tác</div>
+            <div class="option-title">Hóa đơn bán hàng</div>
             <div class="option-desc">Ẩn tỷ lệ % chiết khấu ở dòng tổng, bỏ cột % chiết khấu</div>
           </div>
         </button>
         <button class="print-type-option print-type-option-warehouse" id="btn-print-type-warehouse">
           <i data-lucide="package" style="width: 22px; height: 22px;"></i>
           <div style="flex: 1;">
-            <div class="option-title">Hóa đơn nhân viên kho</div>
+            <div class="option-title">Phiếu xuất kho</div>
             <div class="option-desc">Ẩn toàn bộ giá tiền, đổi cột Quy cách thành Khối lượng, thêm cột Ghi chú</div>
           </div>
         </button>
