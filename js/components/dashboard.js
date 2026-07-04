@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { formatCurrency, safeCreateIcons } from '../utils.js';
+import { formatCurrency, safeCreateIcons, isSameUser } from '../utils.js';
 import { switchTab } from '../main.js';
 import { openProductModal } from './products.js';
 
@@ -11,9 +11,9 @@ export function getFilteredDashboardOrders() {
 
   // 1. Lọc theo nhân viên Sale
   if (state.currentUser && state.currentUser.role === 'sale') {
-    orders = orders.filter(o => o.createdBy === state.currentUser.username);
+    orders = orders.filter(o => isSameUser(o.createdBy, state.currentUser.username));
   } else if (state.dashboardFilter.saleUser && state.dashboardFilter.saleUser !== 'all') {
-    orders = orders.filter(o => o.createdBy === state.dashboardFilter.saleUser);
+    orders = orders.filter(o => isSameUser(o.createdBy, state.dashboardFilter.saleUser));
   }
 
   // 2. Lọc theo khoảng thời gian
@@ -300,9 +300,9 @@ export function updateDashboardStats() {
 
   let userCustomers = state.customers;
   if (state.currentUser && state.currentUser.role === 'sale') {
-    userCustomers = state.customers.filter(c => c.managedBy === state.currentUser.username);
+    userCustomers = state.customers.filter(c => isSameUser(c.managedBy, state.currentUser.username));
   } else if (state.dashboardFilter.saleUser && state.dashboardFilter.saleUser !== 'all') {
-    userCustomers = state.customers.filter(c => c.managedBy === state.dashboardFilter.saleUser);
+    userCustomers = state.customers.filter(c => isSameUser(c.managedBy, state.dashboardFilter.saleUser));
   }
 
   const labelSuffix = state.dashboardFilter.timeRange === 'custom' 

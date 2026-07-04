@@ -10,7 +10,7 @@ import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDrop
 import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
-import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
+import { showToast, safeCreateIcons, updateDbStatusUI, isSameUser } from './utils.js';
 
 // Vẽ lại toàn bộ giao diện của tất cả các Tab
 export function renderAll() {
@@ -327,8 +327,15 @@ async function initApp() {
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session && session.user) {
-        const username = session.user.email.split('@')[0];
-        const user = state.users.find(u => u.username === username);
+        const authUser = session.user;
+        // 1. Tìm theo ID UUID trước (chính xác nhất)
+        let user = state.users.find(u => u.id === authUser.id);
+        
+        // 2. Nếu không tìm thấy, thử tìm theo email/username trùng khớp linh hoạt
+        if (!user && authUser.email) {
+          user = state.users.find(u => isSameUser(u.username, authUser.email));
+        }
+        
         if (user) {
           activeUser = user;
         }

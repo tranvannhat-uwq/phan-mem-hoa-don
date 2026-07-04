@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatDateTime, isSameUser } from '../utils.js';
 import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { openPrintTypeModal } from './invoice.js';
@@ -181,7 +181,7 @@ export function renderHistoryOrders() {
   const filtered = state.savedOrders.filter(o => {
     // 1. Phân quyền hiển thị đơn của Sale
     if (state.currentUser && state.currentUser.role === 'sale') {
-      if (o.createdBy !== state.currentUser.username) return false;
+      if (!isSameUser(o.createdBy, state.currentUser.username)) return false;
     }
     
     // 2. Lọc theo tìm kiếm từ khóa
@@ -271,9 +271,8 @@ export function renderHistoryOrders() {
       `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>` : 
       `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
       
-    const creatorUname = order.createdBy ? (order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy) : '';
-    const creator = state.users.find(u => u.username === creatorUname);
-    const creatorName = creator ? creator.displayName : order.createdBy;
+    const creator = state.users.find(u => isSameUser(u.username, order.createdBy));
+    const creatorName = creator ? creator.displayName : (order.createdBy && order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy);
 
     let showDeleteBtn = true;
     if (order.status === 'settled' && state.currentUser && state.currentUser.role !== 'admin') {

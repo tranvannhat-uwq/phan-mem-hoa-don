@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, safeCreateIcons } from '../utils.js';
+import { showToast, safeCreateIcons, isSameUser } from '../utils.js';
 import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populateManagedByDropdown } from './customers.js';
@@ -115,6 +115,9 @@ export function closeUserModal() {
 export async function saveUser() {
   const editId = document.getElementById('user-edit-id').value;
   let username = document.getElementById('user-username').value.trim().toLowerCase();
+  if (username && !username.includes('@')) {
+    username = `${username}@lendon.com`;
+  }
   const displayName = document.getElementById('user-displayname').value.trim();
   const password = document.getElementById('user-password').value.trim();
   const role = document.getElementById('user-role').value;
@@ -143,12 +146,7 @@ export async function saveUser() {
   
   let user;
   if (!editId) {
-    const exists = state.users.some(u => {
-      const uName = u.username.toLowerCase();
-      const uNamePart = uName.includes('@') ? uName.split('@')[0] : uName;
-      const targetPart = username.includes('@') ? username.split('@')[0] : username;
-      return uName === username || uNamePart === targetPart;
-    });
+    const exists = state.users.some(u => isSameUser(u.username, username));
     if (exists) {
       showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
       return;
@@ -169,13 +167,7 @@ export async function saveUser() {
     const existingUser = state.users.find(u => u.id === editId);
     if (!existingUser) return;
     
-    const exists = state.users.some(u => {
-      if (u.id === editId) return false;
-      const uName = u.username.toLowerCase();
-      const uNamePart = uName.includes('@') ? uName.split('@')[0] : uName;
-      const targetPart = username.includes('@') ? username.split('@')[0] : username;
-      return uName === username || uNamePart === targetPart;
-    });
+    const exists = state.users.some(u => u.id !== editId && isSameUser(u.username, username));
     if (exists) {
       showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
       return;
@@ -329,16 +321,20 @@ export async function handleLogin(e) {
         throw loginError || new Error('Tài khoản hoặc mật khẩu không chính xác!');
       }
 
+      // Lấy thông tin xác thực vừa đăng nhập thành công từ Supabase Auth
+      const { data: { user: authUser } } = await supabaseClient.auth.getUser();
+      if (!authUser) {
+        throw new Error('Không thể lấy thông tin xác thực sau khi đăng nhập.');
+      }
+
       // Đồng bộ dữ liệu mới nhất (bao gồm hồ sơ tài khoản từ bảng users) sau khi đăng nhập thành công
       await fetchCloudData();
 
-      const cleanInput = usernameInput.toLowerCase().trim();
-      const usernamePart = cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput;
-      const user = state.users.find(u => {
-        const uName = u.username.toLowerCase();
-        const uNamePart = uName.includes('@') ? uName.split('@')[0] : uName;
-        return uName === cleanInput || uName === usernamePart || uNamePart === cleanInput || uNamePart === usernamePart;
-      });
+      // Tìm user trong CSDL (state.users) bằng UUID trước, sau đó bằng Email/Username
+      let user = state.users.find(u => u.id === authUser.id);
+      if (!user && authUser.email) {
+        user = state.users.find(u => isSameUser(u.username, authUser.email));
+      }
       if (user) {
         state.currentUser = user;
         sessionStorage.setItem('billing_system_auth', 'true');

@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser } from '../utils.js';
 import { dbSaveCustomer, dbDeleteCustomer } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
@@ -13,14 +13,10 @@ export function renderCustomersTable() {
   const filterEmployee = filterSelect ? filterSelect.value : '';
   
   const filtered = state.customers.filter(c => {
-    const cManager = c.managedBy ? (c.managedBy.includes('@') ? c.managedBy.split('@')[0] : c.managedBy) : '';
-    const currentUserUname = state.currentUser ? (state.currentUser.username.includes('@') ? state.currentUser.username.split('@')[0] : state.currentUser.username) : '';
-    const filterEmpUname = filterEmployee ? (filterEmployee.includes('@') ? filterEmployee.split('@')[0] : filterEmployee) : '';
-
     if (state.currentUser && state.currentUser.role === 'sale') {
-      if (cManager !== currentUserUname) return false;
+      if (!isSameUser(c.managedBy, state.currentUser.username)) return false;
     } else if (filterEmployee) {
-      if (cManager !== filterEmpUname) return false;
+      if (!isSameUser(c.managedBy, filterEmployee)) return false;
     }
     return c.code.toLowerCase().includes(searchVal) || 
            c.name.toLowerCase().includes(searchVal) || 
@@ -297,7 +293,8 @@ export function openCustomerModal(index = -1) {
     const mBySelect = document.getElementById('cust-managed-by');
     if (mBySelect) {
       const mByVal = customer.managedBy || 'nhat';
-      mBySelect.value = mByVal.includes('@') ? mByVal.split('@')[0] : mByVal;
+      const matchingUser = state.users.find(u => isSameUser(u.username, mByVal));
+      mBySelect.value = matchingUser ? matchingUser.username : mByVal;
     }
   }
 }
@@ -351,9 +348,7 @@ export async function saveCustomer() {
       managedBy = document.getElementById('cust-managed-by').value;
     }
   }
-  if (managedBy && managedBy.includes('@')) {
-    managedBy = managedBy.split('@')[0];
-  }
+  // Lưu trữ đầy đủ email/username để đảm bảo tính đồng nhất
   
   const duplicateCode = state.customers.some((c, idx) => c.code === code && idx !== index);
   if (duplicateCode) {
@@ -594,7 +589,7 @@ export function openCustomerDetailModal(index) {
   }
   
   const managerUsername = cust.managedBy ? (cust.managedBy.includes('@') ? cust.managedBy.split('@')[0] : cust.managedBy) : '';
-  const user = state.users.find(u => u.username === managerUsername);
+  const user = state.users.find(u => isSameUser(u.username, cust.managedBy));
   document.getElementById('detail-cust-manager').innerText = user ? `${user.displayName} (${managerUsername})` : cust.managedBy;
   
   // Xác định tên bảng giá đang áp dụng

@@ -118,3 +118,14 @@ export function formatPhoneNumber(phone) {
   }
   return phone;
 }
+
+// So sánh hai tên đăng nhập / email linh hoạt (không phân biệt hoa thường và so khớp tiền tố)
+export function isSameUser(u1, u2) {
+  if (!u1 || !u2) return false;
+  const clean1 = u1.toLowerCase().trim();
+  const clean2 = u2.toLowerCase().trim();
+  if (clean1 === clean2) return true;
+  const prefix1 = clean1.split('@')[0];
+  const prefix2 = clean2.split('@')[0];
+  return prefix1 === prefix2;
+}

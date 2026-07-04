@@ -156,6 +156,15 @@ ALTER TABLE pricelists ENABLE ROW LEVEL SECURITY;
 
 -- 4. TẠO CÁC HÀM HỖ TRỢ PHÂN QUYỀN (SECURITY DEFINER để tránh đệ quy RLS)
 
+-- Hàm so sánh 2 tên người dùng linh hoạt (hỗ trợ so khớp tiền tố không phân biệt tên miền email)
+CREATE OR REPLACE FUNCTION public.is_same_user(u1 text, u2 text)
+RETURNS boolean AS $$
+BEGIN
+  RETURN COALESCE(u1, '') = COALESCE(u2, '') 
+         OR split_part(COALESCE(u1, ''), '@', 1) = split_part(COALESCE(u2, ''), '@', 1);
+END;
+$$ LANGUAGE plpgsql;
+
 -- Hàm kiểm tra xem người dùng hiện tại có phải là Admin hay không
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS boolean SECURITY DEFINER AS $$
@@ -222,17 +231,17 @@ DROP POLICY IF EXISTS delete_customers ON customers;
 
 -- Admin/Kế toán xem tất cả khách hàng; Sale chỉ xem khách hàng mình quản lý
 CREATE POLICY select_customers ON customers FOR SELECT TO authenticated USING (
-  public.is_admin_or_accounting() OR managed_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(managed_by, public.get_current_username())
 );
 
 -- Admin/Kế toán thêm bất kỳ khách hàng nào; Sale chỉ được thêm khách hàng gán cho mình
 CREATE POLICY insert_customers ON customers FOR INSERT TO authenticated WITH CHECK (
-  public.is_admin_or_accounting() OR managed_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(managed_by, public.get_current_username())
 );
 
 -- Admin/Kế toán sửa bất kỳ khách hàng nào; Sale chỉ sửa khách hàng mình quản lý
 CREATE POLICY update_customers ON customers FOR UPDATE TO authenticated USING (
-  public.is_admin_or_accounting() OR managed_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(managed_by, public.get_current_username())
 );
 
 -- Chỉ Admin và Kế toán mới có quyền xóa khách hàng
@@ -248,12 +257,12 @@ DROP POLICY IF EXISTS delete_orders ON orders;
 
 -- Admin/Kế toán xem tất cả hóa đơn; Sale chỉ xem hóa đơn mình tạo
 CREATE POLICY select_orders ON orders FOR SELECT TO authenticated USING (
-  public.is_admin_or_accounting() OR created_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(created_by, public.get_current_username())
 );
 
 -- Admin/Kế toán tạo đơn cho bất kỳ ai; Sale chỉ được tạo đơn dưới tên của mình
 CREATE POLICY insert_orders ON orders FOR INSERT TO authenticated WITH CHECK (
-  public.is_admin_or_accounting() OR created_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(created_by, public.get_current_username())
 );
 
 -- Admin/Kế toán sửa bất kỳ đơn nào; Sale không có quyền sửa đơn đã chốt
@@ -274,22 +283,22 @@ DROP POLICY IF EXISTS delete_draft_orders ON draft_orders;
 
 -- Admin/Kế toán xem tất cả đơn nháp; Sale chỉ xem đơn nháp mình tạo
 CREATE POLICY select_draft_orders ON draft_orders FOR SELECT TO authenticated USING (
-  public.is_admin_or_accounting() OR created_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(created_by, public.get_current_username())
 );
 
 -- Admin/Kế toán tạo đơn nháp; Sale chỉ được tạo đơn nháp dưới tên mình
 CREATE POLICY insert_draft_orders ON draft_orders FOR INSERT TO authenticated WITH CHECK (
-  public.is_admin_or_accounting() OR created_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(created_by, public.get_current_username())
 );
 
 -- Admin/Kế toán sửa bất kỳ đơn nháp nào; Sale chỉ sửa đơn nháp mình tạo
 CREATE POLICY update_draft_orders ON draft_orders FOR UPDATE TO authenticated USING (
-  public.is_admin_or_accounting() OR created_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(created_by, public.get_current_username())
 );
 
 -- Admin/Kế toán xóa bất kỳ đơn nháp nào; Sale được quyền xóa đơn nháp mình tạo
 CREATE POLICY delete_draft_orders ON draft_orders FOR DELETE TO authenticated USING (
-  public.is_admin_or_accounting() OR created_by = public.get_current_username()
+  public.is_admin_or_accounting() OR public.is_same_user(created_by, public.get_current_username())
 );
 
 
@@ -300,7 +309,8 @@ RETURNS trigger AS $$
 DECLARE
   u_username text;
 BEGIN
-  u_username := COALESCE(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1));
+  -- Ưu tiên lấy email đầy đủ làm username để đồng nhất với Auth
+  u_username := COALESCE(new.email, new.raw_user_meta_data->>'username', split_part(new.email, '@', 1));
 
   -- Xóa mọi tài khoản cũ trùng username nhưng khác ID (do local offline cũ hoặc tài khoản đã xóa trên Auth)
   DELETE FROM public.users WHERE username = u_username AND id <> new.id::text;
@@ -308,7 +318,7 @@ BEGIN
   INSERT INTO public.users (id, username, display_name, role, password)
   VALUES (
     new.id::text,
-    u_username, -- Tên đăng nhập gốc từ metadata hoặc email
+    u_username, -- Lưu email đầy đủ hoặc username gốc
     COALESCE(new.raw_user_meta_data->>'display_name', new.raw_user_meta_data->>'displayName', u_username),
     COALESCE(new.raw_user_meta_data->>'role', 'sale'),
     '' -- Không lưu mật khẩu dạng plain-text

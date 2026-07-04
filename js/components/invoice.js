@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode } from '../utils.js';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser } from '../utils.js';
 import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
@@ -1551,9 +1551,7 @@ function setupInvoiceCustomerSearch() {
 
     const matches = state.customers.filter(c => {
       if (state.currentUser && state.currentUser.role === 'sale') {
-        const cManager = c.managedBy ? (c.managedBy.includes('@') ? c.managedBy.split('@')[0] : c.managedBy) : '';
-        const currentUserUname = state.currentUser.username ? (state.currentUser.username.includes('@') ? state.currentUser.username.split('@')[0] : state.currentUser.username) : '';
-        if (cManager !== currentUserUname) return false;
+        if (!isSameUser(c.managedBy, state.currentUser.username)) return false;
       }
       return c.code.toLowerCase().includes(val) || c.name.toLowerCase().includes(val) || (c.phone && c.phone.includes(val));
     });
