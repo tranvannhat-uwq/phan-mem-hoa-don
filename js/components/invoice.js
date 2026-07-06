@@ -1,8 +1,9 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser } from '../utils.js';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode } from '../utils.js';
 import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
+import { generateUniqueCustomerCode } from './customers.js';
 
 let currentOrderToPrint = null;
 
@@ -118,6 +119,16 @@ export function renderInvoiceTable() {
     
     const disabledAttr = isReadOnly ? 'disabled' : '';
 
+    let isDiscountDisabled = isReadOnly;
+    if (!isReadOnly && state.currentUser && state.currentUser.role === 'sale') {
+      const plSelect = document.getElementById('invoice-pricelist-select');
+      const activePlId = plSelect ? plSelect.value : 'retail';
+      if (activePlId !== 'retail') {
+        isDiscountDisabled = true;
+      }
+    }
+    const discDisabledAttr = isDiscountDisabled ? 'disabled' : '';
+
     // Kiểm tra sản phẩm sơn lót hoặc bột bả
     const nameLower = p.name.toLowerCase();
     const isPrimerOrPutty = nameLower.includes('lót') || nameLower.includes('bả');
@@ -152,7 +163,7 @@ export function renderInvoiceTable() {
           <input type="number" class="form-control-inline item-quantity" value="${item.quantity}" min="1" style="width: 55px; text-align: center; font-weight: 600;" ${disabledAttr}>
         </td>
         <td style="text-align: center;">
-          <input type="number" class="form-control-inline item-discount" value="${item.discountPercent}" min="0" max="100" step="any" style="width: 55px; text-align: center;" ${disabledAttr}>
+          <input type="number" class="form-control-inline item-discount" value="${item.discountPercent}" min="0" max="100" step="any" style="width: 55px; text-align: center;" ${discDisabledAttr}>
         </td>
         <td>
           <input type="text" class="form-control-inline item-notes" value="${item.notes}" placeholder="VD: Màu pha đậm..." style="width: 100%; font-size: 0.75rem;" ${disabledAttr}>
@@ -526,18 +537,26 @@ export async function saveActiveOrder(status = 'settled') {
       return null;
     }
     
-    let nextNum = 1;
-    if (state.customers.length > 0) {
-      const nums = state.customers.map(c => {
-        const match = c.code.match(/\d+/);
-        return match ? parseInt(match[0]) : 0;
-      }).filter(Boolean);
-      if (nums.length > 0) {
-        nextNum = Math.max(...nums) + 1;
+    const qProvinceSelect = document.getElementById('quick-cust-province');
+    const qProvince = qProvinceSelect ? qProvinceSelect.value : '';
+    if (!qProvince) {
+      showToast('Vui lòng chọn Tỉnh/Thành phố cho khách hàng mới!', 'danger');
+      return null;
+    }
+    
+    const qCode = generateUniqueCustomerCode(qProvince);
+    const qPhone = document.getElementById('quick-cust-phone').value.trim();
+    const cleanPhone = qPhone.replace(/\D/g, '');
+    if (cleanPhone) {
+      const duplicatePhone = state.customers.some(c => {
+        const cPhone = (c.phone || '').replace(/\D/g, '');
+        return cPhone === cleanPhone;
+      });
+      if (duplicatePhone) {
+        showToast('Số điện thoại này đã được đăng ký cho khách hàng khác!', 'danger');
+        return null;
       }
     }
-    const qCode = `KH-${nextNum.toString().padStart(3, '0')}`;
-    const qPhone = document.getElementById('quick-cust-phone').value.trim();
     const qAddress = document.getElementById('quick-cust-address').value.trim();
     const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
     
@@ -559,7 +578,7 @@ export async function saveActiveOrder(status = 'settled') {
       phone: qPhone,
       address: qAddress,
       assignedBrand: qAssignedBrand,
-      brandDiscounts: {},
+      brandDiscounts: { province: qProvince },
       shippingSupport: qShippingSupport,
       debt: 0,
       totalTransaction: 0,
@@ -757,6 +776,7 @@ export function enableQuickCustomerMode() {
   const plGroup = document.getElementById('invoice-pricelist-group');
   const shipContainer = document.getElementById('quick-cust-shipping-support-container');
   if (plGroup && quickFields && shipContainer) {
+    plGroup.style.display = 'block';
     quickFields.insertBefore(plGroup, shipContainer);
   }
   
@@ -781,6 +801,8 @@ export function disableQuickCustomerMode() {
   if (qName) qName.value = '';
   const qPhone = document.getElementById('quick-cust-phone');
   if (qPhone) qPhone.value = '';
+  const qProvince = document.getElementById('quick-cust-province');
+  if (qProvince) qProvince.value = '';
   const qAddr = document.getElementById('quick-cust-address');
   if (qAddr) qAddr.value = '';
   const qBrand = document.getElementById('quick-cust-assigned-brand');
@@ -1613,9 +1635,21 @@ function selectInvoiceCustomer(customer) {
     infoCard.style.display = 'block';
     document.getElementById('selected-customer-name-lbl').innerText = customer.name;
     document.getElementById('selected-customer-phone-lbl').innerText = customer.phone || 'N/A';
-    document.getElementById('selected-customer-address-lbl').innerText = customer.address || 'N/A';
+    const provinceName = getProvinceNameByCode(customer.brandDiscounts && customer.brandDiscounts.province);
+    const detailAddress = customer.address || 'N/A';
+    document.getElementById('selected-customer-address-lbl').innerText = provinceName ? `[${provinceName}] ${detailAddress}` : detailAddress;
     document.getElementById('selected-customer-brand-lbl').innerText = customer.assignedBrand;
-    document.getElementById('selected-customer-debt-lbl').innerText = formatCurrency(customer.debt);
+    
+    const pl = state.pricelists.find(p => p.id === customer.pricelistId);
+    const plName = pl ? pl.name : (customer.pricelistId === 'custom' ? 'Chiết khấu riêng' : (customer.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
+    const plLbl = document.getElementById('selected-customer-pricelist-lbl');
+    if (plLbl) plLbl.innerText = plName;
+    
+    const debtLbl = document.getElementById('selected-customer-debt-lbl');
+    if (debtLbl) {
+      debtLbl.innerText = formatCurrency(customer.debt);
+      debtLbl.style.color = (customer.debt > 0) ? 'var(--color-danger)' : ((customer.debt < 0) ? 'var(--color-success)' : 'var(--text-muted)');
+    }
   }
 
   const shipCheck = document.getElementById('invoice-shipping-support');
@@ -1628,6 +1662,11 @@ function selectInvoiceCustomer(customer) {
   if (plSelect) {
     plSelect.value = customer.pricelistId || 'custom';
     plSelect.disabled = true; // Khóa lại, không cho sale thay đổi bảng giá của đại lý tùy ý
+  }
+  
+  const plGroup = document.getElementById('invoice-pricelist-group');
+  if (plGroup) {
+    plGroup.style.display = 'none';
   }
   
   applyActivePriceListToInvoice();

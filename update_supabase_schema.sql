@@ -441,3 +441,14 @@ VALUES
   ('cova', 'CÔNG TY CỔ PHẦN ABS JAPAN', 'absjapan.png', '088.603.7878 - 0961.030.923', '0868.055.866', 'nhamaysonnano@gmail.com', 'Tiên Kha - Phúc Thịnh - Hà Nội', 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh')
 ON CONFLICT (name) DO NOTHING;
 
+-- Bổ sung cột quản lý kinh doanh ngoài / tài khoản công ty
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_external boolean DEFAULT false;
+
+-- Chèn mặc định tài khoản quản lý công ty
+INSERT INTO public.users (id, username, display_name, role, password, is_external)
+VALUES 
+  ('u-abs-japan', 'ctyabs@lendon.com', 'ABS JAPAN (Công ty)', 'sale', '', true),
+  ('u-emp-hoa-ky', 'emp_hoa_ky', 'EMP Hoa Kỳ (Công ty)', 'sale', '', true)
+ON CONFLICT (username) DO UPDATE SET
+  is_external = true,
+  display_name = EXCLUDED.display_name;

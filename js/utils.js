@@ -125,7 +125,54 @@ export function isSameUser(u1, u2) {
   const clean1 = u1.toLowerCase().trim();
   const clean2 = u2.toLowerCase().trim();
   if (clean1 === clean2) return true;
+  
+  // Coi abs_japan, abs-japan và ctyabs@lendon.com (bao gồm cả dạng đuôi @lendon.com) là cùng một người quản lý (Tài khoản công ty ABS JAPAN)
+  const isAbs1 = clean1.includes('abs_japan') || clean1.includes('abs-japan') || clean1.includes('ctyabs') || clean1.includes('absjapan');
+  const isAbs2 = clean2.includes('abs_japan') || clean2.includes('abs-japan') || clean2.includes('ctyabs') || clean2.includes('absjapan');
+  if (isAbs1 && isAbs2) return true;
+
   const prefix1 = clean1.split('@')[0];
   const prefix2 = clean2.split('@')[0];
   return prefix1 === prefix2;
+}
+
+// Lấy tên hiển thị của người quản lý linh hoạt, hỗ trợ fallback cho tài khoản công ty và email
+export function getManagerDisplayName(managedBy, users) {
+  if (!managedBy) return '';
+  const cleanM = managedBy.toLowerCase().trim();
+  if (cleanM === 'ctyabs@lendon.com' || cleanM === 'abs_japan' || cleanM === 'abs-japan') {
+    return 'ABS JAPAN (Công ty)';
+  }
+  if (cleanM === 'emp_hoa_ky' || cleanM === 'emp-hoa-ky') {
+    return 'EMP Hoa Kỳ (Công ty)';
+  }
+  const u = users.find(usr => isSameUser(usr.username, managedBy));
+  return u ? u.displayName : (managedBy.includes('@') ? managedBy.split('@')[0] : managedBy);
+}
+
+const PROVINCES = {
+  HN: 'Hà Nội',
+  HP: 'Hải Phòng',
+  HD: 'Hải Dương',
+  HNam: 'Hà Nam',
+  ND: 'Nam Định',
+  TB: 'Thái Bình',
+  NBi: 'Ninh Bình',
+  TN: 'Thái Nguyên',
+  VP: 'Vĩnh Phúc',
+  BN: 'Bắc Ninh',
+  BG: 'Bắc Giang',
+  QN: 'Quảng Ninh',
+  HY: 'Hưng Yên',
+  HCM: 'Hồ Chí Minh',
+  DN: 'Đà Nẵng',
+  BD: 'Bình Dương',
+  DNai: 'Đồng Nai',
+  LA: 'Long An',
+  BL: 'Bạc Liêu',
+  OTHER: 'Khác'
+};
+
+export function getProvinceNameByCode(code) {
+  return PROVINCES[code] || '';
 }

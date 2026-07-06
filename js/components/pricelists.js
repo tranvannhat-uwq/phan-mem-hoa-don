@@ -173,6 +173,7 @@ export async function deletePricelist(index) {
 }
 
 export function populatePricelistsDropdowns() {
+  const isSale = state.currentUser && state.currentUser.role === 'sale';
   const select = document.getElementById('invoice-pricelist-select');
   if (select) {
     const currentVal = select.value;
@@ -180,7 +181,7 @@ export function populatePricelistsDropdowns() {
       <option value="">-- Chọn bảng giá --</option>
       ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
       <option value="retail">Nhập tay (Khách lẻ)</option>
-      <option value="custom">Chiết khấu riêng của đại lý</option>
+      <option value="custom" ${isSale ? 'disabled' : ''}>Chiết khấu riêng của đại lý</option>
     `;
     
     const exists = Array.from(select.options).some(opt => opt.value === currentVal);
@@ -194,7 +195,7 @@ export function populatePricelistsDropdowns() {
     custPlSelect.innerHTML = `
       <option value="">-- Chọn bảng giá --</option>
       ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
-      <option value="custom">Chiết khấu riêng (Tự thiết lập bên dưới)</option>
+      <option value="custom" ${isSale ? 'disabled' : ''}>Chiết khấu riêng (Tự thiết lập bên dưới)</option>
     `;
     const exists = Array.from(custPlSelect.options).some(opt => opt.value === currentCustPlVal);
     if (exists) custPlSelect.value = currentCustPlVal;

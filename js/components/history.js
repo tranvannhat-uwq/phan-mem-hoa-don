@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatDateTime, isSameUser } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName } from '../utils.js';
 import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { openPrintTypeModal } from './invoice.js';
@@ -280,6 +280,25 @@ export function renderHistoryOrders() {
     }
     const gridCols = showDeleteBtn ? '1fr 1fr 1fr' : '1fr 1fr';
 
+    const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
+    
+    let managerName = 'Chưa phân công';
+    let plName = 'Nhập tay';
+    let debtText = '0 ₫';
+    
+    if (cust) {
+      managerName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa phân công';
+      
+      const pl = state.pricelists.find(p => p.id === cust.pricelistId);
+      plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
+      
+      debtText = formatCurrency(cust.debt || 0);
+    } else {
+      const orderPlId = order.pricelistId || 'retail';
+      const pl = state.pricelists.find(p => p.id === orderPlId);
+      plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
+    }
+
     return `
       <div class="glass-panel order-card flex flex-col justify-between" style="padding: 1.25rem; gap: 1rem;">
         <div>
@@ -294,6 +313,9 @@ export function renderHistoryOrders() {
             <div class="flex items-center gap-1"><i data-lucide="user" style="width:13px;height:13px;color: var(--color-primary);"></i> <span>Khách hàng: <strong>${order.customerName}</strong></span></div>
             <div class="flex items-center gap-1"><i data-lucide="calendar" style="width:13px;height:13px;"></i> <span>Ngày lập: ${formatDateTime(order.date)}</span></div>
             <div class="flex items-center gap-1"><i data-lucide="user-check" style="width:13px;height:13px;"></i> <span>Người tạo: ${creatorName}</span></div>
+            <div class="flex items-center gap-1"><i data-lucide="users" style="width:13px;height:13px;"></i> <span>Kinh doanh quản lý: ${managerName}</span></div>
+            <div class="flex items-center gap-1"><i data-lucide="tags" style="width:13px;height:13px;"></i> <span>Bảng giá: <strong style="color: var(--color-warning);">${plName}</strong></span></div>
+            <div class="flex items-center gap-1"><i data-lucide="credit-card" style="width:13px;height:13px;"></i> <span>Công nợ hiện tại: <strong style="color: var(--color-danger);">${debtText}</strong></span></div>
           </div>
           
           <div class="order-details-summary" style="font-size: 0.85rem; background: rgba(255,255,255,0.02); border-radius: 6px; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); margin-bottom: 1rem; max-height: 120px; overflow-y: auto;">
@@ -429,6 +451,12 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
       document.getElementById('selected-customer-phone-lbl').innerText = cust.phone || 'N/A';
       document.getElementById('selected-customer-address-lbl').innerText = cust.address || 'N/A';
       document.getElementById('selected-customer-brand-lbl').innerText = cust.assignedBrand;
+      
+      const pl = state.pricelists.find(p => p.id === cust.pricelistId);
+      const plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
+      const plLbl = document.getElementById('selected-customer-pricelist-lbl');
+      if (plLbl) plLbl.innerText = plName;
+      
       document.getElementById('selected-customer-debt-lbl').innerText = formatCurrency(cust.debt);
     }
   } else {

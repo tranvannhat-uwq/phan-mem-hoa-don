@@ -23,6 +23,7 @@ export function renderAll() {
   renderUsersTable();
   renderBrandsTable();
   populateCustomerEmployeeFilter();
+  populatePricelistsDropdowns();
   safeCreateIcons();
 }
 
@@ -210,7 +211,9 @@ function loadLocalStorageBackup() {
       { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
       { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
       { id: 'u-sale1', username: 'sale1', password: '123', displayName: 'Sale Nguyễn Văn A', role: 'sale' },
-      { id: 'u-sale2', username: 'sale2', password: '123', displayName: 'Sale Lê Văn B', role: 'sale' }
+      { id: 'u-sale2', username: 'sale2', password: '123', displayName: 'Sale Lê Văn B', role: 'sale' },
+      { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
+      { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
     ];
     localStorage.setItem('billing_system_users', JSON.stringify(state.users));
   }

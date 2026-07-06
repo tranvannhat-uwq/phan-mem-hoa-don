@@ -228,8 +228,8 @@ export async function fetchCloudData() {
         debt: parseFloat(cust.debt || 0),
         totalTransaction: parseFloat(cust.total_transaction || 0),
         notes: cust.notes || '',
-        pricelistId: cust.pricelist_id || 'custom',
-        managedBy: cust.managed_by || 'nhat',
+        pricelistId: cust.pricelist_id || '',
+        managedBy: cust.managed_by || '',
         debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
       }));
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
@@ -268,7 +268,8 @@ export async function fetchCloudData() {
         username: u.username,
         password: u.password,
         displayName: u.display_name,
-        role: u.role || 'sale'
+        role: u.role || 'sale',
+        isExternal: u.is_external || false
       }));
       localStorage.setItem('billing_system_users', JSON.stringify(state.users));
     } catch (uErr) {
@@ -447,7 +448,8 @@ export async function syncLocalToCloud() {
         id: u.id,
         username: u.username,
         display_name: u.displayName,
-        role: u.role
+        role: u.role,
+        is_external: u.isExternal || false
       }));
       
       const { error } = await supabaseClient
@@ -562,8 +564,8 @@ export async function dbSaveCustomer(customer) {
         debt: customer.debt,
         total_transaction: customer.totalTransaction,
         notes: customer.notes,
-        pricelist_id: customer.pricelistId || 'custom',
-        managed_by: customer.managedBy || 'nhat',
+        pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
+        managed_by: customer.managedBy === undefined ? null : customer.managedBy,
         debt_history: customer.debtHistory || []
       };
       
@@ -576,6 +578,59 @@ export async function dbSaveCustomer(customer) {
     } catch(err) {
       console.error(err);
       showToast('Không thể lưu khách hàng lên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function dbSaveCustomersBulk(customers) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRows = customers.map(customer => ({
+        id: customer.id,
+        code: customer.code,
+        name: customer.name,
+        phone: customer.phone,
+        address: customer.address,
+        assigned_brand: customer.assignedBrand,
+        brand_discounts: customer.brandDiscounts,
+        shipping_support: customer.shippingSupport || false,
+        debt: customer.debt,
+        total_transaction: customer.totalTransaction,
+        notes: customer.notes,
+        pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
+        managed_by: customer.managedBy === undefined ? null : customer.managedBy,
+        debt_history: customer.debtHistory || []
+      }));
+      
+      const { error } = await supabaseClient
+        .from(tableCustomersName)
+        .upsert(dbRows, { onConflict: 'id' });
+        
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể lưu danh sách khách hàng lên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function dbDeleteAllCustomers() {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableCustomersName)
+        .delete()
+        .neq('id', '');
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể xóa danh sách khách hàng trên đám mây: ' + err.message, 'danger');
       return false;
     }
   }
@@ -740,6 +795,7 @@ export async function dbDeleteAllOrders() {
 // --- Thao tác CSDL chi tiết (Người dùng & Auth) ---
 export async function authRegisterOrUpdateUser(user, isNew) {
   if (!isCloudActive || !supabaseClient) return true;
+  if (user.isExternal) return true; // skip external reps from auth registration
   try {
     const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
     const savedKey = localStorage.getItem('billing_supabase_key') || COMPANY_SUPABASE_KEY;
@@ -823,9 +879,10 @@ export async function dbSaveUser(user) {
       const dbRow = {
         id: user.id,
         username: user.username,
-        password: user.password,
+        password: user.password || '',
         display_name: user.displayName,
-        role: user.role
+        role: user.role,
+        is_external: user.isExternal || false
       };
       
       const { error } = await supabaseClient

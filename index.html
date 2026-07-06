@@ -468,9 +468,36 @@
                       </select>
                     </div>
                   </div>
-                  <div class="form-group" style="margin-bottom: 0.5rem;">
-                    <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Địa chỉ</label>
-                    <input type="text" class="form-control" id="quick-cust-address" placeholder="Ví dụ: 123 Đường ABC, Quận 1">
+                  <div class="form-row-2" style="margin-bottom: 0.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Tỉnh/Thành phố *</label>
+                      <select class="form-control" id="quick-cust-province" style="width: 100%;">
+                        <option value="">-- Chọn Tỉnh/Thành --</option>
+                        <option value="HN">Hà Nội</option>
+                        <option value="HP">Hải Phòng</option>
+                        <option value="HD">Hải Dương</option>
+                        <option value="HNam">Hà Nam</option>
+                        <option value="ND">Nam Định</option>
+                        <option value="TB">Thái Bình</option>
+                        <option value="NBi">Ninh Bình</option>
+                        <option value="TN">Thái Nguyên</option>
+                        <option value="VP">Vĩnh Phúc</option>
+                        <option value="BN">Bắc Ninh</option>
+                        <option value="BG">Bắc Giang</option>
+                        <option value="QN">Quảng Ninh</option>
+                        <option value="HY">Hưng Yên</option>
+                        <option value="HCM">Hồ Chí Minh</option>
+                        <option value="DN">Đà Nẵng</option>
+                        <option value="BD">Bình Dương</option>
+                        <option value="DNai">Đồng Nai</option>
+                        <option value="LA">Long An</option>
+                        <option value="OTHER">Khác</option>
+                      </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Địa chỉ chi tiết</label>
+                      <input type="text" class="form-control" id="quick-cust-address" placeholder="Ví dụ: Kè Sặt, Bình Giang">
+                    </div>
                   </div>
                   <div class="form-group" id="quick-cust-shipping-support-container" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
                     <input type="checkbox" id="quick-cust-shipping-support" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary);">
@@ -646,6 +673,9 @@
           <div class="panel-header">
             <h2 class="panel-title"><i data-lucide="users"></i> Danh sách khách hàng & Đại lý</h2>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-indigo btn-sm" id="btn-open-cust-excel-modal">
+                <i data-lucide="file-up"></i> Nhập Excel
+              </button>
               <button class="btn btn-primary btn-sm" id="btn-open-add-customer-modal">
                 <i data-lucide="user-plus"></i> Thêm khách hàng
               </button>
@@ -686,13 +716,14 @@
             <table class="table" style="table-layout: fixed; min-width: 1100px;">
               <colgroup>
                 <col style="width: 90px;">   <!-- Mã KH -->
-                <col style="width: 180px;">  <!-- Tên KH -->
-                <col style="width: 120px;">  <!-- SĐT -->
+                <col style="width: 170px;">  <!-- Tên KH -->
+                <col style="width: 110px;">  <!-- SĐT -->
                 <col style="width: auto;">   <!-- Địa chỉ -->
-                <col style="width: 130px;">  <!-- Nhãn đại lý -->
-                <col style="width: 180px;">  <!-- Bảng giá áp dụng -->
-                <col style="width: 120px;">  <!-- Công nợ -->
-                <col style="width: 120px;">  <!-- Doanh số -->
+                <col style="width: 110px;">  <!-- Nhãn đại lý -->
+                <col style="width: 140px;">  <!-- Kinh doanh -->
+                <col style="width: 150px;">  <!-- Bảng giá áp dụng -->
+                <col style="width: 110px;">  <!-- Công nợ -->
+                <col style="width: 110px;">  <!-- Doanh số -->
                 <col style="width: 135px;">   <!-- Thao tác -->
               </colgroup>
               <thead>
@@ -702,6 +733,7 @@
                   <th>Số điện thoại</th>
                   <th>Địa chỉ</th>
                   <th>Nhãn đại lý</th>
+                  <th>Kinh doanh</th>
                   <th>Bảng giá áp dụng</th>
                   <th style="text-align: right;">Công nợ</th>
                   <th style="text-align: right;">Doanh số</th>
@@ -1061,12 +1093,37 @@
           <div class="form-row-2">
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-debt">Công nợ hiện tại (đ)</label>
-              <input type="number" class="form-control" id="cust-debt" value="0" min="0" placeholder="Ví dụ: 5000000" style="width: 100%;">
+              <input type="number" class="form-control" id="cust-debt" value="0" placeholder="Ví dụ: 5000000 hoặc -1000000" style="width: 100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="cust-address">Địa chỉ</label>
-              <input type="text" class="form-control" id="cust-address" placeholder="Ví dụ: 123 Đường ABC, Quận 1" style="width: 100%;">
+              <label class="form-label" for="cust-province">Tỉnh/Thành phố *</label>
+              <select class="form-control" id="cust-province" required style="width: 100%;">
+                <option value="">-- Chọn Tỉnh/Thành --</option>
+                <option value="HN">Hà Nội</option>
+                <option value="HP">Hải Phòng</option>
+                <option value="HD">Hải Dương</option>
+                <option value="HNam">Hà Nam</option>
+                <option value="ND">Nam Định</option>
+                <option value="TB">Thái Bình</option>
+                <option value="NBi">Ninh Bình</option>
+                <option value="TN">Thái Nguyên</option>
+                <option value="VP">Vĩnh Phúc</option>
+                <option value="BN">Bắc Ninh</option>
+                <option value="BG">Bắc Giang</option>
+                <option value="QN">Quảng Ninh</option>
+                <option value="HY">Hưng Yên</option>
+                <option value="HCM">Hồ Chí Minh</option>
+                <option value="DN">Đà Nẵng</option>
+                <option value="BD">Bình Dương</option>
+                <option value="DNai">Đồng Nai</option>
+                <option value="LA">Long An</option>
+                <option value="OTHER">Khác</option>
+              </select>
             </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="cust-address">Địa chỉ chi tiết</label>
+            <input type="text" class="form-control" id="cust-address" placeholder="Ví dụ: 397 Trần Hưng Đạo, Kè Sặt, Bình Giang" style="width: 100%;">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label" for="cust-notes">Ghi chú</label>
@@ -1487,7 +1544,14 @@
         <input type="hidden" id="user-edit-id" value="">
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
           <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="user-username">Tên đăng nhập *</label>
+            <label class="form-label" for="user-is-external">Loại tài khoản *</label>
+            <select class="form-control" id="user-is-external" required style="width: 100%;">
+              <option value="false">Tài khoản phần mềm (Đăng nhập)</option>
+              <option value="true">Kinh doanh ngoài hoặc Công ty (Không đăng nhập, chỉ dùng gắn quản lý)</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="user-username">Tên đăng nhập / Mã kinh doanh *</label>
             <input type="text" class="form-control" id="user-username" required placeholder="Ví dụ: sale3, ketoan2" style="width: 100%;">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
@@ -1613,6 +1677,72 @@
         <button type="button" class="btn btn-secondary" id="btn-cancel-excel">Hủy bỏ</button>
         <button type="button" class="btn btn-primary" id="btn-save-excel-submit" disabled>
           <i data-lucide="check"></i> Lưu vào hệ thống
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer Excel Import Modal -->
+  <div class="modal-overlay" id="cust-excel-modal">
+    <div class="modal-content" style="max-width: 850px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Nhập khách hàng từ file Excel</h3>
+        <button class="modal-close" id="btn-close-cust-excel-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="cust-excel-dropzone" class="upload-dropzone">
+          <i data-lucide="file-spreadsheet" class="upload-icon" style="width: 48px; height: 48px; color: var(--color-success); margin-bottom: 0.75rem;"></i>
+          <p class="upload-text" style="font-weight: 600; margin-bottom: 0.25rem;">Kéo thả tệp Excel (.xlsx, .xls) hoặc CSV vào đây</p>
+          <p class="upload-subtext" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Hoặc nhấp chuột để chọn tệp từ máy tính</p>
+          <input type="file" id="cust-excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-cust-excel">Chọn tệp</button>
+        </div>
+        
+        <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px dashed var(--border-color); padding-bottom: 1rem;">
+          <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+            <input type="radio" name="cust-import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
+            Gộp thêm (Giữ lại khách cũ, trùng mã/SĐT sẽ cập nhật)
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+            <input type="radio" name="cust-import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
+            Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
+          </label>
+        </div>
+
+
+        <div id="cust-excel-preview-container" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+          <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--color-success); display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="eye" style="width:16px;"></i> Xem trước dữ liệu khách hàng (Hiển thị tối đa 5 dòng):
+          </h4>
+          <div class="table-responsive" style="max-height: 220px;">
+            <table class="table" style="font-size: 0.8rem;">
+              <thead>
+                <tr>
+                  <th style="width: 50px; text-align: center;">STT</th>
+                  <th>Mã KH (KiotViet)</th>
+                  <th>Tên đại lý</th>
+                  <th>Số điện thoại</th>
+                  <th>Địa chỉ (Tỉnh)</th>
+                  <th>Bảng giá khớp</th>
+                  <th style="text-align: right;">Nợ cần thu (đ)</th>
+                  <th style="text-align: right;">Tổng bán (đ)</th>
+                </tr>
+              </thead>
+              <tbody id="cust-excel-preview-table-body">
+                <!-- JS dynamically fills -->
+              </tbody>
+            </table>
+          </div>
+          <p id="cust-excel-preview-summary" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; font-style: italic;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-cust-excel">Hủy bỏ</button>
+        <button type="button" class="btn btn-success" id="btn-save-cust-excel-submit" disabled>
+          <i data-lucide="check"></i> Lưu khách hàng vào hệ thống
         </button>
       </div>
     </div>

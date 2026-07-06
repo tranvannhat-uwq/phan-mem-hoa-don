@@ -1,6 +1,6 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer } from '../services/supabase.js';
+import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName } from '../utils.js';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
 
@@ -16,7 +16,13 @@ export function renderCustomersTable() {
     if (state.currentUser && state.currentUser.role === 'sale') {
       if (!isSameUser(c.managedBy, state.currentUser.username)) return false;
     } else if (filterEmployee) {
-      if (!isSameUser(c.managedBy, filterEmployee)) return false;
+      if (filterEmployee === 'unassigned') {
+        if (c.managedBy && c.managedBy !== '') return false;
+      } else if (filterEmployee === 'unassigned_pricelist') {
+        if (c.pricelistId && c.pricelistId !== '') return false;
+      } else {
+        if (!isSameUser(c.managedBy, filterEmployee)) return false;
+      }
     }
     return c.code.toLowerCase().includes(searchVal) || 
            c.name.toLowerCase().includes(searchVal) || 
@@ -84,7 +90,7 @@ export function renderCustomersTable() {
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không tìm thấy khách hàng nào.
         </td>
       </tr>
@@ -97,12 +103,15 @@ export function renderCustomersTable() {
     
     let pricelistName = '';
     let tooltipTitle = '';
-    const plId = c.pricelistId || 'custom';
-    if (plId === 'custom') {
+    const plId = c.pricelistId || '';
+    if (plId === '') {
+      pricelistName = '<span style="color: #ef4444; font-weight: 500;">Chưa xác định</span>';
+      tooltipTitle = 'Chưa áp dụng bảng giá';
+    } else if (plId === 'custom') {
       const discSummary = [];
       if (c.brandDiscounts) {
         for (const [brand, pct] of Object.entries(c.brandDiscounts)) {
-          if (pct > 0) {
+          if (brand !== 'province' && pct > 0) {
             discSummary.push(`${brand}: ${pct}%`);
           }
         }
@@ -137,6 +146,10 @@ export function renderCustomersTable() {
       ? `<span style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); margin-left: 0.35rem; display: inline-block; vertical-align: middle; font-weight: 600;">Hỗ trợ VC</span>` 
       : '';
     
+    const provinceName = getProvinceNameByCode(c.brandDiscounts && c.brandDiscounts.province);
+    const displayAddr = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '<span style="color: var(--text-muted);">N/A</span>');
+    const addrTitle = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '');
+    
     return `
       <tr>
         <td style="font-weight: 600; color: #fff;">${c.code}</td>
@@ -147,12 +160,15 @@ export function renderCustomersTable() {
           ${shippingBadge}
         </td>
         <td>${c.phone || '<span style="color: var(--text-muted);">N/A</span>'}</td>
-        <td style="font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${c.address || ''}">${c.address || '<span style="color: var(--text-muted);">N/A</span>'}</td>
+        <td style="font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${addrTitle}">${displayAddr}</td>
         <td>
           <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: ${c.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${c.assignedBrand === 'Tất cả' ? '#10b981' : '#60a5fa'}; border: 1px solid ${c.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.4)'};">${c.assignedBrand}</span>
         </td>
-        <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
-        <td style="text-align: right; font-weight: 600; color: ${c.debt > 0 ? 'var(--color-danger)' : 'var(--text-muted)'};">${formatCurrency(c.debt)}</td>
+        <td style="font-size: 0.85rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          ${c.managedBy ? getManagerDisplayName(c.managedBy, state.users) : '<span style="color: #ef4444; font-weight: 500;">Chưa bàn giao</span>'}
+        </td>
+        <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
+        <td style="text-align: right; font-weight: 600; color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
         <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(c.totalTransaction)}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
@@ -203,6 +219,25 @@ export function renderCustomersTable() {
   safeCreateIcons();
 }
 
+export function generateRandomCustomerCode(provinceCode) {
+  const randNum = Math.floor(1000 + Math.random() * 9000); // 4 digits
+  const pCode = provinceCode || 'DL';
+  return `KH-${pCode}-${randNum}`;
+}
+
+export function generateUniqueCustomerCode(provinceCode) {
+  let code = '';
+  let exists = true;
+  let attempts = 0;
+  
+  while (exists && attempts < 100) {
+    code = generateRandomCustomerCode(provinceCode);
+    exists = state.customers.some(c => c.code === code);
+    attempts++;
+  }
+  return code;
+}
+
 export function openCustomerModal(index = -1) {
   const modal = document.getElementById('customer-modal');
   const title = document.getElementById('customer-modal-title');
@@ -226,38 +261,48 @@ export function openCustomerModal(index = -1) {
     }
   }
   
+  const isSale = state.currentUser && state.currentUser.role === 'sale';
   const plSelect = document.getElementById('cust-pricelist');
   if (plSelect) {
     plSelect.innerHTML = `
-      <option value="custom">Chiết khấu riêng (Tự thiết lập bên dưới)</option>
+      <option value="custom" ${isSale ? 'disabled' : ''}>Chiết khấu riêng (Tự thiết lập bên dưới)</option>
       ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
     `;
   }
   
-  document.querySelectorAll('.cust-brand-disc').forEach(input => input.value = 0);
+  document.querySelectorAll('.cust-brand-disc').forEach(input => {
+    input.value = 0;
+    if (isSale) {
+      input.setAttribute('disabled', 'true');
+    } else {
+      input.removeAttribute('disabled');
+    }
+  });
   
+  const provinceSelect = document.getElementById('cust-province');
+  if (provinceSelect) {
+    provinceSelect.value = '';
+  }
+
   if (index === -1) {
     title.innerText = 'Thêm khách hàng mới';
     document.getElementById('customer-edit-index').value = '-1';
     document.getElementById('customer-edit-id').value = '';
     
-    // Tạo mã KH tự động tăng
-    let nextNum = 1;
-    if (state.customers.length > 0) {
-      const nums = state.customers.map(c => {
-        const match = c.code.match(/\d+/);
-        return match ? parseInt(match[0]) : 0;
-      }).filter(Boolean);
-      if (nums.length > 0) {
-        nextNum = Math.max(...nums) + 1;
+    document.getElementById('cust-shipping-support').checked = false;
+    document.getElementById('cust-code').value = generateUniqueCustomerCode('');
+    
+    if (plSelect) {
+      if (isSale && state.pricelists.length > 0) {
+        plSelect.value = state.pricelists[0].id;
+      } else {
+        plSelect.value = 'custom';
       }
     }
-    document.getElementById('cust-shipping-support').checked = false;
-    document.getElementById('cust-code').value = `KH-${nextNum.toString().padStart(3, '0')}`;
-    
-    if (plSelect) plSelect.value = 'custom';
     const discSection = document.getElementById('cust-brand-discounts-section');
-    if (discSection) discSection.style.display = 'block';
+    if (discSection) {
+      discSection.style.display = (plSelect && plSelect.value === 'custom') ? 'block' : 'none';
+    }
     const mBySelect = document.getElementById('cust-managed-by');
     if (mBySelect) {
       mBySelect.value = state.currentUser ? state.currentUser.username : 'nhat';
@@ -289,6 +334,10 @@ export function openCustomerModal(index = -1) {
       const brand = input.getAttribute('data-brand');
       input.value = (customer.brandDiscounts && customer.brandDiscounts[brand] !== undefined) ? customer.brandDiscounts[brand] : 0;
     });
+
+    if (provinceSelect) {
+      provinceSelect.value = (customer.brandDiscounts && customer.brandDiscounts.province) ? customer.brandDiscounts.province : '';
+    }
 
     const mBySelect = document.getElementById('cust-managed-by');
     if (mBySelect) {
@@ -356,11 +405,29 @@ export async function saveCustomer() {
     return;
   }
   
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone) {
+    const duplicatePhone = state.customers.some((c, idx) => {
+      if (idx === index) return false;
+      const cPhone = (c.phone || '').replace(/\D/g, '');
+      return cPhone === cleanPhone;
+    });
+    if (duplicatePhone) {
+      showToast('Số điện thoại đã được đăng ký cho khách hàng khác!', 'danger');
+      return;
+    }
+  }
+  
   const brandDiscounts = {};
   document.querySelectorAll('.cust-brand-disc').forEach(input => {
     const brand = input.getAttribute('data-brand');
     brandDiscounts[brand] = parseFloat(input.value) || 0;
   });
+  
+  const provinceSelect = document.getElementById('cust-province');
+  if (provinceSelect) {
+    brandDiscounts.province = provinceSelect.value;
+  }
   
   const shippingSupport = document.getElementById('cust-shipping-support').checked;
   const customerId = index === -1 ? `cust-${Date.now()}` : editId;
@@ -410,6 +477,12 @@ export async function saveCustomer() {
       document.getElementById('selected-customer-phone-lbl').innerText = phone || 'N/A';
       document.getElementById('selected-customer-address-lbl').innerText = address || 'N/A';
       document.getElementById('selected-customer-brand-lbl').innerText = assignedBrand;
+      
+      const pl = state.pricelists.find(p => p.id === pricelistId);
+      const plName = pl ? pl.name : (pricelistId === 'custom' ? 'Chiết khấu riêng' : (pricelistId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
+      const plLbl = document.getElementById('selected-customer-pricelist-lbl');
+      if (plLbl) plLbl.innerText = plName;
+      
       document.getElementById('selected-customer-debt-lbl').innerText = formatCurrency(debt);
       
       const shipCheck = document.getElementById('invoice-shipping-support');
@@ -488,7 +561,7 @@ export async function handlePayDebtSubmit(e) {
     }
   }
   
-  cust.debt = Math.max(0, cust.debt - amountPaid);
+  cust.debt = cust.debt - amountPaid;
   
   // Ghi nhận lịch sử thu nợ
   if (!cust.debtHistory) cust.debtHistory = [];
@@ -522,6 +595,9 @@ export function setupCustomerManagement() {
   const managedFilter = document.getElementById('customer-managed-filter');
   if (managedFilter) managedFilter.addEventListener('change', onFilterChange);
 
+  const addBtn = document.getElementById('btn-open-add-customer-modal');
+  if (addBtn) addBtn.addEventListener('click', () => openCustomerModal());
+
   const closeBtn = document.getElementById('btn-close-customer-modal');
   if (closeBtn) closeBtn.addEventListener('click', closeCustomerModal);
 
@@ -533,6 +609,20 @@ export function setupCustomerManagement() {
     customerForm.addEventListener('submit', (e) => {
       e.preventDefault();
       saveCustomer();
+    });
+  }
+
+  const provinceSelect = document.getElementById('cust-province');
+  if (provinceSelect) {
+    provinceSelect.addEventListener('change', () => {
+      const editIndex = document.getElementById('customer-edit-index').value;
+      if (editIndex === '-1') {
+        const pCode = provinceSelect.value;
+        const codeInput = document.getElementById('cust-code');
+        if (codeInput) {
+          codeInput.value = generateUniqueCustomerCode(pCode);
+        }
+      }
     });
   }
 
@@ -562,6 +652,53 @@ export function setupCustomerManagement() {
   const closeDetailFooterBtn = document.getElementById('btn-close-detail-modal-footer');
   if (closeDetailBtn) closeDetailBtn.addEventListener('click', closeCustomerDetailModal);
   if (closeDetailFooterBtn) closeDetailFooterBtn.addEventListener('click', closeCustomerDetailModal);
+
+  // Customer Excel Import Listeners
+  const openImportBtn = document.getElementById('btn-open-cust-excel-modal');
+  if (openImportBtn) openImportBtn.addEventListener('click', openCustExcelModal);
+  
+  const closeImportBtn = document.getElementById('btn-close-cust-excel-modal');
+  if (closeImportBtn) closeImportBtn.addEventListener('click', closeCustExcelModal);
+  
+  const cancelImportBtn = document.getElementById('btn-cancel-cust-excel');
+  if (cancelImportBtn) cancelImportBtn.addEventListener('click', closeCustExcelModal);
+  
+  const fileInput = document.getElementById('cust-excel-file-input');
+  const browseBtn = document.getElementById('btn-browse-cust-excel');
+  const dropzone = document.getElementById('cust-excel-dropzone');
+  
+  if (browseBtn && fileInput) {
+    browseBtn.addEventListener('click', () => fileInput.click());
+  }
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleCustExcelFile(e.target.files[0]);
+      }
+    });
+  }
+  
+  if (dropzone) {
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleCustExcelFile(e.dataTransfer.files[0]);
+      }
+    });
+  }
+  
+  const submitImportBtn = document.getElementById('btn-save-cust-excel-submit');
+  if (submitImportBtn) {
+    submitImportBtn.addEventListener('click', processCustomerExcelImport);
+  }
 }
 
 // --- Logic hiển thị chi tiết đại lý và lịch sử công nợ ---
@@ -581,21 +718,24 @@ export function openCustomerDetailModal(index) {
   document.getElementById('detail-cust-code').innerText = cust.code;
   document.getElementById('detail-cust-name').innerText = cust.name;
   document.getElementById('detail-cust-phone').innerText = formatPhoneNumber(cust.phone);
-  document.getElementById('detail-cust-address').innerText = cust.address || 'N/A';
+  const provinceName = getProvinceNameByCode(cust.brandDiscounts && cust.brandDiscounts.province);
+  const detailAddress = cust.address || 'N/A';
+  document.getElementById('detail-cust-address').innerText = provinceName ? `[${provinceName}] ${detailAddress}` : detailAddress;
   
   const brandEl = document.getElementById('detail-cust-brand');
   if (brandEl) {
     brandEl.innerHTML = `<span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: ${cust.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)'}; color: ${cust.assignedBrand === 'Tất cả' ? '#10b981' : '#60a5fa'}; border: 1px solid ${cust.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.4)'};">${cust.assignedBrand}</span>`;
   }
   
-  const managerUsername = cust.managedBy ? (cust.managedBy.includes('@') ? cust.managedBy.split('@')[0] : cust.managedBy) : '';
-  const user = state.users.find(u => isSameUser(u.username, cust.managedBy));
-  document.getElementById('detail-cust-manager').innerText = user ? `${user.displayName} (${managerUsername})` : cust.managedBy;
+  const mName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa bàn giao / Trống';
+  document.getElementById('detail-cust-manager').innerText = mName;
   
   // Xác định tên bảng giá đang áp dụng
   let plName = '';
-  const plId = cust.pricelistId || 'custom';
-  if (plId === 'custom') {
+  const plId = cust.pricelistId || '';
+  if (plId === '') {
+    plName = 'Chưa xác định';
+  } else if (plId === 'custom') {
     const discSummary = [];
     if (cust.brandDiscounts) {
       for (const [brand, pct] of Object.entries(cust.brandDiscounts)) {
@@ -617,7 +757,11 @@ export function openCustomerDetailModal(index) {
   document.getElementById('detail-cust-notes').innerText = cust.notes || 'N/A';
   
   document.getElementById('detail-cust-sales').innerText = formatCurrency(cust.totalTransaction || 0);
-  document.getElementById('detail-cust-debt').innerText = formatCurrency(cust.debt || 0);
+  const detailDebtEl = document.getElementById('detail-cust-debt');
+  if (detailDebtEl) {
+    detailDebtEl.innerText = formatCurrency(cust.debt || 0);
+    detailDebtEl.style.color = (cust.debt > 0) ? 'var(--color-danger)' : ((cust.debt < 0) ? 'var(--color-success)' : 'var(--text-muted)');
+  }
 
   // Vẽ danh sách lịch sử biến động công nợ
   const historyBody = document.getElementById('detail-debt-history-body');
@@ -688,7 +832,360 @@ export function populateManagedByDropdown() {
   const select = document.getElementById('cust-managed-by');
   if (!select) return;
   
-  select.innerHTML = state.users.map(u => `
-    <option value="${u.username}">${u.displayName} (${u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale'})</option>
-  `).join('');
+  select.innerHTML = `
+    <option value="">-- Chưa bàn giao / Trống --</option>
+    ${state.users.map(u => `
+      <option value="${u.username}">${u.displayName} (${u.isExternal ? 'Kinh doanh ngoài' : (u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale')})</option>
+    `).join('')}
+  `;
+}
+
+let custExcelImportData = [];
+
+export function openCustExcelModal() {
+  const modal = document.getElementById('cust-excel-modal');
+  if (modal) {
+    modal.classList.add('active');
+    
+
+
+    // Reset UI
+    custExcelImportData = [];
+    document.getElementById('cust-excel-file-input').value = '';
+    document.getElementById('cust-excel-preview-container').style.display = 'none';
+    const submitBtn = document.getElementById('btn-save-cust-excel-submit');
+    if (submitBtn) {
+      submitBtn.setAttribute('disabled', 'true');
+      submitBtn.disabled = true;
+    }
+    const dropzone = document.getElementById('cust-excel-dropzone');
+    if (dropzone) dropzone.className = 'upload-dropzone';
+  }
+}
+
+export function closeCustExcelModal() {
+  const modal = document.getElementById('cust-excel-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function handleCustExcelFile(file) {
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      if (rows.length === 0) {
+        showToast("Tập tin Excel trống!", "danger");
+        return;
+      }
+      
+      const headers = rows[0].map(h => (h || '').toString().trim());
+      
+      // Map columns
+      const colMap = {
+        code: headers.indexOf('Mã khách hàng'),
+        name: headers.indexOf('Tên khách hàng'),
+        phone: headers.indexOf('Điện thoại'),
+        address: headers.indexOf('Địa chỉ'),
+        debt: headers.indexOf('Nợ cần thu hiện tại'),
+        totalTransaction: headers.indexOf('Tổng bán'),
+        excelPricelist: headers.indexOf('Bảng giá'),
+        excelManager: headers.indexOf('Người quản lý'),
+      };
+      
+      if (colMap.name === -1) {
+        showToast("Tập tin không có cột 'Tên khách hàng'!", "danger");
+        return;
+      }
+      
+      const defaultManager = 'nhat';
+      const defaultBrand = 'Tất cả';
+      const defaultPricelist = 'custom';
+      
+      // Fuzzy matcher helper for managers
+      const findUserByExcelName = (excelName) => {
+        if (!excelName) return null;
+        const nameLower = excelName.toString().toLowerCase().trim();
+        
+        // Exact or direct match
+        let found = state.users.find(u => 
+          u.username.toLowerCase() === nameLower || 
+          u.displayName.toLowerCase() === nameLower
+        );
+        if (found) return found;
+        
+        // Strip prefixes (Mr., Ms., Anh, Chị)
+        const cleanExcelName = nameLower.replace(/^(mr|ms|mrs|anh|chị)\.?\s+/gi, '').trim();
+        
+        found = state.users.find(u => {
+          const cleanUserDisp = u.displayName.toLowerCase().replace(/^(mr|ms|mrs|anh|chị)\.?\s+/gi, '').trim();
+          return cleanUserDisp === cleanExcelName || u.username.toLowerCase() === cleanExcelName;
+        });
+        if (found) return found;
+        
+        // Fuzzy search: check if displayName contains clean name or vice-versa
+        found = state.users.find(u => {
+          const cleanUserDisp = u.displayName.toLowerCase().replace(/^(mr|ms|mrs|anh|chị)\.?\s+/gi, '').trim();
+          return cleanUserDisp.includes(cleanExcelName) || cleanExcelName.includes(cleanUserDisp);
+        });
+        return found;
+      };
+
+      custExcelImportData = [];
+      const previewRows = [];
+      
+      const provinces = [
+        { code: 'HN', name: 'Hà Nội' },
+        { code: 'HP', name: 'Hải Phòng' },
+        { code: 'HD', name: 'Hải Dương' },
+        { code: 'HNam', name: 'Hà Nam' },
+        { code: 'ND', name: 'Nam Định' },
+        { code: 'TB', name: 'Thái Bình' },
+        { code: 'NBi', name: 'Ninh Bình' },
+        { code: 'TN', name: 'Thái Nguyên' },
+        { code: 'VP', name: 'Vĩnh Phúc' },
+        { code: 'BN', name: 'Bắc Ninh' },
+        { code: 'BG', name: 'Bắc Giang' },
+        { code: 'QN', name: 'Quảng Ninh' },
+        { code: 'HY', name: 'Hưng Yên' },
+        { code: 'HCM', name: 'Hồ Chí Minh' },
+        { code: 'DN', name: 'Đà Nẵng' },
+        { code: 'BD', name: 'Bình Dương' },
+        { code: 'DNai', name: 'Đồng Nai' },
+        { code: 'LA', name: 'Long An' },
+        { code: 'BL', name: 'Bạc Liêu' }
+      ];
+      
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        
+        let name = colMap.name !== -1 ? (row[colMap.name] || '').toString().trim() : '';
+        if (!name) continue; // skip rows without name
+        
+        let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim() : '';
+        let phone = colMap.phone !== -1 ? (row[colMap.phone] || '').toString().trim() : '';
+        let address = colMap.address !== -1 ? (row[colMap.address] || '').toString().trim() : '';
+        let debt = colMap.debt !== -1 ? parseFloat(row[colMap.debt]) || 0 : 0;
+        let totalTransaction = colMap.totalTransaction !== -1 ? parseFloat(row[colMap.totalTransaction]) || 0 : 0;
+        
+        // Auto detect brand
+        const nameLower = name.toLowerCase();
+        const codeLower = code.toLowerCase();
+        let assignedBrand = defaultBrand;
+        if (nameLower.includes('nano10') || codeLower.includes('nano10')) assignedBrand = 'Nano10*';
+        else if (nameLower.includes('hatacco') || codeLower.includes('hatacco')) assignedBrand = 'Hatacco nano';
+        else if (nameLower.includes('mutsutec') || codeLower.includes('mutsutec')) assignedBrand = 'mutsutec';
+        else if (nameLower.includes('tdkaw') || codeLower.includes('tdkaw')) assignedBrand = 'tdkaw';
+        else if (nameLower.includes('cova') || codeLower.includes('cova')) assignedBrand = 'cova';
+        else if (nameLower.includes('festiva') || codeLower.includes('festiva')) assignedBrand = 'festiva';
+        
+        // Auto detect pricelist
+        let pricelistId = '';
+        let excelPlVal = colMap.excelPricelist !== -1 && row[colMap.excelPricelist] ? row[colMap.excelPricelist].toString().trim() : '';
+        if (excelPlVal) {
+          const foundPl = state.pricelists.find(p => p.name.toLowerCase() === excelPlVal.toLowerCase() || p.id.toLowerCase() === excelPlVal.toLowerCase() || p.name.includes(excelPlVal));
+          if (foundPl) {
+            pricelistId = foundPl.id;
+          }
+        } else {
+          const matchBG = code.match(/BG(\d+)/i);
+          if (matchBG) {
+            const numStr = matchBG[1].padStart(2, '0');
+            const foundPl = state.pricelists.find(p => p.name.includes(numStr) || p.id.includes(numStr));
+            if (foundPl) {
+              pricelistId = foundPl.id;
+            }
+          }
+        }
+        
+        // Auto detect province from address or code
+        let provinceCode = 'OTHER';
+        const addressLower = address.toLowerCase();
+        for (const prov of provinces) {
+          const provNameLower = prov.name.toLowerCase();
+          if (addressLower.includes(provNameLower) || codeLower.includes(provNameLower)) {
+            provinceCode = prov.code;
+            break;
+          }
+        }
+        
+        if (!code) {
+          code = generateUniqueCustomerCode(provinceCode);
+        }
+        
+        const customerObj = {
+          id: `cust-${Date.now()}-${i}-${Math.floor(Math.random() * 1000)}`,
+          code: code,
+          name: name,
+          phone: phone,
+          address: address,
+          assignedBrand: assignedBrand,
+          brandDiscounts: { province: provinceCode },
+          shippingSupport: false,
+          debt: debt,
+          totalTransaction: totalTransaction,
+          notes: 'Imported from KiotViet',
+          pricelistId: pricelistId,
+          managedBy: (() => {
+            // 1. Nếu Excel có cột Người quản lý và có giá trị, tìm khớp
+            if (colMap.excelManager !== -1 && row[colMap.excelManager]) {
+              const val = row[colMap.excelManager].toString().trim();
+              if (val) {
+                const valL = val.toLowerCase();
+                if (valL.includes('abs japan')) return 'ctyabs@lendon.com';
+                if (valL.includes('emp hoa kỳ') || valL.includes('emp hoa ky')) return 'emp_hoa_ky';
+                
+                const u = findUserByExcelName(val);
+                if (u) return u.username;
+              }
+            }
+            // 2. Nếu trống, để trống hoàn toàn để kế toán tự rà soát sau
+            return '';
+          })(),
+          debtHistory: debt !== 0 ? [{
+            date: new Date().toISOString(),
+            type: 'adjust',
+            amount: debt,
+            debtAfter: debt,
+            notes: 'Số dư đầu kỳ nhập từ KiotViet'
+          }] : []
+        };
+        
+        custExcelImportData.push(customerObj);
+        
+        if (previewRows.length < 5) {
+          previewRows.push({
+            code: code,
+            name: name,
+            phone: phone,
+            address: address,
+            province: provinceCode,
+            pricelistId: pricelistId,
+            debt: debt,
+            totalTransaction: totalTransaction
+          });
+        }
+      }
+      
+      if (custExcelImportData.length === 0) {
+        showToast("Không phân tích được khách hàng nào hợp lệ!", "warning");
+        return;
+      }
+      
+      // Render preview table
+      const previewBody = document.getElementById('cust-excel-preview-table-body');
+      if (previewBody) {
+        previewBody.innerHTML = previewRows.map((c, idx) => {
+          const pl = state.pricelists.find(p => p.id === c.pricelistId);
+          const plName = pl ? pl.name : (c.pricelistId === 'custom' ? 'Chiết khấu riêng' : 'Chiết khấu riêng');
+          const provName = provinces.find(p => p.code === c.province)?.name || 'Khác';
+          return `
+            <tr>
+              <td style="text-align: center;">${idx + 1}</td>
+              <td style="font-weight: 600;">${c.code}</td>
+              <td>${c.name}</td>
+              <td>${c.phone || '-'}</td>
+              <td>[${provName}] ${c.address || '-'}</td>
+              <td>${plName}</td>
+              <td style="text-align: right;">${formatCurrency(c.debt)}</td>
+              <td style="text-align: right;">${formatCurrency(c.totalTransaction)}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+      
+      const summaryText = document.getElementById('cust-excel-preview-summary');
+      if (summaryText) {
+        summaryText.innerText = `Hiển thị 5 trên tổng số ${custExcelImportData.length} khách hàng đọc được từ file.`;
+      }
+      
+      const previewContainer = document.getElementById('cust-excel-preview-container');
+      if (previewContainer) previewContainer.style.display = 'block';
+      
+      const submitBtn = document.getElementById('btn-save-cust-excel-submit');
+      if (submitBtn) {
+        submitBtn.removeAttribute('disabled');
+        submitBtn.disabled = false;
+      }
+      
+      const dropzone = document.getElementById('cust-excel-dropzone');
+      if (dropzone) dropzone.className = 'upload-dropzone success-uploaded';
+      
+      showToast(`Đọc tệp thành công! Tìm thấy ${custExcelImportData.length} khách hàng.`, "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Lỗi đọc tập tin Excel: " + err.message, "danger");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function processCustomerExcelImport() {
+  if (custExcelImportData.length === 0) return;
+  
+  const mode = document.querySelector('input[name="cust-import-mode"]:checked').value;
+  
+  try {
+    showToast("Đang nhập dữ liệu khách hàng vào hệ thống...", "info");
+    let successCount = 0;
+    
+    // Import mode overwrite: delete existing customers
+    if (mode === 'overwrite') {
+      if (confirm("Chế độ ghi đè sẽ xóa sạch toàn bộ khách hàng hiện tại của bạn. Bạn chắc chắn chứ?")) {
+        const deleted = await dbDeleteAllCustomers();
+        if (!deleted) return;
+        state.customers = [];
+      } else {
+        return;
+      }
+    }
+    
+    // Process local array mapping first (in-memory)
+    for (const c of custExcelImportData) {
+      let idx = -1;
+      if (mode === 'merge') {
+        idx = state.customers.findIndex(oc => oc.code === c.code || (c.phone && oc.phone && oc.phone.replace(/\D/g, '') === c.phone.replace(/\D/g, '')));
+      }
+      
+      if (idx > -1) {
+        // Update existing customer
+        const oldId = state.customers[idx].id;
+        c.id = oldId; // keep original ID
+        
+        // Merge debt histories
+        const oldHistory = state.customers[idx].debtHistory || [];
+        c.debtHistory = [...oldHistory, ...c.debtHistory];
+        
+        state.customers[idx] = c;
+      } else {
+        // Insert new customer
+        state.customers.push(c);
+      }
+    }
+    
+    // Perform a single BULK UPSERT to Supabase (de-duplicate by id to prevent Postgres ON CONFLICT error)
+    const uniqueImportMap = new Map();
+    for (const c of custExcelImportData) {
+      uniqueImportMap.set(c.id, c);
+    }
+    const uniqueImportData = Array.from(uniqueImportMap.values());
+    
+    const saved = await dbSaveCustomersBulk(uniqueImportData);
+    if (saved) {
+      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      renderAll();
+      closeCustExcelModal();
+      showToast(`Nhập dữ liệu thành công! Đã thêm/cập nhật ${uniqueImportData.length} khách hàng.`, "success");
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Lỗi lưu dữ liệu khách hàng: " + err.message, "danger");
+  }
 }
