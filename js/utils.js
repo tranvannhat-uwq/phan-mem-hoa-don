@@ -150,29 +150,227 @@ export function getManagerDisplayName(managedBy, users) {
   return u ? u.displayName : (managedBy.includes('@') ? managedBy.split('@')[0] : managedBy);
 }
 
-const PROVINCES = {
-  HN: 'Hà Nội',
-  HP: 'Hải Phòng',
-  HD: 'Hải Dương',
-  HNam: 'Hà Nam',
-  ND: 'Nam Định',
-  TB: 'Thái Bình',
-  NBi: 'Ninh Bình',
-  TN: 'Thái Nguyên',
-  VP: 'Vĩnh Phúc',
-  BN: 'Bắc Ninh',
+export const PROVINCES = {
+  AG: 'An Giang',
+  BRVT: 'Bà Rịa - Vũng Tàu',
   BG: 'Bắc Giang',
-  QN: 'Quảng Ninh',
-  HY: 'Hưng Yên',
-  HCM: 'Hồ Chí Minh',
-  DN: 'Đà Nẵng',
-  BD: 'Bình Dương',
-  DNai: 'Đồng Nai',
-  LA: 'Long An',
+  BK: 'Bắc Kạn',
   BL: 'Bạc Liêu',
+  BN: 'Bắc Ninh',
+  BT: 'Bến Tre',
+  BDI: 'Bình Định',
+  BD: 'Bình Dương',
+  BP: 'Bình Phước',
+  BTH: 'Bình Thuận',
+  CM: 'Cà Mau',
+  CT: 'Cần Thơ',
+  CB: 'Cao Bằng',
+  DN: 'Đà Nẵng',
+  DL: 'Đắk Lắk',
+  DNO: 'Đắk Nông',
+  DB: 'Điện Biên',
+  DNai: 'Đồng Nai',
+  DT: 'Đồng Tháp',
+  GL: 'Gia Lai',
+  HG: 'Hà Giang',
+  HNam: 'Hà Nam',
+  HN: 'Hà Nội',
+  HT: 'Hà Tĩnh',
+  HD: 'Hải Dương',
+  HP: 'Hải Phòng',
+  HGi: 'Hậu Giang',
+  HB: 'Hòa Bình',
+  HY: 'Hưng Yên',
+  KH: 'Khánh Hòa',
+  KG: 'Kiên Giang',
+  KT: 'Kon Tum',
+  LC: 'Lai Châu',
+  LD: 'Lâm Đồng',
+  LS: 'Lạng Sơn',
+  LCai: 'Lào Cai',
+  LA: 'Long An',
+  ND: 'Nam Định',
+  NA: 'Nghệ An',
+  NBi: 'Ninh Bình',
+  NT: 'Ninh Thuận',
+  PT: 'Phú Thọ',
+  PY: 'Phú Yên',
+  QB: 'Quảng Bình',
+  QNa: 'Quảng Nam',
+  QNg: 'Quảng Ngãi',
+  QN: 'Quảng Ninh',
+  QT: 'Quảng Trị',
+  ST: 'Sóc Trăng',
+  SL: 'Sơn La',
+  TNin: 'Tây Ninh',
+  TB: 'Thái Bình',
+  TN: 'Thái Nguyên',
+  TH: 'Thanh Hóa',
+  TTH: 'Thừa Thiên Huế',
+  TG: 'Tiền Giang',
+  HCM: 'TP Hồ Chí Minh',
+  TV: 'Trà Vinh',
+  TQ: 'Tuyên Quang',
+  VL: 'Vĩnh Long',
+  VP: 'Vĩnh Phúc',
+  YB: 'Yên Bái',
   OTHER: 'Khác'
 };
 
 export function getProvinceNameByCode(code) {
   return PROVINCES[code] || '';
+}
+
+// Biến đổi thẻ select thường thành dạng có hỗ trợ tìm kiếm từ khóa
+export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  
+  // Tránh tạo lặp nhiều lần wrapper
+  if (select.parentNode.classList.contains('searchable-select-wrapper')) {
+    const label = select.parentNode.querySelector('.searchable-select-label');
+    if (label) label.innerText = select.options[select.selectedIndex]?.text || placeholder;
+    return;
+  }
+  
+  // Tạo wrapper
+  const wrapper = document.createElement('div');
+  wrapper.className = 'searchable-select-wrapper';
+  
+  select.parentNode.insertBefore(wrapper, select);
+  wrapper.appendChild(select);
+  select.style.display = 'none';
+  
+  // Tạo nút trigger hiển thị lựa chọn hiện tại
+  const trigger = document.createElement('div');
+  trigger.className = 'searchable-select-trigger';
+  
+  const label = document.createElement('span');
+  label.className = 'searchable-select-label';
+  label.innerText = select.options[select.selectedIndex]?.text || placeholder;
+  trigger.appendChild(label);
+  
+  const icon = document.createElement('span');
+  icon.innerHTML = '<i data-lucide="chevron-down" style="width: 16px; height: 16px; color: var(--text-secondary);"></i>';
+  trigger.appendChild(icon);
+  
+  wrapper.appendChild(trigger);
+  
+  // Tạo hộp dropdown chứa ô tìm kiếm và danh sách lựa chọn
+  const dropdown = document.createElement('div');
+  dropdown.className = 'searchable-select-dropdown';
+  
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.className = 'searchable-select-search-input';
+  searchInput.placeholder = placeholder;
+  dropdown.appendChild(searchInput);
+  
+  const list = document.createElement('div');
+  list.className = 'searchable-select-options-list';
+  dropdown.appendChild(list);
+  
+  wrapper.appendChild(dropdown);
+  
+  function updateOptions() {
+    list.innerHTML = '';
+    const options = Array.from(select.options);
+    const searchVal = searchInput.value.toLowerCase().trim();
+    
+    // Hàm chuẩn hóa tiếng Việt không dấu để tìm kiếm thông minh hơn
+    const removeAccents = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+    const searchValNorm = removeAccents(searchVal);
+    
+    const filtered = options.filter(opt => {
+      const text = opt.text.toLowerCase();
+      const textNorm = removeAccents(text);
+      return text.includes(searchVal) || textNorm.includes(searchValNorm);
+    });
+    
+    if (filtered.length === 0) {
+      const noRes = document.createElement('div');
+      noRes.innerText = 'Không tìm thấy kết quả';
+      noRes.style.padding = '10px';
+      noRes.style.color = 'var(--text-muted)';
+      noRes.style.fontSize = '0.85rem';
+      noRes.style.textAlign = 'center';
+      list.appendChild(noRes);
+      return;
+    }
+    
+    filtered.forEach(opt => {
+      const item = document.createElement('div');
+      item.className = 'searchable-select-option-item';
+      if (opt.selected) item.classList.add('selected');
+      item.innerText = opt.text;
+      
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        select.value = opt.value;
+        label.innerText = opt.text;
+        
+        select.dispatchEvent(new Event('change'));
+        
+        dropdown.style.display = 'none';
+        searchInput.value = '';
+      });
+      list.appendChild(item);
+    });
+  }
+  
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isShowing = dropdown.style.display === 'flex';
+    document.querySelectorAll('.searchable-select-dropdown').forEach(d => d.style.display = 'none');
+    
+    if (!isShowing) {
+      dropdown.style.display = 'flex';
+      updateOptions();
+      setTimeout(() => searchInput.focus(), 50);
+    } else {
+      dropdown.style.display = 'none';
+    }
+  });
+  
+  searchInput.addEventListener('input', updateOptions);
+  
+  document.addEventListener('click', (e) => {
+    if (!wrapper.contains(e.target)) {
+      dropdown.style.display = 'none';
+      searchInput.value = '';
+    }
+  });
+  
+  const updateDisabledState = () => {
+    if (select.disabled || select.hasAttribute('disabled')) {
+      trigger.style.pointerEvents = 'none';
+      trigger.style.opacity = '0.65';
+      trigger.style.cursor = 'not-allowed';
+      trigger.style.backgroundColor = 'rgba(255,255,255,0.05)';
+    } else {
+      trigger.style.pointerEvents = 'auto';
+      trigger.style.opacity = '1';
+      trigger.style.cursor = 'pointer';
+      trigger.style.backgroundColor = '';
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    label.innerText = select.options[select.selectedIndex]?.text || placeholder;
+    updateDisabledState();
+  });
+  observer.observe(select, { childList: true, subtree: true, attributes: true });
+  
+  updateDisabledState();
+  
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+  Object.defineProperty(select, 'value', {
+    set: function(val) {
+      descriptor.set.call(this, val);
+      label.innerText = select.options[select.selectedIndex]?.text || placeholder;
+    },
+    get: function() {
+      return descriptor.get.call(this);
+    }
+  });
 }

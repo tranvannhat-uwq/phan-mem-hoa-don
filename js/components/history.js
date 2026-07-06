@@ -35,6 +35,8 @@ export function setupHistoryPanel() {
     }
     filterYearSelect.value = currentYear.toString();
 
+
+
     dateModeSelect.addEventListener('change', () => {
       const mode = dateModeSelect.value;
       
@@ -70,20 +72,22 @@ export function setupHistoryPanel() {
     creatorFilter.addEventListener('input', onFilterChange);
   }
 
-  const clearBtn = document.getElementById('btn-clear-history');
-  if (clearBtn) {
-    clearBtn.addEventListener('click', async () => {
-      if (state.savedOrders.length === 0) {
-        showToast('Lịch sử đơn hàng trống!', 'warning');
-        return;
-      }
+  const refreshBtn = document.getElementById('btn-refresh-history');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      const icon = refreshBtn.querySelector('i');
+      if (icon) icon.classList.add('spin-animation');
       
-      if (confirm('CẢNH BÁO: Bạn có muốn xóa toàn bộ lịch sử đơn hàng không? Hành động này không thể hoàn tác.')) {
-        const cleared = await dbDeleteAllOrders();
-        if (cleared) {
-          state.savedOrders = [];
-          renderAll();
-          showToast('Đã xóa toàn bộ lịch sử hóa đơn!', 'warning');
+      showToast('Đang làm mới dữ liệu từ Cloud...', 'info');
+      try {
+        await fetchCloudData();
+        renderAll();
+        showToast('Đã làm mới dữ liệu từ Cloud thành công!', 'success');
+      } catch (err) {
+        showToast('Lỗi khi làm mới dữ liệu: ' + err.message, 'danger');
+      } finally {
+        if (icon) {
+          setTimeout(() => icon.classList.remove('spin-animation'), 500);
         }
       }
     });
@@ -193,14 +197,26 @@ export function renderHistoryOrders() {
     
     // 4. Lọc theo nhân viên lên đơn (Tìm kiếm tương đối)
     if (selectedCreator) {
-      const creatorUname = o.createdBy ? (o.createdBy.includes('@') ? o.createdBy.split('@')[0] : o.createdBy) : '';
-      const creatorObj = state.users.find(u => u.username === creatorUname);
-      
       const filterLower = selectedCreator.toLowerCase().trim();
-      const matchUsername = creatorUname.toLowerCase().includes(filterLower);
-      const matchDisplayName = creatorObj && creatorObj.displayName.toLowerCase().includes(filterLower);
       
-      if (!matchUsername && !matchDisplayName) return false;
+      const matchingUsers = state.users.filter(u => 
+        u.displayName.toLowerCase().includes(filterLower) || 
+        u.username.toLowerCase().includes(filterLower)
+      );
+      
+      let matched = false;
+      if (matchingUsers.length > 0) {
+        matched = matchingUsers.some(u => isSameUser(o.createdBy, u.username));
+      }
+      
+      if (!matched) {
+        const creatorClean = (o.createdBy || '').toLowerCase();
+        if (creatorClean.includes(filterLower)) {
+          matched = true;
+        }
+      }
+      
+      if (!matched) return false;
     }
     
     // 5. Lọc theo thời gian
@@ -240,6 +256,8 @@ export function renderHistoryOrders() {
     
     return true;
   });
+
+
 
   if (filtered.length === 0) {
     container.innerHTML = `

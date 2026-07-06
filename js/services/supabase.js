@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY } from '../config.js';
-import { showToast, updateDbStatusUI } from '../utils.js';
+import { showToast, updateDbStatusUI, isSameUser } from '../utils.js';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -26,10 +26,9 @@ export async function connectSupabase(url, key, verbose = true) {
     }
     const client = supabase.createClient(url, key);
     
-    // Kiểm tra cấu trúc bảng để gán tiền tố wl_ nếu có
-    let { error: testWlErr } = await client.from('wl_products').select('code').limit(1);
-    if (testWlErr && (testWlErr.code === '42P01' || (testWlErr.message && (testWlErr.message.includes('not find') || testWlErr.message.includes('does not exist'))))) {
-      // wl_products không tồn tại, sử dụng tên bảng gốc
+    // Kiểm tra cấu trúc bảng để gán tiền tố wl_ nếu có (Kiểm tra bảng gốc trước để tránh ném lỗi 404 vào Console trình duyệt)
+    let { error: testNormalErr } = await client.from('products').select('code').limit(1);
+    if (!testNormalErr) {
       tableProductsName = 'products';
       tableOrdersName = 'orders';
       tableDraftOrdersName = 'draft_orders';
@@ -38,13 +37,24 @@ export async function connectSupabase(url, key, verbose = true) {
       tableUsersName = 'users';
       tableBrandsName = 'brands';
     } else {
-      tableProductsName = 'wl_products';
-      tableOrdersName = 'wl_orders';
-      tableDraftOrdersName = 'wl_draft_orders';
-      tableCustomersName = 'wl_customers';
-      tablePricelistsName = 'wl_pricelists';
-      tableUsersName = 'wl_users';
-      tableBrandsName = 'wl_brands';
+      let { error: testWlErr } = await client.from('wl_products').select('code').limit(1);
+      if (!testWlErr) {
+        tableProductsName = 'wl_products';
+        tableOrdersName = 'wl_orders';
+        tableDraftOrdersName = 'wl_draft_orders';
+        tableCustomersName = 'wl_customers';
+        tablePricelistsName = 'wl_pricelists';
+        tableUsersName = 'wl_users';
+        tableBrandsName = 'wl_brands';
+      } else {
+        tableProductsName = 'products';
+        tableOrdersName = 'orders';
+        tableDraftOrdersName = 'draft_orders';
+        tableCustomersName = 'customers';
+        tablePricelistsName = 'pricelists';
+        tableUsersName = 'users';
+        tableBrandsName = 'brands';
+      }
     }
     
     supabaseClient = client;
@@ -125,6 +135,35 @@ export async function retrySupabaseConnection() {
   return connected;
 }
 
+// Hàm phụ trợ tải toàn bộ dữ liệu (bỏ giới hạn mặc định 1000 dòng của PostgREST)
+async function fetchFullTableData(tableName) {
+  let allData = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .select('*')
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+      
+    if (error) throw error;
+    
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  return allData;
+}
+
 // Tải toàn bộ dữ liệu từ Supabase về State
 export async function fetchCloudData() {
   if (!supabaseClient) return;
@@ -171,16 +210,10 @@ export async function fetchCloudData() {
       console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
     }
 
-    const [ordersResult, draftsResult] = await Promise.all([
-      supabaseClient.from(tableOrdersName).select('*'),
-      supabaseClient.from(tableDraftOrdersName).select('*')
+    const [rawOrders, rawDrafts] = await Promise.all([
+      fetchFullTableData(tableOrdersName),
+      fetchFullTableData(tableDraftOrdersName)
     ]);
-      
-    if (ordersResult.error) throw ordersResult.error;
-    if (draftsResult.error) throw draftsResult.error;
-    
-    const rawOrders = ordersResult.data || [];
-    const rawDrafts = draftsResult.data || [];
 
     const mapOrderRow = (order, isDraft) => {
       let status = isDraft ? 'draft' : (order.status || 'settled');
@@ -210,11 +243,7 @@ export async function fetchCloudData() {
 
     // 3. Fetch Customers
     try {
-      const { data: customerData, error: customerErr } = await supabaseClient
-        .from(tableCustomersName)
-        .select('*');
-
-      if (customerErr) throw customerErr;
+      const customerData = await fetchFullTableData(tableCustomersName);
 
       state.customers = (customerData || []).map(cust => ({
         id: cust.id,
@@ -263,7 +292,7 @@ export async function fetchCloudData() {
 
       if (userErr) throw userErr;
 
-      state.users = (userData || []).map(u => ({
+      const cloudUsers = (userData || []).map(u => ({
         id: u.id,
         username: u.username,
         password: u.password,
@@ -271,6 +300,40 @@ export async function fetchCloudData() {
         role: u.role || 'sale',
         isExternal: u.is_external || false
       }));
+
+      // Danh sách tài khoản hệ thống mặc định dự phòng
+      const defaultUsers = [
+        { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
+        { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
+        { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
+        { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
+        { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
+      ];
+
+      // Gộp hai danh sách, ưu tiên tài khoản từ Cloud nếu trùng username
+      const merged = [...cloudUsers];
+      defaultUsers.forEach(def => {
+        const defClean = (def.username || '').toLowerCase().trim();
+        const hasUser = merged.some(u => (u.username || '').toLowerCase().trim() === defClean);
+        if (!hasUser) {
+          merged.push(def);
+        }
+      });
+      
+      const uniqueUsers = [];
+      merged.forEach(u => {
+        const isOldAbs = u.username === 'abs_japan' || u.username === 'abs-japan' || u.username === 'absjapan';
+        if (isOldAbs) {
+          const hasNewAbs = merged.some(ru => ru.username === 'ctyabs@lendon.com');
+          if (hasNewAbs) return;
+        }
+        const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
+        if (!isDup) {
+          uniqueUsers.push(u);
+        }
+      });
+
+      state.users = uniqueUsers;
       localStorage.setItem('billing_system_users', JSON.stringify(state.users));
     } catch (uErr) {
       console.warn("Could not load users from Supabase:", uErr.message);

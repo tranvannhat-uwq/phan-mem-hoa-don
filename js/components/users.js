@@ -295,6 +295,32 @@ export async function handleLogin(e) {
   const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
   const passwordInput = document.getElementById('login-password').value.trim();
 
+  // Kiểm tra đăng nhập bằng tài khoản cục bộ / hệ thống mặc định trước
+  const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
+  const localUser = state.users.find(u => {
+    const uClean = (u.username || '').toLowerCase().trim();
+    const uCleanNoDomain = uClean.includes('@') ? uClean.split('@')[0] : uClean;
+    return (uClean === usernameInput || uCleanNoDomain === cleanUsername) && u.password === passwordInput && u.password !== '';
+  });
+
+  if (localUser) {
+    state.currentUser = localUser;
+    sessionStorage.setItem('billing_system_auth', 'true');
+    sessionStorage.setItem('billing_system_username', localUser.username);
+    
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-layout').classList.remove('auth-hidden');
+    
+    document.getElementById('user-info-header').style.display = 'flex';
+    document.getElementById('btn-logout').style.display = 'inline-flex';
+    document.getElementById('header-user-display').innerText = `${localUser.displayName} (${localUser.role === 'admin' ? 'Admin' : localUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+    
+    applyUserPermissions(localUser);
+    renderAll();
+    showToast(`Đăng nhập thành công (Tài khoản hệ thống)! Chào mừng ${localUser.displayName}!`, 'success');
+    return;
+  }
+
   if (isCloudActive && supabaseClient) {
     try {
       let loginSuccess = false;

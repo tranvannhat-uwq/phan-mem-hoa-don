@@ -10,6 +10,7 @@ import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDrop
 import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js';
 import { showToast, safeCreateIcons, updateDbStatusUI, isSameUser } from './utils.js';
 
 // Vẽ lại toàn bộ giao diện của tất cả các Tab
@@ -20,6 +21,7 @@ export function renderAll() {
   renderInvoiceTable();
   renderPricelistsTable();
   renderHistoryOrders();
+  renderSoQuyTable();
   renderUsersTable();
   renderBrandsTable();
   populateCustomerEmployeeFilter();
@@ -52,6 +54,7 @@ export function switchTab(panelId) {
   else if (panelId === 'products-panel') heading.innerText = 'Quản lý sản phẩm';
   else if (panelId === 'invoice-panel') heading.innerText = 'Lập hóa đơn bán hàng';
   else if (panelId === 'history-panel') heading.innerText = 'Lịch sử giao dịch';
+  else if (panelId === 'so-quy-panel') heading.innerText = 'Sổ quỹ thu chi đơn hàng';
   else if (panelId === 'customers-panel') heading.innerText = 'Danh sách khách hàng & Đại lý';
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
@@ -204,14 +207,26 @@ function loadLocalStorageBackup() {
 
   const storedUsers = localStorage.getItem('billing_system_users');
   if (storedUsers) {
-    state.users = JSON.parse(storedUsers);
+    const rawList = JSON.parse(storedUsers).filter(u => u.username !== 'sale1' && u.username !== 'sale2');
+    const uniqueUsers = [];
+    rawList.forEach(u => {
+      const isOldAbs = u.username === 'abs_japan' || u.username === 'abs-japan' || u.username === 'absjapan';
+      if (isOldAbs) {
+        const hasNewAbs = rawList.some(ru => ru.username === 'ctyabs@lendon.com');
+        if (hasNewAbs) return;
+      }
+      const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
+      if (!isDup) {
+        uniqueUsers.push(u);
+      }
+    });
+    state.users = uniqueUsers;
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
   } else {
     state.users = [
       { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
       { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
       { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
-      { id: 'u-sale1', username: 'sale1', password: '123', displayName: 'Sale Nguyễn Văn A', role: 'sale' },
-      { id: 'u-sale2', username: 'sale2', password: '123', displayName: 'Sale Lê Văn B', role: 'sale' },
       { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
       { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
     ];
@@ -279,6 +294,7 @@ async function initApp() {
   setupPricelistManagement();
   setupInvoiceCreator();
   setupHistoryPanel();
+  setupSoQuyPanel();
   setupDashboardQuickActions();
   setupDashboardFilters();
   setupExcelImportAndTemplate();

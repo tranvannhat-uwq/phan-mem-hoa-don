@@ -2500,4 +2500,120 @@ select#invoice-pricelist-select:disabled {
   justify-content: space-between !important;
 }
 
+/* Searchable Select Dropdown Styles */
+.searchable-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.searchable-select-trigger {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  cursor: pointer !important;
+  padding: 0.5rem 1rem !important;
+  height: 42px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-color) !important;
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  font-size: 0.9rem !important;
+  user-select: none !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+.searchable-select-trigger:hover {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.searchable-select-wrapper:focus-within .searchable-select-trigger {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px var(--border-focus) !important;
+}
+
+.searchable-select-dropdown {
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1050 !important;
+  margin-top: 4px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-color) !important;
+  background-color: var(--bg-secondary) !important;
+  box-shadow: var(--shadow-lg) !important;
+  display: none;
+  flex-direction: column !important;
+  max-height: 280px !important;
+  overflow: hidden !important;
+  animation: selectDropdownFadeIn 0.15s ease-out !important;
+}
+
+@keyframes selectDropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.searchable-select-search-input {
+  margin: 8px !important;
+  width: calc(100% - 16px) !important;
+  height: 36px !important;
+  border-radius: 6px !important;
+  background-color: var(--bg-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  padding: 0 10px !important;
+  font-size: 0.85rem !important;
+}
+
+.searchable-select-search-input:focus {
+  border-color: var(--color-primary) !important;
+  outline: none !important;
+}
+
+.searchable-select-options-list {
+  overflow-y: auto !important;
+  flex: 1 !important;
+  max-height: 180px !important;
+  padding: 4px 0 !important;
+}
+
+.searchable-select-option-item {
+  padding: 8px 12px !important;
+  cursor: pointer !important;
+  font-size: 0.85rem !important;
+  color: var(--text-primary) !important;
+  transition: background-color 0.15s !important;
+}
+
+.searchable-select-option-item:hover {
+  background-color: var(--bg-primary) !important;
+}
+
+.searchable-select-option-item.selected {
+  background-color: var(--color-primary-light) !important;
+  color: var(--color-primary-hover) !important;
+  font-weight: 600 !important;
+}
+
+/* Spin animation for refresh button */
+.spin-animation {
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 

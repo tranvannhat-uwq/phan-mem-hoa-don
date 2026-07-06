@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode } from '../utils.js';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable } from '../utils.js';
 import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
@@ -78,6 +78,8 @@ export function applyActivePriceListToInvoice() {
 export function renderInvoiceTable() {
   const tableBody = document.getElementById('invoice-items-body');
   if (!tableBody) return;
+  
+  populateQuickCustomerManagerDropdown();
   
   if (state.invoiceItems.length === 0) {
     tableBody.innerHTML = `
@@ -567,6 +569,13 @@ export async function saveActiveOrder(status = 'settled') {
     
     const qShippingSupport = document.getElementById('quick-cust-shipping-support').checked;
     
+    const qManagerSelect = document.getElementById('quick-cust-manager');
+    const qManager = qManagerSelect ? qManagerSelect.value : '';
+    if (!qManager) {
+      showToast('Vui lòng chọn nhân viên quản lý cho khách hàng mới!', 'danger');
+      return null;
+    }
+    
     const plSelect = document.getElementById('invoice-pricelist-select');
     const qPricelistId = plSelect && plSelect.value ? plSelect.value : 'custom';
     
@@ -584,7 +593,7 @@ export async function saveActiveOrder(status = 'settled') {
       totalTransaction: 0,
       notes: 'Thêm nhanh từ màn hình lên đơn',
       pricelistId: qPricelistId,
-      managedBy: state.currentUser ? state.currentUser.username : 'nhat'
+      managedBy: qManager
     };
     
     const custSaved = await dbSaveCustomer(newCustomer);
@@ -809,6 +818,15 @@ export function disableQuickCustomerMode() {
   if (qBrand) qBrand.value = 'Tất cả';
   const qShip = document.getElementById('quick-cust-shipping-support');
   if (qShip) qShip.checked = false;
+  
+  const qManager = document.getElementById('quick-cust-manager');
+  if (qManager) {
+    if (state.currentUser) {
+      qManager.value = state.currentUser.username;
+    } else {
+      qManager.value = '';
+    }
+  }
   
   // Restore the price list selector back to the placeholder
   const placeholder = document.getElementById('invoice-pricelist-placeholder');
@@ -1362,6 +1380,21 @@ export function setupPrintTypeModal() {
 }
 
 export function setupInvoiceCreator() {
+  populateQuickCustomerManagerDropdown();
+
+  const quickProvinceSelect = document.getElementById('quick-cust-province');
+  if (quickProvinceSelect) {
+    quickProvinceSelect.innerHTML = `
+      <option value="">-- Chọn Tỉnh/Thành --</option>
+      ${Object.entries(PROVINCES).map(([code, name]) => {
+        if (code === 'OTHER') return '';
+        return `<option value="${code}">${name}</option>`;
+      }).join('')}
+      <option value="OTHER">Khác</option>
+    `;
+    makeSelectSearchable('quick-cust-province', '-- Chọn Tỉnh/Thành --');
+  }
+
   const searchInput = document.getElementById('invoice-product-search');
   const suggestionsList = document.getElementById('invoice-product-suggestions');
   const addBtn = document.getElementById('btn-add-to-invoice-table');
@@ -1678,3 +1711,33 @@ document.addEventListener('loadDraftOrder', (e) => {
   const { order, isReadOnly } = e.detail;
   renderInvoiceTable();
 });
+
+// Tải danh sách nhân viên quản lý chữ đỏ cho Thêm nhanh khách mới
+export function populateQuickCustomerManagerDropdown() {
+  const select = document.getElementById('quick-cust-manager');
+  if (!select) return;
+  
+  const currentUser = state.currentUser;
+  
+  if (currentUser && currentUser.role === 'sale') {
+    select.innerHTML = `
+      <option value="${currentUser.username}">${currentUser.displayName} (${currentUser.isExternal ? 'Kinh doanh ngoài' : 'Sale'})</option>
+    `;
+    select.value = currentUser.username;
+    select.setAttribute('disabled', 'true');
+  } else {
+    select.removeAttribute('disabled');
+    select.innerHTML = `
+      <option value="">-- Chọn nhân viên quản lý --</option>
+      ${state.users.map(u => `
+        <option value="${u.username}">${u.displayName} (${u.isExternal ? 'Kinh doanh ngoài' : (u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale')})</option>
+      `).join('')}
+    `;
+    
+    if (currentUser) {
+      select.value = currentUser.username;
+    } else {
+      select.value = '';
+    }
+  }
+}

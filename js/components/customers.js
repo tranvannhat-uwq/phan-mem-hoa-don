@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable } from '../utils.js';
 import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
@@ -614,6 +614,16 @@ export function setupCustomerManagement() {
 
   const provinceSelect = document.getElementById('cust-province');
   if (provinceSelect) {
+    // Populate dynamically with all 63 provinces
+    provinceSelect.innerHTML = `
+      <option value="">-- Chọn Tỉnh/Thành --</option>
+      ${Object.entries(PROVINCES).map(([code, name]) => {
+        if (code === 'OTHER') return '';
+        return `<option value="${code}">${name}</option>`;
+      }).join('')}
+      <option value="OTHER">Khác</option>
+    `;
+
     provinceSelect.addEventListener('change', () => {
       const editIndex = document.getElementById('customer-edit-index').value;
       if (editIndex === '-1') {
@@ -624,6 +634,8 @@ export function setupCustomerManagement() {
         }
       }
     });
+
+    makeSelectSearchable('cust-province', '-- Chọn Tỉnh/Thành --');
   }
 
   const closePayDebtBtn = document.getElementById('btn-close-pay-debt-modal');
@@ -940,27 +952,7 @@ function handleCustExcelFile(file) {
       custExcelImportData = [];
       const previewRows = [];
       
-      const provinces = [
-        { code: 'HN', name: 'Hà Nội' },
-        { code: 'HP', name: 'Hải Phòng' },
-        { code: 'HD', name: 'Hải Dương' },
-        { code: 'HNam', name: 'Hà Nam' },
-        { code: 'ND', name: 'Nam Định' },
-        { code: 'TB', name: 'Thái Bình' },
-        { code: 'NBi', name: 'Ninh Bình' },
-        { code: 'TN', name: 'Thái Nguyên' },
-        { code: 'VP', name: 'Vĩnh Phúc' },
-        { code: 'BN', name: 'Bắc Ninh' },
-        { code: 'BG', name: 'Bắc Giang' },
-        { code: 'QN', name: 'Quảng Ninh' },
-        { code: 'HY', name: 'Hưng Yên' },
-        { code: 'HCM', name: 'Hồ Chí Minh' },
-        { code: 'DN', name: 'Đà Nẵng' },
-        { code: 'BD', name: 'Bình Dương' },
-        { code: 'DNai', name: 'Đồng Nai' },
-        { code: 'LA', name: 'Long An' },
-        { code: 'BL', name: 'Bạc Liêu' }
-      ];
+      const provinces = Object.entries(PROVINCES).map(([code, name]) => ({ code, name }));
       
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
