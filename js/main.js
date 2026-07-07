@@ -54,15 +54,14 @@ export function switchTab(panelId) {
   else if (panelId === 'products-panel') heading.innerText = 'Quản lý sản phẩm';
   else if (panelId === 'invoice-panel') heading.innerText = 'Lập hóa đơn bán hàng';
   else if (panelId === 'history-panel') heading.innerText = 'Lịch sử giao dịch';
-  else if (panelId === 'so-quy-panel') heading.innerText = 'Sổ quỹ thu chi đơn hàng';
+  else if (panelId === 'so-quy-panel') heading.innerText = 'Sổ quỹ thu chi';
   else if (panelId === 'customers-panel') heading.innerText = 'Danh sách khách hàng & Đại lý';
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
   
-  if (panelId === 'dashboard-panel') {
-    updateDashboardStats();
-  }
+  // Tự động làm mới dữ liệu và thống kê trên tất cả các tab khi chuyển đổi
+  renderAll();
 }
 
 // Trình quản lý thanh điều hướng

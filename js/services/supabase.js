@@ -13,6 +13,8 @@ export let tableCustomersName = 'customers';
 export let tablePricelistsName = 'pricelists';
 export let tableUsersName = 'users';
 export let tableBrandsName = 'brands';
+export let tableCashbookTransactionsName = 'cashbook_transactions';
+export let tableStartingBalancesName = 'starting_balances';
 
 export function setCloudActive(active) {
   isCloudActive = active;
@@ -36,6 +38,8 @@ export async function connectSupabase(url, key, verbose = true) {
       tablePricelistsName = 'pricelists';
       tableUsersName = 'users';
       tableBrandsName = 'brands';
+      tableCashbookTransactionsName = 'cashbook_transactions';
+      tableStartingBalancesName = 'starting_balances';
     } else {
       let { error: testWlErr } = await client.from('wl_products').select('code').limit(1);
       if (!testWlErr) {
@@ -46,6 +50,8 @@ export async function connectSupabase(url, key, verbose = true) {
         tablePricelistsName = 'wl_pricelists';
         tableUsersName = 'wl_users';
         tableBrandsName = 'wl_brands';
+        tableCashbookTransactionsName = 'wl_cashbook_transactions';
+        tableStartingBalancesName = 'wl_starting_balances';
       } else {
         tableProductsName = 'products';
         tableOrdersName = 'orders';
@@ -54,6 +60,8 @@ export async function connectSupabase(url, key, verbose = true) {
         tablePricelistsName = 'pricelists';
         tableUsersName = 'users';
         tableBrandsName = 'brands';
+        tableCashbookTransactionsName = 'cashbook_transactions';
+        tableStartingBalancesName = 'starting_balances';
       }
     }
     
@@ -310,15 +318,17 @@ export async function fetchCloudData() {
         { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
       ];
 
-      // Gộp hai danh sách, ưu tiên tài khoản từ Cloud nếu trùng username
+      // Gộp hai danh sách, chỉ tự động gộp tài khoản mặc định nếu dữ liệu Cloud trống (CSDL trống hoặc chưa đồng bộ)
       const merged = [...cloudUsers];
-      defaultUsers.forEach(def => {
-        const defClean = (def.username || '').toLowerCase().trim();
-        const hasUser = merged.some(u => (u.username || '').toLowerCase().trim() === defClean);
-        if (!hasUser) {
-          merged.push(def);
-        }
-      });
+      if (cloudUsers.length === 0) {
+        defaultUsers.forEach(def => {
+          const defClean = (def.username || '').toLowerCase().trim();
+          const hasUser = merged.some(u => (u.username || '').toLowerCase().trim() === defClean);
+          if (!hasUser) {
+            merged.push(def);
+          }
+        });
+      }
       
       const uniqueUsers = [];
       merged.forEach(u => {
@@ -364,6 +374,58 @@ export async function fetchCloudData() {
       console.warn("Could not load brands from Supabase:", brandErr.message);
       state.brands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
     }
+
+    // 7. Fetch Cashbook Transactions
+    try {
+      const { data: txData, error: txErr } = await supabaseClient
+        .from(tableCashbookTransactionsName)
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (txErr) throw txErr;
+
+      if (txData) {
+        const cloudTxs = txData.map(t => ({
+          id: t.id,
+          date: t.date,
+          type: t.type,
+          category: t.category,
+          partner: t.partner,
+          value: parseFloat(t.value || 0),
+          method: t.method,
+          accounting: t.accounting,
+          status: t.status,
+          creator: t.creator,
+          note: t.note,
+          starred: t.starred
+        }));
+        localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
+      }
+    } catch (txErr) {
+      console.warn("Could not load cashbook transactions from Supabase:", txErr.message);
+    }
+
+    // 8. Fetch Starting Balances
+    try {
+      const { data: balData, error: balErr } = await supabaseClient
+        .from(tableStartingBalancesName)
+        .select('*')
+        .eq('id', 'current_balances')
+        .single();
+
+      if (balErr && balErr.code !== 'PGRST116') throw balErr;
+
+      if (balData) {
+        const cloudBal = {
+          cash: parseFloat(balData.cash || 0),
+          bank: parseFloat(balData.bank || 0),
+          wallet: parseFloat(balData.wallet || 0)
+        };
+        localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(cloudBal));
+      }
+    } catch (balErr) {
+      console.warn("Could not load starting balances from Supabase:", balErr.message);
+    }
   } catch(err) {
     console.error('Error fetching cloud data:', err);
     showToast('Lỗi đồng bộ dữ liệu đám mây!', 'danger');
@@ -383,8 +445,10 @@ export async function syncLocalToCloud() {
   const localPricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
   const localUsers = JSON.parse(localStorage.getItem('billing_system_users') || '[]');
   const localBrands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
+  const localTxs = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
+  const localBalances = JSON.parse(localStorage.getItem('billing_system_cashbook_start_balances') || 'null');
   
-  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0) {
+  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0 && localTxs.length === 0 && !localBalances) {
     showToast('Không tìm thấy dữ liệu LocalStorage nào để đồng bộ!', 'warning');
     return false;
   }
@@ -539,6 +603,47 @@ export async function syncLocalToCloud() {
       const { error } = await supabaseClient
         .from(tableBrandsName)
         .upsert(dbRows, { onConflict: 'name' });
+        
+      if (error) throw error;
+    }
+
+    // 7. Sync Cashbook Transactions
+    if (localTxs.length > 0) {
+      const dbRows = localTxs.map(t => ({
+        id: t.id,
+        date: t.date,
+        type: t.type,
+        category: t.category,
+        partner: t.partner,
+        value: t.value,
+        method: t.method,
+        accounting: t.accounting,
+        status: t.status,
+        creator: t.creator,
+        note: t.note,
+        starred: t.starred
+      }));
+      
+      const { error } = await supabaseClient
+        .from(tableCashbookTransactionsName)
+        .upsert(dbRows, { onConflict: 'id' });
+        
+      if (error) throw error;
+    }
+
+    // 8. Sync Starting Balances
+    if (localBalances) {
+      const dbRow = {
+        id: 'current_balances',
+        cash: localBalances.cash || 0,
+        bank: localBalances.bank || 0,
+        wallet: localBalances.wallet || 0,
+        updated_at: new Date().toISOString()
+      };
+      
+      const { error } = await supabaseClient
+        .from(tableStartingBalancesName)
+        .upsert(dbRow, { onConflict: 'id' });
         
       if (error) throw error;
     }
@@ -1026,6 +1131,66 @@ export async function dbDeleteBrand(name) {
     } catch(err) {
       console.error(err);
       showToast('Không thể xóa hãng sơn trên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+// --- Thao tác CSDL chi tiết (Sổ quỹ & Số dư đầu kỳ) ---
+export async function dbSaveCashbookTransaction(tx) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: tx.id,
+        date: tx.date,
+        type: tx.type,
+        category: tx.category,
+        partner: tx.partner,
+        value: tx.value,
+        method: tx.method,
+        accounting: tx.accounting,
+        status: tx.status,
+        creator: tx.creator,
+        note: tx.note,
+        starred: tx.starred
+      };
+      
+      const { error } = await supabaseClient
+        .from(tableCashbookTransactionsName)
+        .upsert(dbRow, { onConflict: 'id' });
+        
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể lưu giao dịch Sổ quỹ lên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function dbSaveStartingBalances(balances) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: 'current_balances',
+        cash: balances.cash || 0,
+        bank: balances.bank || 0,
+        wallet: balances.wallet || 0,
+        updated_at: new Date().toISOString()
+      };
+      
+      const { error } = await supabaseClient
+        .from(tableStartingBalancesName)
+        .upsert(dbRow, { onConflict: 'id' });
+        
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể lưu Số dư đầu kỳ lên đám mây: ' + err.message, 'danger');
       return false;
     }
   }

@@ -4,6 +4,7 @@ import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder } from '../services/supabase
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js';
+import { addCashbookTransaction } from './so_quy.js';
 
 let currentOrderToPrint = null;
 
@@ -643,6 +644,18 @@ export async function saveActiveOrder(status = 'settled') {
       showToast(`Đã lưu đơn nháp ${order.id} thành công!`);
     } else {
       showToast(`Đã thanh toán và lưu đơn hàng ${order.id} thành công!`);
+      
+      // Ghi nhận phiếu thu tự động vào Sổ quỹ
+      addCashbookTransaction({
+        type: 'thu',
+        category: 'Thu thu tiền hàng',
+        partner: order.customerName,
+        value: order.totalPayable,
+        method: 'cash',
+        accounting: true,
+        note: `Thu tiền hàng cho hóa đơn ${order.id}`,
+        creator: state.currentUser ? state.currentUser.displayName : 'Administrator'
+      });
       
       // Cập nhật công nợ và tổng giao dịch nếu chốt đơn (settled) và có khách hàng liên kết (làm tròn số nguyên)
       if (order.customerId) {
@@ -1404,21 +1417,7 @@ export function setupInvoiceCreator() {
   const printBtn = document.getElementById('btn-print-order');
 
   if (searchInput) {
-    searchInput.addEventListener('focus', () => {
-      if (!state.activeCustomerId && !state.isQuickCustomerMode) {
-        searchInput.blur();
-        showToast('Vui lòng tìm và chọn khách hàng trước khi chọn sản phẩm!', 'warning');
-      }
-    });
-
     searchInput.addEventListener('input', () => {
-      if (!state.activeCustomerId && !state.isQuickCustomerMode) {
-        searchInput.value = '';
-        suggestionsList.style.display = 'none';
-        showToast('Vui lòng tìm và chọn khách hàng trước khi chọn sản phẩm!', 'warning');
-        return;
-      }
-
       searchInput.removeAttribute('data-selected-brand');
       const val = searchInput.value.trim().toLowerCase();
       if (val === '') {

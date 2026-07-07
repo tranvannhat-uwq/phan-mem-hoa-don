@@ -1739,7 +1739,7 @@ select option {
   .print-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
+    align-items: center;
     margin-bottom: 25px;
     border-bottom: 2.5px solid #000;
     padding-bottom: 10px;
@@ -2615,5 +2615,474 @@ select#invoice-pricelist-select:disabled {
     transform: rotate(360deg);
   }
 }
+
+/* KiotViet Cashbook Styles */
+.so-quy-container {
+  display: flex;
+  gap: 1.25rem;
+  width: 100%;
+  align-items: flex-start;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 1024px) {
+  .so-quy-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .so-quy-sidebar {
+    width: 100% !important;
+  }
+}
+
+.so-quy-sidebar {
+  width: 250px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.so-quy-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.so-quy-sidebar-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  border-bottom: 2px solid #0070d2;
+  padding-bottom: 0.25rem;
+  display: inline-block;
+}
+
+.filter-group-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+}
+
+.filter-group-sec:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.filter-group-sec-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.custom-radio-group, .custom-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.custom-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.custom-control input {
+  cursor: pointer;
+  accent-color: #0070d2;
+  width: 15px;
+  height: 15px;
+}
+
+.so-quy-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 768px) {
+  .so-quy-stats-bar {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0.5rem;
+  border-right: 1px solid var(--border-color);
+}
+
+.stat-item:last-child {
+  border-right: none;
+}
+
+@media (max-width: 768px) {
+  .stat-item:nth-child(2) {
+    border-right: none;
+  }
+}
+
+.stat-item-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 0.15rem;
+}
+
+.stat-item-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  word-break: break-all;
+  text-align: right;
+}
+
+.color-quy-dau-ky {
+  color: var(--text-primary);
+}
+.color-tong-thu {
+  color: #0070d2;
+}
+.color-tong-chi {
+  color: var(--color-danger);
+}
+.color-ton-quy {
+  color: var(--color-primary);
+}
+
+.so-quy-table-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.so-quy-search-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.so-quy-search-wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+  min-width: 220px;
+}
+
+.so-quy-search-wrapper i {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  width: 14px;
+  height: 14px;
+}
+
+.so-quy-search-input {
+  width: 100%;
+  padding: 0.55rem 0.75rem 0.55rem 2.1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  height: 38px;
+}
+
+.so-quy-search-input:focus {
+  border-color: #0070d2;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 112, 210, 0.1);
+}
+
+.so-quy-buttons-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn-kiot-outline-blue {
+  background: #ffffff !important;
+  color: #0070d2 !important;
+  border: 1px solid #0070d2 !important;
+  padding: 0.5rem 0.85rem !important;
+  border-radius: 6px !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 38px;
+}
+
+.btn-kiot-outline-blue:hover {
+  background: rgba(0, 112, 210, 0.05) !important;
+  transform: translateY(-1px);
+}
+
+.btn-kiot-outline-gray {
+  background: #ffffff !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  padding: 0.5rem 0.85rem !important;
+  border-radius: 6px !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 38px;
+}
+
+.btn-kiot-outline-gray:hover {
+  background: var(--bg-primary) !important;
+  transform: translateY(-1px);
+}
+
+.segmented-control {
+  display: flex;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  height: 34px;
+}
+
+.segmented-btn {
+  flex: 1;
+  text-align: center;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1.2;
+}
+
+.segmented-btn:hover {
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--text-primary);
+}
+
+.segmented-btn.active {
+  background: #0070d2 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: #ccd0d5;
+  transition: color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.star-btn:hover {
+  color: #f59e0b;
+}
+
+.star-btn.starred {
+  color: #f59e0b;
+}
+
+.so-quy-table th {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border-color) !important;
+  background-color: var(--bg-primary);
+}
+
+.so-quy-table td {
+  font-size: 0.85rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.so-quy-table tr:hover td {
+  background-color: rgba(0, 112, 210, 0.02) !important;
+}
+
+.badge-status {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.badge-status-paid {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-primary);
+}
+
+.badge-status-cancelled {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+}
+
+/* Modal details */
+.detail-item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px dashed var(--border-color);
+  font-size: 0.85rem;
+}
+
+.detail-item-row:last-child {
+  border-bottom: none;
+}
+
+.detail-item-label {
+  color: var(--text-muted);
+}
+
+.detail-item-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* KiotViet Pill Group and Buttons */
+.kiot-pill-group {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.kiot-pill-btn {
+  padding: 0.35rem 0.85rem !important;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+  border: 1px solid var(--border-color) !important;
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-secondary) !important;
+  border-radius: 9999px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.kiot-pill-btn:hover {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.kiot-pill-btn.active {
+  background-color: #0070d2 !important;
+  color: #ffffff !important;
+  border-color: #0070d2 !important;
+  font-weight: 600 !important;
+}
+
+/* Responsive Top Navbar Override (Desktop) */
+@media (min-width: 769px) {
+  .sidebar {
+    width: 100% !important;
+    height: 60px !important;
+    bottom: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 1.5rem !important;
+    padding: 0 1.5rem !important;
+    z-index: 1000 !important;
+  }
+  
+  .brand {
+    margin-bottom: 0 !important;
+    margin-right: 1rem !important;
+  }
+  
+  .nav-menu {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.25rem !important;
+    flex: 1 !important;
+    margin: 0 !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    scrollbar-width: none !important;
+  }
+  .nav-menu::-webkit-scrollbar {
+    display: none !important;
+  }
+  
+  .nav-item {
+    margin-bottom: 0 !important;
+  }
+  
+  .nav-link {
+    padding: 0.4rem 0.75rem !important;
+    border-radius: 6px !important;
+    font-size: 0.85rem !important;
+    white-space: nowrap !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.35rem !important;
+  }
+  
+  .sidebar-footer {
+    display: none !important;
+  }
+  
+  .main-content {
+    margin-left: 0 !important;
+    padding-top: 80px !important;
+  }
+
+  .top-header {
+    margin-bottom: 0.5rem !important;
+  }
+}
+
+
+
 
 

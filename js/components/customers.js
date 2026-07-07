@@ -3,6 +3,7 @@ import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUs
 import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
+import { addCashbookTransaction } from './so_quy.js';
 
 export function renderCustomersTable() {
   const tableBody = document.getElementById('customers-table-body');
@@ -576,6 +577,16 @@ export async function handlePayDebtSubmit(e) {
   
   const saved = await dbSaveCustomer(cust);
   if (saved) {
+    addCashbookTransaction({
+      type: 'thu',
+      category: 'Thu nợ khách hàng',
+      partner: cust.name,
+      value: amountPaid,
+      method: 'cash',
+      accounting: true,
+      note: notes,
+      creator: state.currentUser ? state.currentUser.displayName : 'Administrator'
+    });
     closePayDebtModal();
     renderAll();
     showToast(`Đã thu nợ ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}!`, 'success');

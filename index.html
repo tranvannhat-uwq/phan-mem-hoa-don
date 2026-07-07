@@ -683,87 +683,223 @@
 
       <!-- Sổ quỹ Panel -->
       <section id="so-quy-panel" class="panel">
-        <div class="glass-panel">
-          <div class="panel-header">
-            <h2 class="panel-title"><i data-lucide="wallet"></i> Sổ quỹ thu chi đơn hàng</h2>
-            <button class="btn btn-secondary btn-sm" id="btn-refresh-so-quy" style="background-color: var(--color-secondary-light); color: var(--color-secondary); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; gap: 0.5rem;">
-              <i data-lucide="refresh-cw"></i> Làm mới
-            </button>
-          </div>
-
-          <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem;">
-            <!-- Tìm kiếm -->
-            <div class="search-wrapper" style="flex: 1.5; min-width: 250px;">
-              <i data-lucide="search" class="search-icon"></i>
-              <input type="text" class="form-control-search" id="so-quy-search-input" placeholder="Tìm kiếm theo mã, khách hàng..." style="font-size: 0.8rem;">
-            </div>
-            
-            <!-- Bộ lọc thời gian -->
-            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; flex: 2; min-width: 320px;">
-              <select class="form-control" id="so-quy-date-mode" style="width: 140px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
-                <option value="all">Tất cả thời gian</option>
-                <option value="date">Theo ngày</option>
-                <option value="month">Theo tháng</option>
-                <option value="year">Theo năm</option>
-                <option value="range">Tùy chọn khoảng</option>
-              </select>
-              
-              <!-- Input cụ thể cho Ngày -->
-              <input type="date" class="form-control" id="so-quy-filter-date" style="display: none; width: 140px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
-              
-              <!-- Input cụ thể cho Tháng -->
-              <input type="month" class="form-control" id="so-quy-filter-month" style="display: none; width: 180px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
-              
-              <!-- Input cụ thể cho Năm -->
-              <select class="form-control" id="so-quy-filter-year" style="display: none; width: 110px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
-                <!-- Tải động qua JS -->
-              </select>
-              
-              <!-- Input khoảng ngày (Từ ngày - Đến ngày) -->
-              <div id="so-quy-filter-range" style="display: none; gap: 0.5rem; align-items: center;">
-                <input type="date" class="form-control" id="so-quy-filter-from" style="width: 130px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
-                <span style="color: var(--text-secondary); font-size: 0.85rem;">đến</span>
-                <input type="date" class="form-control" id="so-quy-filter-to" style="width: 130px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+        <div class="so-quy-container">
+          <!-- Sidebar Filters -->
+          <aside class="so-quy-sidebar">
+            <!-- Quỹ tiền -->
+            <div class="filter-group-sec">
+              <span class="so-quy-sidebar-title" id="so-quy-title-display">Sổ quỹ tiền mặt</span>
+              <div class="custom-radio-group" style="margin-top: 0.5rem;">
+                <label class="custom-control">
+                  <input type="radio" name="so-quy-acc-type" value="cash" checked>
+                  <span>Tiền mặt</span>
+                </label>
+                <label class="custom-control">
+                  <input type="radio" name="so-quy-acc-type" value="bank">
+                  <span>Ngân hàng</span>
+                </label>
+                <label class="custom-control">
+                  <input type="radio" name="so-quy-acc-type" value="wallet">
+                  <span>Ví điện tử</span>
+                </label>
+                <label class="custom-control">
+                  <input type="radio" name="so-quy-acc-type" value="all">
+                  <span>Tổng quỹ</span>
+                </label>
               </div>
             </div>
 
-            <!-- Bộ lọc khách hàng (Tích hợp tìm kiếm) -->
-            <div style="width: 200px; min-width: 160px; position: relative;">
-              <input type="text" class="form-control" id="so-quy-customer-filter" list="so-quy-customer-list" placeholder="Tìm khách hàng..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); font-size: 0.8rem;">
-              <datalist id="so-quy-customer-list"></datalist>
+            <!-- Thời gian -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Thời gian</span>
+              <div class="custom-radio-group">
+                <label class="custom-control">
+                  <input type="radio" name="so-quy-time" value="month" checked>
+                  <span>Tháng này</span>
+                </label>
+                <label class="custom-control">
+                  <input type="radio" name="so-quy-time" value="custom">
+                  <span>Tùy chỉnh</span>
+                </label>
+              </div>
+              
+              <!-- Custom Date Pickers -->
+              <div id="so-quy-sidebar-range-inputs" style="display: none; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+                <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                  <span style="font-size: 0.75rem; color: var(--text-muted);">Từ ngày:</span>
+                  <input type="date" id="so-quy-sidebar-from" class="form-control" style="font-size: 0.8rem; padding: 0.35rem 0.5rem; height: 32px;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                  <span style="font-size: 0.75rem; color: var(--text-muted);">Đến ngày:</span>
+                  <input type="date" id="so-quy-sidebar-to" class="form-control" style="font-size: 0.8rem; padding: 0.35rem 0.5rem; height: 32px;">
+                </div>
+              </div>
             </div>
 
-            <!-- Bộ lọc nhân viên lên đơn (Tích hợp tìm kiếm) -->
-            <div style="width: 180px; min-width: 150px; position: relative;">
-              <input type="text" class="form-control" id="so-quy-creator-filter" list="so-quy-creator-list" placeholder="Tìm nhân viên..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); font-size: 0.8rem;">
-              <datalist id="so-quy-creator-list"></datalist>
+            <!-- Loại chứng từ -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Loại chứng từ</span>
+              <div class="custom-checkbox-group">
+                <label class="custom-control">
+                  <input type="checkbox" id="so-quy-type-thu" checked>
+                  <span>Phiếu thu</span>
+                </label>
+                <label class="custom-control">
+                  <input type="checkbox" id="so-quy-type-chi" checked>
+                  <span>Phiếu chi</span>
+                </label>
+              </div>
             </div>
-          </div>
-          
-          <!-- Thanh thống kê tổng hợp Sổ quỹ động -->
-          <div id="so-quy-summary-stats" style="margin-bottom: 1.5rem;"></div>
 
-          <!-- Bảng danh sách giao dịch Sổ quỹ -->
-          <div class="table-responsive">
-            <table class="table" style="width: 100%; border-collapse: collapse;">
-              <thead>
-                <tr>
-                  <th style="width: 50px; text-align: center;">STT</th>
-                  <th style="width: 130px; text-align: center;">Mã hóa đơn</th>
-                  <th style="width: 150px; text-align: center;">Thời gian</th>
-                  <th>Khách hàng</th>
-                  <th style="width: 180px;">Kinh doanh phụ trách</th>
-                  <th style="width: 120px;">Bảng giá</th>
-                  <th style="width: 140px; text-align: right;">Doanh thu gốc</th>
-                  <th style="width: 120px; text-align: right;">Giảm trừ</th>
-                  <th style="width: 140px; text-align: right;">Thực thu</th>
-                  <th style="width: 120px; text-align: center;">Hành động</th>
-                </tr>
-              </thead>
-              <tbody id="so-quy-table-body">
-                <!-- Dynamically populated by JS -->
-              </tbody>
-            </table>
+            <!-- Loại thu chi -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Loại thu chi</span>
+              <select id="so-quy-category-select" class="form-control" style="font-size: 0.8rem; padding: 0.35rem 0.5rem; height: 34px;">
+                <option value="all">-- Chọn loại thu chi --</option>
+              </select>
+            </div>
+
+            <!-- Trạng thái -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Trạng thái</span>
+              <div class="custom-checkbox-group">
+                <label class="custom-control">
+                  <input type="checkbox" id="so-quy-status-paid" checked>
+                  <span>Đã thanh toán</span>
+                </label>
+                <label class="custom-control">
+                  <input type="checkbox" id="so-quy-status-cancelled">
+                  <span>Đã hủy</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Hạch toán kết quả kinh doanh -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Hạch toán kết quả kinh doanh</span>
+              <div class="kiot-pill-group">
+                <button type="button" class="kiot-pill-btn active" data-value="all">Tất cả</button>
+                <button type="button" class="kiot-pill-btn" data-value="yes">Có</button>
+                <button type="button" class="kiot-pill-btn" data-value="no">Không</button>
+              </div>
+            </div>
+
+            <!-- Người tạo -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Người tạo</span>
+              <select id="so-quy-creator-select" class="form-control" style="font-size: 0.85rem; padding: 0.35rem 0.5rem; height: 36px; border-radius: 6px;">
+                <option value="all">Chọn người tạo</option>
+              </select>
+            </div>
+
+            <!-- Nhân viên -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Nhân viên</span>
+              <select id="so-quy-employee-select" class="form-control" style="font-size: 0.85rem; padding: 0.35rem 0.5rem; height: 36px; border-radius: 6px;">
+                <option value="all">Chọn nhân viên</option>
+              </select>
+            </div>
+
+            <!-- Người nộp/nhận -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Người nộp/nhận <span style="color:#0070d2; font-size:12px;">●</span></span>
+              <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <select id="so-quy-partner-type" class="form-control" style="font-size: 0.85rem; padding: 0.35rem 0.5rem; height: 36px; border-radius: 6px; border-color: #0070d2; font-weight: 500;">
+                  <option value="all">Tất cả đối tác</option>
+                  <option value="customer" selected>Khách hàng</option>
+                  <option value="supplier">Nhà cung cấp</option>
+                  <option value="other">Khác</option>
+                </select>
+                <input type="text" id="so-quy-partner-search" class="form-control" placeholder="Tên, mã người nộp/nhận" style="font-size: 0.85rem; height: 36px; border-radius: 6px; padding: 0.35rem 0.5rem;">
+                <input type="text" id="so-quy-partner-phone" class="form-control" placeholder="Số điện thoại" style="font-size: 0.85rem; height: 36px; border-radius: 6px; padding: 0.35rem 0.5rem;">
+              </div>
+            </div>
+
+            <!-- Công nợ đối tác -->
+            <div class="filter-group-sec">
+              <span class="filter-group-sec-title">Công nợ đối tác</span>
+              <div class="custom-checkbox-group">
+                <label class="custom-control">
+                  <input type="checkbox" id="so-quy-debt-impact-yes" checked>
+                  <span>Tính vào công nợ</span>
+                </label>
+                <label class="custom-control">
+                  <input type="checkbox" id="so-quy-debt-impact-no" checked>
+                  <span>Không tính vào công nợ</span>
+                </label>
+                <label class="custom-control">
+                  <input type="checkbox" id="so-quy-debt-impact-none" checked>
+                  <span>Không có công nợ</span>
+                </label>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Ledger Main Content -->
+          <div class="so-quy-content">
+            <!-- Stats bar -->
+            <div class="so-quy-stats-bar">
+              <div class="stat-item">
+                <span class="stat-item-label">Quỹ đầu kỳ</span>
+                <span class="stat-item-value color-quy-dau-ky" id="so-quy-stat-start">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-item-label">Tổng thu</span>
+                <span class="stat-item-value color-tong-thu" id="so-quy-stat-income">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-item-label">Tổng chi</span>
+                <span class="stat-item-value color-tong-chi" id="so-quy-stat-expense">0</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-item-label">Tồn quỹ</span>
+                <span class="stat-item-value color-ton-quy" id="so-quy-stat-balance">0</span>
+              </div>
+            </div>
+
+            <!-- Table Card -->
+            <div class="so-quy-table-card">
+              <!-- Search and actions bar -->
+              <div class="so-quy-search-group">
+                <div class="so-quy-search-wrapper">
+                  <i data-lucide="search"></i>
+                  <input type="text" id="so-quy-search" class="so-quy-search-input" placeholder="Thao tác mã phiếu, người nộp/nhận...">
+                </div>
+                <div class="so-quy-buttons-group">
+                  <button type="button" class="btn-kiot-outline-blue" id="so-quy-btn-add-thu">
+                    <i data-lucide="plus" style="width: 15px; height: 15px;"></i> Phiếu thu
+                  </button>
+                  <button type="button" class="btn-kiot-outline-blue" id="so-quy-btn-add-chi">
+                    <i data-lucide="plus" style="width: 15px; height: 15px;"></i> Phiếu chi
+                  </button>
+                  <button type="button" class="btn-kiot-outline-gray" id="so-quy-btn-export">
+                    <i data-lucide="file-spreadsheet" style="width: 15px; height: 15px; color: #10b981;"></i> Xuất file
+                  </button>
+                </div>
+              </div>
+
+              <!-- Transaction Table -->
+              <div class="table-responsive">
+                <table class="table so-quy-table" style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px; text-align: center;">
+                        <input type="checkbox" id="so-quy-select-all" style="cursor: pointer; width: 14px; height: 14px;">
+                      </th>
+                      <th style="width: 40px; text-align: center;">⭐</th>
+                      <th style="width: 120px; text-align: center;">Mã phiếu</th>
+                      <th style="width: 140px; text-align: center;">Thời gian</th>
+                      <th>Loại thu chi</th>
+                      <th style="width: 250px;">Người nộp/nhận</th>
+                      <th style="width: 130px; text-align: right;">Giá trị</th>
+                    </tr>
+                  </thead>
+                  <tbody id="so-quy-table-body">
+                    <!-- Loaded dynamically via JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -1490,20 +1626,21 @@
 
   <!-- Printable Invoice Template (Hidden on Screen, visible in Print mode) -->
   <div id="print-invoice-template">
-    <div class="print-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2.5px solid #000; padding-bottom: 12px; margin-bottom: 20px;">
-      <div class="print-logo-container" style="display: flex; align-items: center; justify-content: flex-start; min-width: 150px;">
+    <div class="print-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2.5px solid #000; padding-bottom: 12px; margin-bottom: 20px; width: 100%;">
+      <div class="print-logo-container" style="display: flex; align-items: center; justify-content: flex-start; min-width: 150px; flex-shrink: 0;">
         <!-- Logo SVG hình giọt nước/lon sơn nghệ thuật mặc định -->
         <svg id="print-logo-svg" width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; color: #000;">
           <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-11-7-11S5 10.7 5 15a7 7 0 0 0 7 7z" />
         </svg>
+        <img src="" alt="Brand Logo" style="display: none; object-fit: contain;" />
       </div>
       <!-- Thông tin doanh nghiệp bên cạnh logo -->
-      <div style="line-height: 1.4; color: #000; font-size: 11pt; font-weight: 500; flex: 1; margin-left: 20px; text-align: left;">
-        <p style="margin: 0;">Trụ sở chính: <span id="print-company-address-main">Tiên Kha - Phúc Thịnh - Hà Nội</span></p>
-        <p style="margin: 0; margin-top: 2px;">Nhà máy SX: <span id="print-company-address-factory">TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên</span></p>
-        <p id="print-company-ddkd" style="margin: 0; margin-top: 2px;">ĐĐKD: <span id="print-company-address-business">228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh</span></p>
-        <p style="margin: 0; margin-top: 2px;">Hotline: <span id="print-company-hotline">088.603.7878 - 0961.030.923</span> &nbsp;&nbsp;&nbsp;&nbsp; CSKH: <span id="print-company-cskh">0868.055.866</span></p>
-        <p style="margin: 0; margin-top: 2px;">Email: <span id="print-company-email">nhamaysonnano@gmail.com</span></p>
+      <div style="line-height: 1.4; color: #000; font-size: 11pt; font-weight: 500; flex: 1; min-width: 0; margin-left: 20px; text-align: left;">
+        <p style="margin: 0; white-space: nowrap;">Trụ sở chính: <span id="print-company-address-main">Tiên Kha - Phúc Thịnh - Hà Nội</span></p>
+        <p style="margin: 0; margin-top: 2px; white-space: nowrap;">Nhà máy SX: <span id="print-company-address-factory">TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên</span></p>
+        <p id="print-company-ddkd" style="margin: 0; margin-top: 2px; white-space: nowrap;">ĐĐKD: <span id="print-company-address-business">228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh</span></p>
+        <p style="margin: 0; margin-top: 2px; white-space: nowrap;">Hotline: <span id="print-company-hotline">088.603.7878 - 0961.030.923</span> &nbsp;&nbsp;&nbsp;&nbsp; CSKH: <span id="print-company-cskh">0868.055.866</span></p>
+        <p style="margin: 0; margin-top: 2px; white-space: nowrap;">Email: <span id="print-company-email">nhamaysonnano@gmail.com</span></p>
       </div>
     </div>
 
@@ -1868,6 +2005,190 @@
           <i data-lucide="log-in"></i> ĐĂNG NHẬP
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- Tạo Phiếu Thu Modal -->
+  <div class="modal-overlay" id="so-quy-receipt-modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Tạo phiếu thu</h3>
+        <button class="modal-close" id="btn-close-receipt-modal">&times;</button>
+      </div>
+      <form id="so-quy-receipt-form">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 65vh; overflow-y: auto; padding-right: 5px;">
+          <div class="form-group">
+            <label class="form-label" for="receipt-code">Mã phiếu (Để trống để tự tạo)</label>
+            <input type="text" class="form-control" id="receipt-code" placeholder="Ví dụ: TTM000001" style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="receipt-time">Thời gian</label>
+            <input type="datetime-local" class="form-control" id="receipt-time" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="receipt-category">Loại thu chi</label>
+            <select class="form-control" id="receipt-category" required style="width: 100%;">
+              <option value="Thu thu tiền hàng">Thu thu tiền hàng</option>
+              <option value="Thu nợ khách hàng">Thu nợ khách hàng</option>
+              <option value="Thu Hộ trợ vận chuyển cho khách">Thu Hộ trợ vận chuyển cho khách</option>
+              <option value="Thu Thư lương thị trường">Thu Thư lương thị trường</option>
+              <option value="Thu tiền phạt">Thu tiền phạt</option>
+              <option value="Khác">Khác</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="receipt-payer">Người nộp</label>
+            <input type="text" class="form-control" id="receipt-payer" list="receipt-payer-list" placeholder="Chọn hoặc nhập tên người nộp" required style="width: 100%;">
+            <datalist id="receipt-payer-list"></datalist>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="receipt-value">Giá trị (đ)</label>
+            <input type="number" class="form-control" id="receipt-value" min="0" placeholder="0" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="receipt-method">Phương thức thanh toán</label>
+            <select class="form-control" id="receipt-method" required style="width: 100%;">
+              <option value="cash">Tiền mặt</option>
+              <option value="bank">Ngân hàng</option>
+              <option value="wallet">Ví điện tử</option>
+            </select>
+          </div>
+          <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+            <input type="checkbox" id="receipt-accounting" checked style="width: 16px; height: 16px; cursor: pointer;">
+            <label for="receipt-accounting" style="font-size: 0.85rem; cursor: pointer; user-select: none; font-weight: 500;">Hạch toán kết quả kinh doanh</label>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="receipt-note">Ghi chú</label>
+            <textarea class="form-control" id="receipt-note" rows="2" placeholder="Ghi chú thêm..." style="width: 100%; font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-receipt-modal">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary btn-sm" style="background-color: #0070d2 !important; border-color: #0070d2 !important;">Lưu phiếu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tạo Phiếu Chi Modal -->
+  <div class="modal-overlay" id="so-quy-payment-modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Tạo phiếu chi</h3>
+        <button class="modal-close" id="btn-close-payment-modal">&times;</button>
+      </div>
+      <form id="so-quy-payment-form">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 65vh; overflow-y: auto; padding-right: 5px;">
+          <div class="form-group">
+            <label class="form-label" for="payment-code">Mã phiếu (Để trống để tự tạo)</label>
+            <input type="text" class="form-control" id="payment-code" placeholder="Ví dụ: TCM000001" style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payment-time">Thời gian</label>
+            <input type="datetime-local" class="form-control" id="payment-time" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payment-category">Loại thu chi</label>
+            <select class="form-control" id="payment-category" required style="width: 100%;">
+              <option value="Chi tiền nhập hàng">Chi tiền nhập hàng</option>
+              <option value="Chi trả lương">Chi trả lương</option>
+              <option value="Chi hoa hồng đại lý">Chi hoa hồng đại lý</option>
+              <option value="Chi chi phí vận chuyển">Chi chi phí vận chuyển</option>
+              <option value="Chi quản lý / vận hành">Chi quản lý / vận hành</option>
+              <option value="Khác">Khác</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payment-recipient">Người nhận</label>
+            <input type="text" class="form-control" id="payment-recipient" placeholder="Nhập tên người nhận" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payment-value">Giá trị (đ)</label>
+            <input type="number" class="form-control" id="payment-value" min="0" placeholder="0" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payment-method">Phương thức thanh toán</label>
+            <select class="form-control" id="payment-method" required style="width: 100%;">
+              <option value="cash">Tiền mặt</option>
+              <option value="bank">Ngân hàng</option>
+              <option value="wallet">Ví điện tử</option>
+            </select>
+          </div>
+          <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+            <input type="checkbox" id="payment-accounting" checked style="width: 16px; height: 16px; cursor: pointer;">
+            <label for="payment-accounting" style="font-size: 0.85rem; cursor: pointer; user-select: none; font-weight: 500;">Hạch toán kết quả kinh doanh</label>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="payment-note">Ghi chú</label>
+            <textarea class="form-control" id="payment-note" rows="2" placeholder="Ghi chú thêm..." style="width: 100%; font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-payment-modal">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary btn-sm" style="background-color: var(--color-danger) !important; border-color: var(--color-danger) !important; color: #fff !important;">Lưu phiếu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Chi Tiết Phiếu Thu Chi Modal -->
+  <div class="modal-overlay" id="so-quy-detail-modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <h3 class="modal-title" id="so-quy-detail-title">Chi tiết phiếu thu/chi</h3>
+        <button class="modal-close" id="btn-close-detail-modal">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1rem 5px 1rem 0; display: flex; flex-direction: column; gap: 0.25rem; max-height: 65vh; overflow-y: auto;">
+        <div class="detail-item-row">
+          <span class="detail-item-label">Mã phiếu</span>
+          <span class="detail-item-value" id="so-quy-detail-code">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label">Thời gian</span>
+          <span class="detail-item-value" id="so-quy-detail-time">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label">Loại phiếu</span>
+          <span class="detail-item-value" id="so-quy-detail-type">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label">Loại thu chi</span>
+          <span class="detail-item-value" id="so-quy-detail-category">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label" id="so-quy-detail-partner-lbl">Người nộp/nhận</span>
+          <span class="detail-item-value" id="so-quy-detail-partner">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label">Phương thức thanh toán</span>
+          <span class="detail-item-value" id="so-quy-detail-method">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label">Hạch toán KQKD</span>
+          <span class="detail-item-value" id="so-quy-detail-accounting">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label">Trạng thái</span>
+          <span class="detail-item-value" id="so-quy-detail-status">-</span>
+        </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label">Người tạo</span>
+          <span class="detail-item-value" id="so-quy-detail-creator">-</span>
+        </div>
+        <div class="detail-item-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem; border-bottom: none;">
+          <span class="detail-item-label">Ghi chú</span>
+          <span class="detail-item-value" id="so-quy-detail-note" style="text-align: left; font-weight: normal; margin-top: 0.25rem; white-space: pre-wrap; width: 100%; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 6px; background-color: var(--bg-primary);">Không có ghi chú</span>
+        </div>
+        <div class="detail-item-row" style="border-bottom: none; padding-top: 1rem; justify-content: center;">
+          <span style="font-size: 1.35rem; font-weight: 700; color: #0070d2;" id="so-quy-detail-value">0 đ</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid var(--border-color); padding-top: 1rem; display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 1rem;">
+        <button type="button" class="btn btn-danger btn-sm" id="btn-cancel-transaction" style="display: flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Hủy phiếu
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-close-detail-modal-footer" style="min-width: 80px;">Đóng</button>
+      </div>
     </div>
   </div>
 

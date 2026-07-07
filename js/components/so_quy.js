@@ -1,349 +1,1112 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName } from '../utils.js';
-import { fetchCloudData } from '../services/supabase.js';
+import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
 import { renderAll } from '../main.js';
-import { printOrderById } from './history.js';
+import { dbSaveCustomer, dbSaveCashbookTransaction, dbSaveStartingBalances } from '../services/supabase.js';
 
-export function setupSoQuyPanel() {
-  const searchInput = document.getElementById('so-quy-search-input');
-  
-  const onFilterChange = () => {
-    renderSoQuyTable();
+// Seed transactions (empty to start clean)
+const seedTransactions = [];
+
+// Helper: load/save transactions from LocalStorage
+export function getCashbookTransactions() {
+  const stored = localStorage.getItem('billing_system_cashbook_transactions');
+  if (stored) {
+    let txs = JSON.parse(stored);
+    // Filter out old seed transaction IDs to clear the sample data from user's storage
+    const seedIds = ["TTM001686", "TTM001685", "TTM001684", "TTM001683", "TTM001682", "TTM001681", "TTM001680", "TTM001678", "TTM001679", "TTM001600"];
+    const filtered = txs.filter(t => !seedIds.includes(t.id));
+    if (filtered.length !== txs.length) {
+      localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(filtered));
+      return filtered;
+    }
+    return txs;
+  }
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify([]));
+  return [];
+}
+
+export function saveCashbookTransactions(txs) {
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(txs));
+}
+
+// Helper: load/save starting balances
+export function getStartingBalances() {
+  const defaults = {
+    cash: 0,
+    bank: 0,
+    wallet: 0
   };
+  const stored = localStorage.getItem('billing_system_cashbook_start_balances');
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    // If the storage contains the large KiotViet sample initial balance, reset it to 0
+    if (parsed.cash === 7620470195) {
+      localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(defaults));
+      return defaults;
+    }
+    return parsed;
+  }
+  localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(defaults));
+  return defaults;
+}
 
+export function saveStartingBalances(balances) {
+  localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(balances));
+  dbSaveStartingBalances(balances);
+}
+
+// Global active filters in this view
+let activeFilters = {
+  accountType: 'cash', // 'cash', 'bank', 'wallet', 'all'
+  timeMode: 'month',   // 'month', 'custom'
+  startDate: '',       // YYYY-MM-DD
+  endDate: '',         // YYYY-MM-DD
+  showThu: true,
+  showChi: true,
+  category: 'all',
+  statusPaid: true,
+  statusCancelled: false,
+  accounting: 'all',   // 'all', 'yes', 'no'
+  creator: 'all',
+  searchQuery: '',
+  employee: 'all',
+  partnerType: 'customer', // Default selected is 'customer'
+  partnerSearch: '',
+  partnerPhone: '',
+  debtImpactYes: true,
+  debtImpactNo: true,
+  debtImpactNone: true
+};
+
+// setup listeners
+export function setupSoQuyPanel() {
+  // 1. Account type selection (Quỹ tiền)
+  document.querySelectorAll('input[name="so-quy-acc-type"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      activeFilters.accountType = e.target.value;
+      const titleDisplay = document.getElementById('so-quy-title-display');
+      if (titleDisplay) {
+        if (activeFilters.accountType === 'cash') titleDisplay.innerText = 'Sổ quỹ tiền mặt';
+        else if (activeFilters.accountType === 'bank') titleDisplay.innerText = 'Sổ quỹ ngân hàng';
+        else if (activeFilters.accountType === 'wallet') titleDisplay.innerText = 'Sổ quỹ ví điện tử';
+        else titleDisplay.innerText = 'Tổng sổ quỹ';
+      }
+      renderSoQuyTable();
+    });
+  });
+
+  // 2. Time filter selection
+  document.querySelectorAll('input[name="so-quy-time"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      activeFilters.timeMode = e.target.value;
+      const rangeInputs = document.getElementById('so-quy-sidebar-range-inputs');
+      if (rangeInputs) {
+        rangeInputs.style.display = activeFilters.timeMode === 'custom' ? 'flex' : 'none';
+      }
+      renderSoQuyTable();
+    });
+  });
+
+  // Start & End dates for custom range
+  const dateFromInput = document.getElementById('so-quy-sidebar-from');
+  const dateToInput = document.getElementById('so-quy-sidebar-to');
+  
+  // Set defaults for custom range (current month)
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  if (dateFromInput) {
+    dateFromInput.value = `${yyyy}-${mm}-01`;
+    activeFilters.startDate = dateFromInput.value;
+    dateFromInput.addEventListener('input', (e) => {
+      activeFilters.startDate = e.target.value;
+      renderSoQuyTable();
+    });
+  }
+  if (dateToInput) {
+    const lastDay = new Date(yyyy, today.getMonth() + 1, 0).getDate();
+    dateToInput.value = `${yyyy}-${mm}-${String(lastDay).padStart(2, '0')}`;
+    activeFilters.endDate = dateToInput.value;
+    dateToInput.addEventListener('input', (e) => {
+      activeFilters.endDate = e.target.value;
+      renderSoQuyTable();
+    });
+  }
+
+  // 3. Document types
+  const typeThuCb = document.getElementById('so-quy-type-thu');
+  const typeChiCb = document.getElementById('so-quy-type-chi');
+  if (typeThuCb) {
+    typeThuCb.addEventListener('change', (e) => {
+      activeFilters.showThu = e.target.checked;
+      renderSoQuyTable();
+    });
+  }
+  if (typeChiCb) {
+    typeChiCb.addEventListener('change', (e) => {
+      activeFilters.showChi = e.target.checked;
+      renderSoQuyTable();
+    });
+  }
+
+  // 4. Categories select (filled dynamically)
+  const catSelect = document.getElementById('so-quy-category-select');
+  if (catSelect) {
+    catSelect.addEventListener('change', (e) => {
+      activeFilters.category = e.target.value;
+      renderSoQuyTable();
+    });
+  }
+
+  // 5. Status
+  const statusPaidCb = document.getElementById('so-quy-status-paid');
+  const statusCancelledCb = document.getElementById('so-quy-status-cancelled');
+  if (statusPaidCb) {
+    statusPaidCb.addEventListener('change', (e) => {
+      activeFilters.statusPaid = e.target.checked;
+      renderSoQuyTable();
+    });
+  }
+  if (statusCancelledCb) {
+    statusCancelledCb.addEventListener('change', (e) => {
+      activeFilters.statusCancelled = e.target.checked;
+      renderSoQuyTable();
+    });
+  }
+
+  // 6. Business Results Accounting (Hạch toán kết quả kinh doanh) - Pill Group
+  document.querySelectorAll('.kiot-pill-group .kiot-pill-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const parent = btn.closest('.kiot-pill-group');
+      parent.querySelectorAll('.kiot-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilters.accounting = btn.getAttribute('data-value');
+      renderSoQuyTable();
+    });
+  });
+
+  // 7. Creator select (filled dynamically)
+  const creatorSelect = document.getElementById('so-quy-creator-select');
+  if (creatorSelect) {
+    creatorSelect.addEventListener('change', (e) => {
+      activeFilters.creator = e.target.value;
+      renderSoQuyTable();
+    });
+  }
+
+  // 8. Employee select (filled dynamically)
+  const employeeSelect = document.getElementById('so-quy-employee-select');
+  if (employeeSelect) {
+    employeeSelect.addEventListener('change', (e) => {
+      activeFilters.employee = e.target.value;
+      renderSoQuyTable();
+    });
+  }
+
+  // 9. Partner type select
+  const partnerTypeSelect = document.getElementById('so-quy-partner-type');
+  if (partnerTypeSelect) {
+    partnerTypeSelect.addEventListener('change', (e) => {
+      activeFilters.partnerType = e.target.value;
+      renderSoQuyTable();
+    });
+  }
+
+  // 10. Partner name / code search
+  const partnerSearchInput = document.getElementById('so-quy-partner-search');
+  if (partnerSearchInput) {
+    partnerSearchInput.addEventListener('input', (e) => {
+      activeFilters.partnerSearch = e.target.value.toLowerCase().trim();
+      renderSoQuyTable();
+    });
+  }
+
+  // 11. Partner phone search
+  const partnerPhoneInput = document.getElementById('so-quy-partner-phone');
+  if (partnerPhoneInput) {
+    partnerPhoneInput.addEventListener('input', (e) => {
+      activeFilters.partnerPhone = e.target.value.trim();
+      renderSoQuyTable();
+    });
+  }
+
+  // 12. Partner debt impact checkboxes
+  const debtImpactYesCb = document.getElementById('so-quy-debt-impact-yes');
+  const debtImpactNoCb = document.getElementById('so-quy-debt-impact-no');
+  const debtImpactNoneCb = document.getElementById('so-quy-debt-impact-none');
+
+  if (debtImpactYesCb) {
+    debtImpactYesCb.addEventListener('change', (e) => {
+      activeFilters.debtImpactYes = e.target.checked;
+      renderSoQuyTable();
+    });
+  }
+  if (debtImpactNoCb) {
+    debtImpactNoCb.addEventListener('change', (e) => {
+      activeFilters.debtImpactNo = e.target.checked;
+      renderSoQuyTable();
+    });
+  }
+  if (debtImpactNoneCb) {
+    debtImpactNoneCb.addEventListener('change', (e) => {
+      activeFilters.debtImpactNone = e.target.checked;
+      renderSoQuyTable();
+    });
+  }
+
+  // 13. Search query input (Mã phiếu, v.v.)
+  const searchInput = document.getElementById('so-quy-search');
   if (searchInput) {
-    searchInput.addEventListener('input', onFilterChange);
-  }
-  
-  // Thiết lập các bộ lọc thời gian, khách hàng, nhân viên
-  const dateModeSelect = document.getElementById('so-quy-date-mode');
-  const filterDateInput = document.getElementById('so-quy-filter-date');
-  const filterMonthInput = document.getElementById('so-quy-filter-month');
-  const filterYearSelect = document.getElementById('so-quy-filter-year');
-  const filterRangeDiv = document.getElementById('so-quy-filter-range');
-  
-  if (dateModeSelect) {
-    // Khởi tạo năm động (năm hiện tại lùi về 5 năm)
-    const currentYear = new Date().getFullYear();
-    filterYearSelect.innerHTML = '<option value="">-- Chọn năm --</option>';
-    for (let y = currentYear; y >= currentYear - 5; y--) {
-      const opt = document.createElement('option');
-      opt.value = y.toString();
-      opt.textContent = y.toString();
-      filterYearSelect.appendChild(opt);
-    }
-    filterYearSelect.value = currentYear.toString();
-
-    // Mặc định ban đầu hiển thị lọc theo ngày hôm nay
-    dateModeSelect.value = 'date';
-    filterDateInput.style.display = 'block';
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    filterDateInput.value = `${yyyy}-${mm}-${dd}`;
-
-    dateModeSelect.addEventListener('change', () => {
-      const mode = dateModeSelect.value;
-      
-      // Ẩn tất cả trước
-      filterDateInput.style.display = 'none';
-      filterMonthInput.style.display = 'none';
-      filterYearSelect.style.display = 'none';
-      filterRangeDiv.style.display = 'none';
-      
-      // Hiện cái tương ứng
-      if (mode === 'date') filterDateInput.style.display = 'block';
-      else if (mode === 'month') filterMonthInput.style.display = 'block';
-      else if (mode === 'year') filterYearSelect.style.display = 'block';
-      else if (mode === 'range') filterRangeDiv.style.display = 'flex';
-      
-      onFilterChange();
+    searchInput.addEventListener('input', (e) => {
+      activeFilters.searchQuery = e.target.value.toLowerCase().trim();
+      renderSoQuyTable();
     });
-    
-    filterDateInput.addEventListener('input', onFilterChange);
-    filterMonthInput.addEventListener('input', onFilterChange);
-    filterYearSelect.addEventListener('change', onFilterChange);
-    document.getElementById('so-quy-filter-from').addEventListener('input', onFilterChange);
-    document.getElementById('so-quy-filter-to').addEventListener('input', onFilterChange);
-  }
-  
-  const customerFilter = document.getElementById('so-quy-customer-filter');
-  if (customerFilter) {
-    customerFilter.addEventListener('input', onFilterChange);
-  }
-  
-  const creatorFilter = document.getElementById('so-quy-creator-filter');
-  if (creatorFilter) {
-    creatorFilter.addEventListener('input', onFilterChange);
   }
 
-  const refreshBtn = document.getElementById('btn-refresh-so-quy');
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', async () => {
-      const icon = refreshBtn.querySelector('i');
-      if (icon) icon.classList.add('spin-animation');
-      
-      showToast('Đang làm mới dữ liệu từ Cloud...', 'info');
-      try {
-        await fetchCloudData();
-        renderAll();
-        showToast('Đã làm mới dữ liệu từ Cloud thành công!', 'success');
-      } catch (err) {
-        showToast('Lỗi khi làm mới dữ liệu: ' + err.message, 'danger');
-      } finally {
-        if (icon) {
-          setTimeout(() => icon.classList.remove('spin-animation'), 500);
+  // 14. Table select-all checkbox
+  const selectAllCb = document.getElementById('so-quy-select-all');
+  if (selectAllCb) {
+    selectAllCb.addEventListener('change', (e) => {
+      const checkVal = e.target.checked;
+      document.querySelectorAll('.so-quy-row-checkbox').forEach(cb => {
+        cb.checked = checkVal;
+      });
+    });
+  }
+
+  // 15. Manual edit starting balance (Double click balance value)
+  const startBalEl = document.getElementById('so-quy-stat-start');
+  if (startBalEl) {
+    startBalEl.style.cursor = 'pointer';
+    startBalEl.title = 'Kích đúp để thay đổi Quỹ đầu kỳ';
+    startBalEl.addEventListener('dblclick', () => {
+      const type = activeFilters.accountType;
+      if (type === 'all') {
+        showToast('Vui lòng chọn cụ thể một loại Quỹ (Tiền mặt, Ngân hàng, Ví điện tử) để thay đổi quỹ đầu kỳ.', 'warning');
+        return;
+      }
+      const balances = getStartingBalances();
+      const currentVal = balances[type] || 0;
+      const newValStr = prompt(`Nhập số tiền quỹ đầu kỳ mới cho quỹ [${type === 'cash' ? 'Tiền mặt' : type === 'bank' ? 'Ngân hàng' : 'Ví điện tử'}]:`, currentVal);
+      if (newValStr !== null) {
+        const newVal = parseFloat(newValStr.replace(/,/g, ''));
+        if (!isNaN(newVal)) {
+          balances[type] = newVal;
+          saveStartingBalances(balances);
+          showToast('Đã cập nhật Quỹ đầu kỳ thành công!', 'success');
+          renderSoQuyTable();
+        } else {
+          showToast('Giá trị nhập vào không hợp lệ!', 'danger');
         }
       }
     });
   }
-}
 
-let lastCustomerLength = 0;
-let lastUserLength = 0;
-
-export function populateSoQuyFilters() {
-  const customerList = document.getElementById('so-quy-customer-list');
-  const creatorList = document.getElementById('so-quy-creator-list');
+  // 16. Modal actions: + Phiếu thu
+  const addThuBtn = document.getElementById('so-quy-btn-add-thu');
+  const receiptModal = document.getElementById('so-quy-receipt-modal');
+  const receiptForm = document.getElementById('so-quy-receipt-form');
+  const receiptTimeInput = document.getElementById('receipt-time');
   
-  if (!customerList || !creatorList) return;
-  
-  if (state.customers.length === lastCustomerLength && state.users.length === lastUserLength) {
-    return;
+  if (addThuBtn && receiptModal) {
+    addThuBtn.addEventListener('click', () => {
+      // Set time default to now in local format
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      if (receiptTimeInput) {
+        receiptTimeInput.value = now.toISOString().slice(0, 16);
+      }
+      // Set method select to match current view filter
+      const rMethod = document.getElementById('receipt-method');
+      if (rMethod && ['cash','bank','wallet'].includes(activeFilters.accountType)) {
+        rMethod.value = activeFilters.accountType;
+      }
+      receiptModal.classList.add('active');
+    });
   }
   
-  lastCustomerLength = state.customers.length;
-  lastUserLength = state.users.length;
+  const closeReceiptBtn = document.getElementById('btn-close-receipt-modal');
+  const cancelReceiptBtn = document.getElementById('btn-cancel-receipt-modal');
   
-  customerList.innerHTML = '';
-  state.customers.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.name;
-    opt.textContent = `${c.code} - ${c.name}`;
-    customerList.appendChild(opt);
-  });
+  const hideReceiptModal = () => {
+    if (receiptModal) receiptModal.classList.remove('active');
+    if (receiptForm) receiptForm.reset();
+  };
   
-  creatorList.innerHTML = '';
-  state.users.forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u.displayName;
-    opt.textContent = `@${u.username}`;
-    creatorList.appendChild(opt);
-  });
+  if (closeReceiptBtn) closeReceiptBtn.addEventListener('click', hideReceiptModal);
+  if (cancelReceiptBtn) cancelReceiptBtn.addEventListener('click', hideReceiptModal);
+
+  if (receiptForm) {
+    receiptForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const code = document.getElementById('receipt-code').value.trim();
+      const time = document.getElementById('receipt-time').value;
+      const category = document.getElementById('receipt-category').value;
+      const payer = document.getElementById('receipt-payer').value.trim();
+      const value = parseFloat(document.getElementById('receipt-value').value) || 0;
+      const method = document.getElementById('receipt-method').value;
+      const accounting = document.getElementById('receipt-accounting').checked;
+      const note = document.getElementById('receipt-note').value.trim();
+      
+      // Auto-generate code if empty
+      let finalCode = code;
+      const txs = getCashbookTransactions();
+      if (!finalCode) {
+        let maxSeq = 0;
+        txs.forEach(t => {
+          if (t.id.startsWith('TTM')) {
+            const num = parseInt(t.id.slice(3));
+            if (!isNaN(num) && num > maxSeq) maxSeq = num;
+          }
+        });
+        finalCode = `TTM${String(maxSeq + 1).padStart(6, '0')}`;
+      } else {
+        // Verify unique code
+        if (txs.some(t => t.id.toLowerCase() === finalCode.toLowerCase())) {
+          showToast(`Mã phiếu ${finalCode} đã tồn tại! Vui lòng nhập mã khác.`, 'danger');
+          return;
+        }
+      }
+      
+      const newTx = {
+        id: finalCode,
+        date: new Date(time).toISOString(),
+        type: 'thu',
+        category,
+        partner: payer,
+        value,
+        method,
+        accounting,
+        status: 'Đã thanh toán',
+        creator: state.currentUser ? state.currentUser.displayName : 'Administrator',
+        note,
+        starred: false
+      };
+      
+      txs.unshift(newTx);
+      saveCashbookTransactions(txs);
+      
+      // Update customer debt (subtract debt balance)
+      await updateCustomerDebtOnReceipt(payer, value, true, finalCode, category);
+      
+      showToast(`Đã tạo phiếu thu ${finalCode} thành công!`, 'success');
+      hideReceiptModal();
+      renderAll();
+    });
+  }
+
+  // 17. Modal actions: + Phiếu chi
+  const addChiBtn = document.getElementById('so-quy-btn-add-chi');
+  const paymentModal = document.getElementById('so-quy-payment-modal');
+  const paymentForm = document.getElementById('so-quy-payment-form');
+  const paymentTimeInput = document.getElementById('payment-time');
+  
+  if (addChiBtn && paymentModal) {
+    addChiBtn.addEventListener('click', () => {
+      // Set time default to now
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      if (paymentTimeInput) {
+        paymentTimeInput.value = now.toISOString().slice(0, 16);
+      }
+      // Set method select to match current view filter
+      const pMethod = document.getElementById('payment-method');
+      if (pMethod && ['cash','bank','wallet'].includes(activeFilters.accountType)) {
+        pMethod.value = activeFilters.accountType;
+      }
+      paymentModal.classList.add('active');
+    });
+  }
+  
+  const closePaymentBtn = document.getElementById('btn-close-payment-modal');
+  const cancelPaymentBtn = document.getElementById('btn-cancel-payment-modal');
+  
+  const hidePaymentModal = () => {
+    if (paymentModal) paymentModal.classList.remove('active');
+    if (paymentForm) paymentForm.reset();
+  };
+  
+  if (closePaymentBtn) closePaymentBtn.addEventListener('click', hidePaymentModal);
+  if (cancelPaymentBtn) cancelPaymentBtn.addEventListener('click', hidePaymentModal);
+
+  if (paymentForm) {
+    paymentForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const code = document.getElementById('payment-code').value.trim();
+      const time = document.getElementById('payment-time').value;
+      const category = document.getElementById('payment-category').value;
+      const recipient = document.getElementById('payment-recipient').value.trim();
+      const value = parseFloat(document.getElementById('payment-value').value) || 0;
+      const method = document.getElementById('payment-method').value;
+      const accounting = document.getElementById('payment-accounting').checked;
+      const note = document.getElementById('payment-note').value.trim();
+      
+      // Auto-generate code if empty
+      let finalCode = code;
+      const txs = getCashbookTransactions();
+      if (!finalCode) {
+        let maxSeq = 0;
+        txs.forEach(t => {
+          if (t.id.startsWith('TCM')) {
+            const num = parseInt(t.id.slice(3));
+            if (!isNaN(num) && num > maxSeq) maxSeq = num;
+          }
+        });
+        finalCode = `TCM${String(maxSeq + 1).padStart(6, '0')}`;
+      } else {
+        // Verify unique code
+        if (txs.some(t => t.id.toLowerCase() === finalCode.toLowerCase())) {
+          showToast(`Mã phiếu ${finalCode} đã tồn tại! Vui lòng nhập mã khác.`, 'danger');
+          return;
+        }
+      }
+      
+      const newTx = {
+        id: finalCode,
+        date: new Date(time).toISOString(),
+        type: 'chi',
+        category,
+        partner: recipient,
+        value,
+        method,
+        accounting,
+        status: 'Đã thanh toán',
+        creator: state.currentUser ? state.currentUser.displayName : 'Administrator',
+        note,
+        starred: false
+      };
+      
+      txs.unshift(newTx);
+      saveCashbookTransactions(txs);
+      
+      // Sync to Supabase in background
+      dbSaveCashbookTransaction(newTx);
+      
+      showToast(`Đã tạo phiếu chi ${finalCode} thành công!`, 'success');
+      hidePaymentModal();
+      renderAll();
+    });
+  }
+
+  // 18. Export file report
+  const exportBtn = document.getElementById('so-quy-btn-export');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const data = getFilteredTransactionsForExport();
+      if (data.length === 0) {
+        showToast('Không có dữ liệu trong khoảng thời gian được lọc để xuất báo cáo!', 'warning');
+        return;
+      }
+      exportSoQuyToExcel(data);
+    });
+  }
+
+  // 19. Detail modal closes
+  const detailModal = document.getElementById('so-quy-detail-modal');
+  const closeDetailBtn = document.getElementById('btn-close-detail-modal');
+  const closeDetailFooterBtn = document.getElementById('btn-close-detail-modal-footer');
+  
+  const hideDetailModal = () => {
+    if (detailModal) detailModal.classList.remove('active');
+  };
+  
+  if (closeDetailBtn) closeDetailBtn.addEventListener('click', hideDetailModal);
+  if (closeDetailFooterBtn) closeDetailFooterBtn.addEventListener('click', hideDetailModal);
 }
 
-export function renderSoQuyTable() {
-  const tableBody = document.getElementById('so-quy-table-body');
-  if (!tableBody) return;
+// External helper to add automated transactions from Sales / Payments
+export function addCashbookTransaction({ type, category, partner, value, method, accounting = true, note = '', creator = '' }) {
+  const txs = getCashbookTransactions();
   
-  populateSoQuyFilters();
+  const prefix = type === 'thu' ? 'TTM' : 'TCM';
+  let maxSeq = 0;
+  txs.forEach(t => {
+    if (t.id.startsWith(prefix)) {
+      const num = parseInt(t.id.slice(3));
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+    }
+  });
   
-  const searchVal = document.getElementById('so-quy-search-input').value.toLowerCase().trim();
+  const finalCode = `${prefix}${String(maxSeq + 1).padStart(6, '0')}`;
   
-  const dateModeSelect = document.getElementById('so-quy-date-mode');
-  const filterDateInput = document.getElementById('so-quy-filter-date');
-  const filterMonthInput = document.getElementById('so-quy-filter-month');
-  const filterYearSelect = document.getElementById('so-quy-filter-year');
-  const filterFromInput = document.getElementById('so-quy-filter-from');
-  const filterToInput = document.getElementById('so-quy-filter-to');
-  const customerFilterSelect = document.getElementById('so-quy-customer-filter');
-  const creatorFilterSelect = document.getElementById('so-quy-creator-filter');
+  const newTx = {
+    id: finalCode,
+    date: new Date().toISOString(),
+    type,
+    category,
+    partner,
+    value: parseFloat(value) || 0,
+    method: method || 'cash', // 'cash', 'bank', 'wallet'
+    accounting,
+    status: 'Đã thanh toán',
+    creator: creator || (state.currentUser ? state.currentUser.displayName : 'Administrator'),
+    note,
+    starred: false
+  };
   
-  const dateMode = dateModeSelect ? dateModeSelect.value : 'all';
-  const filterDate = filterDateInput ? filterDateInput.value : '';
-  const filterMonth = filterMonthInput ? filterMonthInput.value : '';
-  const filterYear = filterYearSelect ? filterYearSelect.value : '';
-  const filterFrom = filterFromInput ? filterFromInput.value : '';
-  const filterTo = filterToInput ? filterToInput.value : '';
-  const selectedCust = customerFilterSelect ? customerFilterSelect.value : '';
-  const selectedCreator = creatorFilterSelect ? creatorFilterSelect.value : '';
+  txs.unshift(newTx);
+  saveCashbookTransactions(txs);
+  
+  // Sync to Supabase in background
+  dbSaveCashbookTransaction(newTx);
+  
+  // Re-render when added dynamically
+  setTimeout(() => renderAll(), 100);
+  return newTx;
+}
 
-  const filtered = state.savedOrders.filter(o => {
-    // Chỉ lấy các đơn đã chốt
-    if (o.status === 'draft') return false;
+// Retrieve date range for current month
+function getCurrentMonthRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return { start, end };
+}
 
-    // Phân quyền hiển thị đơn của Sale
-    if (state.currentUser && state.currentUser.role === 'sale') {
-      if (!isSameUser(o.createdBy, state.currentUser.username)) return false;
+// Retrieve currently filtered transactions for display/calculations
+function getProcessedData() {
+  const txs = getCashbookTransactions();
+  const balances = getStartingBalances();
+  
+  // Define time range boundaries
+  let rangeStart = null;
+  let rangeEnd = null;
+  
+  if (activeFilters.timeMode === 'month') {
+    const range = getCurrentMonthRange();
+    rangeStart = range.start;
+    rangeEnd = range.end;
+  } else {
+    if (activeFilters.startDate) {
+      rangeStart = new Date(activeFilters.startDate);
+      rangeStart.setHours(0, 0, 0, 0);
+    }
+    if (activeFilters.endDate) {
+      rangeEnd = new Date(activeFilters.endDate);
+      rangeEnd.setHours(23, 59, 59, 999);
+    }
+  }
+
+  // 1. Calculate Quỹ đầu kỳ dynamically (transactions before rangeStart)
+  // Quỹ đầu kỳ base for the selected account type
+  let baseStartVal = 0;
+  if (activeFilters.accountType === 'all') {
+    baseStartVal = (balances.cash || 0) + (balances.bank || 0) + (balances.wallet || 0);
+  } else {
+    baseStartVal = balances[activeFilters.accountType] || 0;
+  }
+  
+  let preIncome = 0;
+  let preExpense = 0;
+  
+  if (rangeStart) {
+    txs.forEach(t => {
+      // Must be settled, match account type, and occur BEFORE the rangeStart
+      if (t.status !== 'Đã thanh toán') return;
+      
+      if (activeFilters.accountType !== 'all' && t.method !== activeFilters.accountType) return;
+      
+      const tDate = new Date(t.date);
+      if (tDate < rangeStart) {
+        if (t.type === 'thu') preIncome += t.value;
+        else if (t.type === 'chi') preExpense += t.value;
+      }
+    });
+  }
+  
+  const calculatedStartBalance = baseStartVal + preIncome - preExpense;
+
+  // 2. Filter transactions that are within the current date range
+  let filtered = txs.filter(t => {
+    // Account type
+    if (activeFilters.accountType !== 'all' && t.method !== activeFilters.accountType) return false;
+    
+    // Time filter
+    if (rangeStart || rangeEnd) {
+      const tDate = new Date(t.date);
+      if (rangeStart && tDate < rangeStart) return false;
+      if (rangeEnd && tDate > rangeEnd) return false;
     }
     
-    // Lọc theo tìm kiếm từ khóa
-    const matchesSearch = o.id.toLowerCase().includes(searchVal) || o.customerName.toLowerCase().includes(searchVal);
-    if (!matchesSearch) return false;
+    // Document type (Phiếu thu / Phiếu chi)
+    if (t.type === 'thu' && !activeFilters.showThu) return false;
+    if (t.type === 'chi' && !activeFilters.showChi) return false;
     
-    // Lọc theo khách hàng
-    if (selectedCust && !o.customerName.toLowerCase().includes(selectedCust.toLowerCase().trim())) return false;
+    // Category (Loại thu chi)
+    if (activeFilters.category !== 'all' && t.category !== activeFilters.category) return false;
     
-    // Lọc theo nhân viên quản lý (của khách hàng, fallback về người tạo đơn)
-    if (selectedCreator) {
-      const filterLower = selectedCreator.toLowerCase().trim();
-      
-      let managerUsername = o.createdBy || '';
-      const cust = o.customerId ? state.customers.find(c => c.id === o.customerId) : null;
-      if (cust && cust.managedBy) {
-        managerUsername = cust.managedBy;
-      }
-      
-      const matchingUsers = state.users.filter(u => 
-        u.displayName.toLowerCase().includes(filterLower) || 
-        u.username.toLowerCase().includes(filterLower)
-      );
-      
-      let matched = false;
-      if (matchingUsers.length > 0) {
-        matched = matchingUsers.some(u => isSameUser(managerUsername, u.username));
-      }
-      
-      if (!matched) {
-        const managerClean = managerUsername.toLowerCase();
-        if (managerClean.includes(filterLower)) {
-          matched = true;
+    // Status (Trạng thái)
+    if (t.status === 'Đã thanh toán' && !activeFilters.statusPaid) return false;
+    if (t.status === 'Đã hủy' && !activeFilters.statusCancelled) return false;
+    
+    // Business Accounting (Hạch toán KQKD)
+    if (activeFilters.accounting === 'yes' && !t.accounting) return false;
+    if (activeFilters.accounting === 'no' && t.accounting) return false;
+    
+    // Creator (Người tạo)
+    if (activeFilters.creator !== 'all' && t.creator !== activeFilters.creator) return false;
+
+    // Filter by Employee (Nhân viên)
+    if (activeFilters.employee !== 'all') {
+      let matchesEmployee = false;
+      const selectedUser = state.users.find(u => u.username === activeFilters.employee);
+      if (selectedUser) {
+        if (t.creator === selectedUser.displayName || t.creator === selectedUser.username) {
+          matchesEmployee = true;
         }
       }
       
-      if (!matched) return false;
+      const cust = state.customers.find(c => c.name === t.partner);
+      if (cust && cust.managedBy === activeFilters.employee) {
+        matchesEmployee = true;
+      }
+      
+      if (!matchesEmployee) return false;
     }
+
+    // Filter by Partner Type (Loại đối tác: Khách hàng / Nhà cung cấp / Khác)
+    const isCustomer = state.customers.some(c => c.name === t.partner) || 
+                       t.category.toLowerCase().includes('khách hàng') || 
+                       t.category.toLowerCase().includes('tiền hàng') ||
+                       t.id.startsWith('TTM');
     
-    // Lọc theo thời gian
-    if (o.date) {
-      const oDate = new Date(o.date);
-      if (isNaN(oDate.getTime())) return true;
-      
-      if (dateMode === 'date') {
-        if (!filterDate) return true;
-        const orderDateStr = oDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
-        if (orderDateStr !== filterDate) return false;
-      } 
-      else if (dateMode === 'month') {
-        if (!filterMonth) return true;
-        const orderMonthStr = oDate.toISOString().slice(0, 7); // YYYY-MM
-        if (orderMonthStr !== filterMonth) return false;
-      } 
-      else if (dateMode === 'year') {
-        if (!filterYear) return true;
-        if (oDate.getFullYear().toString() !== filterYear) return false;
-      } 
-      else if (dateMode === 'range') {
-        const checkDate = new Date(oDate);
-        checkDate.setHours(0,0,0,0);
-        if (filterFrom) {
-          const fromDate = new Date(filterFrom);
-          fromDate.setHours(0,0,0,0);
-          if (checkDate < fromDate) return false;
-        }
-        if (filterTo) {
-          const toDate = new Date(filterTo);
-          toDate.setHours(23,59,59,999);
-          if (checkDate > toDate) return false;
+    const isSupplier = t.category.toLowerCase().includes('nhập hàng') || 
+                       t.category.toLowerCase().includes('nhà cung cấp') ||
+                       t.id.startsWith('TCM');
+
+    if (activeFilters.partnerType === 'customer') {
+      if (!isCustomer) return false;
+    } else if (activeFilters.partnerType === 'supplier') {
+      if (!isSupplier) return false;
+    } else if (activeFilters.partnerType === 'other') {
+      if (isCustomer || isSupplier) return false;
+    }
+
+    // Filter by Partner Search Query (Tên, mã người nộp/nhận)
+    if (activeFilters.partnerSearch) {
+      const q = activeFilters.partnerSearch;
+      let matchesPartner = t.partner.toLowerCase().includes(q);
+      if (!matchesPartner) {
+        const cust = state.customers.find(c => c.name === t.partner);
+        if (cust && cust.code.toLowerCase().includes(q)) {
+          matchesPartner = true;
         }
       }
+      if (!matchesPartner) return false;
+    }
+
+    // Filter by Partner Phone (Số điện thoại)
+    if (activeFilters.partnerPhone) {
+      const q = activeFilters.partnerPhone;
+      const cust = state.customers.find(c => c.name === t.partner);
+      if (!cust || !cust.phone || !cust.phone.includes(q)) {
+        return false;
+      }
+    }
+
+    // Filter by Partner Debt Impact (Công nợ đối tác)
+    // Classify transaction's debt impact:
+    // 'yes' = affects customer debt (Thu nợ, Chi nợ v.v.)
+    // 'none' = no partner / general accumulator
+    // 'no' = other partner transactions (Thu tiền hàng v.v.)
+    let debtImpact = 'no';
+    if (t.category.toLowerCase().includes('nợ')) {
+      debtImpact = 'yes';
+    } else if (!t.partner || t.partner === 'Khách bán lẻ tích lũy đầu tháng' || t.partner === 'Hệ thống') {
+      debtImpact = 'none';
+    }
+
+    if (debtImpact === 'yes' && !activeFilters.debtImpactYes) return false;
+    if (debtImpact === 'no' && !activeFilters.debtImpactNo) return false;
+    if (debtImpact === 'none' && !activeFilters.debtImpactNone) return false;
+    
+    // Search input (Mã phiếu, người nộp/nhận, ghi chú)
+    if (activeFilters.searchQuery) {
+      const idMatch = t.id.toLowerCase().includes(activeFilters.searchQuery);
+      const partnerMatch = t.partner.toLowerCase().includes(activeFilters.searchQuery);
+      const noteMatch = (t.note || '').toLowerCase().includes(activeFilters.searchQuery);
+      if (!idMatch && !partnerMatch && !noteMatch) return false;
     }
     
     return true;
   });
 
-  // Tính toán số liệu thống kê tổng hợp từ các đơn hàng đã lọc
-  let totalOrdersCount = filtered.length;
-  let sumMarket = 0;
-  let sumDiscount = 0;
-  let sumShipping = 0;
-  let sumPayable = 0;
+  // 3. Calculate statistics for the CURRENT range
+  let totalIncome = 0;
+  let totalExpense = 0;
   
-  filtered.forEach(o => {
-    sumMarket += (o.totalMarket || 0);
-    sumDiscount += (o.totalDiscount || 0);
-    sumShipping += (o.shippingDiscount || 0);
-    sumPayable += (o.totalPayable || 0);
+  filtered.forEach(t => {
+    // Only count active (paid) transactions for statistics
+    if (t.status !== 'Đã thanh toán') return;
+    
+    if (t.type === 'thu') totalIncome += t.value;
+    else if (t.type === 'chi') totalExpense += t.value;
   });
   
-  const statsContainer = document.getElementById('so-quy-summary-stats');
-  if (statsContainer) {
-    statsContainer.innerHTML = `
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
-        <!-- Card 1: Số đơn hàng -->
-        <div class="stat-card" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.5rem;">
-          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Tổng đơn đã chốt</span>
-          <span style="font-size: 1.75rem; font-weight: 800; color: var(--color-secondary);">${totalOrdersCount} đơn</span>
-          <span style="font-size: 0.7rem; color: var(--text-muted);">Đã được lọc theo điều kiện</span>
-        </div>
-        
-        <!-- Card 2: Thực thu -->
-        <div class="stat-card" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.5rem;">
-          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Thực tế bán được (Thực thu)</span>
-          <span style="font-size: 1.75rem; font-weight: 800; color: var(--color-primary);">${formatCurrency(sumPayable)}</span>
-          <span style="font-size: 0.7rem; color: var(--text-muted);">Tổng doanh số thực tế phải thu</span>
-        </div>
-      </div>
-    `;
+  const finalBalance = calculatedStartBalance + totalIncome - totalExpense;
+
+  return {
+    filteredTransactions: filtered,
+    stats: {
+      startBalance: calculatedStartBalance,
+      income: totalIncome,
+      expense: totalExpense,
+      balance: finalBalance
+    }
+  };
+}
+
+// Get filtered list for exporting without UI constraints
+function getFilteredTransactionsForExport() {
+  return getProcessedData().filteredTransactions;
+}
+
+// Populates dropdown filters dynamically based on current transaction properties
+function refreshDynamicFilters(txs) {
+  // 1. Categories filter
+  const catSelect = document.getElementById('so-quy-category-select');
+  if (catSelect) {
+    const currentVal = catSelect.value;
+    const cats = new Set();
+    txs.forEach(t => {
+      if (t.category) cats.add(t.category);
+    });
+    
+    catSelect.innerHTML = '<option value="all">-- Chọn loại thu chi --</option>';
+    Array.from(cats).sort().forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      catSelect.appendChild(opt);
+    });
+    // Keep selection if still valid
+    if (cats.has(currentVal)) {
+      catSelect.value = currentVal;
+      activeFilters.category = currentVal;
+    } else {
+      activeFilters.category = 'all';
+    }
   }
 
-  if (filtered.length === 0) {
+  // 2. Creator filter
+  const creatorSelect = document.getElementById('so-quy-creator-select');
+  if (creatorSelect) {
+    const currentVal = creatorSelect.value;
+    const creators = new Set();
+    txs.forEach(t => {
+      if (t.creator) creators.add(t.creator);
+    });
+    
+    creatorSelect.innerHTML = '<option value="all">Chọn người tạo</option>';
+    Array.from(creators).sort().forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      creatorSelect.appendChild(opt);
+    });
+    
+    if (creators.has(currentVal)) {
+      creatorSelect.value = currentVal;
+      activeFilters.creator = currentVal;
+    } else {
+      activeFilters.creator = 'all';
+    }
+  }
+
+  // 3. Employee filter (from system users in state)
+  const employeeSelect = document.getElementById('so-quy-employee-select');
+  if (employeeSelect) {
+    const currentVal = employeeSelect.value;
+    employeeSelect.innerHTML = '<option value="all">Chọn nhân viên</option>';
+    state.users.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.username;
+      opt.textContent = u.displayName;
+      employeeSelect.appendChild(opt);
+    });
+    
+    if (state.users.some(u => u.username === currentVal)) {
+      employeeSelect.value = currentVal;
+      activeFilters.employee = currentVal;
+    } else {
+      activeFilters.employee = 'all';
+    }
+  }
+
+  // 4. Receipt payer suggestions (danh sách khách hàng)
+  const payerList = document.getElementById('receipt-payer-list');
+  if (payerList) {
+    payerList.innerHTML = '';
+    state.customers.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      // Show Customer Code, Name, and Phone for easy visual matching in suggestions dropdown
+      opt.textContent = `${c.code} - ${c.name} ${c.phone ? `(${c.phone})` : ''}`;
+      payerList.appendChild(opt);
+    });
+  }
+}
+
+// Render cashbook table and update stats in UI
+export function renderSoQuyTable() {
+  const tableBody = document.getElementById('so-quy-table-body');
+  if (!tableBody) return;
+
+  const allTxs = getCashbookTransactions();
+  // Refresh dynamic dropdown options
+  refreshDynamicFilters(allTxs);
+
+  // Get processed transactions and statistics
+  const { filteredTransactions, stats } = getProcessedData();
+
+  // Update Statistics in UI (with integers rounding for clean display)
+  const statStartEl = document.getElementById('so-quy-stat-start');
+  const statIncomeEl = document.getElementById('so-quy-stat-income');
+  const statExpenseEl = document.getElementById('so-quy-stat-expense');
+  const statBalanceEl = document.getElementById('so-quy-stat-balance');
+  
+  if (statStartEl) statStartEl.innerText = formatCurrency(Math.round(stats.startBalance));
+  if (statIncomeEl) statIncomeEl.innerText = formatCurrency(Math.round(stats.income));
+  if (statExpenseEl) statExpenseEl.innerText = formatCurrency(Math.round(stats.expense));
+  if (statBalanceEl) statBalanceEl.innerText = formatCurrency(Math.round(stats.balance));
+
+  // Render Table rows
+  if (filteredTransactions.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 3rem;">
-          Không có giao dịch chốt đơn nào trong khoảng thời gian đã chọn
+        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+          Không có giao dịch sổ quỹ nào phù hợp với bộ lọc hiện tại
         </td>
       </tr>
     `;
     return;
   }
 
-  tableBody.innerHTML = filtered.map((o, index) => {
-    // Xác định nhân viên quản lý thực tế của khách hàng (hoặc fallback về người tạo đơn)
-    let managerName = 'Chưa phân công';
-    const cust = o.customerId ? state.customers.find(c => c.id === o.customerId) : null;
-    if (cust && cust.managedBy) {
-      managerName = getManagerDisplayName(cust.managedBy, state.users);
-    } else {
-      managerName = getManagerDisplayName(o.createdBy, state.users);
-    }
-    
-    // Tên bảng giá áp dụng
-    const pl = state.pricelists.find(p => p.id === o.pricelistId);
-    const plName = pl ? pl.name : (o.pricelistId === 'custom' ? 'Chiết khấu riêng' : (o.pricelistId === 'retail' ? 'Nhập tay' : 'Bảng giá chuẩn'));
+  tableBody.innerHTML = filteredTransactions.map(t => {
+    const isCancelled = t.status === 'Đã hủy';
+    const valText = t.type === 'thu' ? formatCurrency(t.value) : `-${formatCurrency(t.value)}`;
+    const valStyle = isCancelled 
+      ? 'color: var(--text-muted); text-decoration: line-through;' 
+      : (t.type === 'thu' ? 'color: #0070d2; font-weight: 700;' : 'color: var(--color-danger); font-weight: 700;');
 
     return `
-      <tr>
-        <td style="text-align: center; color: var(--text-muted);">${index + 1}</td>
-        <td style="text-align: center; font-weight: 700; color: var(--color-primary); cursor: pointer;" class="so-quy-order-id" data-id="${o.id}">${o.id}</td>
-        <td style="text-align: center; color: var(--text-muted);">${formatDateTime(o.date)}</td>
-        <td>
-          <div style="font-weight: 600; color: #fff;">${o.customerName}</div>
+      <tr class="${isCancelled ? 'row-cancelled' : ''}" style="${isCancelled ? 'opacity: 0.6;' : ''}">
+        <td style="text-align: center; padding: 0.5rem 0.25rem;">
+          <input type="checkbox" class="so-quy-row-checkbox" data-id="${t.id}" style="cursor: pointer; width: 14px; height: 14px;">
         </td>
-        <td>
-          <span style="color: var(--text-secondary); font-size: 0.85rem;">${managerName}</span>
-        </td>
-        <td>
-          <span style="font-size: 0.8rem; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 2px 6px; border-radius: 4px;">${plName}</span>
-        </td>
-        <td style="text-align: right; font-weight: 500;">${formatCurrency(o.totalMarket)}</td>
-        <td style="text-align: right; color: var(--color-danger);">${formatCurrency(o.totalDiscount + o.shippingDiscount)}</td>
-        <td style="text-align: right; font-weight: 700; color: var(--color-primary);">${formatCurrency(o.totalPayable)}</td>
         <td style="text-align: center;">
-          <button class="btn btn-primary btn-sm so-quy-print-btn" data-id="${o.id}" style="padding: 2px 8px; font-size: 0.75rem;">
-            <i data-lucide="printer" style="width: 12px; height: 12px; margin-right: 2px;"></i> In đơn
+          <button class="star-btn ${t.starred ? 'starred' : ''}" data-id="${t.id}" title="${t.starred ? 'Bỏ đánh dấu sao' : 'Đánh dấu sao'}">
+            <i data-lucide="star" style="width: 14px; height: 14px;"></i>
           </button>
+        </td>
+        <td style="text-align: center;">
+          <span style="font-weight: 700; color: #0070d2; cursor: pointer; text-decoration: underline;" class="so-quy-tx-code" data-id="${t.id}">
+            ${t.id}
+          </span>
+        </td>
+        <td style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">
+          ${formatDateTime(t.date)}
+        </td>
+        <td>
+          <div style="font-weight: 500;">${t.category}</div>
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;">
+            ${t.method === 'cash' ? 'Tiền mặt' : (t.method === 'bank' ? 'Ngân hàng' : 'Ví điện tử')}
+          </span>
+        </td>
+        <td>
+          <div style="font-weight: 500;">${t.partner}</div>
+          ${t.note ? `<div style="font-size: 0.75rem; color: var(--text-muted); word-break: break-all; margin-top: 0.15rem;">HD: ${t.note}</div>` : ''}
+        </td>
+        <td style="text-align: right; ${valStyle}">
+          ${valText}
         </td>
       </tr>
     `;
   }).join('');
 
-  // Gắn sự kiện click vào ID đơn hàng để xem chi tiết hoặc in ấn
-  tableBody.querySelectorAll('.so-quy-order-id').forEach(el => {
-    el.addEventListener('click', () => {
-      const orderId = el.getAttribute('data-id');
-      printOrderById(orderId);
+  // Wire up Star toggle event
+  tableBody.querySelectorAll('.star-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const txId = btn.getAttribute('data-id');
+      const txs = getCashbookTransactions();
+      const found = txs.find(t => t.id === txId);
+      if (found) {
+        found.starred = !found.starred;
+        saveCashbookTransactions(txs);
+        dbSaveCashbookTransaction(found);
+        btn.classList.toggle('starred');
+        showToast(found.starred ? 'Đã thêm vào mục quan trọng' : 'Đã bỏ đánh dấu quan trọng', 'info');
+      }
     });
   });
 
-  tableBody.querySelectorAll('.so-quy-print-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const orderId = btn.getAttribute('data-id');
-      printOrderById(orderId);
+  // Wire up Detail Modal display event
+  tableBody.querySelectorAll('.so-quy-tx-code').forEach(el => {
+    el.addEventListener('click', () => {
+      const txId = el.getAttribute('data-id');
+      showTransactionDetails(txId);
     });
   });
 
   safeCreateIcons();
 }
+
+// Display details of a single transaction
+function showTransactionDetails(txId) {
+  const txs = getCashbookTransactions();
+  const t = txs.find(tx => tx.id === txId);
+  if (!t) return;
+
+  const detailModal = document.getElementById('so-quy-detail-modal');
+  if (!detailModal) return;
+
+  // Set modal texts
+  document.getElementById('so-quy-detail-code').innerText = t.id;
+  document.getElementById('so-quy-detail-time').innerText = formatDateTime(t.date);
+  document.getElementById('so-quy-detail-type').innerText = t.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi';
+  document.getElementById('so-quy-detail-category').innerText = t.category;
+  
+  const partnerLbl = document.getElementById('so-quy-detail-partner-lbl');
+  if (partnerLbl) {
+    partnerLbl.innerText = t.type === 'thu' ? 'Người nộp' : 'Người nhận';
+  }
+  document.getElementById('so-quy-detail-partner').innerText = t.partner;
+  document.getElementById('so-quy-detail-method').innerText = t.method === 'cash' ? 'Tiền mặt' : (t.method === 'bank' ? 'Ngân hàng' : 'Ví điện tử');
+  document.getElementById('so-quy-detail-accounting').innerText = t.accounting ? 'Có' : 'Không';
+  document.getElementById('so-quy-detail-creator').innerText = t.creator || 'Hệ thống';
+  document.getElementById('so-quy-detail-note').innerText = t.note || 'Không có ghi chú';
+  
+  const statusEl = document.getElementById('so-quy-detail-status');
+  if (statusEl) {
+    statusEl.innerHTML = `<span class="badge-status ${t.status === 'Đã thanh toán' ? 'badge-status-paid' : 'badge-status-cancelled'}">${t.status}</span>`;
+  }
+
+  const valEl = document.getElementById('so-quy-detail-value');
+  if (valEl) {
+    valEl.innerText = (t.type === 'thu' ? '+' : '-') + ' ' + formatCurrency(t.value);
+    valEl.style.color = t.status === 'Đã hủy' 
+      ? 'var(--text-muted)' 
+      : (t.type === 'thu' ? '#0070d2' : 'var(--color-danger)');
+  }
+
+  // Handle Hủy phiếu (Cancel transaction) button
+  const cancelBtn = document.getElementById('btn-cancel-transaction');
+  if (cancelBtn) {
+    if (t.status === 'Đã hủy') {
+      cancelBtn.style.display = 'none';
+    } else {
+      cancelBtn.style.display = 'inline-flex';
+      // Remove old listeners to avoid multiple fires
+      const newCancelBtn = cancelBtn.cloneNode(true);
+      cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+      
+      newCancelBtn.addEventListener('click', async () => {
+        if (confirm(`Bạn có chắc chắn muốn hủy phiếu [${t.id}]? Số tiền giao dịch sẽ không còn được hạch toán vào Sổ quỹ và sẽ khôi phục lại công nợ đối tác nếu có.`)) {
+          t.status = 'Đã hủy';
+          saveCashbookTransactions(txs);
+          
+          // Sync cancelled status to cloud
+          dbSaveCashbookTransaction(t);
+          
+          // Restore customer debt if it's a receipt
+          if (t.type === 'thu') {
+            await updateCustomerDebtOnReceipt(t.partner, t.value, false, t.id, t.category);
+          }
+          
+          showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
+          detailModal.classList.remove('active');
+          renderAll();
+        }
+      });
+    }
+  }
+
+  // Open modal
+  detailModal.classList.add('active');
+  safeCreateIcons();
+}
+
+// Excel Export Report using SheetJS (XLSX)
+function exportSoQuyToExcel(filteredTxs) {
+  const sheetData = [
+    ["Mã phiếu", "Thời gian", "Loại phiếu", "Loại thu chi", "Người nộp/nhận", "Phương thức thanh toán", "Giá trị (đ)", "Hạch toán kết quả KD", "Trạng thái", "Người tạo", "Ghi chú"]
+  ];
+  
+  filteredTxs.forEach(t => {
+    sheetData.push([
+      t.id,
+      formatDateTime(t.date),
+      t.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi',
+      t.category,
+      t.partner,
+      t.method === 'cash' ? 'Tiền mặt' : (t.method === 'bank' ? 'Ngân hàng' : 'Ví điện tử'),
+      t.value,
+      t.accounting ? 'Có' : 'Không',
+      t.status,
+      t.creator || 'Hệ thống',
+      t.note || ''
+    ]);
+  });
+  
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+  
+  // Format column widths for export
+  const wscols = [
+    { wch: 15 }, // Code
+    { wch: 18 }, // Time
+    { wch: 12 }, // Type
+    { wch: 25 }, // Category
+    { wch: 35 }, // Partner
+    { wch: 18 }, // Method
+    { wch: 15 }, // Value
+    { wch: 15 }, // Accounting
+    { wch: 15 }, // Status
+    { wch: 15 }, // Creator
+    { wch: 30 }  // Note
+  ];
+  ws['!cols'] = wscols;
+
+  XLSX.utils.book_append_sheet(wb, ws, "Báo Cáo Sổ Quỹ");
+  
+  const dateStr = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `So_quy_bao_cao_${dateStr}.xlsx`);
+  showToast('Xuất báo cáo Sổ quỹ Excel thành công!', 'success');
+}
+
+// Helper: updates customer debt and records debt history when manual receipt is created or cancelled
+async function updateCustomerDebtOnReceipt(payerName, amount, isSubtract = true, receiptCode = '', category = '') {
+  const cust = state.customers.find(c => c.name === payerName);
+  if (!cust) return;
+  
+  if (isSubtract) {
+    cust.debt = cust.debt - amount;
+    if (!cust.debtHistory) cust.debtHistory = [];
+    cust.debtHistory.push({
+      id: `pay-${Date.now()}`,
+      date: new Date().toISOString(),
+      type: 'payment',
+      amount: amount,
+      notes: `Thu tiền từ phiếu thu ${receiptCode} (${category})`,
+      debtAfter: cust.debt
+    });
+  } else {
+    cust.debt = cust.debt + amount;
+    if (!cust.debtHistory) cust.debtHistory = [];
+    cust.debtHistory.push({
+      id: `void-${Date.now()}`,
+      date: new Date().toISOString(),
+      type: 'adjust',
+      amount: amount,
+      notes: `Hủy phiếu thu ${receiptCode} - khôi phục công nợ`,
+      debtAfter: cust.debt
+    });
+  }
+  
+  // Save locally and cloud
+  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  await dbSaveCustomer(cust);
+}
+
