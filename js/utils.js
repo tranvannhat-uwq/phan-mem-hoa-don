@@ -374,3 +374,78 @@ export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
     }
   });
 }
+
+export function docSoTienBangChu(number) {
+  if (number === 0) return 'Không đồng';
+  
+  const chuSo = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+  let units = ['', 'nghìn', 'triệu', 'tỷ'];
+  
+  let temp = Math.abs(number);
+  let blocks = [];
+  
+  while (temp > 0) {
+    blocks.push(temp % 1000);
+    temp = Math.floor(temp / 1000);
+  }
+  
+  let result = '';
+  
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    let block = blocks[i];
+    if (block === 0) {
+      continue;
+    }
+    
+    let tram = Math.floor(block / 100);
+    let chuc = Math.floor((block % 100) / 10);
+    let donvi = block % 10;
+    
+    let blockStr = '';
+    
+    if (i < blocks.length - 1 || tram > 0) {
+      blockStr += chuSo[tram] + ' trăm ';
+    }
+    
+    if (chuc === 0) {
+      if (donvi > 0 && (i < blocks.length - 1 || tram > 0)) {
+        blockStr += 'linh ';
+      }
+    } else if (chuc === 1) {
+      blockStr += 'mười ';
+    } else {
+      blockStr += chuSo[chuc] + ' mươi ';
+    }
+    
+    if (donvi === 1) {
+      if (chuc > 1) {
+        blockStr += 'mốt ';
+      } else {
+        blockStr += 'một ';
+      }
+    } else if (donvi === 5) {
+      if (chuc > 0) {
+        blockStr += 'lăm ';
+      } else {
+        blockStr += 'năm ';
+      }
+    } else if (donvi === 4) {
+      if (chuc > 1) {
+        blockStr += 'tư ';
+      } else {
+        blockStr += 'bốn ';
+      }
+    } else if (donvi > 0) {
+      blockStr += chuSo[donvi] + ' ';
+    }
+    
+    blockStr += units[i] + ' ';
+    result += blockStr;
+  }
+  
+  result = result.trim().replace(/\s+/g, ' ');
+  if (result.length > 0) {
+    result = result.charAt(0).toUpperCase() + result.slice(1) + ' đồng chẵn';
+  }
+  return result;
+}

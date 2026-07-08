@@ -64,6 +64,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" data-target="suppliers-panel">
+            <i data-lucide="truck"></i>
+            Nhà cung cấp
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" data-target="products-panel">
             <i data-lucide="package"></i>
             Sản phẩm
@@ -988,6 +994,47 @@
         </div>
       </section>
 
+      <!-- Suppliers Panel -->
+      <section id="suppliers-panel" class="panel">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h2 class="panel-title"><i data-lucide="truck"></i> Danh sách nhà cung cấp</h2>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-open-add-supplier-modal">
+                <i data-lucide="user-plus"></i> Thêm nhà cung cấp
+              </button>
+            </div>
+          </div>
+
+          <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
+            <div class="search-wrapper" style="flex: 1; min-width: 250px;">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" class="form-control-search" id="supplier-search-input" placeholder="Tìm kiếm theo mã, tên hoặc số điện thoại...">
+            </div>
+          </div>
+
+          <!-- Suppliers Table -->
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th style="width: 12%;">Mã NCC</th>
+                  <th style="width: 25%;">Tên nhà cung cấp</th>
+                  <th style="width: 15%;">Số điện thoại</th>
+                  <th style="width: 25%;">Địa chỉ</th>
+                  <th style="width: 15%;">Ghi chú</th>
+                  <th style="width: 8%; text-align: center;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="suppliers-table-body">
+                <!-- Dynamic load -->
+              </tbody>
+            </table>
+          </div>
+          <div id="suppliers-pagination"></div>
+        </div>
+      </section>
+
       <!-- Price Lists Panel -->
       <section id="pricelists-panel" class="panel">
         <div class="glass-panel">
@@ -1628,7 +1675,7 @@
 
   <!-- Printable Invoice Template (Hidden on Screen, visible in Print mode) -->
   <div id="print-invoice-template">
-    <div class="print-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2.5px solid #000; padding-bottom: 12px; margin-bottom: 20px; width: 100%;">
+    <div class="print-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2.5px solid #000; padding-bottom: 4px; margin-bottom: 12px; width: 100%;">
       <div class="print-logo-container" style="display: flex; align-items: center; justify-content: flex-start; min-width: 150px; flex-shrink: 0;">
         <!-- Logo SVG hình giọt nước/lon sơn nghệ thuật mặc định -->
         <svg id="print-logo-svg" width="45" height="45" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: block; color: #000;">
@@ -1636,8 +1683,8 @@
         </svg>
         <img src="" alt="Brand Logo" style="display: none; object-fit: contain;" />
       </div>
-      <!-- Thông tin doanh nghiệp bên cạnh logo -->
-      <div style="line-height: 1.4; color: #000; font-size: 11pt; font-weight: 500; flex: 1; min-width: 0; margin-left: 20px; text-align: left;">
+      <!-- Thông tin doanh nghiệp bên cạnh logo - Tăng cỡ chữ 15% (từ 11pt thành 12.5pt) -->
+      <div style="line-height: 1.4; color: #000; font-size: 12.5pt; font-weight: 500; flex: 1; min-width: 0; margin-left: 20px; text-align: left;">
         <p style="margin: 0; white-space: nowrap;">Trụ sở chính: <span id="print-company-address-main">Tiên Kha - Phúc Thịnh - Hà Nội</span></p>
         <p style="margin: 0; margin-top: 2px; white-space: nowrap;">Nhà máy SX: <span id="print-company-address-factory">TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên</span></p>
         <p id="print-company-ddkd" style="margin: 0; margin-top: 2px; white-space: nowrap;">ĐĐKD: <span id="print-company-address-business">228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh</span></p>
@@ -1650,27 +1697,27 @@
     <div class="print-title-section" style="margin-top: 15px; margin-bottom: 25px; color: #000;">
       <div id="print-company-name-large" style="font-size: 13pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5px;">CÔNG TY CỔ PHẦN ABS JAPAN</div>
       <h1 id="print-invoice-title-large" style="text-align: center; font-size: 22pt; font-weight: bold; margin: 15px 0 5px 0; text-transform: uppercase; color: #000;">HÓA ĐƠN BÁN HÀNG</h1>
-      <div style="text-align: center; font-size: 12pt; line-height: 1.4;">
-        <p style="margin: 0; font-weight: bold;">Mã hóa đơn: <span id="print-invoice-id">HD-000000</span></p>
-        <p style="margin: 0; margin-top: 4px;">Ngày lập: <span id="print-invoice-date">23/06/2026</span></p>
+      <!-- Mã hóa đơn và Ngày lập cùng hàng -->
+      <div style="text-align: center; font-size: 12pt; line-height: 1.4; display: flex; justify-content: center; gap: 30px;">
+        <p style="margin: 0;"><strong>Mã hóa đơn:</strong> <span id="print-invoice-id">HD-000000</span></p>
+        <p style="margin: 0;"><strong>Ngày lập:</strong> <span id="print-invoice-date">23/06/2026</span></p>
       </div>
     </div>
 
-    <div class="print-info-grid">
-      <div>
-        <p><strong>Đơn vị bán hàng:</strong> <span id="print-seller-name">CÔNG TY CỔ PHẦN ABS JAPAN</span></p>
-        <p><strong>Hotline:</strong> <span id="print-seller-hotline">088.603.7878 - 0961.030.923</span></p>
-        <p><strong>Email:</strong> nhamaysonnano@gmail.com</p>
+    <!-- Khối thông tin chi tiết khách hàng và đơn hàng -->
+    <div class="print-info-section" style="font-size: 11.5pt; margin-bottom: 12px; color: #000 !important; line-height: 1.4; text-align: left;">
+      <div style="display: flex; justify-content: space-between;">
+        <span>- <strong>Họ tên người nhận hàng:</strong> <span id="print-customer-name" style="font-weight: bold;">Khách hàng vãng lai</span></span>
+        <span><strong>SĐT:</strong> <span id="print-customer-phone" style="font-weight: bold;">N/A</span></span>
       </div>
-      <div>
-        <p><strong>Khách hàng:</strong> <span id="print-customer-name">Khách hàng vãng lai</span></p>
-        <div id="print-customer-info-extra" style="font-size: 13pt; color: #000; line-height: 1.4;"></div>
-        <p style="display: none;"><strong>Ghi chú:</strong> <span id="print-invoice-notes">N/A</span></p>
+      <p style="margin: 0; margin-top: 2px;">- <strong>Địa chỉ:</strong> <span id="print-customer-address">N/A</span></p>
+      <p style="margin: 0; margin-top: 2px;">- <strong>Lý do xuất bán:</strong> <span id="print-invoice-reason">Xuất bán hàng</span></p>
+      <p style="margin: 0; margin-top: 2px;">- <strong>Xuất tại kho (ngăn lô):</strong> <span id="print-warehouse-name">CÔNG TY CỔ PHẦN ABS JAPAN</span></p>
+      <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+        <span>- <strong>Nhân viên bán hàng:</strong> <span id="print-creator-name">admin</span></span>
+        <span><strong>Hãng sơn:</strong> <span id="print-order-brand" style="text-transform: uppercase; font-weight: bold;">N/A</span></span>
       </div>
-    </div>
-
-    <div style="font-size: 13pt; margin-top: 10px; margin-bottom: 10px; color: #000;">
-      <strong>Hãng sơn:</strong> <span id="print-order-brand" style="text-transform: uppercase; font-weight: bold;">N/A</span>
+      <p style="display: none;">- <strong>Ghi chú:</strong> <span id="print-invoice-notes">N/A</span></p>
     </div>
 
     <table class="print-table" id="print-invoice-table">
@@ -1694,6 +1741,19 @@
         <span>TỔNG THANH TOÁN:</span>
         <span id="print-total-payable">0 ₫</span>
       </div>
+      <div class="print-summary-row" id="print-old-debt-row" style="display: none; border-top: 1px dashed #000; margin-top: 4px; padding-top: 4px;">
+        <span>Nợ cũ:</span>
+        <span id="print-old-debt">0 ₫</span>
+      </div>
+      <div class="print-summary-row" id="print-new-debt-row" style="display: none;">
+        <span>Tổng nợ hiện tại:</span>
+        <span id="print-new-debt">0 ₫</span>
+      </div>
+    </div>
+
+    <!-- Tổng số tiền viết bằng chữ -->
+    <div id="print-amount-in-words-container" style="font-size: 12pt; font-style: italic; color: #000; margin-top: 8px; margin-bottom: 10px; text-align: left; padding-top: 0;">
+      - <strong>Tổng số tiền (viết bằng chữ):</strong> <span id="print-amount-in-words" style="font-weight: 500;">...</span>
     </div>
 
     <div class="print-signatures">
@@ -1986,6 +2046,49 @@
     </div>
   </div>
 
+  <!-- Thêm/Sửa Nhà Cung Cấp Modal -->
+  <div class="modal-overlay" id="supplier-modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="supplier-modal-title">Thêm nhà cung cấp</h3>
+        <button class="modal-close" id="btn-close-supplier-modal">&times;</button>
+      </div>
+      <form id="supplier-form">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+          <input type="hidden" id="supplier-id">
+          <div class="form-group">
+            <label class="form-label" for="supplier-code">Mã nhà cung cấp <span style="color: red;">*</span></label>
+            <input type="text" class="form-control" id="supplier-code" placeholder="Ví dụ: NCC001" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supplier-name">Tên nhà cung cấp <span style="color: red;">*</span></label>
+            <input type="text" class="form-control" id="supplier-name" placeholder="Tên công ty / nhà máy cung cấp" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supplier-phone">Số điện thoại</label>
+            <input type="text" class="form-control" id="supplier-phone" placeholder="Nhập SĐT" style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supplier-address">Địa chỉ</label>
+            <input type="text" class="form-control" id="supplier-address" placeholder="Nhập địa chỉ" style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supplier-debt">Công nợ ban đầu (đ)</label>
+            <input type="number" class="form-control" id="supplier-debt" placeholder="0" value="0" style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supplier-notes">Ghi chú</label>
+            <textarea class="form-control" id="supplier-notes" rows="2" placeholder="Ghi chú thêm..." style="width: 100%; font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-supplier-modal">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary btn-sm">Lưu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Login Screen Overlay -->
   <div id="login-screen" class="login-overlay">
     <div class="login-card">
@@ -2003,7 +2106,7 @@
           <label class="form-label" for="login-password">Mật khẩu</label>
           <input type="password" class="form-control" id="login-password" placeholder="Nhập mật khẩu" required autocomplete="current-password" style="width: 100%;">
         </div>
-        <button type="submit" class="btn btn-primary" style="padding: 0.75rem; margin-top: 0.5rem; width: 100%; font-weight: 600;">
+        <button type="submit" id="btn-login-submit" class="btn btn-primary" style="padding: 0.75rem; margin-top: 0.5rem; width: 100%; font-weight: 600;">
           <i data-lucide="log-in"></i> ĐĂNG NHẬP
         </button>
       </form>
@@ -2102,7 +2205,8 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="payment-recipient">Người nhận</label>
-            <input type="text" class="form-control" id="payment-recipient" placeholder="Nhập tên người nhận" required style="width: 100%;">
+            <input type="text" class="form-control" id="payment-recipient" list="payment-recipient-list" placeholder="Chọn hoặc nhập tên người nhận" required style="width: 100%;">
+            <datalist id="payment-recipient-list"></datalist>
           </div>
           <div class="form-group">
             <label class="form-label" for="payment-value">Giá trị (đ)</label>

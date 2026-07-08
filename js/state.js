@@ -21,5 +21,7 @@ export const state = {
   dashboardChartView: 'month', // 'day', 'week', 'month', 'year'
   historyPage: 1,
   productsPage: 1,
-  customersPage: 1
+  customersPage: 1,
+  suppliers: [],
+  suppliersPage: 1
 };

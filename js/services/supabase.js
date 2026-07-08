@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY } from '../config.js';
+import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser } from '../utils.js';
 
 export let supabaseClient = null;
@@ -18,6 +18,120 @@ export let tableStartingBalancesName = 'starting_balances';
 
 export function setCloudActive(active) {
   isCloudActive = active;
+}
+
+// Tải dữ liệu dự phòng từ LocalStorage khi mất kết nối mạng
+export function loadLocalStorageBackup() {
+  const storedProducts = localStorage.getItem('billing_system_products');
+  const storedOrders = localStorage.getItem('billing_system_orders');
+  
+  if (storedProducts) {
+    state.products = JSON.parse(storedProducts);
+  } else {
+    state.products = [...defaultProducts];
+    localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+  }
+  
+  if (storedOrders) {
+    state.savedOrders = JSON.parse(storedOrders);
+  } else {
+    state.savedOrders = [];
+    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+  }
+
+  const storedCustomers = localStorage.getItem('billing_system_customers');
+  if (storedCustomers) {
+    state.customers = JSON.parse(storedCustomers);
+  } else {
+    state.customers = [];
+    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  }
+
+  const storedSuppliers = localStorage.getItem('billing_system_suppliers');
+  if (storedSuppliers) {
+    state.suppliers = JSON.parse(storedSuppliers);
+  } else {
+    state.suppliers = [
+      { id: 'supplier-abs', code: 'NCC001', name: 'CÔNG TY CỔ PHẦN ABS JAPAN', phone: '088.603.7878', address: 'Tiên Kha - Phúc Thịnh - Hà Nội', debt: 0, notes: 'Nhà máy cung cấp sơn chính hãng Nano10*' }
+    ];
+    localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
+  }
+
+  const storedUsers = localStorage.getItem('billing_system_users');
+  if (storedUsers) {
+    const rawList = JSON.parse(storedUsers).filter(u => u.username !== 'sale1' && u.username !== 'sale2');
+    const uniqueUsers = [];
+    rawList.forEach(u => {
+      const isOldAbs = u.username === 'abs_japan' || u.username === 'abs-japan' || u.username === 'absjapan';
+      if (isOldAbs) {
+        const hasNewAbs = rawList.some(ru => ru.username === 'ctyabs@lendon.com');
+        if (hasNewAbs) return;
+      }
+      const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
+      if (!isDup) {
+        uniqueUsers.push(u);
+      }
+    });
+    state.users = uniqueUsers;
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+  } else {
+    state.users = [
+      { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
+      { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
+      { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
+      { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
+      { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
+    ];
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+  }
+
+  const storedPricelists = localStorage.getItem('billing_system_pricelists');
+  if (storedPricelists) {
+    state.pricelists = JSON.parse(storedPricelists);
+  } else {
+    state.pricelists = [
+      {
+        id: 'pl-02',
+        name: 'Bảng giá 02',
+        brandDiscounts: {
+          'Nano10*': 74.7,
+          'Hatacco nano': 0,
+          'mutsutec': 0,
+          'tdkaw': 0,
+          'cova': 0,
+          'festivanano': 0
+        }
+      },
+      {
+        id: 'pl-03',
+        name: 'Bảng giá 03',
+        brandDiscounts: {
+          'Nano10*': 76,
+          'Hatacco nano': 0,
+          'mutsutec': 0,
+          'tdkaw': 0,
+          'cova': 0,
+          'festivanano': 0
+        }
+      }
+    ];
+    localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
+  }
+
+  const storedBrands = localStorage.getItem('billing_system_brands');
+  if (storedBrands) {
+    state.brands = JSON.parse(storedBrands);
+  } else {
+    state.brands = [
+      { name: 'Nano10*', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
+      { name: 'Hatacco nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'hatacco.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
+      { name: 'Festiva nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'festiva.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
+      { name: 'mutsutec', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
+      { name: 'tdkaw', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
+      { name: 'cova', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' }
+    ];
+    localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
+  }
 }
 
 // Kết nối đến Supabase
@@ -85,7 +199,13 @@ export async function connectSupabase(url, key, verbose = true) {
     
     updateDbStatusUI('cloud');
     
-    await fetchCloudData();
+    // Chỉ tải dữ liệu đám mây nếu có phiên đăng nhập hợp lệ
+    const { data: { session } } = await client.auth.getSession();
+    if (session) {
+      await fetchCloudData();
+    } else {
+      loadLocalStorageBackup();
+    }
     
     if (verbose) {
       showToast('Kết nối cơ sở dữ liệu đám mây Supabase thành công!');
@@ -176,256 +296,316 @@ async function fetchFullTableData(tableName) {
 export async function fetchCloudData() {
   if (!supabaseClient) return;
   try {
-    // 1. Fetch Products
-    const { data: prodData, error: prodErr } = await supabaseClient
-      .from(tableProductsName)
-      .select('*')
-      .order('code', { ascending: true });
+    // Luồng tải dữ liệu lõi (nếu lỗi sẽ dừng và báo lỗi toàn cục)
+    const fetchProducts = async () => {
+      const { data: prodData, error: prodErr } = await supabaseClient
+        .from(tableProductsName)
+        .select('*')
+        .order('code', { ascending: true });
+        
+      if (prodErr) throw prodErr;
       
-    if (prodErr) throw prodErr;
-    
-    const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
-    state.products = (prodData || []).map(row => {
-      const local = localProducts.find(lp => lp.code === row.code);
-      return {
-        code: row.code,
-        name: row.name,
-        brand: row.brand !== undefined && row.brand !== null ? row.brand : (local ? local.brand : 'Nano10*'),
-        priceThung: row.price_thung !== undefined && row.price_thung !== null ? row.price_thung : (local && local.priceThung !== undefined ? local.priceThung : (row.price !== undefined ? row.price : 0)),
-        priceLon: row.price_lon !== undefined && row.price_lon !== null ? row.price_lon : (local && local.priceLon !== undefined ? local.priceLon : 0),
-        priceHop: row.price_hop !== undefined && row.price_hop !== null ? row.price_hop : (local && local.priceHop !== undefined ? local.priceHop : 0),
-        priceBao: row.price_bao !== undefined && row.price_bao !== null ? row.price_bao : (local && local.priceBao !== undefined ? local.priceBao : 0),
-        priceTui: row.price_tui !== undefined && row.price_tui !== null ? row.price_tui : (local && local.priceTui !== undefined ? local.priceTui : 0),
-        weightThung: row.weight_thung !== undefined && row.weight_thung !== null ? row.weight_thung : (local && local.weightThung !== undefined ? local.weightThung : ''),
-        weightBao: row.weight_bao !== undefined && row.weight_bao !== null ? row.weight_bao : (local && local.weightBao !== undefined ? local.weightBao : ''),
-        weightLon: row.weight_lon !== undefined && row.weight_lon !== null ? row.weight_lon : (local && local.weightLon !== undefined ? local.weightLon : ''),
-        weightHop: row.weight_hop !== undefined && row.weight_hop !== null ? row.weight_hop : (local && local.weightHop !== undefined ? local.weightHop : ''),
-        weightTui: row.weight_tui !== undefined && row.weight_tui !== null ? row.weight_tui : (local && local.weightTui !== undefined ? local.weightTui : '')
-      };
-    });
-    localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-    
-    // 2. Fetch Orders (bao gồm đơn chốt và đơn nháp từ 2 bảng riêng biệt)
-    // Tự động xóa đơn nháp cũ hơn 2 ngày trên cloud trước khi tải dữ liệu
-    try {
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      await supabaseClient
-        .from(tableDraftOrdersName)
-        .delete()
-        .lt('created_at', twoDaysAgo.toISOString());
-    } catch (cleanErr) {
-      console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
-    }
-
-    const [rawOrders, rawDrafts] = await Promise.all([
-      fetchFullTableData(tableOrdersName),
-      fetchFullTableData(tableDraftOrdersName)
-    ]);
-
-    const mapOrderRow = (order, isDraft) => {
-      let status = isDraft ? 'draft' : (order.status || 'settled');
-      let notes = order.notes || '';
-      return {
-        id: order.id,
-        customerId: order.customer_id || null,
-        customerName: order.customer_name,
-        notes: notes,
-        items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
-        date: order.created_at,
-        totalMarket: parseFloat(order.total_market || 0),
-        totalDiscount: parseFloat(order.total_discount || 0),
-        shippingSupport: order.shipping_support || false,
-        shippingDiscount: parseFloat(order.shipping_discount || 0),
-        totalPayable: parseFloat(order.total_payable || 0),
-        pricelistId: order.pricelist_id || 'retail',
-        createdBy: order.created_by || 'admin',
-        status: status
-      };
+      const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
+      state.products = (prodData || []).map(row => {
+        const local = localProducts.find(lp => lp.code === row.code);
+        return {
+          code: row.code,
+          name: row.name,
+          brand: row.brand !== undefined && row.brand !== null ? row.brand : (local ? local.brand : 'Nano10*'),
+          priceThung: row.price_thung !== undefined && row.price_thung !== null ? row.price_thung : (local && local.priceThung !== undefined ? local.priceThung : (row.price !== undefined ? row.price : 0)),
+          priceLon: row.price_lon !== undefined && row.price_lon !== null ? row.price_lon : (local && local.priceLon !== undefined ? local.priceLon : 0),
+          priceHop: row.price_hop !== undefined && row.price_hop !== null ? row.price_hop : (local && local.priceHop !== undefined ? local.priceHop : 0),
+          priceBao: row.price_bao !== undefined && row.price_bao !== null ? row.price_bao : (local && local.priceBao !== undefined ? local.priceBao : 0),
+          priceTui: row.price_tui !== undefined && row.price_tui !== null ? row.price_tui : (local && local.priceTui !== undefined ? local.priceTui : 0),
+          weightThung: row.weight_thung !== undefined && row.weight_thung !== null ? row.weight_thung : (local && local.weightThung !== undefined ? local.weightThung : ''),
+          weightBao: row.weight_bao !== undefined && row.weight_bao !== null ? row.weight_bao : (local && local.weightBao !== undefined ? local.weightBao : ''),
+          weightLon: row.weight_lon !== undefined && row.weight_lon !== null ? row.weight_lon : (local && local.weightLon !== undefined ? local.weightLon : ''),
+          weightHop: row.weight_hop !== undefined && row.weight_hop !== null ? row.weight_hop : (local && local.weightHop !== undefined ? local.weightHop : ''),
+          weightTui: row.weight_tui !== undefined && row.weight_tui !== null ? row.weight_tui : (local && local.weightTui !== undefined ? local.weightTui : '')
+        };
+      });
+      localStorage.setItem('billing_system_products', JSON.stringify(state.products));
     };
 
-    const mappedOrders = rawOrders.map(o => mapOrderRow(o, false));
-    const mappedDrafts = rawDrafts.map(o => mapOrderRow(o, true));
+    const fetchOrders = async () => {
+      // Tự động xóa đơn nháp cũ hơn 2 ngày trên cloud trước khi tải dữ liệu
+      try {
+        const twoDaysAgo = new Date();
+        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+        await supabaseClient
+          .from(tableDraftOrdersName)
+          .delete()
+          .lt('created_at', twoDaysAgo.toISOString());
+      } catch (cleanErr) {
+        console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
+      }
 
-    state.savedOrders = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
+      const [rawOrders, rawDrafts] = await Promise.all([
+        fetchFullTableData(tableOrdersName),
+        fetchFullTableData(tableDraftOrdersName)
+      ]);
 
-    // 3. Fetch Customers
-    try {
-      const customerData = await fetchFullTableData(tableCustomersName);
+      const mapOrderRow = (order, isDraft) => {
+        let status = isDraft ? 'draft' : (order.status || 'settled');
+        let notes = order.notes || '';
+        return {
+          id: order.id,
+          customerId: order.customer_id || null,
+          customerName: order.customer_name,
+          notes: notes,
+          items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
+          date: order.created_at,
+          totalMarket: parseFloat(order.total_market || 0),
+          totalDiscount: parseFloat(order.total_discount || 0),
+          shippingSupport: order.shipping_support || false,
+          shippingDiscount: parseFloat(order.shipping_discount || 0),
+          totalPayable: parseFloat(order.total_payable || 0),
+          pricelistId: order.pricelist_id || 'retail',
+          createdBy: order.created_by || 'admin',
+          status: status
+        };
+      };
 
-      state.customers = (customerData || []).map(cust => ({
-        id: cust.id,
-        code: cust.code,
-        name: cust.name,
-        phone: cust.phone,
-        address: cust.address,
-        assignedBrand: cust.assigned_brand || 'Tất cả',
-        brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
-        shippingSupport: cust.shipping_support || false,
-        debt: parseFloat(cust.debt || 0),
-        totalTransaction: parseFloat(cust.total_transaction || 0),
-        notes: cust.notes || '',
-        pricelistId: cust.pricelist_id || '',
-        managedBy: cust.managed_by || '',
-        debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
-      }));
-      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-    } catch (custErr) {
-      console.warn("Could not load customers from Supabase:", custErr.message);
-    }
+      const mappedOrders = rawOrders.map(o => mapOrderRow(o, false));
+      const mappedDrafts = rawDrafts.map(o => mapOrderRow(o, true));
 
-    // 4. Fetch Price Lists
-    try {
-      const { data: plData, error: plErr } = await supabaseClient
-        .from(tablePricelistsName)
-        .select('*');
+      state.savedOrders = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
+    };
 
-      if (plErr) throw plErr;
+    // Các luồng tải phụ trợ (lỗi từng bảng sẽ được bắt riêng biệt để tránh hỏng cả ứng dụng)
+    const fetchCustomers = async () => {
+      try {
+        const customerData = await fetchFullTableData(tableCustomersName);
 
-      state.pricelists = (plData || []).map(pl => ({
-        id: pl.id,
-        name: pl.name,
-        brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
-      }));
-      localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
-    } catch (plErr) {
-      console.warn("Could not load pricelists from Supabase:", plErr.message);
-    }
+        state.customers = (customerData || []).map(cust => ({
+          id: cust.id,
+          code: cust.code,
+          name: cust.name,
+          phone: cust.phone,
+          address: cust.address,
+          assignedBrand: cust.assigned_brand || 'Tất cả',
+          brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
+          shippingSupport: cust.shipping_support || false,
+          debt: parseFloat(cust.debt || 0),
+          totalTransaction: parseFloat(cust.total_transaction || 0),
+          notes: cust.notes || '',
+          pricelistId: cust.pricelist_id || '',
+          managedBy: cust.managed_by || '',
+          debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
+        }));
+        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      } catch (custErr) {
+        console.warn("Could not load customers from Supabase:", custErr.message);
+      }
+    };
 
-    // 5. Fetch Users
-    try {
-      const { data: userData, error: userErr } = await supabaseClient
-        .from(tableUsersName)
-        .select('*');
+    const fetchPricelists = async () => {
+      try {
+        const { data: plData, error: plErr } = await supabaseClient
+          .from(tablePricelistsName)
+          .select('*');
 
-      if (userErr) throw userErr;
+        if (plErr) throw plErr;
 
-      const cloudUsers = (userData || []).map(u => ({
-        id: u.id,
-        username: u.username,
-        password: u.password,
-        displayName: u.display_name,
-        role: u.role || 'sale',
-        isExternal: u.is_external || false
-      }));
+        state.pricelists = (plData || []).map(pl => ({
+          id: pl.id,
+          name: pl.name,
+          brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
+        }));
+        localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
+      } catch (plErr) {
+        console.warn("Could not load pricelists from Supabase:", plErr.message);
+      }
+    };
 
-      // Danh sách tài khoản hệ thống mặc định dự phòng
-      const defaultUsers = [
-        { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
-        { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
-        { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
-        { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
-        { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
-      ];
+    const fetchUsers = async () => {
+      try {
+        const { data: userData, error: userErr } = await supabaseClient
+          .from(tableUsersName)
+          .select('*');
 
-      // Gộp hai danh sách, chỉ tự động gộp tài khoản mặc định nếu dữ liệu Cloud trống (CSDL trống hoặc chưa đồng bộ)
-      const merged = [...cloudUsers];
-      if (cloudUsers.length === 0) {
-        defaultUsers.forEach(def => {
-          const defClean = (def.username || '').toLowerCase().trim();
-          const hasUser = merged.some(u => (u.username || '').toLowerCase().trim() === defClean);
-          if (!hasUser) {
-            merged.push(def);
+        if (userErr) throw userErr;
+
+        const defaultUsers = [
+          { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
+          { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
+          { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
+          { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
+          { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
+        ];
+
+        const cloudUsers = (userData || []).map(u => {
+          let pwd = u.password;
+          if (!pwd || pwd === '') {
+            const def = defaultUsers.find(du => isSameUser(du.username, u.username));
+            if (def) pwd = def.password;
+          }
+          return {
+            id: u.id,
+            username: u.username,
+            password: pwd,
+            displayName: u.display_name,
+            role: u.role || 'sale',
+            isExternal: u.is_external || false
+          };
+        });
+
+        const merged = [...cloudUsers];
+        if (cloudUsers.length === 0) {
+          defaultUsers.forEach(def => {
+            const defClean = (def.username || '').toLowerCase().trim();
+            const hasUser = merged.some(u => (u.username || '').toLowerCase().trim() === defClean);
+            if (!hasUser) {
+              merged.push(def);
+            }
+          });
+        }
+        
+        const uniqueUsers = [];
+        merged.forEach(u => {
+          const isOldAbs = u.username === 'abs_japan' || u.username === 'abs-japan' || u.username === 'absjapan';
+          if (isOldAbs) {
+            const hasNewAbs = merged.some(ru => ru.username === 'ctyabs@lendon.com');
+            if (hasNewAbs) return;
+          }
+          const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
+          if (!isDup) {
+            uniqueUsers.push(u);
           }
         });
+
+        state.users = uniqueUsers;
+        localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+      } catch (uErr) {
+        console.warn("Could not load users from Supabase:", uErr.message);
       }
-      
-      const uniqueUsers = [];
-      merged.forEach(u => {
-        const isOldAbs = u.username === 'abs_japan' || u.username === 'abs-japan' || u.username === 'absjapan';
-        if (isOldAbs) {
-          const hasNewAbs = merged.some(ru => ru.username === 'ctyabs@lendon.com');
-          if (hasNewAbs) return;
-        }
-        const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
-        if (!isDup) {
-          uniqueUsers.push(u);
-        }
-      });
+    };
 
-      state.users = uniqueUsers;
-      localStorage.setItem('billing_system_users', JSON.stringify(state.users));
-    } catch (uErr) {
-      console.warn("Could not load users from Supabase:", uErr.message);
-    }
+    const fetchBrands = async () => {
+      try {
+        const { data: brandData, error: brandErr } = await supabaseClient
+          .from(tableBrandsName)
+          .select('*')
+          .order('name', { ascending: true });
 
-    // 6. Fetch Brands
-    try {
-      const { data: brandData, error: brandErr } = await supabaseClient
-        .from(tableBrandsName)
-        .select('*')
-        .order('name', { ascending: true });
+        if (brandErr) throw brandErr;
 
-      if (brandErr) throw brandErr;
-
-      state.brands = (brandData || []).map(b => ({
-        name: b.name,
-        companyName: b.company_name,
-        logoFilename: b.logo_filename,
-        hotline: b.hotline,
-        cskh: b.cskh,
-        email: b.email,
-        addressMain: b.address_main,
-        addressFactory: b.address_factory,
-        addressBusiness: b.address_business || null
-      }));
-      localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
-    } catch (brandErr) {
-      console.warn("Could not load brands from Supabase:", brandErr.message);
-      state.brands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
-    }
-
-    // 7. Fetch Cashbook Transactions
-    try {
-      const { data: txData, error: txErr } = await supabaseClient
-        .from(tableCashbookTransactionsName)
-        .select('*')
-        .order('date', { ascending: false });
-
-      if (txErr) throw txErr;
-
-      if (txData) {
-        const cloudTxs = txData.map(t => ({
-          id: t.id,
-          date: t.date,
-          type: t.type,
-          category: t.category,
-          partner: t.partner,
-          value: parseFloat(t.value || 0),
-          method: t.method,
-          accounting: t.accounting,
-          status: t.status,
-          creator: t.creator,
-          note: t.note,
-          starred: t.starred
+        state.brands = (brandData || []).map(b => ({
+          name: b.name,
+          companyName: b.company_name,
+          logoFilename: b.logo_filename,
+          hotline: b.hotline,
+          cskh: b.cskh,
+          email: b.email,
+          addressMain: b.address_main,
+          addressFactory: b.address_factory,
+          addressBusiness: b.address_business || null
         }));
-        localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
+        localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
+      } catch (brandErr) {
+        console.warn("Could not load brands from Supabase:", brandErr.message);
+        state.brands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
       }
-    } catch (txErr) {
-      console.warn("Could not load cashbook transactions from Supabase:", txErr.message);
-    }
+    };
 
-    // 8. Fetch Starting Balances
-    try {
-      const { data: balData, error: balErr } = await supabaseClient
-        .from(tableStartingBalancesName)
-        .select('*')
-        .eq('id', 'current_balances')
-        .single();
+    const fetchCashbook = async () => {
+      try {
+        const { data: txData, error: txErr } = await supabaseClient
+          .from(tableCashbookTransactionsName)
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (balErr && balErr.code !== 'PGRST116') throw balErr;
+        if (txErr) throw txErr;
 
-      if (balData) {
-        const cloudBal = {
-          cash: parseFloat(balData.cash || 0),
-          bank: parseFloat(balData.bank || 0),
-          wallet: parseFloat(balData.wallet || 0)
-        };
-        localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(cloudBal));
+        if (txData) {
+          const cloudTxs = txData.map(t => ({
+            id: t.id,
+            date: t.date,
+            type: t.type,
+            category: t.category,
+            partner: t.partner,
+            value: parseFloat(t.value || 0),
+            method: t.method,
+            accounting: t.accounting,
+            status: t.status,
+            creator: t.creator,
+            note: t.note,
+            starred: t.starred
+          }));
+          localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
+        }
+      } catch (txErr) {
+        console.warn("Could not load cashbook transactions from Supabase:", txErr.message);
       }
-    } catch (balErr) {
-      console.warn("Could not load starting balances from Supabase:", balErr.message);
-    }
+    };
+
+    const fetchStartingBalances = async () => {
+      try {
+        const { data: balData, error: balErr } = await supabaseClient
+          .from(tableStartingBalancesName)
+          .select('*')
+          .eq('id', 'current_balances')
+          .single();
+
+        if (balErr && balErr.code !== 'PGRST116') throw balErr;
+
+        if (balData) {
+          const cloudBal = {
+            cash: parseFloat(balData.cash || 0),
+            bank: parseFloat(balData.bank || 0),
+            wallet: parseFloat(balData.wallet || 0)
+          };
+          localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(cloudBal));
+        }
+      } catch (balErr) {
+        console.warn("Could not load starting balances from Supabase:", balErr.message);
+      }
+    };
+    const fetchSuppliers = async () => {
+      try {
+        const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
+        const { data, error } = await supabaseClient
+          .from(tableName)
+          .select('*')
+          .order('name', { ascending: true });
+        if (error) throw error;
+        if (data) {
+          state.suppliers = data.map(s => ({
+            id: s.id,
+            code: s.code,
+            name: s.name,
+            phone: s.phone,
+            address: s.address,
+            debt: parseFloat(s.debt || 0),
+            notes: s.notes || ''
+          }));
+          localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
+        }
+      } catch (err) {
+        console.warn("Could not load suppliers from Supabase:", err.message);
+        const stored = localStorage.getItem('billing_system_suppliers');
+        if (stored) {
+          state.suppliers = JSON.parse(stored);
+        } else {
+          state.suppliers = [];
+          localStorage.setItem('billing_system_suppliers', JSON.stringify([]));
+        }
+      }
+    };
+
+    // Tải song song tất cả các bảng dữ liệu bằng Promise.all để tăng tốc độ phản hồi tối đa
+    await Promise.all([
+      fetchProducts(),
+      fetchOrders(),
+      fetchCustomers(),
+      fetchPricelists(),
+      fetchUsers(),
+      fetchBrands(),
+      fetchCashbook(),
+      fetchStartingBalances(),
+      fetchSuppliers()
+    ]);
+
   } catch(err) {
     console.error('Error fetching cloud data:', err);
     showToast('Lỗi đồng bộ dữ liệu đám mây!', 'danger');
@@ -447,8 +627,9 @@ export async function syncLocalToCloud() {
   const localBrands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
   const localTxs = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
   const localBalances = JSON.parse(localStorage.getItem('billing_system_cashbook_start_balances') || 'null');
+  const localSuppliers = JSON.parse(localStorage.getItem('billing_system_suppliers') || '[]');
   
-  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0 && localTxs.length === 0 && !localBalances) {
+  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0 && localTxs.length === 0 && !localBalances && localSuppliers.length === 0) {
     showToast('Không tìm thấy dữ liệu LocalStorage nào để đồng bộ!', 'warning');
     return false;
   }
@@ -645,7 +826,28 @@ export async function syncLocalToCloud() {
         .from(tableStartingBalancesName)
         .upsert(dbRow, { onConflict: 'id' });
         
-      if (error) throw error;
+    }
+    
+    // 9. Sync Suppliers
+    if (localSuppliers.length > 0) {
+      try {
+        const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
+        const dbRows = localSuppliers.map(s => ({
+          id: s.id,
+          code: s.code,
+          name: s.name,
+          phone: s.phone,
+          address: s.address,
+          debt: parseFloat(s.debt || 0),
+          notes: s.notes || ''
+        }));
+        const { error } = await supabaseClient
+          .from(tableName)
+          .upsert(dbRows, { onConflict: 'id' });
+        if (error) throw error;
+      } catch (err) {
+        console.warn("Could not sync suppliers to cloud:", err.message);
+      }
     }
     
     await fetchCloudData();
@@ -1192,6 +1394,50 @@ export async function dbSaveStartingBalances(balances) {
       console.error(err);
       showToast('Không thể lưu Số dư đầu kỳ lên đám mây: ' + err.message, 'danger');
       return false;
+    }
+  }
+  return true;
+}
+
+export async function dbSaveSupplier(supplier) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: supplier.id,
+        code: supplier.code,
+        name: supplier.name,
+        phone: supplier.phone,
+        address: supplier.address,
+        debt: parseFloat(supplier.debt || 0),
+        notes: supplier.notes || ''
+      };
+      const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
+      const { error } = await supabaseClient
+        .from(tableName)
+        .upsert(dbRow, { onConflict: 'id' });
+      if (error) {
+        console.warn("Could not save supplier to cloud table:", error.message);
+      }
+    } catch (err) {
+      console.warn("Cloud save supplier failed:", err);
+    }
+  }
+  return true;
+}
+
+export async function dbDeleteSupplier(supplierId) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
+      const { error } = await supabaseClient
+        .from(tableName)
+        .delete()
+        .eq('id', supplierId);
+      if (error) {
+        console.warn("Could not delete supplier from cloud table:", error.message);
+      }
+    } catch (err) {
+      console.warn("Cloud delete supplier failed:", err);
     }
   }
   return true;

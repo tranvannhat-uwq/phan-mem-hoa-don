@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient } from './services/supabase.js';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup } from './services/supabase.js';
 import { setupBackupRestoreListeners } from './services/backup.js';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js';
@@ -11,6 +11,7 @@ import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showL
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js';
 import { showToast, safeCreateIcons, updateDbStatusUI, isSameUser } from './utils.js';
 
 // Vẽ lại toàn bộ giao diện của tất cả các Tab
@@ -18,6 +19,7 @@ export function renderAll() {
   updateDashboardStats();
   renderProductsTable();
   renderCustomersTable();
+  renderSuppliersTable();
   renderInvoiceTable();
   renderPricelistsTable();
   renderHistoryOrders();
@@ -26,6 +28,7 @@ export function renderAll() {
   renderBrandsTable();
   populateCustomerEmployeeFilter();
   populatePricelistsDropdowns();
+  populateSupplierDatalist();
   safeCreateIcons();
 }
 
@@ -56,6 +59,7 @@ export function switchTab(panelId) {
   else if (panelId === 'history-panel') heading.innerText = 'Lịch sử giao dịch';
   else if (panelId === 'so-quy-panel') heading.innerText = 'Sổ quỹ thu chi';
   else if (panelId === 'customers-panel') heading.innerText = 'Danh sách khách hàng & Đại lý';
+  else if (panelId === 'suppliers-panel') heading.innerText = 'Danh sách nhà cung cấp';
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
@@ -200,109 +204,7 @@ function setupSupabaseSettings() {
   syncBtn.addEventListener('click', syncLocalToCloud);
 }
 
-// Tải dữ liệu dự phòng từ LocalStorage khi mất kết nối mạng
-function loadLocalStorageBackup() {
-  const storedProducts = localStorage.getItem('billing_system_products');
-  const storedOrders = localStorage.getItem('billing_system_orders');
-  
-  if (storedProducts) {
-    state.products = JSON.parse(storedProducts);
-  } else {
-    state.products = [...defaultProducts];
-    localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-  }
-  
-  if (storedOrders) {
-    state.savedOrders = JSON.parse(storedOrders);
-  } else {
-    state.savedOrders = [];
-    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
-  }
-
-  const storedCustomers = localStorage.getItem('billing_system_customers');
-  if (storedCustomers) {
-    state.customers = JSON.parse(storedCustomers);
-  } else {
-    state.customers = [];
-    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-  }
-
-  const storedUsers = localStorage.getItem('billing_system_users');
-  if (storedUsers) {
-    const rawList = JSON.parse(storedUsers).filter(u => u.username !== 'sale1' && u.username !== 'sale2');
-    const uniqueUsers = [];
-    rawList.forEach(u => {
-      const isOldAbs = u.username === 'abs_japan' || u.username === 'abs-japan' || u.username === 'absjapan';
-      if (isOldAbs) {
-        const hasNewAbs = rawList.some(ru => ru.username === 'ctyabs@lendon.com');
-        if (hasNewAbs) return;
-      }
-      const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
-      if (!isDup) {
-        uniqueUsers.push(u);
-      }
-    });
-    state.users = uniqueUsers;
-    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
-  } else {
-    state.users = [
-      { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
-      { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
-      { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
-      { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
-      { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
-    ];
-    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
-  }
-
-  const storedPricelists = localStorage.getItem('billing_system_pricelists');
-  if (storedPricelists) {
-    state.pricelists = JSON.parse(storedPricelists);
-  } else {
-    state.pricelists = [
-      {
-        id: 'pl-02',
-        name: 'Bảng giá 02',
-        brandDiscounts: {
-          'Nano10*': 74.7,
-          'Hatacco nano': 0,
-          'mutsutec': 0,
-          'tdkaw': 0,
-          'cova': 0,
-          'festivanano': 0
-        }
-      },
-      {
-        id: 'pl-03',
-        name: 'Bảng giá 03',
-        brandDiscounts: {
-          'Nano10*': 76,
-          'Hatacco nano': 0,
-          'mutsutec': 0,
-          'tdkaw': 0,
-          'cova': 0,
-          'festivanano': 0
-        }
-      }
-    ];
-    localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
-  }
-
-  const storedBrands = localStorage.getItem('billing_system_brands');
-  if (storedBrands) {
-    state.brands = JSON.parse(storedBrands);
-  } else {
-    state.brands = [
-      { name: 'Nano10*', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
-      { name: 'Hatacco nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'hatacco.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
-      { name: 'Festiva nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'festiva.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
-      { name: 'mutsutec', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
-      { name: 'tdkaw', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
-      { name: 'cova', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' }
-    ];
-    localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
-  }
-}
+// loadLocalStorageBackup đã được chuyển sang services/supabase.js để tối ưu hóa
 
 // Khởi chạy ứng dụng
 async function initApp() {
@@ -313,6 +215,7 @@ async function initApp() {
   setupNavigation();
   setupProductManagement();
   setupCustomerManagement();
+  setupSupplierManagement();
   setupPricelistManagement();
   setupInvoiceCreator();
   setupHistoryPanel();

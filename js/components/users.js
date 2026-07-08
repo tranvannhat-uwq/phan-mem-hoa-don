@@ -290,44 +290,72 @@ export function populateCustomerEmployeeFilter() {
   select.value = currentVal;
 }
 
+let isLoggingIn = false;
+
 export async function handleLogin(e) {
   e.preventDefault();
+  if (isLoggingIn) return;
+  isLoggingIn = true;
+
   const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
   const passwordInput = document.getElementById('login-password').value.trim();
 
-  // Kiểm tra đăng nhập bằng tài khoản cục bộ / hệ thống mặc định trước
-  const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
-  const localUser = state.users.find(u => {
-    const uClean = (u.username || '').toLowerCase().trim();
-    const uCleanNoDomain = uClean.includes('@') ? uClean.split('@')[0] : uClean;
-    return (uClean === usernameInput || uCleanNoDomain === cleanUsername) && u.password === passwordInput && u.password !== '';
-  });
+  const submitBtn = document.getElementById('btn-login-submit') || e.target.querySelector('button[type="submit"]');
+  const originalBtnHTML = submitBtn ? submitBtn.innerHTML : '';
+  const usernameField = document.getElementById('login-username');
+  const passwordField = document.getElementById('login-password');
 
-  if (localUser) {
-    state.currentUser = localUser;
-    sessionStorage.setItem('billing_system_auth', 'true');
-    sessionStorage.setItem('billing_system_username', localUser.username);
-    
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app-layout').classList.remove('auth-hidden');
-    
-    const userInfoHeader = document.getElementById('user-info-header');
-    if (userInfoHeader) userInfoHeader.style.display = 'flex';
-    const logoutBtn = document.getElementById('btn-logout');
-    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-    const userDisplay = document.getElementById('header-user-display');
-    if (userDisplay) {
-      userDisplay.innerText = `${localUser.displayName} (${localUser.role === 'admin' ? 'Admin' : localUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
-    }
-    
-    applyUserPermissions(localUser);
-    renderAll();
-    showToast(`Đăng nhập thành công (Tài khoản hệ thống)! Chào mừng ${localUser.displayName}!`, 'success');
-    return;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 6px; vertical-align: middle;"></span> ĐANG ĐĂNG NHẬP...`;
   }
+  if (usernameField) usernameField.disabled = true;
+  if (passwordField) passwordField.disabled = true;
 
-  if (isCloudActive && supabaseClient) {
-    try {
+  const resetFormState = () => {
+    isLoggingIn = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnHTML;
+    }
+    if (usernameField) usernameField.disabled = false;
+    if (passwordField) passwordField.disabled = false;
+  };
+
+  try {
+    // Kiểm tra đăng nhập bằng tài khoản cục bộ / hệ thống mặc định trước
+    const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
+    const localUser = state.users.find(u => {
+      const uClean = (u.username || '').toLowerCase().trim();
+      const uCleanNoDomain = uClean.includes('@') ? uClean.split('@')[0] : uClean;
+      return (uClean === usernameInput || uCleanNoDomain === cleanUsername) && u.password === passwordInput && u.password !== '';
+    });
+
+    if (localUser) {
+      state.currentUser = localUser;
+      sessionStorage.setItem('billing_system_auth', 'true');
+      sessionStorage.setItem('billing_system_username', localUser.username);
+      
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-layout').classList.remove('auth-hidden');
+      
+      const userInfoHeader = document.getElementById('user-info-header');
+      if (userInfoHeader) userInfoHeader.style.display = 'flex';
+      const logoutBtn = document.getElementById('btn-logout');
+      if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+      const userDisplay = document.getElementById('header-user-display');
+      if (userDisplay) {
+        userDisplay.innerText = `${localUser.displayName} (${localUser.role === 'admin' ? 'Admin' : localUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+      }
+      
+      applyUserPermissions(localUser);
+      renderAll();
+      showToast(`Đăng nhập thành công (Tài khoản hệ thống)! Chào mừng ${localUser.displayName}!`, 'success');
+      resetFormState();
+      return;
+    }
+
+    if (isCloudActive && supabaseClient) {
       let loginSuccess = false;
       let loginError = null;
 
@@ -342,39 +370,31 @@ export async function handleLogin(e) {
           loginSuccess = true;
         }
       } else {
-        // Thử với tên miền công ty @lendon.com trước (mặc định mới)
-        const emailLd = `${usernameInput}@lendon.com`;
-        const { error: errLd } = await supabaseClient.auth.signInWithPassword({
-          email: emailLd,
-          password: passwordInput
-        });
-        
-        if (!errLd) {
+        // Thử song song với các tên miền để tối ưu hóa thời gian phản hồi
+        const domains = ['@lendon.com', '@weblendon.com', '@gmail.com'];
+        const results = await Promise.all(
+          domains.map(async (domain) => {
+            const email = `${usernameInput}${domain}`;
+            try {
+              const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email,
+                password: passwordInput
+              });
+              if (error) throw error;
+              return { success: true, data, email };
+            } catch (err) {
+              return { success: false, error: err, email };
+            }
+          })
+        );
+
+        const successResult = results.find(r => r.success);
+        if (successResult) {
           loginSuccess = true;
         } else {
-          // Thử với tên miền công ty cũ @weblendon.com (cho các tài khoản cũ tạo từ app)
-          const emailWl = `${usernameInput}@weblendon.com`;
-          const { error: errWl } = await supabaseClient.auth.signInWithPassword({
-            email: emailWl,
-            password: passwordInput
-          });
-          
-          if (!errWl) {
-            loginSuccess = true;
-          } else {
-            // Nếu không được, thử với @gmail.com (cho tài khoản mới liên kết gmail)
-            const emailGmail = `${usernameInput}@gmail.com`;
-            const { error: errGmail } = await supabaseClient.auth.signInWithPassword({
-              email: emailGmail,
-              password: passwordInput
-            });
-            
-            if (!errGmail) {
-              loginSuccess = true;
-            } else {
-              loginError = errGmail;
-            }
-          }
+          // Lấy lỗi từ @lendon.com làm lỗi mặc định nếu có, không thì lấy lỗi đầu tiên
+          const lendonResult = results.find(r => r.email.endsWith('@lendon.com'));
+          loginError = lendonResult ? lendonResult.error : results[0].error;
         }
       }
 
@@ -417,38 +437,64 @@ export async function handleLogin(e) {
         renderAll();
         showToast(`Đăng nhập đám mây thành công! Chào mừng ${user.displayName}!`, 'success');
       } else {
-        showToast('Đăng nhập thành công nhưng không tìm thấy thông tin tài khoản trong cơ sở dữ liệu!', 'warning');
+        const fallbackUser = {
+          id: authUser.id,
+          username: authUser.email || usernameInput,
+          displayName: authUser.email ? authUser.email.split('@')[0] : usernameInput,
+          role: 'sale'
+        };
+        state.currentUser = fallbackUser;
+        sessionStorage.setItem('billing_system_auth', 'true');
+        sessionStorage.setItem('billing_system_username', fallbackUser.username);
+        
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-layout').classList.remove('auth-hidden');
+        
+        const userInfoHeader = document.getElementById('user-info-header');
+        if (userInfoHeader) userInfoHeader.style.display = 'flex';
+        const logoutBtn = document.getElementById('btn-logout');
+        if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+        const userDisplay = document.getElementById('header-user-display');
+        if (userDisplay) {
+          userDisplay.innerText = `${fallbackUser.displayName} (Sale)`;
+        }
+        
+        applyUserPermissions(fallbackUser);
+        renderAll();
+        showToast('Đăng nhập đám mây thành công! (Tài khoản chưa khởi tạo hồ sơ)', 'warning');
       }
-    } catch (err) {
-      console.error('Login error:', err);
-      showToast('Đăng nhập thất bại: ' + (err.message || 'Tài khoản hoặc mật khẩu không chính xác!'), 'danger');
-    }
-  } else {
-    const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
-    const user = state.users.find(u => u.username === cleanUsername && u.password === passwordInput);
-    if (user) {
-      state.currentUser = user;
-      sessionStorage.setItem('billing_system_auth', 'true');
-      sessionStorage.setItem('billing_system_username', user.username);
-      
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app-layout').classList.remove('auth-hidden');
-      
-      const userInfoHeader = document.getElementById('user-info-header');
-      if (userInfoHeader) userInfoHeader.style.display = 'flex';
-      const logoutBtn = document.getElementById('btn-logout');
-      if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-      const userDisplay = document.getElementById('header-user-display');
-      if (userDisplay) {
-        userDisplay.innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
-      }
-      
-      applyUserPermissions(user);
-      renderAll();
-      showToast(`Chế độ ngoại tuyến: Chào mừng ${user.displayName}!`, 'success');
     } else {
-      showToast('Tên đăng nhập hoặc mật khẩu không chính xác!', 'danger');
+      const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
+      const user = state.users.find(u => u.username === cleanUsername && u.password === passwordInput);
+      if (user) {
+        state.currentUser = user;
+        sessionStorage.setItem('billing_system_auth', 'true');
+        sessionStorage.setItem('billing_system_username', user.username);
+        
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-layout').classList.remove('auth-hidden');
+        
+        const userInfoHeader = document.getElementById('user-info-header');
+        if (userInfoHeader) userInfoHeader.style.display = 'flex';
+        const logoutBtn = document.getElementById('btn-logout');
+        if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+        const userDisplay = document.getElementById('header-user-display');
+        if (userDisplay) {
+          userDisplay.innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+        }
+        
+        applyUserPermissions(user);
+        renderAll();
+        showToast(`Chế độ ngoại tuyến: Chào mừng ${user.displayName}!`, 'success');
+      } else {
+        showToast('Tên đăng nhập hoặc mật khẩu không chính xác!', 'danger');
+      }
     }
+  } catch (err) {
+    console.error('Login error:', err);
+    showToast('Đăng nhập thất bại: ' + (err.message || 'Tài khoản hoặc mật khẩu không chính xác!'), 'danger');
+  } finally {
+    resetFormState();
   }
 }
 

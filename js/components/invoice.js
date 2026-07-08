@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable } from '../utils.js';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu } from '../utils.js';
 import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
@@ -914,22 +914,24 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   if (titleEl) {
     if (type === 'warehouse') {
       titleEl.innerText = 'PHIẾU XUẤT KHO';
+      titleEl.style.fontSize = '17.6pt'; // Giảm 20% từ 22pt
     } else {
       titleEl.innerText = 'HÓA ĐƠN BÁN HÀNG';
+      titleEl.style.fontSize = '22pt';
     }
   }
 
   if (type === 'warehouse') {
     if (printLogoImg) {
-      printLogoImg.style.maxHeight = '205px';
-      printLogoImg.style.maxWidth = '450px';
+      printLogoImg.style.maxHeight = '164px'; // Giảm 20% từ 205px
+      printLogoImg.style.maxWidth = '360px'; // Giảm 20% từ 450px
     }
     if (printLogoSvg) {
-      printLogoSvg.setAttribute('width', '170');
-      printLogoSvg.setAttribute('height', '170');
+      printLogoSvg.setAttribute('width', '136'); // Giảm 20% từ 170
+      printLogoSvg.setAttribute('height', '136'); // Giảm 20% từ 170
     }
     if (printLogoContainer) {
-      printLogoContainer.style.minWidth = '190px';
+      printLogoContainer.style.minWidth = '152px'; // Giảm 20% từ 190px
     }
   } else {
     if (printLogoImg) {
@@ -1071,19 +1073,35 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     }
   }
 
-  const extraInfo = document.getElementById('print-customer-info-extra');
+  const addressEl = document.getElementById('print-customer-address');
+  const phoneEl = document.getElementById('print-customer-phone');
+  const groupEl = document.getElementById('print-customer-group');
+  const creatorEl = document.getElementById('print-creator-name');
+  const warehouseEl = document.getElementById('print-warehouse-name');
+  const reasonEl = document.getElementById('print-invoice-reason');
+
+  const creatorUser = state.users ? state.users.find(u => u.username === order.createdBy) : null;
+  const creatorName = creatorUser ? creatorUser.displayName : order.createdBy;
+
+  if (creatorEl) creatorEl.innerText = creatorName || 'admin';
+  if (warehouseEl) warehouseEl.innerText = config.companyName;
+  if (reasonEl) reasonEl.innerText = 'Xuất bán hàng';
+
   if (order.customerId) {
     const cust = state.customers.find(c => c.id === order.customerId);
     if (cust) {
-      extraInfo.innerHTML = `
-        <p style="margin: 0; margin-top: 4px;"><strong>Địa chỉ:</strong> ${cust.address || 'N/A'}</p>
-        <p style="margin: 0; margin-top: 4px;"><strong>Số điện thoại:</strong> ${formatPhoneNumber(cust.phone)}</p>
-      `;
+      if (addressEl) addressEl.innerText = cust.address || 'N/A';
+      if (phoneEl) phoneEl.innerText = formatPhoneNumber(cust.phone) || 'N/A';
+      if (groupEl) groupEl.innerText = cust.managedBy || 'N/A';
     } else {
-      extraInfo.innerHTML = '';
+      if (addressEl) addressEl.innerText = 'N/A';
+      if (phoneEl) phoneEl.innerText = 'N/A';
+      if (groupEl) groupEl.innerText = 'N/A';
     }
   } else {
-    extraInfo.innerHTML = '';
+    if (addressEl) addressEl.innerText = 'N/A';
+    if (phoneEl) phoneEl.innerText = 'N/A';
+    if (groupEl) groupEl.innerText = 'N/A';
   }
 
   const table = document.getElementById('print-invoice-table');
@@ -1159,177 +1177,157 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     
     // Ẩn tổng tiền thanh toán trên hóa đơn kho
     document.querySelector('.print-summary').style.display = 'none';
-  } else if (type === 'agent') {
-    // Hoá đơn cho đại lý, đối tác (Ẩn tỷ lệ % chiết khấu, thêm cột Mã màu riêng biệt, thu nhỏ Mã hàng và SL)
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th style="width: 5%;">STT</th>
-          <th style="width: 10%;">Mã hàng</th>
-          <th style="width: 30%;">Tên sản phẩm</th>
-          <th style="width: 15%; text-align: center;">Mã màu</th>
-          <th style="width: 10%;">Đơn vị (kg)</th>
-          <th style="width: 5%; text-align: center;">SL</th>
-          <th style="width: 12%; text-align: right;">Đơn giá (đ)</th>
-          <th style="width: 13%; text-align: right;">Thành tiền (đ)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${order.items.map((item, idx) => {
-          const discountedPrice = Math.round(item.price * (1 - item.discountPercent / 100));
-          const subTotal = Math.round(item.quantity * discountedPrice);
-          
-          // Lấy khối lượng sản phẩm tương ứng với quy cách đóng gói
-          const p = state.products.find(prod => prod.code === item.productCode);
-          let weight = '';
-          if (p) {
-            if (item.package === 'Thung') weight = p.weightThung;
-            else if (item.package === 'Lon') weight = p.weightLon;
-            else if (item.package === 'Hop') weight = p.weightHop;
-            else if (item.package === 'Bao') weight = p.weightBao;
-            else if (item.package === 'Tui') weight = p.weightTui;
-          }
-          
-          let packageDisplay = item.package;
-          let prefix = '';
-          if (packageDisplay === 'Thung') prefix = 'T';
-          else if (packageDisplay === 'Lon') prefix = 'L';
-          else if (packageDisplay === 'Hop') prefix = 'H';
-          else if (packageDisplay === 'Bao') prefix = 'B';
-          else if (packageDisplay === 'Tui') prefix = 'T';
-          
-          if (weight && weight !== 'N/A') {
-            let formattedWeight = weight.replace(/\s+/g, '').toLowerCase();
-            formattedWeight = formattedWeight.replace(/kg$/, '').replace(/l$/, '');
-            if (formattedWeight.endsWith('.0')) {
-              formattedWeight = formattedWeight.slice(0, -2);
-            }
-            packageDisplay = `${prefix}${formattedWeight}`;
-          } else {
-            if (packageDisplay === 'Thung') packageDisplay = 'Thùng';
-            else if (packageDisplay === 'Lon') packageDisplay = 'Lon';
-            else if (packageDisplay === 'Hop') packageDisplay = 'Hộp';
-            else if (packageDisplay === 'Bao') packageDisplay = 'Bao';
-            else if (packageDisplay === 'Tui') packageDisplay = 'Túi';
-          }
-          
-          return `
-            <tr>
-              <td style="text-align: center;">${idx + 1}</td>
-              <td style="font-weight: bold;">${item.productCode}</td>
-              <td>${item.productName}</td>
-              <td style="text-align: center; font-weight: bold;">
-                ${item.colorCode || ''}
-                ${item.colorPercent > 0 ? `<div style="font-size: 8pt; font-weight: bold; margin-top: 2px;">(+${item.colorPercent}% màu)</div>` : ''}
-              </td>
-              <td style="text-align: center;">${packageDisplay}</td>
-              <td style="text-align: center;">${item.quantity}</td>
-              <td style="text-align: right;">${formatNumber(discountedPrice)}</td>
-              <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    `;
-    
-    // Ẩn chi tiết dòng % giảm giá, chỉ hiện tổng thanh toán cuối cùng
-    document.querySelector('.print-summary').style.display = 'block';
-    document.getElementById('print-total-market').parentElement.style.display = 'none';
-    document.getElementById('print-total-discount').parentElement.style.display = 'none';
   } else {
-    // Hoá đơn khách lẻ (Hiển thị chi tiết đầy đủ)
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th style="width: 5%;">STT</th>
-          <th style="width: 15%;">Mã hàng</th>
-          <th style="width: 30%;">Tên sản phẩm (kèm màu sắc)</th>
-          <th style="width: 10%;">Đơn vị (kg)</th>
-          <th style="width: 7%; text-align: center;">SL</th>
-          <th style="width: 12%; text-align: right;">Giá niêm yết (đ)</th>
-          <th style="width: 8%; text-align: center;">% CK</th>
-          <th style="width: 13%; text-align: right;">Thành tiền (đ)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${order.items.map((item, idx) => {
-          const colorPctText = item.colorPercent > 0 ? `, +${item.colorPercent}% màu` : '';
-          const colorSuffix = item.colorCode ? ` (Màu: <strong>${item.colorCode}${colorPctText}</strong>)` : '';
-          const subTotal = Math.round(item.quantity * item.price * (1 - item.discountPercent / 100));
-          
-          // Lấy khối lượng sản phẩm tương ứng với quy cách đóng gói
-          const p = state.products.find(prod => prod.code === item.productCode);
-          let weight = '';
-          if (p) {
-            if (item.package === 'Thung') weight = p.weightThung;
-            else if (item.package === 'Lon') weight = p.weightLon;
-            else if (item.package === 'Hop') weight = p.weightHop;
-            else if (item.package === 'Bao') weight = p.weightBao;
-            else if (item.package === 'Tui') weight = p.weightTui;
-          }
-          
-          let packageDisplay = item.package;
-          let prefix = '';
-          if (packageDisplay === 'Thung') prefix = 'T';
-          else if (packageDisplay === 'Lon') prefix = 'L';
-          else if (packageDisplay === 'Hop') prefix = 'H';
-          else if (packageDisplay === 'Bao') prefix = 'B';
-          else if (packageDisplay === 'Tui') prefix = 'T';
-          
-          if (weight && weight !== 'N/A') {
-            let formattedWeight = weight.replace(/\s+/g, '').toLowerCase();
-            formattedWeight = formattedWeight.replace(/kg$/, '').replace(/l$/, '');
-            if (formattedWeight.endsWith('.0')) {
-              formattedWeight = formattedWeight.slice(0, -2);
-            }
-            packageDisplay = `${prefix}${formattedWeight}`;
+    // Hóa đơn bán hàng (Đại lý & Bán lẻ) dùng chung mẫu in chuẩn như yêu cầu
+    let oldDebt = 0;
+    let newDebt = 0;
+    let hasDebtInfo = false;
+    
+    if (order.customerId) {
+      const cust = state.customers.find(c => c.id === order.customerId);
+      if (cust) {
+        hasDebtInfo = true;
+        const historyEntry = cust.debtHistory ? cust.debtHistory.find(h => h.id === order.id) : null;
+        if (historyEntry) {
+          newDebt = historyEntry.debtAfter || 0;
+          oldDebt = newDebt - order.totalPayable;
+        } else {
+          if (order.status === 'draft') {
+            oldDebt = cust.debt || 0;
+            newDebt = oldDebt + order.totalPayable;
           } else {
-            if (packageDisplay === 'Thung') packageDisplay = 'Thùng';
-            else if (packageDisplay === 'Lon') packageDisplay = 'Lon';
-            else if (packageDisplay === 'Hop') packageDisplay = 'Hộp';
-            else if (packageDisplay === 'Bao') packageDisplay = 'Bao';
-            else if (packageDisplay === 'Tui') packageDisplay = 'Túi';
+            newDebt = cust.debt || 0;
+            oldDebt = newDebt - order.totalPayable;
           }
-          
-          return `
-            <tr>
-              <td style="text-align: center;">${idx + 1}</td>
-              <td style="font-weight: bold;">${item.productCode}</td>
-              <td>${item.productName}${colorSuffix}</td>
-              <td style="text-align: center;">${packageDisplay}</td>
-              <td style="text-align: center;">${item.quantity}</td>
-              <td style="text-align: right;">${formatNumber(Math.round(item.price))}</td>
-              <td style="text-align: center;">${item.discountPercent}%</td>
-              <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    `;
-    
-    // Hiện đầy đủ các dòng tổng tiền niêm yết, chiết khấu
-    document.querySelector('.print-summary').style.display = 'block';
-    document.getElementById('print-total-market').parentElement.style.display = 'flex';
-    document.getElementById('print-total-discount').parentElement.style.display = 'flex';
-    
-    document.getElementById('print-total-market').innerText = formatCurrency(order.totalMarket);
-    document.getElementById('print-total-discount').innerText = '-' + formatCurrency(order.totalDiscount);
-  }
-
-  // Hỗ trợ vận chuyển chung
-  const printShipRow = document.getElementById('print-shipping-discount-row');
-  if (order.shippingSupport && order.shippingDiscount > 0 && type !== 'warehouse') {
-    if (printShipRow) {
-      printShipRow.style.display = 'flex';
-      document.getElementById('print-shipping-discount').innerText = '-' + formatCurrency(order.shippingDiscount);
+        }
+      }
     }
-  } else {
-    if (printShipRow) printShipRow.style.display = 'none';
+
+    let debtRowsHtml = '';
+    if (hasDebtInfo) {
+      debtRowsHtml = `
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Nợ cũ</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(oldDebt)}</td>
+        </tr>
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng nợ hiện tại</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(newDebt)}</td>
+        </tr>
+      `;
+    }
+
+    const avgDiscountPercent = order.totalMarket > 0 ? Math.round((order.totalDiscount / order.totalMarket) * 100) : 0;
+
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th style="width: 5%;">STT</th>
+          <th style="width: 32%;">Tên, nhãn hiệu, sản phẩm</th>
+          <th style="width: 10%;">Mã SP</th>
+          <th style="width: 12%; text-align: center;">Mã màu/ % Màu</th>
+          <th style="width: 10%;">ĐVT</th>
+          <th style="width: 6%; text-align: center;">SL</th>
+          <th style="width: 12%; text-align: right;">Giá bán x % màu</th>
+          <th style="width: 13%; text-align: right;">Thành tiền X % màu</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${order.items.map((item, idx) => {
+          const basePrice = item.price;
+          const subTotal = Math.round(item.quantity * basePrice);
+          
+          const itemBrand = item.brand || (item.product && item.product.brand);
+          const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
+          let weight = '';
+          if (p) {
+            if (item.package === 'Thung') weight = p.weightThung;
+            else if (item.package === 'Lon') weight = p.weightLon;
+            else if (item.package === 'Hop') weight = p.weightHop;
+            else if (item.package === 'Bao') weight = p.weightBao;
+            else if (item.package === 'Tui') weight = p.weightTui;
+          }
+          
+          let packageDisplay = item.package;
+          let prefix = '';
+          if (packageDisplay === 'Thung') prefix = 'Thùng';
+          else if (packageDisplay === 'Lon') prefix = 'Lon';
+          else if (packageDisplay === 'Hop') prefix = 'Hộp';
+          else if (packageDisplay === 'Bao') prefix = 'Bao';
+          else if (packageDisplay === 'Tui') prefix = 'Túi';
+          
+          if (weight && weight !== 'N/A') {
+            let formattedWeight = weight.replace(/\s+/g, '').toUpperCase();
+            packageDisplay = `${prefix} ${formattedWeight}`;
+          } else {
+            packageDisplay = prefix;
+          }
+
+          const colorPercentText = item.colorPercent > 0 ? ` (+${item.colorPercent}% màu)` : '';
+          const colorCodeDisplay = item.colorCode ? `${item.colorCode}${colorPercentText}` : '';
+          
+          return `
+            <tr>
+              <td style="text-align: center;">${idx + 1}</td>
+              <td>${item.productName}</td>
+              <td style="font-weight: bold; text-align: center;">${item.productCode}</td>
+              <td style="text-align: center; font-weight: bold;">${colorCodeDisplay}</td>
+              <td style="text-align: center;">${packageDisplay}</td>
+              <td style="text-align: center;">${item.quantity}</td>
+              <td style="text-align: right;">${formatNumber(basePrice)}</td>
+              <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
+            </tr>
+          `;
+        }).join('')}
+        
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng:</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalMarket)}</td>
+        </tr>
+        
+        <tr>
+          <td colspan="6" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán hàng</td>
+          <td style="text-align: center; font-weight: bold; padding: 4px 8px;">${avgDiscountPercent > 0 ? avgDiscountPercent + '%' : ''}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalDiscount)}</td>
+        </tr>
+        
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cước Vận Chuyển</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.shippingDiscount)}</td>
+        </tr>
+        
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng tiền sau chiết khấu</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalPayable)}</td>
+        </tr>
+        
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thanh toán</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">0</td>
+        </tr>
+        
+        ${debtRowsHtml}
+      </tbody>
+    `;
+
+    // Ẩn bảng tổng tiền dạng nổi ở bên phải vì đã tích hợp thẳng vào bảng
+    const oldSummary = document.querySelector('.print-summary');
+    if (oldSummary) oldSummary.style.display = 'none';
   }
 
-  // Tổng thanh toán
-  if (type !== 'warehouse') {
-    document.getElementById('print-total-payable').innerText = formatCurrency(order.totalPayable);
+  // Tổng số tiền viết bằng chữ
+  const wordsContainer = document.getElementById('print-amount-in-words-container');
+  if (wordsContainer) {
+    if (type === 'warehouse') {
+      wordsContainer.style.display = 'none';
+    } else {
+      wordsContainer.style.display = 'block';
+      const amountInWords = docSoTienBangChu(order.totalPayable);
+      const wordsTextEl = document.getElementById('print-amount-in-words');
+      if (wordsTextEl) {
+        wordsTextEl.innerText = amountInWords;
+      }
+    }
   }
 
   // Gán nhãn ký tên khách hàng và dựng các cột chữ ký
@@ -1351,21 +1349,35 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           <p><strong>Người nhận hàng</strong></p>
           <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
           <div class="print-sig-space"></div>
-          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">${order.customerName}</p>
         </div>
       `;
     } else {
+      // Hóa đơn bán hàng gồm 5 chữ ký như yêu cầu
       sigsEl.innerHTML = `
-        <div class="print-sig-col" style="width: 45%;">
-          <p><strong>Người lập hóa đơn</strong></p>
-          <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+        <div class="print-sig-col" style="width: 18%;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">Người lập phiếu</p>
+          <p style="font-size: 10pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, họ tên)</p>
           <div class="print-sig-space"></div>
         </div>
-        <div class="print-sig-col" style="width: 45%;">
-          <p><strong>Người nhận hàng</strong></p>
-          <p style="font-size: 11pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+        <div class="print-sig-col" style="width: 18%;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">Người nhận</p>
+          <p style="font-size: 10pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, họ tên)</p>
           <div class="print-sig-space"></div>
-          <p id="print-customer-sign-name" style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">${order.customerName}</p>
+        </div>
+        <div class="print-sig-col" style="width: 18%;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">Thủ kho</p>
+          <p style="font-size: 10pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, họ tên)</p>
+          <div class="print-sig-space"></div>
+        </div>
+        <div class="print-sig-col" style="width: 18%;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">KT. Trưởng</p>
+          <p style="font-size: 10pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, họ tên)</p>
+          <div class="print-sig-space"></div>
+        </div>
+        <div class="print-sig-col" style="width: 18%;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">Giám đốc</p>
+          <p style="font-size: 10pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, họ tên)</p>
+          <div class="print-sig-space"></div>
         </div>
       `;
     }
