@@ -9,6 +9,7 @@ import { addCashbookTransaction } from './so_quy.js';
 let currentOrderToPrint = null;
 
 export function getActiveInvoiceDiscount(brand) {
+  if (!brand) return 0;
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (!plSelect) return 0;
   const plVal = plSelect.value;
@@ -17,11 +18,26 @@ export function getActiveInvoiceDiscount(brand) {
     return 0; // manual
   }
   
+  const normBrand = brand.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  const getDiscountFromObject = (discountsObj) => {
+    if (!discountsObj) return 0;
+    // Exact match first
+    if (discountsObj[brand] !== undefined) return discountsObj[brand];
+    // Normalized match next
+    for (const key in discountsObj) {
+      if (key.toLowerCase().replace(/[^a-z0-9]/g, '') === normBrand) {
+        return discountsObj[key];
+      }
+    }
+    return 0;
+  };
+  
   if (plVal === 'custom') {
     if (state.activeCustomerId) {
       const customer = state.customers.find(c => c.id === state.activeCustomerId);
       if (customer && customer.brandDiscounts) {
-        return customer.brandDiscounts[brand] !== undefined ? customer.brandDiscounts[brand] : 0;
+        return getDiscountFromObject(customer.brandDiscounts);
       }
     }
     return 0;
@@ -29,7 +45,7 @@ export function getActiveInvoiceDiscount(brand) {
   
   const pl = state.pricelists.find(p => p.id === plVal);
   if (pl && pl.brandDiscounts) {
-    return pl.brandDiscounts[brand] !== undefined ? pl.brandDiscounts[brand] : 0;
+    return getDiscountFromObject(pl.brandDiscounts);
   }
   
   return 0;
@@ -63,8 +79,8 @@ export function applyActivePriceListToInvoice() {
       label.style.color = '#10b981';
     } else if (plVal === 'custom') {
       label.innerText = 'CK Đại lý';
-      label.style.background = 'rgba(59, 130, 246, 0.1)';
-      label.style.color = '#60a5fa';
+      label.style.background = 'rgba(34, 197, 94, 0.08)';
+      label.style.color = '#22c55e';
     } else {
       const pl = state.pricelists.find(p => p.id === plVal);
       label.innerText = pl ? pl.name : 'Bảng giá';
@@ -147,7 +163,7 @@ export function renderInvoiceTable() {
           <div class="flex flex-col gap-1">
             <span style="font-weight: 500; font-size: 0.85rem;">${p.name}</span>
             <div class="flex gap-2 items-center" style="margin-top: 2px;">
-              <span class="suggestion-brand-badge" style="font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.25);">${item.brand}</span>
+              <span class="suggestion-brand-badge" style="font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.2);">${item.brand}</span>
             </div>
           </div>
         </td>
@@ -853,7 +869,12 @@ export function disableQuickCustomerMode() {
 
 export function handleQuickCustomerBrandChange(newBrand) {
   if (newBrand && newBrand !== 'Tất cả') {
-    const invalidItems = state.invoiceItems.filter(item => item.brand !== newBrand);
+    const invalidItems = state.invoiceItems.filter(item => {
+      const pBrandLower = (item.brand || '').toLowerCase().replace(/\s+/g, '');
+      const isFestiva = pBrandLower === 'festivanano' || pBrandLower === 'festiva';
+      if (isFestiva) return false;
+      return item.brand !== newBrand;
+    });
     if (invalidItems.length > 0) {
       const ok = confirm(`Khách hàng mới này được chỉ định nhãn sơn "${newBrand}". Chọn nhãn này sẽ loại bỏ ${invalidItems.length} sản phẩm khác nhãn sơn hiện có trong đơn hàng. Bạn có đồng ý không?`);
       if (!ok) {
@@ -861,7 +882,11 @@ export function handleQuickCustomerBrandChange(newBrand) {
         if (quickBrandSelect) quickBrandSelect.value = state.activeCustomerBrand;
         return;
       } else {
-        state.invoiceItems = state.invoiceItems.filter(item => item.brand === newBrand);
+        state.invoiceItems = state.invoiceItems.filter(item => {
+          const pBrandLower = (item.brand || '').toLowerCase().replace(/\s+/g, '');
+          const isFestiva = pBrandLower === 'festivanano' || pBrandLower === 'festiva';
+          return isFestiva || item.brand === newBrand;
+        });
       }
     }
   }
@@ -1434,7 +1459,11 @@ export function setupInvoiceCreator() {
       });
 
       if (state.activeCustomerBrand && state.activeCustomerBrand !== 'Tất cả') {
-        matches = matches.filter(p => p.brand === state.activeCustomerBrand);
+        matches = matches.filter(p => {
+          const pBrandLower = (p.brand || '').toLowerCase().replace(/\s+/g, '');
+          const isFestiva = pBrandLower === 'festivanano' || pBrandLower === 'festiva';
+          return isFestiva || p.brand === state.activeCustomerBrand;
+        });
       }
 
       matches.sort((a, b) => {
@@ -1459,7 +1488,7 @@ export function setupInvoiceCreator() {
               <span class="suggestion-code" style="font-weight: 600; color: #fff; font-size: 0.8rem;">${p.code}</span>
               <span class="suggestion-name" style="color: var(--text-secondary); font-size: 0.85rem;">${p.name}</span>
             </div>
-            <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);">${p.brand || 'Nano10*'}</span>
+            <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3);">${p.brand || 'Nano10*'}</span>
           </li>
         `).join('');
       }

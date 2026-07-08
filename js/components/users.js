@@ -311,9 +311,14 @@ export async function handleLogin(e) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-layout').classList.remove('auth-hidden');
     
-    document.getElementById('user-info-header').style.display = 'flex';
-    document.getElementById('btn-logout').style.display = 'inline-flex';
-    document.getElementById('header-user-display').innerText = `${localUser.displayName} (${localUser.role === 'admin' ? 'Admin' : localUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+    const userInfoHeader = document.getElementById('user-info-header');
+    if (userInfoHeader) userInfoHeader.style.display = 'flex';
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+    const userDisplay = document.getElementById('header-user-display');
+    if (userDisplay) {
+      userDisplay.innerText = `${localUser.displayName} (${localUser.role === 'admin' ? 'Admin' : localUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+    }
     
     applyUserPermissions(localUser);
     renderAll();
@@ -399,9 +404,14 @@ export async function handleLogin(e) {
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('app-layout').classList.remove('auth-hidden');
         
-        document.getElementById('user-info-header').style.display = 'flex';
-        document.getElementById('btn-logout').style.display = 'inline-flex';
-        document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+        const userInfoHeader = document.getElementById('user-info-header');
+        if (userInfoHeader) userInfoHeader.style.display = 'flex';
+        const logoutBtn = document.getElementById('btn-logout');
+        if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+        const userDisplay = document.getElementById('header-user-display');
+        if (userDisplay) {
+          userDisplay.innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+        }
         
         applyUserPermissions(user);
         renderAll();
@@ -424,9 +434,14 @@ export async function handleLogin(e) {
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app-layout').classList.remove('auth-hidden');
       
-      document.getElementById('user-info-header').style.display = 'flex';
-      document.getElementById('btn-logout').style.display = 'inline-flex';
-      document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+      const userInfoHeader = document.getElementById('user-info-header');
+      if (userInfoHeader) userInfoHeader.style.display = 'flex';
+      const logoutBtn = document.getElementById('btn-logout');
+      if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+      const userDisplay = document.getElementById('header-user-display');
+      if (userDisplay) {
+        userDisplay.innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+      }
       
       applyUserPermissions(user);
       renderAll();

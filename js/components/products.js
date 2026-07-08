@@ -103,7 +103,7 @@ export function renderProductsTable() {
         <td style="font-weight: 600; color: #fff;">${p.code}</td>
         <td style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${p.name}">${p.name}</td>
         <td>
-          <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); display: inline-block;">${p.brand || 'Nano10*'}</span>
+          <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.12); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.25); display: inline-block;">${p.brand || 'Nano10*'}</span>
         </td>
         <td style="font-size: 0.75rem; color: var(--text-secondary); white-space: pre-line; line-height: 1.3;" title="${getWeightStr()}">${getWeightStr().replace(/\n/g, ', ')}</td>
         <td style="text-align: right; font-weight: 600; color: #fff;">${p.priceThung > 0 ? formatCurrency(p.priceThung) : '<span style="color: var(--text-muted); font-weight: normal;">-</span>'}</td>

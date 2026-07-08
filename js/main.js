@@ -84,23 +84,7 @@ function setupNavigation() {
     });
   });
 
-  const hamburgerBtn = document.getElementById('hamburger-btn');
   const sidebarOverlay = document.getElementById('sidebar-overlay');
-
-  if (hamburgerBtn) {
-    hamburgerBtn.addEventListener('click', () => {
-      if (window.innerWidth <= 768) {
-        toggleMobileSidebar();
-      } else {
-        const appLayout = document.getElementById('app-layout');
-        if (appLayout) {
-          appLayout.classList.toggle('sidebar-collapsed');
-          const isCollapsed = appLayout.classList.contains('sidebar-collapsed');
-          localStorage.setItem('sidebar_collapsed', isCollapsed);
-        }
-      }
-    });
-  }
 
   if (sidebarOverlay) {
     sidebarOverlay.addEventListener('click', () => {
@@ -113,6 +97,45 @@ function setupNavigation() {
       closeMobileSidebar();
     }
   });
+
+  // Toggle global settings dropdown
+  const settingsToggle = document.getElementById('btn-settings-toggle');
+  const settingsMenu = document.getElementById('global-settings-menu');
+  if (settingsToggle && settingsMenu) {
+    settingsToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isDisplayed = settingsMenu.style.display === 'block';
+      settingsMenu.style.display = isDisplayed ? 'none' : 'block';
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!settingsToggle.contains(e.target) && !settingsMenu.contains(e.target)) {
+        settingsMenu.style.display = 'none';
+      }
+    });
+
+    // Handle clicks on dropdown navigation links
+    const dropdownLinks = document.querySelectorAll('.dropdown-nav-link');
+    dropdownLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetPanel = link.getAttribute('data-target');
+        switchTab(targetPanel);
+
+        // Update active nav-link highlighting in the main navbar
+        document.querySelectorAll('.nav-link').forEach(nl => {
+          if (nl.getAttribute('data-target') === targetPanel) {
+            nl.classList.add('active');
+          } else {
+            nl.classList.remove('active');
+          }
+        });
+
+        // Close dropdown
+        settingsMenu.style.display = 'none';
+      });
+    });
+  }
 }
 
 function toggleMobileSidebar() {
@@ -385,9 +408,14 @@ async function initApp() {
     sessionStorage.setItem('billing_system_username', activeUser.username);
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-layout').classList.remove('auth-hidden');
-    document.getElementById('user-info-header').style.display = 'flex';
-    document.getElementById('btn-logout').style.display = 'inline-flex';
-    document.getElementById('header-user-display').innerText = `${activeUser.displayName} (${activeUser.role === 'admin' ? 'Admin' : activeUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+    const userInfoHeader = document.getElementById('user-info-header');
+    if (userInfoHeader) userInfoHeader.style.display = 'flex';
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+    const userDisplay = document.getElementById('header-user-display');
+    if (userDisplay) {
+      userDisplay.innerText = `${activeUser.displayName} (${activeUser.role === 'admin' ? 'Admin' : activeUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+    }
     applyUserPermissions(activeUser);
   } else {
     showLoginGate();

@@ -195,8 +195,8 @@ export function renderRevenueChart(orders) {
       scales: {
         x: {
           grid: {
-            color: 'rgba(255, 255, 255, 0.03)',
-            borderColor: 'rgba(255, 255, 255, 0.05)'
+            color: 'rgba(0, 0, 0, 0.05)',
+            borderColor: 'rgba(0, 0, 0, 0.08)'
           },
           ticks: {
             color: '#64748b',
@@ -208,8 +208,8 @@ export function renderRevenueChart(orders) {
         },
         y: {
           grid: {
-            color: 'rgba(255, 255, 255, 0.03)',
-            borderColor: 'rgba(255, 255, 255, 0.05)'
+            color: 'rgba(0, 0, 0, 0.05)',
+            borderColor: 'rgba(0, 0, 0, 0.08)'
           },
           ticks: {
             color: '#64748b',

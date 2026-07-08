@@ -24,9 +24,12 @@
   <div class="app-container auth-hidden" id="app-layout">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-logo">🎨</div>
-        <span class="brand-name" style="font-size: 1.05rem; white-space: nowrap;">Tập đoàn sơn NANO</span>
+      <div class="brand" style="display: flex; align-items: center; gap: 0.5rem;">
+        <div class="brand-logos" style="display: flex; gap: 0.35rem; align-items: center; background: transparent; padding: 0; box-shadow: none;">
+          <img src="absjapan.png" alt="ABS Japan Logo" style="height: 28px; width: auto; border-radius: 4px; object-fit: contain; background: #fff; padding: 2px;">
+          <img src="hatacco.png" alt="Hatacco Logo" style="height: 28px; width: auto; border-radius: 4px; object-fit: contain; background: #fff; padding: 2px;">
+        </div>
+        <span class="brand-name" style="font-size: 1.05rem; white-space: nowrap;">KIOT NANO</span>
       </div>
 
       <nav class="nav-menu">
@@ -66,31 +69,45 @@
             Sản phẩm
           </a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" data-target="brands-panel">
-            <i data-lucide="palette"></i>
-            Hãng sơn
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" data-target="pricelists-panel">
-            <i data-lucide="tags"></i>
-            Quản lý bảng giá
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" data-target="users-panel">
-            <i data-lucide="user-cog"></i>
-            Quản lý tài khoản
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" data-target="settings-panel">
-            <i data-lucide="settings"></i>
-            Cấu hình Cloud
-          </a>
-        </li>
       </nav>
+
+      <div class="sidebar-actions">
+        <!-- Global Settings / User Profile Dropdown Button -->
+        <div class="global-settings-dropdown" style="position: relative;">
+          <button class="btn-settings-toggle" id="btn-settings-toggle" style="background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" title="Cài đặt hệ thống">
+            <i data-lucide="settings" style="width: 18px; height: 18px; color: #fff;"></i>
+          </button>
+          <!-- Dropdown Menu -->
+          <div class="global-settings-menu" id="global-settings-menu" style="display: none; position: absolute; right: 0; top: 45px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow-lg); width: 220px; z-index: 300; padding: 0.5rem 0; animation: fadeIn 0.2s ease;">
+            <div class="dropdown-user-info" style="padding: 0.65rem 1rem; border-bottom: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="user" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+              <span id="header-user-display" style="font-weight: 600; color: var(--text-primary);"></span>
+            </div>
+            <!-- Dropdown Nav Links -->
+            <button class="dropdown-item dropdown-nav-link" data-target="users-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+              <i data-lucide="user-cog" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+              Quản lý tài khoản
+            </button>
+            <button class="dropdown-item dropdown-nav-link" data-target="pricelists-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+              <i data-lucide="tags" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+              Quản lý bảng giá
+            </button>
+            <button class="dropdown-item dropdown-nav-link" data-target="brands-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+              <i data-lucide="palette" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+              Hãng sơn
+            </button>
+            <button class="dropdown-item dropdown-nav-link" data-target="settings-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+              <i data-lucide="settings" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+              Cấu hình Cloud
+            </button>
+            <div style="border-top: 1px solid var(--border-color); margin-top: 0.25rem; padding-top: 0.25rem;"></div>
+            <button class="dropdown-item" id="btn-logout" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--color-danger); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+              <i data-lucide="log-out" style="width: 16px; height: 16px;"></i>
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div class="sidebar-footer">
         <p>Hệ thống Quản lý Bán hàng</p>
@@ -105,27 +122,12 @@
     <main class="main-content">
       <!-- Top Header -->
       <header class="top-header">
-        <button class="hamburger-btn" id="hamburger-btn">
-          <i data-lucide="menu"></i>
-        </button>
         <div>
           <h1 class="page-title" id="page-title-heading">Tổng quan hệ thống</h1>
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Hôm nay: <span id="current-date-lbl">23/06/2026</span></p>
             <span class="db-status-badge status-local" id="db-status-badge">Cục bộ (LocalStorage)</span>
           </div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div id="user-info-header" style="display: none; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--text-secondary); background: rgba(255, 255, 255, 0.05); padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08);">
-            <i data-lucide="user" style="width: 14px; height: 14px; color: var(--color-primary);"></i>
-            <span id="header-user-display" style="font-weight: 500;"></span>
-          </div>
-          <button class="btn btn-secondary" id="btn-quick-order">
-            <i data-lucide="plus-circle"></i> Lên đơn nhanh
-          </button>
-          <button class="btn btn-danger" id="btn-logout" title="Đăng xuất" style="display: none; padding: 0.625rem 0.875rem;">
-            <i data-lucide="log-out"></i>
-          </button>
         </div>
       </header>
 
@@ -135,7 +137,7 @@
         <div class="dashboard-toolbar glass-panel">
           <div class="filter-group">
             <label class="filter-label"><i data-lucide="calendar"></i> Khoảng thời gian:</label>
-            <select class="form-control" id="dashboard-time-filter" style="width: auto; height: 38px; min-width: 130px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color);">
+            <select class="form-control" id="dashboard-time-filter" style="width: auto; height: 38px; min-width: 130px; border-radius: 6px; cursor: pointer; ">
               <option value="month" selected>Tháng này</option>
               <option value="day">Hôm nay</option>
               <option value="week">Tuần này</option>
@@ -145,14 +147,14 @@
           </div>
           
           <div id="dashboard-custom-dates" style="display: none; align-items: center; gap: 0.5rem;">
-            <input type="date" class="form-control" id="dashboard-start-date" style="width: auto; height: 38px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 0.5rem;">
+            <input type="date" class="form-control" id="dashboard-start-date" style="width: auto; height: 38px; border-radius: 6px; padding: 0 0.5rem;">
             <span style="color: var(--text-secondary); font-size: 0.85rem;">đến</span>
-            <input type="date" class="form-control" id="dashboard-end-date" style="width: auto; height: 38px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0 0.5rem;">
+            <input type="date" class="form-control" id="dashboard-end-date" style="width: auto; height: 38px; border-radius: 6px; padding: 0 0.5rem;">
           </div>
 
           <div class="filter-group" id="dashboard-sale-filter-group" style="display: none; align-items: center; gap: 0.5rem; margin-left: auto;">
             <label class="filter-label"><i data-lucide="users"></i> Nhân viên Sale:</label>
-            <select class="form-control" id="dashboard-sale-filter" style="width: auto; height: 38px; min-width: 185px; background-color: rgba(17,24,39,0.8); color: var(--text-primary); border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color);">
+            <select class="form-control" id="dashboard-sale-filter" style="width: auto; height: 38px; min-width: 185px; border-radius: 6px; cursor: pointer; ">
               <option value="all">-- Tất cả nhân viên --</option>
             </select>
           </div>
@@ -206,7 +208,7 @@
           <div class="glass-panel chart-panel">
             <div class="panel-header" style="margin-bottom: 1.25rem;">
               <h2 class="panel-title"><i data-lucide="trending-up"></i> Biểu đồ doanh thu</h2>
-              <div class="chart-controls" style="display: flex; gap: 0.35rem; background: rgba(0,0,0,0.2); padding: 0.2rem; border-radius: 8px; border: 1px solid var(--border-color);">
+              <div class="chart-controls" style="display: flex; gap: 0.35rem; background: rgba(0,0,0,0.2); padding: 0.2rem; border-radius: 8px; ">
                 <button class="btn btn-secondary btn-xs chart-view-btn" data-view="day" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 6px;">Ngày</button>
                 <button class="btn btn-secondary btn-xs chart-view-btn" data-view="week" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 6px;">Tuần</button>
                 <button class="btn btn-primary btn-xs chart-view-btn" data-view="month" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 6px;">Tháng</button>
@@ -308,7 +310,7 @@
               <input type="text" class="form-control-search" id="product-search-input" placeholder="Tìm kiếm sản phẩm theo tên, mã...">
             </div>
             <div class="filter-wrapper" style="width: 200px;">
-              <select class="form-control" id="product-brand-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
+              <select class="form-control" id="product-brand-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer;">
                 <option value="">-- Tất cả hãng sơn --</option>
               </select>
             </div>
@@ -515,7 +517,7 @@
 
                   <div class="form-group" id="quick-cust-shipping-support-container" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
                     <input type="checkbox" id="quick-cust-shipping-support" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary);">
-                    <label for="quick-cust-shipping-support" style="font-size: 0.75rem; color: var(--text-primary); cursor: pointer; font-weight: 500; user-select: none;">
+                    <label for="quick-cust-shipping-support" style="font-size: 0.75rem; cursor: pointer; font-weight: 500; user-select: none;">
                       Hỗ trợ vận chuyển (3%)
                     </label>
                   </div>
@@ -576,7 +578,7 @@
                 <!-- Hỗ trợ vận chuyển Checkbox -->
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 0; padding: 0.5rem; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 6px;">
                   <input type="checkbox" id="invoice-shipping-support" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary);">
-                  <label for="invoice-shipping-support" style="font-size: 0.8rem; color: var(--text-primary); cursor: pointer; user-select: none; font-weight: 500;">
+                  <label for="invoice-shipping-support" style="font-size: 0.8rem; cursor: pointer; user-select: none; font-weight: 500;">
                     Hỗ trợ vận chuyển (3%)
                   </label>
                 </div>
@@ -635,7 +637,7 @@
             
             <!-- Bộ lọc thời gian -->
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; flex: 2; min-width: 320px;">
-              <select class="form-control" id="history-date-mode" style="width: 140px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
+              <select class="form-control" id="history-date-mode" style="width: 140px; height: 42px; border-radius: 8px; cursor: pointer;">
                 <option value="all">Tất cả thời gian</option>
                 <option value="date">Theo ngày</option>
                 <option value="month">Theo tháng</option>
@@ -644,33 +646,33 @@
               </select>
               
               <!-- Input cụ thể cho Ngày -->
-              <input type="date" class="form-control" id="history-filter-date" style="display: none; width: 140px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+              <input type="date" class="form-control" id="history-filter-date" style="display: none; width: 140px; height: 42px; border-radius: 8px; ">
               
               <!-- Input cụ thể cho Tháng -->
-              <input type="month" class="form-control" id="history-filter-month" style="display: none; width: 180px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+              <input type="month" class="form-control" id="history-filter-month" style="display: none; width: 180px; height: 42px; border-radius: 8px; ">
               
               <!-- Input cụ thể cho Năm -->
-              <select class="form-control" id="history-filter-year" style="display: none; width: 110px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer;">
+              <select class="form-control" id="history-filter-year" style="display: none; width: 110px; height: 42px; border-radius: 8px; cursor: pointer;">
                 <!-- Tải động qua JS -->
               </select>
               
               <!-- Input khoảng ngày (Từ ngày - Đến ngày) -->
               <div id="history-filter-range" style="display: none; gap: 0.5rem; align-items: center;">
-                <input type="date" class="form-control" id="history-filter-from" style="width: 130px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+                <input type="date" class="form-control" id="history-filter-from" style="width: 130px; height: 42px; border-radius: 8px; ">
                 <span style="color: var(--text-secondary); font-size: 0.85rem;">đến</span>
-                <input type="date" class="form-control" id="history-filter-to" style="width: 130px; height: 42px; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary);">
+                <input type="date" class="form-control" id="history-filter-to" style="width: 130px; height: 42px; border-radius: 8px; ">
               </div>
             </div>
 
             <!-- Bộ lọc khách hàng (Tích hợp tìm kiếm) -->
             <div style="width: 200px; min-width: 160px; position: relative;">
-              <input type="text" class="form-control" id="history-customer-filter" list="history-customer-list" placeholder="Tìm khách hàng..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); font-size: 0.8rem;">
+              <input type="text" class="form-control" id="history-customer-filter" list="history-customer-list" placeholder="Tìm khách hàng..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem;">
               <datalist id="history-customer-list"></datalist>
             </div>
 
             <!-- Bộ lọc nhân viên lên đơn (Tích hợp tìm kiếm) -->
             <div style="width: 180px; min-width: 150px; position: relative;">
-              <input type="text" class="form-control" id="history-creator-filter" list="history-creator-list" placeholder="Tìm nhân viên..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); font-size: 0.8rem;">
+              <input type="text" class="form-control" id="history-creator-filter" list="history-creator-list" placeholder="Tìm nhân viên..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem;">
               <datalist id="history-creator-list"></datalist>
             </div>
           </div>
@@ -925,7 +927,7 @@
               <input type="text" class="form-control-search" id="customer-search-input" placeholder="Tìm kiếm theo mã, tên hoặc số điện thoại...">
             </div>
             <div class="filter-wrapper" style="width: 220px;" id="cust-managed-filter-wrapper">
-              <select class="form-control" id="customer-managed-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background-color: rgba(17,24,39,0.8); color: var(--text-primary); cursor: pointer; width: 100%;">
+              <select class="form-control" id="customer-managed-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; width: 100%;">
                 <option value="">-- Tất cả nhân viên --</option>
               </select>
             </div>
@@ -1381,7 +1383,7 @@
           </div>
           <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0;">
             <input type="checkbox" id="cust-shipping-support" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--color-primary);">
-            <label for="cust-shipping-support" style="font-size: 0.85rem; color: var(--text-primary); cursor: pointer; font-weight: 500; user-select: none;">
+            <label for="cust-shipping-support" style="font-size: 0.85rem; cursor: pointer; font-weight: 500; user-select: none;">
               Được hỗ trợ vận chuyển (Chiết khấu 3% giá trị đơn hàng sau chiết khấu nhãn sơn)
             </label>
           </div>
@@ -1438,7 +1440,7 @@
       <form id="pay-debt-form">
         <input type="hidden" id="pay-debt-customer-id" value="">
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
-          <div style="font-size: 0.9rem; line-height: 1.5; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem;">
+          <div style="font-size: 0.9rem; line-height: 1.5; background: rgba(255, 255, 255, 0.03); border-radius: 8px; padding: 0.75rem;">
             <div><strong>Khách hàng:</strong> <span id="pay-debt-cust-name" style="color: #fff; font-weight: 600;"></span></div>
             <div style="margin-top: 0.25rem;"><strong>Công nợ hiện tại:</strong> <span id="pay-debt-cust-current-debt" style="color: var(--color-danger); font-weight: 700;">0 ₫</span></div>
           </div>
@@ -1474,7 +1476,7 @@
       <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.5rem; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
         
         <!-- Customer Info Summary Card (Divided into 2 halves) -->
-        <div style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; background: rgba(255, 255, 255, 0.02); border-radius: 8px;">
           
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
             <!-- Nửa 1: Thông tin liên hệ -->
@@ -1537,7 +1539,7 @@
             Lịch sử biến động công nợ
           </h4>
           
-          <div class="table-container" style="max-height: 350px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;">
+          <div class="table-container" style="max-height: 350px; overflow-y: auto; border-radius: 8px;">
             <table class="table" style="font-size: 0.85rem; margin-bottom: 0;">
               <thead>
                 <tr>
@@ -1871,11 +1873,11 @@
         
         <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap;">
           <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
-          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
             <input type="radio" name="import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
             Gộp thêm (Giữ lại sản phẩm cũ, trùng mã sẽ cập nhật)
           </label>
-          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
             <input type="radio" name="import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
             Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
           </label>
@@ -1938,11 +1940,11 @@
         
         <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px dashed var(--border-color); padding-bottom: 1rem;">
           <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
-          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
             <input type="radio" name="cust-import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
             Gộp thêm (Giữ lại khách cũ, trùng mã/SĐT sẽ cập nhật)
           </label>
-          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text-primary);">
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
             <input type="radio" name="cust-import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
             Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
           </label>
@@ -2177,7 +2179,7 @@
         </div>
         <div class="detail-item-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem; border-bottom: none;">
           <span class="detail-item-label">Ghi chú</span>
-          <span class="detail-item-value" id="so-quy-detail-note" style="text-align: left; font-weight: normal; margin-top: 0.25rem; white-space: pre-wrap; width: 100%; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 6px; background-color: var(--bg-primary);">Không có ghi chú</span>
+          <span class="detail-item-value" id="so-quy-detail-note" style="text-align: left; font-weight: normal; margin-top: 0.25rem; white-space: pre-wrap; width: 100%; padding: 0.5rem; border-radius: 6px; background-color: var(--bg-primary);">Không có ghi chú</span>
         </div>
         <div class="detail-item-row" style="border-bottom: none; padding-top: 1rem; justify-content: center;">
           <span style="font-size: 1.35rem; font-weight: 700; color: #0070d2;" id="so-quy-detail-value">0 đ</span>
