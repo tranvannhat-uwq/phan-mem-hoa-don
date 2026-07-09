@@ -1760,9 +1760,9 @@ select option {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 25px;
+    margin-bottom: 12px !important;
     border-bottom: 2.5px solid #000;
-    padding-bottom: 10px;
+    padding-bottom: 6px !important;
   }
 
   .print-header h1 {
@@ -1777,7 +1777,7 @@ select option {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
-    margin-bottom: 25px;
+    margin-bottom: 12px !important;
     font-size: 13pt;
     font-weight: bold;
     color: #000 !important;
@@ -1786,7 +1786,7 @@ select option {
   .print-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 12px;
+    margin-bottom: 8px !important;
     table-layout: fixed;
   }
 
@@ -1839,7 +1839,7 @@ select option {
   }
 
   .print-signatures {
-    margin-top: 25px;
+    margin-top: 15px !important;
     display: flex;
     justify-content: space-between;
     clear: both;
@@ -1854,7 +1854,7 @@ select option {
   }
 
   .print-sig-space {
-    height: 55px;
+    height: 40px !important;
   }
   
   .print-color-box {
@@ -3125,6 +3125,13 @@ select#invoice-pricelist-select:disabled {
 
 .dropdown-item:hover {
   background-color: var(--bg-primary) !important;
+}
+
+/* Exclusive brand select red color overrides */
+select.form-control.default-red,
+select.default-red ~ .searchable-select-trigger .searchable-select-label {
+  color: #ff0000 !important;
+  font-weight: bold !important;
 }
 
 

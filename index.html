@@ -17,7 +17,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1.0.5">
 </head>
 <body>
 
@@ -470,9 +470,8 @@
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                       <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Nhãn đại lý độc quyền</label>
-                      <select class="form-control" id="quick-cust-assigned-brand">
-                        <option value="">-- Chọn nhãn sơn --</option>
-                        <option value="Tất cả">Tất cả (Đại lý tổng hợp/Khách lẻ)</option>
+                      <select class="form-control default-red" id="quick-cust-assigned-brand">
+                        <option value="Tất cả" selected>Chọn nhãn sơn</option>
                         <option value="Nano10*">Nano10*</option>
                         <option value="Hatacco nano">Hatacco nano</option>
                         <option value="mutsutec">mutsutec</option>
@@ -1370,9 +1369,8 @@
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-assigned-brand">Nhãn đại lý độc quyền</label>
-              <select class="form-control" id="cust-assigned-brand" style="width: 100%;">
-                <option value="">-- Chọn nhãn sơn --</option>
-                <option value="Tất cả">Tất cả (Đại lý tổng hợp/Khách lẻ)</option>
+              <select class="form-control default-red" id="cust-assigned-brand" style="width: 100%;">
+                <option value="Tất cả" selected>Chọn nhãn sơn</option>
                 <option value="Nano10*">Nano10*</option>
                 <option value="Hatacco nano">Hatacco nano</option>
                 <option value="mutsutec">mutsutec</option>
@@ -2368,6 +2366,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=1.0.5"></script>
 </body>
 </html>

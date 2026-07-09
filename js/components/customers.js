@@ -308,6 +308,9 @@ export function openCustomerModal(index = -1) {
     if (mBySelect) {
       mBySelect.value = state.currentUser ? state.currentUser.username : 'nhat';
     }
+    
+    document.getElementById('cust-assigned-brand').value = 'Tất cả';
+    makeSelectSearchable('cust-assigned-brand', 'Chọn nhãn sơn', false);
   } else {
     title.innerText = 'Chỉnh sửa khách hàng';
     const customer = state.customers[index];
@@ -319,6 +322,7 @@ export function openCustomerModal(index = -1) {
     document.getElementById('cust-phone').value = customer.phone || '';
     document.getElementById('cust-address').value = customer.address || '';
     document.getElementById('cust-assigned-brand').value = customer.assignedBrand || 'Tất cả';
+    makeSelectSearchable('cust-assigned-brand', 'Chọn nhãn sơn', false);
     document.getElementById('cust-debt').value = customer.debt || 0;
     document.getElementById('cust-notes').value = customer.notes || '';
     document.getElementById('cust-shipping-support').checked = customer.shippingSupport || false;
@@ -648,6 +652,8 @@ export function setupCustomerManagement() {
 
     makeSelectSearchable('cust-province', '-- Chọn Tỉnh/Thành --');
   }
+  
+  makeSelectSearchable('cust-assigned-brand', 'Chọn nhãn sơn', false);
 
   const closePayDebtBtn = document.getElementById('btn-close-pay-debt-modal');
   const cancelPayDebtBtn = document.getElementById('btn-cancel-pay-debt');

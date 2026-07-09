@@ -7,6 +7,7 @@ import { generateUniqueCustomerCode } from './customers.js';
 import { addCashbookTransaction } from './so_quy.js';
 
 let currentOrderToPrint = null;
+let isSavingOrder = false;
 
 export function getActiveInvoiceDiscount(brand) {
   if (!brand) return 0;
@@ -119,11 +120,19 @@ export function renderInvoiceTable() {
     
     // Tạo dropdown quy cách đóng gói dựa trên giá tiền cấu hình (> 0)
     const activePackages = [];
-    if (p.priceThung > 0) activePackages.push({ value: 'Thung', label: `Thùng (${formatCurrency(p.priceThung)})` });
-    if (p.priceLon > 0) activePackages.push({ value: 'Lon', label: `Lon (${formatCurrency(p.priceLon)})` });
-    if (p.priceHop > 0) activePackages.push({ value: 'Hop', label: `Hộp (${formatCurrency(p.priceHop)})` });
-    if (p.priceBao > 0) activePackages.push({ value: 'Bao', label: `Bao (${formatCurrency(p.priceBao)})` });
-    if (p.priceTui > 0) activePackages.push({ value: 'Tui', label: `Túi (${formatCurrency(p.priceTui)})` });
+    const isSpecialWaterproofing = p.name.toLowerCase().includes('chống thấm sàn chuyên dụng') || 
+                                   p.code === 'SIKA-01 A+B' || 
+                                   p.code === 'EMP-01';
+    if (isSpecialWaterproofing) {
+      const boPrice = p.priceLon || p.priceThung || 0;
+      activePackages.push({ value: 'Bo', label: `Bộ (gồm Lon + Bao) (${formatCurrency(boPrice)})` });
+    } else {
+      if (p.priceThung > 0) activePackages.push({ value: 'Thung', label: `Thùng (${formatCurrency(p.priceThung)})` });
+      if (p.priceLon > 0) activePackages.push({ value: 'Lon', label: `Lon (${formatCurrency(p.priceLon)})` });
+      if (p.priceHop > 0) activePackages.push({ value: 'Hop', label: `Hộp (${formatCurrency(p.priceHop)})` });
+      if (p.priceBao > 0) activePackages.push({ value: 'Bao', label: `Bao (${formatCurrency(p.priceBao)})` });
+      if (p.priceTui > 0) activePackages.push({ value: 'Tui', label: `Túi (${formatCurrency(p.priceTui)})` });
+    }
     
     // Trường hợp sản phẩm không có quy cách nào thiết lập giá (>0), mặc định dùng Thùng
     if (activePackages.length === 0) {
@@ -298,7 +307,8 @@ function recalculateItemPriceWithColorMarkup(index) {
   
   // Lấy đơn giá gốc theo quy cách đóng gói được chọn
   let basePrice = 0;
-  if (item.package === 'Thung') basePrice = p.priceThung || p.price || 0;
+  if (item.package === 'Bo') basePrice = p.priceLon || p.priceThung || p.price || 0;
+  else if (item.package === 'Thung') basePrice = p.priceThung || p.price || 0;
   else if (item.package === 'Lon') basePrice = p.priceLon || 0;
   else if (item.package === 'Hop') basePrice = p.priceHop || 0;
   else if (item.package === 'Bao') basePrice = p.priceBao || 0;
@@ -402,7 +412,12 @@ export async function addProductToInvoice() {
   
   // Xác định quy cách đóng gói mặc định (cái đầu tiên có giá > 0)
   let defaultPackage = 'Thung';
-  if (product.priceThung > 0) defaultPackage = 'Thung';
+  const isSpecialWaterproofing = product.name.toLowerCase().includes('chống thấm sàn chuyên dụng') || 
+                                 product.code === 'SIKA-01 A+B' || 
+                                 product.code === 'EMP-01';
+  if (isSpecialWaterproofing) {
+    defaultPackage = 'Bo';
+  } else if (product.priceThung > 0) defaultPackage = 'Thung';
   else if (product.priceLon > 0) defaultPackage = 'Lon';
   else if (product.priceHop > 0) defaultPackage = 'Hop';
   else if (product.priceBao > 0) defaultPackage = 'Bao';
@@ -410,7 +425,8 @@ export async function addProductToInvoice() {
 
   // Lấy đơn giá gốc
   let price = product.priceThung || product.price || 0;
-  if (defaultPackage === 'Lon') price = product.priceLon || 0;
+  if (defaultPackage === 'Bo') price = product.priceLon || product.priceThung || 0;
+  else if (defaultPackage === 'Lon') price = product.priceLon || 0;
   else if (defaultPackage === 'Hop') price = product.priceHop || 0;
   else if (defaultPackage === 'Bao') price = product.priceBao || 0;
   else if (defaultPackage === 'Tui') price = product.priceTui || 0;
@@ -546,166 +562,212 @@ export function compileActiveOrder() {
 }
 
 export async function saveActiveOrder(status = 'settled') {
-  let customerId = state.activeCustomerId || null;
-  
-  // Xử lý tạo nhanh khách hàng mới nếu ở chế độ thêm nhanh
-  if (state.isQuickCustomerMode) {
-    const qName = document.getElementById('quick-cust-name').value.trim();
-    if (!qName) {
-      showToast('Vui lòng nhập tên khách hàng mới!', 'danger');
-      return null;
-    }
-    
-    const qProvinceSelect = document.getElementById('quick-cust-province');
-    const qProvince = qProvinceSelect ? qProvinceSelect.value : '';
-    if (!qProvince) {
-      showToast('Vui lòng chọn Tỉnh/Thành phố cho khách hàng mới!', 'danger');
-      return null;
-    }
-    
-    const qCode = generateUniqueCustomerCode(qProvince);
-    const qPhone = document.getElementById('quick-cust-phone').value.trim();
-    const cleanPhone = qPhone.replace(/\D/g, '');
-    if (cleanPhone) {
-      const duplicatePhone = state.customers.some(c => {
-        const cPhone = (c.phone || '').replace(/\D/g, '');
-        return cPhone === cleanPhone;
-      });
-      if (duplicatePhone) {
-        showToast('Số điện thoại này đã được đăng ký cho khách hàng khác!', 'danger');
-        return null;
-      }
-    }
-    const qAddress = document.getElementById('quick-cust-address').value.trim();
-    const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
-    
-    if (!qAssignedBrand) {
-      showToast('Vui lòng chọn nhãn đại lý độc quyền!', 'warning');
-      return null;
-    }
-    
-    const qShippingSupport = document.getElementById('quick-cust-shipping-support').checked;
-    
-    const qManagerSelect = document.getElementById('quick-cust-manager');
-    const qManager = qManagerSelect ? qManagerSelect.value : '';
-    if (!qManager) {
-      showToast('Vui lòng chọn nhân viên quản lý cho khách hàng mới!', 'danger');
-      return null;
-    }
-    
-    const plSelect = document.getElementById('invoice-pricelist-select');
-    const qPricelistId = plSelect && plSelect.value ? plSelect.value : 'custom';
-    
-    const newCustId = `cust-${Date.now()}`;
-    const newCustomer = {
-      id: newCustId,
-      code: qCode,
-      name: qName,
-      phone: qPhone,
-      address: qAddress,
-      assignedBrand: qAssignedBrand,
-      brandDiscounts: { province: qProvince },
-      shippingSupport: qShippingSupport,
-      debt: 0,
-      totalTransaction: 0,
-      notes: 'Thêm nhanh từ màn hình lên đơn',
-      pricelistId: qPricelistId,
-      managedBy: qManager
-    };
-    
-    const custSaved = await dbSaveCustomer(newCustomer);
-    if (!custSaved) {
-      showToast('Không thể tạo thông tin khách hàng mới. Vui lòng thử lại!', 'danger');
-      return null;
-    }
-    state.activeCustomerId = newCustId;
-    customerId = newCustId;
-    
-    state.customers.push(newCustomer);
-    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-  }
-
-  const order = compileActiveOrder();
-  if (!order) return null;
-  
-  if (status === 'settled' && state.currentUser && state.currentUser.role === 'sale') {
-    showToast('Nhân viên kinh doanh không có quyền thực hiện thanh toán!', 'danger');
+  if (isSavingOrder) {
+    console.warn("Lưu đơn hàng đang được thực hiện...");
     return null;
   }
-  
-  order.status = status;
 
-  // Lấy ID đơn sửa nếu có
   const saveBtn = document.getElementById('btn-save-order');
-  const editOrderId = saveBtn ? saveBtn.getAttribute('data-edit-order-id') : null;
+  const draftBtn = document.getElementById('btn-draft-order');
 
-  showToast('Đang lưu hóa đơn...', 'info');
-
-  // Nếu là đơn sửa, kiểm tra trạng thái cũ để chuyển bảng nếu cần
-  if (editOrderId) {
-    const oldOrder = state.savedOrders.find(o => o.id === editOrderId);
-    const oldStatus = oldOrder ? oldOrder.status : null;
-    
-    state.savedOrders = state.savedOrders.filter(o => o.id !== editOrderId);
-
-    // Nếu đơn cũ là nháp và đơn mới là chốt chính thức, cần xóa bản ghi cũ ở bảng draft_orders
-    if (oldStatus === 'draft' && status === 'settled') {
-      await dbDeleteOrder(editOrderId, 'draft');
+  const disableButtons = () => {
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.style.opacity = '0.5';
+      saveBtn.style.cursor = 'not-allowed';
     }
-  }
+    if (draftBtn) {
+      draftBtn.disabled = true;
+      draftBtn.style.opacity = '0.5';
+      draftBtn.style.cursor = 'not-allowed';
+    }
+  };
 
-  const saved = await dbSaveOrder(order);
-  if (saved) {
-    if (status === 'draft') {
-      showToast(`Đã lưu đơn nháp ${order.id} thành công!`);
-    } else {
-      showToast(`Đã thanh toán và lưu đơn hàng ${order.id} thành công!`);
+  const enableButtons = () => {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.style.opacity = '1';
+      saveBtn.style.cursor = 'pointer';
+    }
+    if (draftBtn) {
+      draftBtn.disabled = false;
+      draftBtn.style.opacity = '1';
+      draftBtn.style.cursor = 'pointer';
+    }
+  };
+
+  isSavingOrder = true;
+  disableButtons();
+
+  try {
+    let customerId = state.activeCustomerId || null;
+    
+    // Xử lý tạo nhanh khách hàng mới nếu ở chế độ thêm nhanh
+    if (state.isQuickCustomerMode) {
+      const qName = document.getElementById('quick-cust-name').value.trim();
+      if (!qName) {
+        showToast('Vui lòng nhập tên khách hàng mới!', 'danger');
+        return null;
+      }
       
-      // Ghi nhận phiếu thu tự động vào Sổ quỹ
-      addCashbookTransaction({
-        type: 'thu',
-        category: 'Thu thu tiền hàng',
-        partner: order.customerName,
-        value: order.totalPayable,
-        method: 'cash',
-        accounting: true,
-        note: `Thu tiền hàng cho hóa đơn ${order.id}`,
-        creator: state.currentUser ? state.currentUser.displayName : 'Administrator'
-      });
+      const qProvinceSelect = document.getElementById('quick-cust-province');
+      const qProvince = qProvinceSelect ? qProvinceSelect.value : '';
+      if (!qProvince) {
+        showToast('Vui lòng chọn Tỉnh/Thành phố cho khách hàng mới!', 'danger');
+        return null;
+      }
       
-      // Cập nhật công nợ và tổng giao dịch nếu chốt đơn (settled) và có khách hàng liên kết (làm tròn số nguyên)
-      if (order.customerId) {
-        const cust = state.customers.find(c => c.id === order.customerId);
-        if (cust) {
-          cust.debt = Math.round((cust.debt || 0) + order.totalPayable);
-          cust.totalTransaction = Math.round((cust.totalTransaction || 0) + order.totalPayable);
-          
-          // Ghi nhận biến động công nợ do mua hàng
-          if (!cust.debtHistory) cust.debtHistory = [];
-          cust.debtHistory.push({
-            id: order.id,
-            date: order.date,
-            type: 'charge',
-            amount: order.totalPayable,
-            notes: `Mua hàng (Hóa đơn ${order.id})`,
-            debtAfter: cust.debt
-          });
-          
-          await dbSaveCustomer(cust);
+      const qCode = generateUniqueCustomerCode(qProvince);
+      const qPhone = document.getElementById('quick-cust-phone').value.trim();
+      const cleanPhone = qPhone.replace(/\D/g, '');
+      if (cleanPhone) {
+        const duplicatePhone = state.customers.some(c => {
+          const cPhone = (c.phone || '').replace(/\D/g, '');
+          return cPhone === cleanPhone;
+        });
+        if (duplicatePhone) {
+          showToast('Số điện thoại này đã được đăng ký cho khách hàng khác!', 'danger');
+          return null;
         }
       }
+      const qAddress = document.getElementById('quick-cust-address').value.trim();
+      const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
+      
+      if (!qAssignedBrand) {
+        showToast('Vui lòng chọn nhãn đại lý độc quyền!', 'warning');
+        return null;
+      }
+      
+      const qShippingSupport = document.getElementById('quick-cust-shipping-support').checked;
+      
+      const qManagerSelect = document.getElementById('quick-cust-manager');
+      const qManager = qManagerSelect ? qManagerSelect.value : '';
+      if (!qManager) {
+        showToast('Vui lòng chọn nhân viên quản lý cho khách hàng mới!', 'danger');
+        return null;
+      }
+      
+      const plSelect = document.getElementById('invoice-pricelist-select');
+      const qPricelistId = plSelect && plSelect.value ? plSelect.value : 'custom';
+      
+      const newCustId = `cust-${Date.now()}`;
+      const newCustomer = {
+        id: newCustId,
+        code: qCode,
+        name: qName,
+        phone: qPhone,
+        address: qAddress,
+        assignedBrand: qAssignedBrand,
+        brandDiscounts: { province: qProvince },
+        shippingSupport: qShippingSupport,
+        debt: 0,
+        totalTransaction: 0,
+        notes: 'Thêm nhanh từ màn hình lên đơn',
+        pricelistId: qPricelistId,
+        managedBy: qManager
+      };
+      
+      const custSaved = await dbSaveCustomer(newCustomer);
+      if (!custSaved) {
+        showToast('Không thể tạo thông tin khách hàng mới. Vui lòng thử lại!', 'danger');
+        return null;
+      }
+      state.activeCustomerId = newCustId;
+      customerId = newCustId;
+      
+      state.customers.push(newCustomer);
+      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    }
+
+    const order = compileActiveOrder();
+    if (!order) return null;
+    
+    if (status === 'settled' && state.currentUser && state.currentUser.role === 'sale') {
+      showToast('Nhân viên kinh doanh không có quyền thực hiện thanh toán!', 'danger');
+      return null;
     }
     
-    // Lưu local
-    state.savedOrders.unshift(order);
-    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+    order.status = status;
 
-    resetInvoiceBuilder();
-    renderAll();
-    
-    return order;
+    // Lấy ID đơn sửa nếu có
+    const saveBtnEl = document.getElementById('btn-save-order');
+    const editOrderId = saveBtnEl ? saveBtnEl.getAttribute('data-edit-order-id') : null;
+
+    showToast('Đang lưu hóa đơn...', 'info');
+
+    // Nếu là đơn sửa, kiểm tra trạng thái cũ để chuyển bảng nếu cần
+    if (editOrderId) {
+      const oldOrder = state.savedOrders.find(o => o.id === editOrderId);
+      const oldStatus = oldOrder ? oldOrder.status : null;
+      
+      state.savedOrders = state.savedOrders.filter(o => o.id !== editOrderId);
+
+      // Nếu đơn cũ là nháp và đơn mới là chốt chính thức, cần xóa bản ghi cũ ở bảng draft_orders
+      if (oldStatus === 'draft' && status === 'settled') {
+        await dbDeleteOrder(editOrderId, 'draft');
+      }
+    }
+
+    const saved = await dbSaveOrder(order);
+    if (saved) {
+      if (status === 'draft') {
+        showToast(`Đã lưu đơn nháp ${order.id} thành công!`);
+      } else {
+        showToast(`Đã thanh toán và lưu đơn hàng ${order.id} thành công!`);
+        
+        // Ghi nhận phiếu thu tự động vào Sổ quỹ
+        addCashbookTransaction({
+          type: 'thu',
+          category: 'Thu thu tiền hàng',
+          partner: order.customerName,
+          value: order.totalPayable,
+          method: 'cash',
+          accounting: true,
+          note: `Thu tiền hàng cho hóa đơn ${order.id}`,
+          creator: state.currentUser ? state.currentUser.displayName : 'Administrator'
+        });
+        
+        // Cập nhật công nợ và tổng giao dịch nếu chốt đơn (settled) và có khách hàng liên kết (làm tròn số nguyên)
+        if (order.customerId) {
+          const cust = state.customers.find(c => c.id === order.customerId);
+          if (cust) {
+            cust.debt = Math.round((cust.debt || 0) + order.totalPayable);
+            cust.totalTransaction = Math.round((cust.totalTransaction || 0) + order.totalPayable);
+            
+            // Ghi nhận biến động công nợ do mua hàng
+            if (!cust.debtHistory) cust.debtHistory = [];
+            cust.debtHistory.push({
+              id: order.id,
+              date: order.date,
+              type: 'charge',
+              amount: order.totalPayable,
+              notes: `Mua hàng (Hóa đơn ${order.id})`,
+              debtAfter: cust.debt
+            });
+            
+            await dbSaveCustomer(cust);
+          }
+        }
+      }
+      
+      // Lưu local
+      state.savedOrders.unshift(order);
+      localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+
+      resetInvoiceBuilder();
+      renderAll();
+      
+      return order;
+    }
+    return null;
+  } catch (error) {
+    console.error("Lỗi khi lưu đơn hàng:", error);
+    showToast('Có lỗi xảy ra khi lưu đơn hàng. Vui lòng thử lại!', 'danger');
+    return null;
+  } finally {
+    isSavingOrder = false;
+    enableButtons();
   }
-  return null;
 }
 
 export function resetInvoiceCustomer() {
@@ -844,7 +906,10 @@ export function disableQuickCustomerMode() {
   const qAddr = document.getElementById('quick-cust-address');
   if (qAddr) qAddr.value = '';
   const qBrand = document.getElementById('quick-cust-assigned-brand');
-  if (qBrand) qBrand.value = 'Tất cả';
+  if (qBrand) {
+    qBrand.value = 'Tất cả';
+    makeSelectSearchable('quick-cust-assigned-brand', 'Chọn nhãn sơn', false);
+  }
   const qShip = document.getElementById('quick-cust-shipping-support');
   if (qShip) qShip.checked = false;
   
@@ -879,7 +944,10 @@ export function handleQuickCustomerBrandChange(newBrand) {
       const ok = confirm(`Khách hàng mới này được chỉ định nhãn sơn "${newBrand}". Chọn nhãn này sẽ loại bỏ ${invalidItems.length} sản phẩm khác nhãn sơn hiện có trong đơn hàng. Bạn có đồng ý không?`);
       if (!ok) {
         const quickBrandSelect = document.getElementById('quick-cust-assigned-brand');
-        if (quickBrandSelect) quickBrandSelect.value = state.activeCustomerBrand;
+        if (quickBrandSelect) {
+          quickBrandSelect.value = state.activeCustomerBrand;
+          makeSelectSearchable('quick-cust-assigned-brand', 'Chọn nhãn sơn', false);
+        }
         return;
       } else {
         state.invoiceItems = state.invoiceItems.filter(item => {
@@ -915,6 +983,9 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     if (type === 'warehouse') {
       titleEl.innerText = 'PHIẾU XUẤT KHO';
       titleEl.style.fontSize = '17.6pt'; // Giảm 20% từ 22pt
+    } else if (type === 'retail') {
+      titleEl.innerText = 'HÓA ĐƠN BÁN LẺ';
+      titleEl.style.fontSize = '22pt';
     } else {
       titleEl.innerText = 'HÓA ĐƠN BÁN HÀNG';
       titleEl.style.fontSize = '22pt';
@@ -1117,6 +1188,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       else if (pkg === 'Hop') pkg = 'Hộp';
       else if (pkg === 'Bao') pkg = 'Bao';
       else if (pkg === 'Tui') pkg = 'Túi';
+      else if (pkg === 'Bo') pkg = 'Bộ';
       
       const qty = parseInt(item.quantity) || 0;
       totalQty += qty;
@@ -1148,7 +1220,12 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           
           let weight = 'N/A';
           if (p) {
-            if (item.package === 'Thung') weight = p.weightThung || 'N/A';
+            if (item.package === 'Bo') {
+              const wLon = p.weightLon ? `Lon: ${p.weightLon}` : '';
+              const wBao = p.weightBao ? `Bao: ${p.weightBao}` : '';
+              weight = [wLon, wBao].filter(Boolean).join(' + ') || 'N/A';
+            }
+            else if (item.package === 'Thung') weight = p.weightThung || 'N/A';
             else if (item.package === 'Lon') weight = p.weightLon || 'N/A';
             else if (item.package === 'Hop') weight = p.weightHop || 'N/A';
             else if (item.package === 'Bao') weight = p.weightBao || 'N/A';
@@ -1183,7 +1260,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     let newDebt = 0;
     let hasDebtInfo = false;
     
-    if (order.customerId) {
+    if (type !== 'retail' && order.customerId) {
       const cust = state.customers.find(c => c.id === order.customerId);
       if (cust) {
         hasDebtInfo = true;
@@ -1241,7 +1318,12 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
           let weight = '';
           if (p) {
-            if (item.package === 'Thung') weight = p.weightThung;
+            if (item.package === 'Bo') {
+              const wLon = p.weightLon ? `Lon: ${p.weightLon}` : '';
+              const wBao = p.weightBao ? `Bao: ${p.weightBao}` : '';
+              weight = [wLon, wBao].filter(Boolean).join(' + ') || 'N/A';
+            }
+            else if (item.package === 'Thung') weight = p.weightThung;
             else if (item.package === 'Lon') weight = p.weightLon;
             else if (item.package === 'Hop') weight = p.weightHop;
             else if (item.package === 'Bao') weight = p.weightBao;
@@ -1250,17 +1332,22 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           
           let packageDisplay = item.package;
           let prefix = '';
-          if (packageDisplay === 'Thung') prefix = 'Thùng';
-          else if (packageDisplay === 'Lon') prefix = 'Lon';
-          else if (packageDisplay === 'Hop') prefix = 'Hộp';
-          else if (packageDisplay === 'Bao') prefix = 'Bao';
-          else if (packageDisplay === 'Tui') prefix = 'Túi';
-          
-          if (weight && weight !== 'N/A') {
-            let formattedWeight = weight.replace(/\s+/g, '').toUpperCase();
-            packageDisplay = `${prefix} ${formattedWeight}`;
+          if (packageDisplay === 'Bo') {
+            prefix = 'Bộ';
+            packageDisplay = `Bộ (${weight})`;
           } else {
-            packageDisplay = prefix;
+            if (packageDisplay === 'Thung') prefix = 'Thùng';
+            else if (packageDisplay === 'Lon') prefix = 'Lon';
+            else if (packageDisplay === 'Hop') prefix = 'Hộp';
+            else if (packageDisplay === 'Bao') prefix = 'Bao';
+            else if (packageDisplay === 'Tui') prefix = 'Túi';
+            
+            if (weight && weight !== 'N/A') {
+              let formattedWeight = weight.replace(/\s+/g, '').toUpperCase();
+              packageDisplay = `${prefix} ${formattedWeight}`;
+            } else {
+              packageDisplay = prefix;
+            }
           }
 
           const colorPercentText = item.colorPercent > 0 ? ` (+${item.colorPercent}% màu)` : '';
@@ -1351,8 +1438,22 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           <div class="print-sig-space"></div>
         </div>
       `;
+    } else if (type === 'retail') {
+      // Hóa đơn bán lẻ gồm 2 chữ ký thông dụng
+      sigsEl.innerHTML = `
+        <div class="print-sig-col" style="width: 45%;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">Người bán hàng</p>
+          <p style="font-size: 10pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+          <div class="print-sig-space"></div>
+        </div>
+        <div class="print-sig-col" style="width: 45%;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">Người mua hàng</p>
+          <p style="font-size: 10pt; color: #555; font-style: italic; margin: 0; margin-top: 2px;">(Ký, ghi rõ họ tên)</p>
+          <div class="print-sig-space"></div>
+        </div>
+      `;
     } else {
-      // Hóa đơn bán hàng gồm 5 chữ ký như yêu cầu
+      // Hóa đơn bán hàng đại lý gồm 5 chữ ký như yêu cầu
       sigsEl.innerHTML = `
         <div class="print-sig-col" style="width: 18%;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold; color: #000;">Người lập phiếu</p>
@@ -1395,38 +1496,56 @@ export function openPrintTypeModal(order) {
 
 export function setupPrintTypeModal() {
   const modal = document.getElementById('print-type-modal');
-  const closeBtn = document.getElementById('btn-close-print-type-modal');
+  if (!modal) return;
   
+  const closeBtn = document.getElementById('btn-close-print-type-modal');
   if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
+    const newCloseBtn = closeBtn.cloneNode(true);
+    closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+    newCloseBtn.addEventListener('click', () => {
       modal.classList.remove('active');
     });
   }
 
-  document.getElementById('btn-print-type-retail').addEventListener('click', () => {
-    if (currentOrderToPrint) {
-      renderAndPrintOrder(currentOrderToPrint, 'retail');
-      modal.classList.remove('active');
-    }
-  });
-  
-  document.getElementById('btn-print-type-agent').addEventListener('click', () => {
-    if (currentOrderToPrint) {
-      renderAndPrintOrder(currentOrderToPrint, 'agent');
-      modal.classList.remove('active');
-    }
-  });
-  
-  document.getElementById('btn-print-type-warehouse').addEventListener('click', () => {
-    if (currentOrderToPrint) {
-      if (state.currentUser && state.currentUser.role === 'sale') {
-        showToast('Nhân viên kinh doanh không có quyền in hóa đơn kho!', 'danger');
-        return;
+  const retailBtn = document.getElementById('btn-print-type-retail');
+  if (retailBtn) {
+    const newRetailBtn = retailBtn.cloneNode(true);
+    retailBtn.parentNode.replaceChild(newRetailBtn, retailBtn);
+    newRetailBtn.addEventListener('click', () => {
+      if (currentOrderToPrint) {
+        renderAndPrintOrder(currentOrderToPrint, 'retail');
+        modal.classList.remove('active');
       }
-      renderAndPrintOrder(currentOrderToPrint, 'warehouse');
-      modal.classList.remove('active');
-    }
-  });
+    });
+  }
+  
+  const agentBtn = document.getElementById('btn-print-type-agent');
+  if (agentBtn) {
+    const newAgentBtn = agentBtn.cloneNode(true);
+    agentBtn.parentNode.replaceChild(newAgentBtn, agentBtn);
+    newAgentBtn.addEventListener('click', () => {
+      if (currentOrderToPrint) {
+        renderAndPrintOrder(currentOrderToPrint, 'agent');
+        modal.classList.remove('active');
+      }
+    });
+  }
+  
+  const warehouseBtn = document.getElementById('btn-print-type-warehouse');
+  if (warehouseBtn) {
+    const newWarehouseBtn = warehouseBtn.cloneNode(true);
+    warehouseBtn.parentNode.replaceChild(newWarehouseBtn, warehouseBtn);
+    newWarehouseBtn.addEventListener('click', () => {
+      if (currentOrderToPrint) {
+        if (state.currentUser && state.currentUser.role === 'sale') {
+          showToast('Nhân viên kinh doanh không có quyền in hóa đơn kho!', 'danger');
+          return;
+        }
+        renderAndPrintOrder(currentOrderToPrint, 'warehouse');
+        modal.classList.remove('active');
+      }
+    });
+  }
 }
 
 export function setupInvoiceCreator() {
@@ -1444,6 +1563,8 @@ export function setupInvoiceCreator() {
     `;
     makeSelectSearchable('quick-cust-province', '-- Chọn Tỉnh/Thành --');
   }
+  
+  makeSelectSearchable('quick-cust-assigned-brand', 'Chọn nhãn sơn', false);
 
   const searchInput = document.getElementById('invoice-product-search');
   const suggestionsList = document.getElementById('invoice-product-suggestions');

@@ -222,7 +222,7 @@ export function getProvinceNameByCode(code) {
 }
 
 // Biến đổi thẻ select thường thành dạng có hỗ trợ tìm kiếm từ khóa
-export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
+export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...', showSearchInput = true) {
   const select = document.getElementById(selectId);
   if (!select) return;
   
@@ -230,6 +230,11 @@ export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
   if (select.parentNode.classList.contains('searchable-select-wrapper')) {
     const label = select.parentNode.querySelector('.searchable-select-label');
     if (label) label.innerText = select.options[select.selectedIndex]?.text || placeholder;
+    if (select.value === 'Tất cả' || select.value === '') {
+      select.classList.add('default-red');
+    } else {
+      select.classList.remove('default-red');
+    }
     return;
   }
   
@@ -240,6 +245,11 @@ export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
   select.parentNode.insertBefore(wrapper, select);
   wrapper.appendChild(select);
   select.style.display = 'none';
+  if (select.value === 'Tất cả' || select.value === '') {
+    select.classList.add('default-red');
+  } else {
+    select.classList.remove('default-red');
+  }
   
   // Tạo nút trigger hiển thị lựa chọn hiện tại
   const trigger = document.createElement('div');
@@ -260,11 +270,14 @@ export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
   const dropdown = document.createElement('div');
   dropdown.className = 'searchable-select-dropdown';
   
-  const searchInput = document.createElement('input');
-  searchInput.type = 'text';
-  searchInput.className = 'searchable-select-search-input';
-  searchInput.placeholder = placeholder;
-  dropdown.appendChild(searchInput);
+  let searchInput = null;
+  if (showSearchInput) {
+    searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'searchable-select-search-input';
+    searchInput.placeholder = placeholder;
+    dropdown.appendChild(searchInput);
+  }
   
   const list = document.createElement('div');
   list.className = 'searchable-select-options-list';
@@ -275,13 +288,14 @@ export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
   function updateOptions() {
     list.innerHTML = '';
     const options = Array.from(select.options);
-    const searchVal = searchInput.value.toLowerCase().trim();
+    const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
     
     // Hàm chuẩn hóa tiếng Việt không dấu để tìm kiếm thông minh hơn
     const removeAccents = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
     const searchValNorm = removeAccents(searchVal);
     
     const filtered = options.filter(opt => {
+      if (!searchInput) return true;
       const text = opt.text.toLowerCase();
       const textNorm = removeAccents(text);
       return text.includes(searchVal) || textNorm.includes(searchValNorm);
@@ -304,15 +318,26 @@ export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
       if (opt.selected) item.classList.add('selected');
       item.innerText = opt.text;
       
+      if (opt.value === 'Tất cả' || opt.text === 'Chọn nhãn sơn') {
+        item.style.setProperty('color', '#ff0000', 'important');
+        item.style.setProperty('font-weight', 'bold', 'important');
+      }
+      
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         select.value = opt.value;
         label.innerText = opt.text;
         
+        if (opt.value === 'Tất cả' || opt.value === '') {
+          select.classList.add('default-red');
+        } else {
+          select.classList.remove('default-red');
+        }
+        
         select.dispatchEvent(new Event('change'));
         
         dropdown.style.display = 'none';
-        searchInput.value = '';
+        if (searchInput) searchInput.value = '';
       });
       list.appendChild(item);
     });
@@ -326,18 +351,18 @@ export function makeSelectSearchable(selectId, placeholder = 'Tìm kiếm...') {
     if (!isShowing) {
       dropdown.style.display = 'flex';
       updateOptions();
-      setTimeout(() => searchInput.focus(), 50);
+      if (searchInput) setTimeout(() => searchInput.focus(), 50);
     } else {
       dropdown.style.display = 'none';
     }
   });
   
-  searchInput.addEventListener('input', updateOptions);
+  if (searchInput) searchInput.addEventListener('input', updateOptions);
   
   document.addEventListener('click', (e) => {
     if (!wrapper.contains(e.target)) {
       dropdown.style.display = 'none';
-      searchInput.value = '';
+      if (searchInput) searchInput.value = '';
     }
   });
   

@@ -325,6 +325,9 @@ async function initApp() {
   }
 
   populatePricelistsDropdowns();
+
+
+
   renderAll();
 }
 
