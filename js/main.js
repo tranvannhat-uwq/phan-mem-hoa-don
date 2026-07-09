@@ -103,17 +103,21 @@ function setupNavigation() {
   });
 
   // Toggle global settings dropdown
-  const settingsToggle = document.getElementById('btn-settings-toggle');
   const settingsMenu = document.getElementById('global-settings-menu');
-  if (settingsToggle && settingsMenu) {
-    settingsToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isDisplayed = settingsMenu.style.display === 'block';
-      settingsMenu.style.display = isDisplayed ? 'none' : 'block';
-    });
+  
+  window.toggleSettingsDropdown = function(e) {
+    if (e) e.stopPropagation();
+    if (settingsMenu) {
+      const isHidden = settingsMenu.style.display === 'none' || settingsMenu.style.display === '';
+      settingsMenu.style.display = isHidden ? 'block' : 'none';
+    }
+  };
 
+  if (settingsMenu) {
     document.addEventListener('click', (e) => {
-      if (!settingsToggle.contains(e.target) && !settingsMenu.contains(e.target)) {
+      const isToggleClick = e.target.closest('#btn-settings-toggle');
+      const isMenuClick = e.target.closest('#global-settings-menu');
+      if (!isToggleClick && !isMenuClick) {
         settingsMenu.style.display = 'none';
       }
     });

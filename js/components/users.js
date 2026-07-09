@@ -550,6 +550,21 @@ export function applyUserPermissions(user) {
     }
   });
 
+  // Hiding dropdown items based on role
+  const dropdownNavLinks = document.querySelectorAll('.dropdown-nav-link');
+  dropdownNavLinks.forEach(link => {
+    const target = link.getAttribute('data-target');
+    if (role === 'sale' || role === 'accounting') {
+      if (target === 'users-panel' || target === 'settings-panel') {
+        link.style.display = 'none';
+      } else {
+        link.style.display = 'flex';
+      }
+    } else {
+      link.style.display = 'flex';
+    }
+  });
+
   if (role === 'sale') {
     switchTab('dashboard-panel');
   }

@@ -191,6 +191,9 @@ body {
   align-items: center;
   gap: 0.75rem;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1005;
+  overflow: visible;
 }
 
 .sidebar-footer {
@@ -1389,6 +1392,9 @@ select option {
     justify-self: end !important;
     display: flex !important;
     align-items: center !important;
+    position: relative !important;
+    z-index: 1005 !important;
+    overflow: visible !important;
   }
 
   .nav-menu {
@@ -3055,6 +3061,7 @@ select#invoice-pricelist-select:disabled {
     gap: 1rem !important;
     padding: 0 1rem !important;
     z-index: 1000 !important;
+    overflow: visible !important;
   }
   
   .brand {
@@ -3091,6 +3098,9 @@ select#invoice-pricelist-select:disabled {
     margin-left: auto !important;
     display: flex !important;
     align-items: center !important;
+    position: relative !important;
+    z-index: 1005 !important;
+    overflow: visible !important;
   }
 
   .sidebar-footer {
@@ -3132,6 +3142,11 @@ select.form-control.default-red,
 select.default-red ~ .searchable-select-trigger .searchable-select-label {
   color: #ff0000 !important;
   font-weight: bold !important;
+}
+
+/* Global Settings Dropdown Menu Active State */
+.global-settings-menu.active {
+  display: block !important;
 }
 
 

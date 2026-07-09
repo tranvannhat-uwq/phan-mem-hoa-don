@@ -17,7 +17,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=1.0.5">
+  <link rel="stylesheet" href="style.css?v=1.1.0">
 </head>
 <body>
 
@@ -80,7 +80,7 @@
       <div class="sidebar-actions">
         <!-- Global Settings / User Profile Dropdown Button -->
         <div class="global-settings-dropdown" style="position: relative;">
-          <button class="btn-settings-toggle" id="btn-settings-toggle" style="background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" title="Cài đặt hệ thống">
+          <button class="btn-settings-toggle" id="btn-settings-toggle" onclick="toggleSettingsDropdown(event)" style="background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" title="Cài đặt hệ thống">
             <i data-lucide="settings" style="width: 18px; height: 18px; color: #fff;"></i>
           </button>
           <!-- Dropdown Menu -->
@@ -2366,6 +2366,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=1.0.5"></script>
+  <script type="module" src="js/main.js?v=1.1.0"></script>
 </body>
 </html>
