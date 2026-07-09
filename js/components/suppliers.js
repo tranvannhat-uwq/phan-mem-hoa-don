@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier } from '../services/supabase.js';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 
 export function renderSuppliersTable() {
@@ -220,6 +220,58 @@ export function setupSupplierManagement() {
 
   // Khởi tạo datalist cho phiếu chi ban đầu
   populateSupplierDatalist();
+
+  // Excel Import for Suppliers
+  const openImportBtn = document.getElementById('btn-open-supplier-excel-modal');
+  if (openImportBtn) openImportBtn.addEventListener('click', openSupplierExcelModal);
+  
+  const closeImportBtn = document.getElementById('btn-close-supplier-excel-modal');
+  if (closeImportBtn) closeImportBtn.addEventListener('click', closeSupplierExcelModal);
+  
+  const cancelImportBtn = document.getElementById('btn-cancel-supplier-excel');
+  if (cancelImportBtn) cancelImportBtn.addEventListener('click', closeSupplierExcelModal);
+  
+  const fileInput = document.getElementById('supplier-excel-file-input');
+  const browseBtn = document.getElementById('btn-browse-supplier-excel');
+  const dropzone = document.getElementById('supplier-excel-dropzone');
+  
+  if (browseBtn && fileInput) {
+    browseBtn.addEventListener('click', () => fileInput.click());
+  }
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleSupplierExcelFile(e.target.files[0]);
+      }
+    });
+  }
+  
+  if (dropzone) {
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleSupplierExcelFile(e.dataTransfer.files[0]);
+      }
+    });
+  }
+  
+  const submitImportBtn = document.getElementById('btn-save-supplier-excel-submit');
+  if (submitImportBtn) {
+    submitImportBtn.addEventListener('click', processSupplierExcelImport);
+  }
+  
+  const downloadTemplateBtn = document.getElementById('btn-download-supplier-excel-template');
+  if (downloadTemplateBtn) {
+    downloadTemplateBtn.addEventListener('click', downloadSupplierExcelTemplate);
+  }
 }
 
 function openEditSupplierModal(idx) {
@@ -255,3 +307,249 @@ function handleDeleteSupplier(idx) {
     populateSupplierDatalist();
   }
 }
+
+// --- Excel Import & Template Helpers for Suppliers ---
+let supplierExcelImportData = [];
+
+export function downloadSupplierExcelTemplate() {
+  const headers = [[
+    "Mã nhà cung cấp", "Tên nhà cung cấp", "Email", "Điện thoại", "Địa chỉ"
+  ]];
+  
+  const sampleRows = [
+    ['NCC001', 'Công ty Cổ phần ABS JAPAN', 'ctyabs@lendon.com', '0886037878', 'Tiên Kha - Phúc Thịnh - Hà Nội'],
+    ['NCC002', 'Công ty TNHH Bao Bì Nam Hải', '', '0904947217', 'Phúc Thuận - Thái Nguyên']
+  ];
+
+  const sheetData = headers.concat(sampleRows);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+  
+  ws['!cols'] = [
+    { wch: 20 }, { wch: 40 }, { wch: 25 }, { wch: 15 }, { wch: 45 }
+  ];
+  
+  XLSX.utils.book_append_sheet(wb, ws, "Danh Sach Nha Cung Cap");
+  XLSX.writeFile(wb, "Mau_Danh_Sach_Nha_Cung_Cap.xlsx");
+  showToast("Đã tải xuống file Excel mẫu nhà cung cấp thành công!");
+}
+
+export function openSupplierExcelModal() {
+  const modal = document.getElementById('supplier-excel-modal');
+  if (modal) {
+    modal.classList.add('active');
+    
+    // Reset UI
+    supplierExcelImportData = [];
+    document.getElementById('supplier-excel-file-input').value = '';
+    document.getElementById('supplier-excel-preview-container').style.display = 'none';
+    const submitBtn = document.getElementById('btn-save-supplier-excel-submit');
+    if (submitBtn) {
+      submitBtn.setAttribute('disabled', 'true');
+      submitBtn.disabled = true;
+    }
+    const dropzone = document.getElementById('supplier-excel-dropzone');
+    if (dropzone) dropzone.className = 'upload-dropzone';
+  }
+}
+
+export function closeSupplierExcelModal() {
+  const modal = document.getElementById('supplier-excel-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function handleSupplierExcelFile(file) {
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      if (rows.length === 0) {
+        showToast("Tập tin Excel trống!", "danger");
+        return;
+      }
+      
+      const headers = rows[0].map(h => (h || '').toString().trim());
+      
+      // Map columns
+      const colMap = {
+        code: headers.findIndex(h => h.toLowerCase().includes('mã nhà cung cấp') || h.toLowerCase().includes('ma ncc') || h.toLowerCase() === 'mã' || h.toLowerCase() === 'code'),
+        name: headers.findIndex(h => h.toLowerCase().includes('tên nhà cung cấp') || h.toLowerCase().includes('ten ncc') || h.toLowerCase() === 'tên' || h.toLowerCase() === 'name'),
+        email: headers.findIndex(h => h.toLowerCase() === 'email' || h.toLowerCase().includes('thư điện tử')),
+        phone: headers.findIndex(h => h.toLowerCase().includes('điện thoại') || h.toLowerCase().includes('sđt') || h.toLowerCase().includes('phone') || h.toLowerCase().includes('di động')),
+        address: headers.findIndex(h => h.toLowerCase().includes('địa chỉ') || h.toLowerCase().includes('dia chi') || h.toLowerCase() === 'address')
+      };
+      
+      // Fallback map if columns are not matched (try to find by position)
+      if (colMap.name === -1) {
+        colMap.code = 0;
+        colMap.name = 1;
+        colMap.email = 2;
+        colMap.phone = 3;
+        colMap.address = 4;
+      }
+      
+      // Re-verify name column
+      if (colMap.name === -1 || !headers[colMap.name]) {
+        showToast("Tập tin không có cột tên nhà cung cấp hợp lệ!", "danger");
+        return;
+      }
+      
+      supplierExcelImportData = [];
+      const previewRows = [];
+      
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        
+        let name = colMap.name !== -1 && row[colMap.name] ? row[colMap.name].toString().trim() : '';
+        if (!name) continue; // skip rows without name
+        
+        let code = colMap.code !== -1 && row[colMap.code] ? row[colMap.code].toString().trim() : '';
+        let email = colMap.email !== -1 && row[colMap.email] ? row[colMap.email].toString().trim() : '';
+        let phone = colMap.phone !== -1 && row[colMap.phone] ? row[colMap.phone].toString().trim() : '';
+        let address = colMap.address !== -1 && row[colMap.address] ? row[colMap.address].toString().trim() : '';
+        
+        // Auto-generate code if empty
+        if (!code) {
+          const nextNum = state.suppliers.length + supplierExcelImportData.length + 1;
+          code = 'NCC' + String(nextNum).padStart(3, '0');
+        }
+        
+        // Build notes: if email exists, save email to notes
+        let notesList = [];
+        if (email) notesList.push(`Email: ${email}`);
+        notesList.push('Imported from Excel');
+        const notes = notesList.join(' | ');
+        
+        const supplierObj = {
+          id: 'supplier-' + Date.now() + '-' + i + '-' + Math.floor(Math.random() * 1000),
+          code: code,
+          name: name,
+          phone: phone,
+          address: address,
+          debt: 0,
+          notes: notes
+        };
+        
+        supplierExcelImportData.push(supplierObj);
+        if (previewRows.length < 5) {
+          previewRows.push({ ...supplierObj, email: email });
+        }
+      }
+      
+      if (supplierExcelImportData.length === 0) {
+        showToast("Không tìm thấy dòng dữ liệu hợp lệ trong file!", "warning");
+        return;
+      }
+      
+      // Render bảng preview
+      const previewBody = document.getElementById('supplier-excel-preview-table-body');
+      if (previewBody) {
+        previewBody.innerHTML = previewRows.map((s, idx) => `
+          <tr>
+            <td style="text-align: center;">${idx + 1}</td>
+            <td style="font-weight: 600; color: #fff;">${s.code}</td>
+            <td style="font-weight: bold; color: #22c55e;">${s.name}</td>
+            <td>${s.email || '<span style="color: var(--text-muted);">-</span>'}</td>
+            <td>${s.phone || '<span style="color: var(--text-muted);">-</span>'}</td>
+            <td>${s.address || '<span style="color: var(--text-muted);">-</span>'}</td>
+          </tr>
+        `).join('');
+      }
+      
+      const summaryEl = document.getElementById('supplier-excel-preview-summary');
+      if (summaryEl) {
+        summaryEl.innerText = `Hiển thị 5 trên tổng số ${supplierExcelImportData.length} nhà cung cấp đọc được từ tệp.`;
+      }
+      
+      const container = document.getElementById('supplier-excel-preview-container');
+      if (container) container.style.display = 'block';
+      
+      const submitBtn = document.getElementById('btn-save-supplier-excel-submit');
+      if (submitBtn) {
+        submitBtn.removeAttribute('disabled');
+        submitBtn.disabled = false;
+      }
+      
+      const dropzone = document.getElementById('supplier-excel-dropzone');
+      if (dropzone) dropzone.className = 'upload-dropzone success-uploaded';
+      
+      showToast(`Đọc tệp thành công! Tìm thấy ${supplierExcelImportData.length} nhà cung cấp.`, "success");
+    } catch(err) {
+      console.error(err);
+      showToast("Lỗi đọc tệp Excel: " + err.message, "danger");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function processSupplierExcelImport() {
+  if (supplierExcelImportData.length === 0) return;
+  
+  const modeVal = document.querySelector('input[name="supplier-import-mode"]:checked');
+  const mode = modeVal ? modeVal.value : 'merge';
+  
+  try {
+    showToast("Đang lưu nhà cung cấp vào hệ thống...", "info");
+    
+    if (mode === 'overwrite') {
+      if (confirm("Chế độ ghi đè sẽ xóa toàn bộ nhà cung cấp hiện tại. Bạn chắc chắn muốn tiếp tục?")) {
+        // Clear all suppliers first
+        // delete from cloud
+        for (const s of state.suppliers) {
+          await dbDeleteSupplier(s.id);
+        }
+        state.suppliers = [];
+      } else {
+        return;
+      }
+    }
+    
+    for (const s of supplierExcelImportData) {
+      // Check duplicate code if merging
+      if (mode === 'merge') {
+        const dupIdx = state.suppliers.findIndex(os => os.code.toLowerCase() === s.code.toLowerCase());
+        if (dupIdx > -1) {
+          // Update existing keeping old ID and debt
+          s.id = state.suppliers[dupIdx].id;
+          s.debt = state.suppliers[dupIdx].debt;
+          
+          // merge notes if needed
+          if (state.suppliers[dupIdx].notes && !s.notes.includes(state.suppliers[dupIdx].notes)) {
+            s.notes = state.suppliers[dupIdx].notes + ' | ' + s.notes;
+          }
+          
+          state.suppliers[dupIdx] = s;
+        } else {
+          state.suppliers.push(s);
+        }
+      } else {
+        // overwrite mode: just push
+        state.suppliers.push(s);
+      }
+    }
+    
+    // Save suppliers to cloud in one batch
+    await dbSaveSuppliersBulk(supplierExcelImportData);
+    
+    localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
+    closeSupplierExcelModal();
+    
+    renderSuppliersTable();
+    populateSupplierDatalist();
+    renderAll();
+    
+    showToast(`Đã nhập thành công ${supplierExcelImportData.length} nhà cung cấp!`, "success");
+  } catch (err) {
+    console.error(err);
+    showToast("Lỗi khi nhập danh sách nhà cung cấp: " + err.message, "danger");
+  }
+}
+

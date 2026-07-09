@@ -1000,6 +1000,12 @@
           <div class="panel-header">
             <h2 class="panel-title"><i data-lucide="truck"></i> Danh sách nhà cung cấp</h2>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" id="btn-download-supplier-excel-template">
+                <i data-lucide="download"></i> Tải file mẫu
+              </button>
+              <button class="btn btn-indigo btn-sm" id="btn-open-supplier-excel-modal">
+                <i data-lucide="file-up"></i> Nhập Excel
+              </button>
               <button class="btn btn-primary btn-sm" id="btn-open-add-supplier-modal">
                 <i data-lucide="user-plus"></i> Thêm nhà cung cấp
               </button>
@@ -2041,6 +2047,69 @@
         <button type="button" class="btn btn-secondary" id="btn-cancel-cust-excel">Hủy bỏ</button>
         <button type="button" class="btn btn-success" id="btn-save-cust-excel-submit" disabled>
           <i data-lucide="check"></i> Lưu khách hàng vào hệ thống
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Excel Import Modal -->
+  <div class="modal-overlay" id="supplier-excel-modal">
+    <div class="modal-content" style="max-width: 850px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Nhập nhà cung cấp từ file Excel</h3>
+        <button class="modal-close" id="btn-close-supplier-excel-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="supplier-excel-dropzone" class="upload-dropzone">
+          <i data-lucide="file-spreadsheet" class="upload-icon" style="width: 48px; height: 48px; color: var(--color-primary); margin-bottom: 0.75rem;"></i>
+          <p class="upload-text" style="font-weight: 600; margin-bottom: 0.25rem;">Kéo thả tệp Excel (.xlsx, .xls) hoặc CSV vào đây</p>
+          <p class="upload-subtext" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Hoặc nhấp chuột để chọn tệp từ máy tính</p>
+          <input type="file" id="supplier-excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-supplier-excel">Chọn tệp</button>
+        </div>
+        
+        <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px dashed var(--border-color); padding-bottom: 1rem;">
+          <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
+            <input type="radio" name="supplier-import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
+            Gộp thêm (Giữ lại nhà cung cấp cũ, trùng mã sẽ cập nhật)
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
+            <input type="radio" name="supplier-import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
+            Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
+          </label>
+        </div>
+
+        <div id="supplier-excel-preview-container" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+          <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--color-primary); display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="eye" style="width:16px;"></i> Xem trước dữ liệu nhà cung cấp (Hiển thị tối đa 5 dòng):
+          </h4>
+          <div class="table-responsive" style="max-height: 220px;">
+            <table class="table" style="font-size: 0.8rem;">
+              <thead>
+                <tr>
+                  <th style="width: 50px; text-align: center;">STT</th>
+                  <th>Mã NCC</th>
+                  <th>Tên nhà cung cấp</th>
+                  <th>Email</th>
+                  <th>Số điện thoại</th>
+                  <th>Địa chỉ</th>
+                </tr>
+              </thead>
+              <tbody id="supplier-excel-preview-table-body">
+                <!-- JS dynamically fills -->
+              </tbody>
+            </table>
+          </div>
+          <p id="supplier-excel-preview-summary" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; font-style: italic;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-supplier-excel">Hủy bỏ</button>
+        <button type="button" class="btn btn-primary" id="btn-save-supplier-excel-submit" disabled>
+          <i data-lucide="check"></i> Lưu nhà cung cấp vào hệ thống
         </button>
       </div>
     </div>

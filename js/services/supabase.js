@@ -1425,6 +1425,33 @@ export async function dbSaveSupplier(supplier) {
   return true;
 }
 
+export async function dbSaveSuppliersBulk(suppliers) {
+  if (isCloudActive && supabaseClient && suppliers.length > 0) {
+    try {
+      const dbRows = suppliers.map(supplier => ({
+        id: supplier.id,
+        code: supplier.code,
+        name: supplier.name,
+        phone: supplier.phone,
+        address: supplier.address,
+        debt: parseFloat(supplier.debt || 0),
+        notes: supplier.notes || ''
+      }));
+      const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
+      const { error } = await supabaseClient
+        .from(tableName)
+        .upsert(dbRows, { onConflict: 'id' });
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error(err);
+      showToast('Không thể lưu danh sách nhà cung cấp lên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function dbDeleteSupplier(supplierId) {
   if (isCloudActive && supabaseClient) {
     try {
