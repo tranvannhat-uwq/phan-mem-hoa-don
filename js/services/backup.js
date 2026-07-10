@@ -191,7 +191,12 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
   const restoreBtn = document.getElementById('btn-restore-backup');
 
   if (exportBtn) {
-    exportBtn.addEventListener('click', exportBackupToExcel);
+    exportBtn.addEventListener('click', () => {
+      exportBackupToExcel();
+      localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
+      const reminderBanner = document.getElementById('backup-reminder-banner');
+      if (reminderBanner) reminderBanner.style.display = 'none';
+    });
   }
 
   if (browseBtn && fileInput) {
@@ -219,5 +224,130 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
         importBackupFromExcel(fileInput.files[0], onRestoreComplete);
       }
     });
+  }
+
+  // Đăng ký sự kiện cho banner nhắc nhở
+  const reminderDownloadBtn = document.getElementById('btn-backup-reminder-download');
+  const reminderIgnoreBtn = document.getElementById('btn-backup-reminder-ignore');
+  const reminderBanner = document.getElementById('backup-reminder-banner');
+
+  if (reminderDownloadBtn) {
+    reminderDownloadBtn.addEventListener('click', async () => {
+      await exportBackupToExcel();
+      localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
+      if (reminderBanner) reminderBanner.style.display = 'none';
+      const mandatoryModal = document.getElementById('mandatory-backup-modal');
+      if (mandatoryModal) mandatoryModal.style.display = 'none';
+    });
+  }
+
+  if (reminderIgnoreBtn) {
+    reminderIgnoreBtn.addEventListener('click', () => {
+      // Bỏ qua lời nhắc banner nhẹ cho ngày hôm nay (nhưng 16h30 vẫn sẽ hiện modal bắt buộc)
+      localStorage.setItem('weblendon_banner_ignored_date', new Date().toLocaleDateString('vi-VN'));
+      if (reminderBanner) reminderBanner.style.display = 'none';
+      showToast('Đã ẩn nhắc nhở sao lưu (16:30 hệ thống sẽ yêu cầu bắt buộc).', 'secondary');
+    });
+  }
+
+  // Đăng ký sự kiện cho modal bắt buộc sao lưu (16h30)
+  const mandatoryDownloadBtn = document.getElementById('btn-mandatory-backup-download');
+  const mandatoryModal = document.getElementById('mandatory-backup-modal');
+
+  if (mandatoryDownloadBtn) {
+    mandatoryDownloadBtn.addEventListener('click', async () => {
+      try {
+        mandatoryDownloadBtn.disabled = true;
+        mandatoryDownloadBtn.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i> Đang chuẩn bị bản sao lưu...';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        
+        await exportBackupToExcel();
+        
+        localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
+        if (mandatoryModal) mandatoryModal.style.display = 'none';
+        showToast('Sao lưu thành công! Đã mở khóa ứng dụng.', 'success');
+      } catch (err) {
+        showToast('Sao lưu thất bại: ' + err.message, 'danger');
+      } finally {
+        mandatoryDownloadBtn.disabled = false;
+        mandatoryDownloadBtn.innerHTML = '<i data-lucide="download"></i> Tải bản sao lưu & Mở khóa ứng dụng';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+    });
+  }
+
+  // Sự kiện trước khi đóng trình duyệt (bật cảnh báo nếu sau 16h30 chưa sao lưu)
+  window.addEventListener('beforeunload', (e) => {
+    if (state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'accounting')) {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const isAfter1630 = hours > 16 || (hours === 16 && minutes >= 30);
+      const todayStr = now.toLocaleDateString('vi-VN');
+      const lastBackup = localStorage.getItem('weblendon_last_backup_date');
+      
+      if (isAfter1630 && lastBackup !== todayStr) {
+        e.preventDefault();
+        e.returnValue = 'Bạn chưa thực hiện sao lưu dữ liệu bắt buộc lúc 16:30! Bạn có chắc chắn muốn thoát?';
+        return 'Bạn chưa thực hiện sao lưu dữ liệu bắt buộc lúc 16:30! Bạn có chắc chắn muốn thoát?';
+      }
+    }
+  });
+
+  // Chạy kiểm tra định kỳ mỗi 30 giây để tự động kích hoạt nhắc nhở/modal
+  setInterval(checkAndShowBackupReminder, 30000);
+}
+
+// Kiểm tra và hiển thị nhắc nhở / modal bắt buộc sao lưu cuối ngày
+export function checkAndShowBackupReminder() {
+  const banner = document.getElementById('backup-reminder-banner');
+  const mandatoryModal = document.getElementById('mandatory-backup-modal');
+
+  // Chỉ hiển thị nhắc nhở cho Admin và Kế toán
+  if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'accounting')) {
+    if (banner) banner.style.display = 'none';
+    if (mandatoryModal) mandatoryModal.style.display = 'none';
+    return;
+  }
+
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const todayStr = now.toLocaleDateString('vi-VN');
+  const lastBackup = localStorage.getItem('weblendon_last_backup_date');
+  const lastIgnoredBanner = localStorage.getItem('weblendon_banner_ignored_date');
+
+  // Kiểm tra mốc giờ 16:30
+  const isAfter1630 = hours > 16 || (hours === 16 && minutes >= 30);
+
+  if (lastBackup === todayStr) {
+    // Đã sao lưu hôm nay -> Ẩn tất cả nhắc nhở
+    if (banner) banner.style.display = 'none';
+    if (mandatoryModal) mandatoryModal.style.display = 'none';
+    return;
+  }
+
+  if (isAfter1630) {
+    // Sau 16h30: Bắt buộc sao lưu (hiển thị modal khóa màn hình, ẩn banner)
+    if (banner) banner.style.display = 'none';
+    if (mandatoryModal && mandatoryModal.style.display !== 'flex') {
+      mandatoryModal.style.display = 'flex';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  } else if (hours >= 16) {
+    // Từ 16h00 đến 16h29: Hiện banner nhắc nhở nhẹ nhàng (nếu chưa nhấn ẩn), ẩn modal bắt buộc
+    if (mandatoryModal) mandatoryModal.style.display = 'none';
+    if (lastIgnoredBanner !== todayStr) {
+      if (banner && banner.style.display !== 'flex') {
+        banner.style.display = 'flex';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+    } else {
+      if (banner) banner.style.display = 'none';
+    }
+  } else {
+    // Chưa đến 16h00: Ẩn tất cả
+    if (banner) banner.style.display = 'none';
+    if (mandatoryModal) mandatoryModal.style.display = 'none';
   }
 }

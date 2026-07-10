@@ -3,6 +3,7 @@ import { showToast, safeCreateIcons, isSameUser } from '../utils.js';
 import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populateManagedByDropdown } from './customers.js';
+import { exportBackupToExcel } from '../services/backup.js';
 
 export function renderUsersTable() {
   const tableBody = document.getElementById('users-table-body');
@@ -499,6 +500,22 @@ export async function handleLogin(e) {
 }
 
 export async function handleLogout() {
+  if (state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'accounting')) {
+    const todayStr = new Date().toLocaleDateString('vi-VN');
+    const lastBackup = localStorage.getItem('weblendon_last_backup_date');
+    if (lastBackup !== todayStr) {
+      const confirmBackup = confirm("Hôm nay bạn chưa tải bản sao lưu dữ liệu Excel cuối ngày về máy tính.\n\nBạn có muốn tải bản sao lưu Excel về máy trước khi đăng xuất không?");
+      if (confirmBackup) {
+        try {
+          await exportBackupToExcel();
+          localStorage.setItem('weblendon_last_backup_date', todayStr);
+        } catch (err) {
+          console.error("Backup before logout failed:", err);
+        }
+      }
+    }
+  }
+
   sessionStorage.removeItem('billing_system_auth');
   sessionStorage.removeItem('billing_system_username');
   state.currentUser = null;

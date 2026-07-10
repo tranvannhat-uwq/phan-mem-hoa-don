@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser } from '../utils.js';
+import { rawMaterialsSeed } from '../components/goods_seed.js';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -139,11 +140,11 @@ export function loadLocalStorageBackup() {
   }
 
   const storedRaw = localStorage.getItem('billing_system_raw_materials');
-  if (storedRaw) {
+  if (storedRaw && JSON.parse(storedRaw).length > 0) {
     state.rawMaterials = JSON.parse(storedRaw);
   } else {
-    state.rawMaterials = [];
-    localStorage.setItem('billing_system_raw_materials', JSON.stringify([]));
+    state.rawMaterials = [...rawMaterialsSeed];
+    localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
   }
 
   const storedSemi = localStorage.getItem('billing_system_semi_finished');
@@ -605,9 +606,9 @@ export async function fetchCloudData() {
           .from(tableStartingBalancesName)
           .select('*')
           .eq('id', 'current_balances')
-          .single();
+          .maybeSingle();
 
-        if (balErr && balErr.code !== 'PGRST116') throw balErr;
+        if (balErr) throw balErr;
 
         if (balData) {
           const cloudBal = {
@@ -655,7 +656,7 @@ export async function fetchCloudData() {
     const fetchRawMaterials = async () => {
       try {
         const data = await fetchFullTableData(tableRawMaterialsName);
-        if (data) {
+        if (data && data.length > 0) {
           state.rawMaterials = data.map(r => ({
             id: r.id,
             code: r.code,
@@ -664,6 +665,9 @@ export async function fetchCloudData() {
             quantity: parseFloat(r.quantity || 0),
             notes: r.notes || ''
           }));
+          localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
+        } else {
+          state.rawMaterials = [...rawMaterialsSeed];
           localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
         }
       } catch (err) {

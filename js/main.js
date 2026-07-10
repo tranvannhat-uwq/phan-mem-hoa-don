@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
 import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup } from './services/supabase.js';
-import { setupBackupRestoreListeners } from './services/backup.js';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js';
 import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js';
@@ -31,6 +31,7 @@ export function renderAll() {
   populatePricelistsDropdowns();
   populateSupplierDatalist();
   renderGoodsPanel();
+  checkAndShowBackupReminder();
   safeCreateIcons();
 }
 
