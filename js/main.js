@@ -12,6 +12,7 @@ import { setupHistoryPanel, renderHistoryOrders } from './components/history.js'
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js';
 import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js';
 import { showToast, safeCreateIcons, updateDbStatusUI, isSameUser } from './utils.js';
 
 // Vẽ lại toàn bộ giao diện của tất cả các Tab
@@ -29,6 +30,7 @@ export function renderAll() {
   populateCustomerEmployeeFilter();
   populatePricelistsDropdowns();
   populateSupplierDatalist();
+  renderGoodsPanel();
   safeCreateIcons();
 }
 
@@ -63,6 +65,7 @@ export function switchTab(panelId) {
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
+  else if (panelId === 'goods-panel') heading.innerText = 'Quản lý Hàng hóa & Sản xuất';
   
   // Tự động làm mới dữ liệu và thống kê trên tất cả các tab khi chuyển đổi
   renderAll();
@@ -70,13 +73,8 @@ export function switchTab(panelId) {
 
 // Trình quản lý thanh điều hướng
 function setupNavigation() {
-  if (window.innerWidth > 768) {
-    const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
-    const appLayout = document.getElementById('app-layout');
-    if (appLayout && isCollapsed) {
-      appLayout.classList.add('sidebar-collapsed');
-    }
-  }
+  // Tự động xóa trạng thái thu nhỏ cũ để tránh ẩn thanh điều hướng trên máy khách
+  localStorage.removeItem('sidebar_collapsed');
 
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach(link => {
@@ -230,6 +228,7 @@ async function initApp() {
   setupSupabaseSettings();
   setupUserManagement();
   setupBrandsPanel();
+  setupGoodsPanel();
   setupBackupRestoreListeners(renderAll);
 
   let savedUrl = localStorage.getItem('billing_supabase_url');

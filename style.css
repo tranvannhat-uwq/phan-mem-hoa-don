@@ -2341,15 +2341,7 @@ textarea::placeholder,
   background-color: rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Sidebar Collapsed State (Desktop) */
-@media (min-width: 769px) {
-  .sidebar-collapsed .sidebar {
-    transform: translateX(-100%);
-  }
-  .sidebar-collapsed .main-content {
-    margin-left: 0;
-  }
-}
+
 
 /* ========================================================
    BẢNG SẢN PHẨM & Ô NHẬP LIỆU TRONG BẢNG (INLINE CONTROLS)

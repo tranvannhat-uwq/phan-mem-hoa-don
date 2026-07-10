@@ -452,3 +452,95 @@ VALUES
 ON CONFLICT (username) DO UPDATE SET
   is_external = true,
   display_name = EXCLUDED.display_name;
+
+-- ====================================================================
+-- 9. TẠO BẢNG CHO PHÂN HỆ HÀNG HÓA & SẢN XUẤT
+-- ====================================================================
+
+-- Bảng nguyên liệu (raw_materials)
+CREATE TABLE IF NOT EXISTS public.raw_materials (
+    id text PRIMARY KEY,
+    code text UNIQUE NOT NULL,
+    name text NOT NULL,
+    unit text NOT NULL DEFAULT 'kg',
+    quantity numeric NOT NULL DEFAULT 0,
+    notes text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Bảng bán thành phẩm (semi_finished)
+CREATE TABLE IF NOT EXISTS public.semi_finished (
+    id text PRIMARY KEY,
+    code text UNIQUE NOT NULL,
+    name text NOT NULL,
+    unit text NOT NULL DEFAULT 'kg',
+    quantity numeric NOT NULL DEFAULT 0,
+    notes text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Bảng công thức sản xuất (recipes)
+CREATE TABLE IF NOT EXISTS public.recipes (
+    id text PRIMARY KEY,
+    name text NOT NULL,
+    semi_finished_id text,
+    output_quantity numeric NOT NULL DEFAULT 1,
+    ingredients jsonb NOT NULL DEFAULT '[]'::jsonb, -- [{rawMaterialId, quantity}]
+    notes text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Bảng nhật ký sản xuất (production_logs)
+CREATE TABLE IF NOT EXISTS public.production_logs (
+    id text PRIMARY KEY,
+    recipe_id text,
+    recipe_name text NOT NULL,
+    semi_finished_name text NOT NULL,
+    quantity numeric NOT NULL,
+    raw_materials_used jsonb NOT NULL DEFAULT '[]'::jsonb, -- [{rawMaterialId, rawMaterialName, quantityUsed}]
+    created_by text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Bảng tồn kho thành phẩm (finished_goods_stock)
+CREATE TABLE IF NOT EXISTS public.finished_goods_stock (
+    product_code text NOT NULL,
+    brand text NOT NULL,
+    package_type text NOT NULL, -- 'thung', 'lon', 'hop', 'bao', 'tui'
+    quantity numeric NOT NULL DEFAULT 0,
+    updated_at timestamptz DEFAULT now(),
+    CONSTRAINT finished_goods_stock_pk PRIMARY KEY (product_code, brand, package_type)
+);
+
+-- Kích hoạt RLS cho các bảng mới
+ALTER TABLE public.raw_materials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.semi_finished ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.production_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.finished_goods_stock ENABLE ROW LEVEL SECURITY;
+
+-- Các chính sách bảo mật RLS
+DROP POLICY IF EXISTS select_raw_materials ON raw_materials;
+DROP POLICY IF EXISTS manage_raw_materials ON raw_materials;
+CREATE POLICY select_raw_materials ON raw_materials FOR SELECT TO authenticated USING (true);
+CREATE POLICY manage_raw_materials ON raw_materials FOR ALL TO authenticated USING (public.is_admin_or_accounting());
+
+DROP POLICY IF EXISTS select_semi_finished ON semi_finished;
+DROP POLICY IF EXISTS manage_semi_finished ON semi_finished;
+CREATE POLICY select_semi_finished ON semi_finished FOR SELECT TO authenticated USING (true);
+CREATE POLICY manage_semi_finished ON semi_finished FOR ALL TO authenticated USING (public.is_admin_or_accounting());
+
+DROP POLICY IF EXISTS select_recipes ON recipes;
+DROP POLICY IF EXISTS manage_recipes ON recipes;
+CREATE POLICY select_recipes ON recipes FOR SELECT TO authenticated USING (true);
+CREATE POLICY manage_recipes ON recipes FOR ALL TO authenticated USING (public.is_admin_or_accounting());
+
+DROP POLICY IF EXISTS select_production_logs ON production_logs;
+DROP POLICY IF EXISTS manage_production_logs ON production_logs;
+CREATE POLICY select_production_logs ON production_logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY manage_production_logs ON production_logs FOR ALL TO authenticated USING (public.is_admin_or_accounting());
+
+DROP POLICY IF EXISTS select_finished_goods_stock ON finished_goods_stock;
+DROP POLICY IF EXISTS manage_finished_goods_stock ON finished_goods_stock;
+CREATE POLICY select_finished_goods_stock ON finished_goods_stock FOR SELECT TO authenticated USING (true);
+CREATE POLICY manage_finished_goods_stock ON finished_goods_stock FOR ALL TO authenticated USING (public.is_admin_or_accounting());

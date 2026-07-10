@@ -15,6 +15,11 @@ export let tableUsersName = 'users';
 export let tableBrandsName = 'brands';
 export let tableCashbookTransactionsName = 'cashbook_transactions';
 export let tableStartingBalancesName = 'starting_balances';
+export let tableRawMaterialsName = 'raw_materials';
+export let tableSemiFinishedName = 'semi_finished';
+export let tableRecipesName = 'recipes';
+export let tableProductionLogsName = 'production_logs';
+export let tableFinishedGoodsStockName = 'finished_goods_stock';
 
 export function setCloudActive(active) {
   isCloudActive = active;
@@ -132,6 +137,46 @@ export function loadLocalStorageBackup() {
     ];
     localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
   }
+
+  const storedRaw = localStorage.getItem('billing_system_raw_materials');
+  if (storedRaw) {
+    state.rawMaterials = JSON.parse(storedRaw);
+  } else {
+    state.rawMaterials = [];
+    localStorage.setItem('billing_system_raw_materials', JSON.stringify([]));
+  }
+
+  const storedSemi = localStorage.getItem('billing_system_semi_finished');
+  if (storedSemi) {
+    state.semiFinished = JSON.parse(storedSemi);
+  } else {
+    state.semiFinished = [];
+    localStorage.setItem('billing_system_semi_finished', JSON.stringify([]));
+  }
+
+  const storedRecipes = localStorage.getItem('billing_system_recipes');
+  if (storedRecipes) {
+    state.recipes = JSON.parse(storedRecipes);
+  } else {
+    state.recipes = [];
+    localStorage.setItem('billing_system_recipes', JSON.stringify([]));
+  }
+
+  const storedLogs = localStorage.getItem('billing_system_production_logs');
+  if (storedLogs) {
+    state.productionLogs = JSON.parse(storedLogs);
+  } else {
+    state.productionLogs = [];
+    localStorage.setItem('billing_system_production_logs', JSON.stringify([]));
+  }
+
+  const storedFgs = localStorage.getItem('billing_system_finished_goods_stock');
+  if (storedFgs) {
+    state.finishedGoodsStock = JSON.parse(storedFgs);
+  } else {
+    state.finishedGoodsStock = [];
+    localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify([]));
+  }
 }
 
 // Kết nối đến Supabase
@@ -154,6 +199,11 @@ export async function connectSupabase(url, key, verbose = true) {
       tableBrandsName = 'brands';
       tableCashbookTransactionsName = 'cashbook_transactions';
       tableStartingBalancesName = 'starting_balances';
+      tableRawMaterialsName = 'raw_materials';
+      tableSemiFinishedName = 'semi_finished';
+      tableRecipesName = 'recipes';
+      tableProductionLogsName = 'production_logs';
+      tableFinishedGoodsStockName = 'finished_goods_stock';
     } else {
       let { error: testWlErr } = await client.from('wl_products').select('code').limit(1);
       if (!testWlErr) {
@@ -166,6 +216,11 @@ export async function connectSupabase(url, key, verbose = true) {
         tableBrandsName = 'wl_brands';
         tableCashbookTransactionsName = 'wl_cashbook_transactions';
         tableStartingBalancesName = 'wl_starting_balances';
+        tableRawMaterialsName = 'wl_raw_materials';
+        tableSemiFinishedName = 'wl_semi_finished';
+        tableRecipesName = 'wl_recipes';
+        tableProductionLogsName = 'wl_production_logs';
+        tableFinishedGoodsStockName = 'wl_finished_goods_stock';
       } else {
         tableProductsName = 'products';
         tableOrdersName = 'orders';
@@ -176,6 +231,11 @@ export async function connectSupabase(url, key, verbose = true) {
         tableBrandsName = 'brands';
         tableCashbookTransactionsName = 'cashbook_transactions';
         tableStartingBalancesName = 'starting_balances';
+        tableRawMaterialsName = 'raw_materials';
+        tableSemiFinishedName = 'semi_finished';
+        tableRecipesName = 'recipes';
+        tableProductionLogsName = 'production_logs';
+        tableFinishedGoodsStockName = 'finished_goods_stock';
       }
     }
     
@@ -592,6 +652,101 @@ export async function fetchCloudData() {
         }
       }
     };
+    const fetchRawMaterials = async () => {
+      try {
+        const data = await fetchFullTableData(tableRawMaterialsName);
+        if (data) {
+          state.rawMaterials = data.map(r => ({
+            id: r.id,
+            code: r.code,
+            name: r.name,
+            unit: r.unit || 'kg',
+            quantity: parseFloat(r.quantity || 0),
+            notes: r.notes || ''
+          }));
+          localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
+        }
+      } catch (err) {
+        console.warn("Could not load raw materials from Supabase, using local:", err.message);
+        state.rawMaterials = JSON.parse(localStorage.getItem('billing_system_raw_materials') || '[]');
+      }
+    };
+    const fetchSemiFinished = async () => {
+      try {
+        const data = await fetchFullTableData(tableSemiFinishedName);
+        if (data) {
+          state.semiFinished = data.map(s => ({
+            id: s.id,
+            code: s.code,
+            name: s.name,
+            unit: s.unit || 'kg',
+            quantity: parseFloat(s.quantity || 0),
+            notes: s.notes || ''
+          }));
+          localStorage.setItem('billing_system_semi_finished', JSON.stringify(state.semiFinished));
+        }
+      } catch (err) {
+        console.warn("Could not load semi finished from Supabase, using local:", err.message);
+        state.semiFinished = JSON.parse(localStorage.getItem('billing_system_semi_finished') || '[]');
+      }
+    };
+    const fetchRecipes = async () => {
+      try {
+        const data = await fetchFullTableData(tableRecipesName);
+        if (data) {
+          state.recipes = data.map(r => ({
+            id: r.id,
+            name: r.name,
+            semiFinishedId: r.semi_finished_id,
+            outputQuantity: parseFloat(r.output_quantity || 1),
+            ingredients: typeof r.ingredients === 'string' ? JSON.parse(r.ingredients) : (r.ingredients || []),
+            notes: r.notes || ''
+          }));
+          localStorage.setItem('billing_system_recipes', JSON.stringify(state.recipes));
+        }
+      } catch (err) {
+        console.warn("Could not load recipes from Supabase, using local:", err.message);
+        state.recipes = JSON.parse(localStorage.getItem('billing_system_recipes') || '[]');
+      }
+    };
+    const fetchProductionLogs = async () => {
+      try {
+        const data = await fetchFullTableData(tableProductionLogsName);
+        if (data) {
+          state.productionLogs = data.map(l => ({
+            id: l.id,
+            recipeId: l.recipe_id,
+            recipeName: l.recipe_name,
+            semiFinishedName: l.semi_finished_name,
+            quantity: parseFloat(l.quantity || 0),
+            rawMaterialsUsed: typeof l.raw_materials_used === 'string' ? JSON.parse(l.raw_materials_used) : (l.raw_materials_used || []),
+            createdBy: l.created_by || 'admin',
+            date: l.created_at
+          }));
+          localStorage.setItem('billing_system_production_logs', JSON.stringify(state.productionLogs));
+        }
+      } catch (err) {
+        console.warn("Could not load production logs from Supabase, using local:", err.message);
+        state.productionLogs = JSON.parse(localStorage.getItem('billing_system_production_logs') || '[]');
+      }
+    };
+    const fetchFinishedGoodsStock = async () => {
+      try {
+        const data = await fetchFullTableData(tableFinishedGoodsStockName);
+        if (data) {
+          state.finishedGoodsStock = data.map(s => ({
+            productCode: s.product_code,
+            brand: s.brand,
+            packageType: s.package_type,
+            quantity: parseFloat(s.quantity || 0)
+          }));
+          localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify(state.finishedGoodsStock));
+        }
+      } catch (err) {
+        console.warn("Could not load finished goods stock from Supabase, using local:", err.message);
+        state.finishedGoodsStock = JSON.parse(localStorage.getItem('billing_system_finished_goods_stock') || '[]');
+      }
+    };
 
     // Tải song song tất cả các bảng dữ liệu bằng Promise.all để tăng tốc độ phản hồi tối đa
     await Promise.all([
@@ -603,7 +758,12 @@ export async function fetchCloudData() {
       fetchBrands(),
       fetchCashbook(),
       fetchStartingBalances(),
-      fetchSuppliers()
+      fetchSuppliers(),
+      fetchRawMaterials(),
+      fetchSemiFinished(),
+      fetchRecipes(),
+      fetchProductionLogs(),
+      fetchFinishedGoodsStock()
     ]);
 
   } catch(err) {
@@ -628,8 +788,13 @@ export async function syncLocalToCloud() {
   const localTxs = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
   const localBalances = JSON.parse(localStorage.getItem('billing_system_cashbook_start_balances') || 'null');
   const localSuppliers = JSON.parse(localStorage.getItem('billing_system_suppliers') || '[]');
+  const localRaw = JSON.parse(localStorage.getItem('billing_system_raw_materials') || '[]');
+  const localSemi = JSON.parse(localStorage.getItem('billing_system_semi_finished') || '[]');
+  const localRecipes = JSON.parse(localStorage.getItem('billing_system_recipes') || '[]');
+  const localLogs = JSON.parse(localStorage.getItem('billing_system_production_logs') || '[]');
+  const localFgs = JSON.parse(localStorage.getItem('billing_system_finished_goods_stock') || '[]');
   
-  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0 && localTxs.length === 0 && !localBalances && localSuppliers.length === 0) {
+  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0 && localTxs.length === 0 && !localBalances && localSuppliers.length === 0 && localRaw.length === 0 && localSemi.length === 0 && localRecipes.length === 0 && localLogs.length === 0 && localFgs.length === 0) {
     showToast('Không tìm thấy dữ liệu LocalStorage nào để đồng bộ!', 'warning');
     return false;
   }
@@ -847,6 +1012,92 @@ export async function syncLocalToCloud() {
         if (error) throw error;
       } catch (err) {
         console.warn("Could not sync suppliers to cloud:", err.message);
+      }
+    }
+    
+    // 10. Sync Raw Materials
+    if (localRaw.length > 0) {
+      try {
+        const dbRows = localRaw.map(r => ({
+          id: r.id,
+          code: r.code,
+          name: r.name,
+          unit: r.unit || 'kg',
+          quantity: parseFloat(r.quantity || 0),
+          notes: r.notes || ''
+        }));
+        await supabaseClient.from(tableRawMaterialsName).upsert(dbRows, { onConflict: 'id' });
+      } catch (err) {
+        console.warn("Could not sync raw materials:", err.message);
+      }
+    }
+
+    // 11. Sync Semi Finished
+    if (localSemi.length > 0) {
+      try {
+        const dbRows = localSemi.map(s => ({
+          id: s.id,
+          code: s.code,
+          name: s.name,
+          unit: s.unit || 'kg',
+          quantity: parseFloat(s.quantity || 0),
+          notes: s.notes || ''
+        }));
+        await supabaseClient.from(tableSemiFinishedName).upsert(dbRows, { onConflict: 'id' });
+      } catch (err) {
+        console.warn("Could not sync semi finished:", err.message);
+      }
+    }
+
+    // 12. Sync Recipes
+    if (localRecipes.length > 0) {
+      try {
+        const dbRows = localRecipes.map(r => ({
+          id: r.id,
+          name: r.name,
+          semi_finished_id: r.semiFinishedId,
+          output_quantity: parseFloat(r.outputQuantity || 1),
+          ingredients: r.ingredients || [],
+          notes: r.notes || ''
+        }));
+        await supabaseClient.from(tableRecipesName).upsert(dbRows, { onConflict: 'id' });
+      } catch (err) {
+        console.warn("Could not sync recipes:", err.message);
+      }
+    }
+
+    // 13. Sync Production Logs
+    if (localLogs.length > 0) {
+      try {
+        const dbRows = localLogs.map(l => ({
+          id: l.id,
+          recipe_id: l.recipeId,
+          recipe_name: l.recipeName,
+          semi_finished_name: l.semiFinishedName,
+          quantity: parseFloat(l.quantity || 0),
+          raw_materials_used: l.rawMaterialsUsed || [],
+          created_by: l.createdBy || 'admin',
+          created_at: l.date || new Date().toISOString()
+        }));
+        await supabaseClient.from(tableProductionLogsName).upsert(dbRows, { onConflict: 'id' });
+      } catch (err) {
+        console.warn("Could not sync production logs:", err.message);
+      }
+    }
+
+    // 14. Sync Finished Goods Stock
+    if (localFgs.length > 0) {
+      try {
+        const dbRows = localFgs.map(s => ({
+          product_code: s.productCode,
+          brand: s.brand,
+          package_type: s.packageType,
+          quantity: parseFloat(s.quantity || 0),
+          updated_at: new Date().toISOString()
+        }));
+        await supabaseClient.from(tableFinishedGoodsStockName).upsert(dbRows, { onConflict: 'product_code,brand,package_type' });
+      } catch (err) {
+        console.warn("Could not sync finished goods stock:", err.message);
       }
     }
     
@@ -1465,6 +1716,164 @@ export async function dbDeleteSupplier(supplierId) {
       }
     } catch (err) {
       console.warn("Cloud delete supplier failed:", err);
+    }
+  }
+  return true;
+}
+
+// --- Thao tác CSDL chi tiết (Phân hệ Hàng hóa & Sản xuất) ---
+
+export async function dbSaveRawMaterial(item) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        unit: item.unit || 'kg',
+        quantity: parseFloat(item.quantity || 0),
+        notes: item.notes || ''
+      };
+      const { error } = await supabaseClient
+        .from(tableRawMaterialsName)
+        .upsert(dbRow, { onConflict: 'id' });
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud save raw material failed, using local fallback:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbDeleteRawMaterial(id) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableRawMaterialsName)
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud delete raw material failed:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbSaveSemiFinished(item) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        unit: item.unit || 'kg',
+        quantity: parseFloat(item.quantity || 0),
+        notes: item.notes || ''
+      };
+      const { error } = await supabaseClient
+        .from(tableSemiFinishedName)
+        .upsert(dbRow, { onConflict: 'id' });
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud save semi finished failed, using local fallback:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbDeleteSemiFinished(id) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableSemiFinishedName)
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud delete semi finished failed:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbSaveRecipe(item) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: item.id,
+        name: item.name,
+        semi_finished_id: item.semiFinishedId,
+        output_quantity: parseFloat(item.outputQuantity || 1),
+        ingredients: item.ingredients || [],
+        notes: item.notes || ''
+      };
+      const { error } = await supabaseClient
+        .from(tableRecipesName)
+        .upsert(dbRow, { onConflict: 'id' });
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud save recipe failed, using local fallback:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbDeleteRecipe(id) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableRecipesName)
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud delete recipe failed:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbSaveProductionLog(item) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: item.id,
+        recipe_id: item.recipeId,
+        recipe_name: item.recipeName,
+        semi_finished_name: item.semiFinishedName,
+        quantity: parseFloat(item.quantity || 0),
+        raw_materials_used: item.rawMaterialsUsed || [],
+        created_by: item.createdBy || 'admin',
+        created_at: item.date || new Date().toISOString()
+      };
+      const { error } = await supabaseClient
+        .from(tableProductionLogsName)
+        .upsert(dbRow, { onConflict: 'id' });
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud save production log failed, using local fallback:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbSaveFinishedGoodsStock(item) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        product_code: item.productCode,
+        brand: item.brand,
+        package_type: item.packageType,
+        quantity: parseFloat(item.quantity || 0),
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await supabaseClient
+        .from(tableFinishedGoodsStockName)
+        .upsert(dbRow, { onConflict: 'product_code,brand,package_type' });
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Cloud save finished goods stock failed, using local fallback:", err.message);
     }
   }
   return true;

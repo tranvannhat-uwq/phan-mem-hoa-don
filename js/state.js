@@ -23,5 +23,10 @@ export const state = {
   productsPage: 1,
   customersPage: 1,
   suppliers: [],
-  suppliersPage: 1
+  suppliersPage: 1,
+  rawMaterials: [],
+  semiFinished: [],
+  recipes: [],
+  productionLogs: [],
+  finishedGoodsStock: []
 };
