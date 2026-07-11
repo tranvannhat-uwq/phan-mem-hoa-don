@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers } from '../services/supabase.js';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
 import { addCashbookTransaction } from './so_quy.js';
@@ -995,7 +995,7 @@ function handleCustExcelFile(file) {
         let name = colMap.name !== -1 ? (row[colMap.name] || '').toString().trim() : '';
         if (!name) continue; // skip rows without name
         
-        let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim() : '';
+        let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim().toUpperCase() : '';
         let phone = colMap.phone !== -1 ? (row[colMap.phone] || '').toString().trim() : '';
         let address = colMap.address !== -1 ? (row[colMap.address] || '').toString().trim() : '';
         let debt = colMap.debt !== -1 ? parseFloat(row[colMap.debt]) || 0 : 0;
@@ -1164,6 +1164,9 @@ async function processCustomerExcelImport() {
   const mode = document.querySelector('input[name="cust-import-mode"]:checked').value;
   
   try {
+    showToast("Đang đồng bộ dữ liệu đám mây mới nhất...", "info");
+    await dbFetchCustomers();
+    
     showToast("Đang nhập dữ liệu khách hàng vào hệ thống...", "info");
     let successCount = 0;
     
@@ -1182,7 +1185,11 @@ async function processCustomerExcelImport() {
     for (const c of custExcelImportData) {
       let idx = -1;
       if (mode === 'merge') {
-        idx = state.customers.findIndex(oc => oc.code === c.code || (c.phone && oc.phone && oc.phone.replace(/\D/g, '') === c.phone.replace(/\D/g, '')));
+        const cCodeClean = c.code.trim().toUpperCase();
+        idx = state.customers.findIndex(oc => 
+          oc.code.trim().toUpperCase() === cCodeClean || 
+          (c.phone && oc.phone && oc.phone.replace(/\D/g, '') === c.phone.replace(/\D/g, ''))
+        );
       }
       
       if (idx > -1) {

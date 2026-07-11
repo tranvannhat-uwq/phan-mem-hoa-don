@@ -1244,6 +1244,36 @@ export async function dbSaveCustomersBulk(customers) {
   return true;
 }
 
+export async function dbFetchCustomers() {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const customerData = await fetchFullTableData(tableCustomersName);
+      state.customers = (customerData || []).map(cust => ({
+        id: cust.id,
+        code: cust.code,
+        name: cust.name,
+        phone: cust.phone,
+        address: cust.address,
+        assignedBrand: cust.assigned_brand || 'Tất cả',
+        brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
+        shippingSupport: cust.shipping_support || false,
+        debt: parseFloat(cust.debt || 0),
+        totalTransaction: parseFloat(cust.total_transaction || 0),
+        notes: cust.notes || '',
+        pricelistId: cust.pricelist_id || '',
+        managedBy: cust.managed_by || '',
+        debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
+      }));
+      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      return true;
+    } catch (err) {
+      console.error("Error fetching customers:", err);
+      return false;
+    }
+  }
+  return false;
+}
+
 export async function dbDeleteAllCustomers() {
   if (isCloudActive && supabaseClient) {
     try {
