@@ -238,10 +238,20 @@ export function setupSupplierManagement() {
   if (browseBtn && fileInput) {
     browseBtn.addEventListener('click', () => fileInput.click());
   }
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', (e) => {
+      // Tránh kích hoạt click 2 lần khi nhấp trúng nút browseBtn (nút con của dropzone)
+      if (e.target !== browseBtn && !browseBtn.contains(e.target)) {
+        fileInput.click();
+      }
+    });
+  }
   if (fileInput) {
     fileInput.addEventListener('change', (e) => {
       if (e.target.files.length > 0) {
         handleSupplierExcelFile(e.target.files[0]);
+        // Xóa value để chọn lại cùng một file (sau khi chỉnh sửa) vẫn kích hoạt sự kiện change
+        fileInput.value = '';
       }
     });
   }

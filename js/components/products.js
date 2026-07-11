@@ -399,6 +399,8 @@ export function setupExcelImportAndTemplate() {
     excelFileInput.addEventListener('change', () => {
       if (excelFileInput.files.length > 0) {
         handleExcelFileSelect(excelFileInput.files[0]);
+        // Xóa value để chọn lại cùng một file (sau khi chỉnh sửa) vẫn kích hoạt sự kiện change
+        excelFileInput.value = '';
       }
     });
   }

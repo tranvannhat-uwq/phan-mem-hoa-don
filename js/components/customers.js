@@ -699,10 +699,20 @@ export function setupCustomerManagement() {
   if (browseBtn && fileInput) {
     browseBtn.addEventListener('click', () => fileInput.click());
   }
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', (e) => {
+      // Tránh kích hoạt click 2 lần khi nhấp trúng nút browseBtn (nút con của dropzone)
+      if (e.target !== browseBtn && !browseBtn.contains(e.target)) {
+        fileInput.click();
+      }
+    });
+  }
   if (fileInput) {
     fileInput.addEventListener('change', (e) => {
       if (e.target.files.length > 0) {
         handleCustExcelFile(e.target.files[0]);
+        // Xóa value để chọn lại cùng một file (sau khi chỉnh sửa) vẫn kích hoạt sự kiện change
+        fileInput.value = '';
       }
     });
   }
@@ -925,7 +935,7 @@ function handleCustExcelFile(file) {
         debt: headers.indexOf('Nợ cần thu hiện tại'),
         totalTransaction: headers.indexOf('Tổng bán'),
         excelPricelist: headers.indexOf('Bảng giá'),
-        excelManager: headers.indexOf('Người quản lý'),
+        excelManager: headers.indexOf('Nhóm khách hàng') !== -1 ? headers.indexOf('Nhóm khách hàng') : (headers.indexOf('Người quản lý') !== -1 ? headers.indexOf('Người quản lý') : headers.indexOf('Người tạo')),
       };
       
       if (colMap.name === -1) {
@@ -940,7 +950,14 @@ function handleCustExcelFile(file) {
       // Fuzzy matcher helper for managers
       const findUserByExcelName = (excelName) => {
         if (!excelName) return null;
-        const nameLower = excelName.toString().toLowerCase().trim();
+        let nameLower = excelName.toString().toLowerCase().trim();
+        
+        // Chuyển đổi biệt danh/tên tắt sang tên đầy đủ trong hệ thống
+        if (nameLower === 'mr thụy' || nameLower === 'mr thuy' || nameLower === 'thụy' || nameLower === 'thuy') {
+          nameLower = 'nguyễn thanh thụy';
+        } else if (nameLower === 'mr dương hoàn' || nameLower === 'mr duong hoan' || nameLower === 'dương hoàn' || nameLower === 'duong hoan') {
+          nameLower = 'dương như hoàn';
+        }
         
         // Exact or direct match
         let found = state.users.find(u => 
@@ -988,9 +1005,9 @@ function handleCustExcelFile(file) {
         const nameLower = name.toLowerCase();
         const codeLower = code.toLowerCase();
         let assignedBrand = defaultBrand;
-        if (nameLower.includes('nano10') || codeLower.includes('nano10')) assignedBrand = 'Nano10*';
+        if (nameLower.includes('nano10') || nameLower.includes('nano 10') || codeLower.includes('nano10') || codeLower.includes('nano 10')) assignedBrand = 'Nano10*';
         else if (nameLower.includes('hatacco') || codeLower.includes('hatacco')) assignedBrand = 'Hatacco nano';
-        else if (nameLower.includes('mutsutec') || codeLower.includes('mutsutec')) assignedBrand = 'mutsutec';
+        else if (nameLower.includes('mutsutec') || nameLower.includes('mutsu') || codeLower.includes('mutsutec') || codeLower.includes('mutsu')) assignedBrand = 'mutsutec';
         else if (nameLower.includes('tdkaw') || codeLower.includes('tdkaw')) assignedBrand = 'tdkaw';
         else if (nameLower.includes('cova') || codeLower.includes('cova')) assignedBrand = 'cova';
         else if (nameLower.includes('festiva') || codeLower.includes('festiva')) assignedBrand = 'festiva';
@@ -1006,8 +1023,13 @@ function handleCustExcelFile(file) {
         } else {
           const matchBG = code.match(/BG(\d+)/i);
           if (matchBG) {
-            const numStr = matchBG[1].padStart(2, '0');
-            const foundPl = state.pricelists.find(p => p.name.includes(numStr) || p.id.includes(numStr));
+            const rawNum = parseInt(matchBG[1]);
+            const numStr = rawNum.toString().padStart(2, '0');
+            const numStrShort = rawNum.toString();
+            const foundPl = state.pricelists.find(p => 
+              p.name.includes(numStr) || p.id.includes(numStr) ||
+              p.name.includes(numStrShort) || p.id.includes(numStrShort)
+            );
             if (foundPl) {
               pricelistId = foundPl.id;
             }
