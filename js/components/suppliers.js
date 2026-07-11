@@ -223,59 +223,76 @@ export function setupSupplierManagement() {
 
   // Excel Import for Suppliers
   const openImportBtn = document.getElementById('btn-open-supplier-excel-modal');
-  if (openImportBtn) openImportBtn.addEventListener('click', openSupplierExcelModal);
+  if (openImportBtn) openImportBtn.onclick = openSupplierExcelModal;
   
   const closeImportBtn = document.getElementById('btn-close-supplier-excel-modal');
-  if (closeImportBtn) closeImportBtn.addEventListener('click', closeSupplierExcelModal);
+  if (closeImportBtn) closeImportBtn.onclick = closeSupplierExcelModal;
   
   const cancelImportBtn = document.getElementById('btn-cancel-supplier-excel');
-  if (cancelImportBtn) cancelImportBtn.addEventListener('click', closeSupplierExcelModal);
+  if (cancelImportBtn) cancelImportBtn.onclick = closeSupplierExcelModal;
   
   const fileInput = document.getElementById('supplier-excel-file-input');
   const browseBtn = document.getElementById('btn-browse-supplier-excel');
   const dropzone = document.getElementById('supplier-excel-dropzone');
   
   if (browseBtn && fileInput) {
-    browseBtn.addEventListener('click', () => fileInput.click());
+    browseBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (isSelectingFile) return;
+      isSelectingFile = true;
+      fileInput.click();
+    };
   }
   if (dropzone && fileInput) {
-    dropzone.addEventListener('click', (e) => {
-      // Tránh kích hoạt click 2 lần khi nhấp trúng nút browseBtn (nút con của dropzone)
-      if (e.target !== browseBtn && !browseBtn.contains(e.target)) {
-        fileInput.click();
+    dropzone.onclick = (e) => {
+      // Tránh kích hoạt click 2 lần khi nhấp trúng nút browseBtn hoặc bản thân fileInput
+      if (e.target === browseBtn || browseBtn.contains(e.target) || e.target === fileInput) {
+        return;
       }
-    });
+      e.stopPropagation();
+      if (isSelectingFile) return;
+      isSelectingFile = true;
+      fileInput.click();
+    };
   }
   if (fileInput) {
-    fileInput.addEventListener('change', (e) => {
+    fileInput.onclick = (e) => {
+      e.stopPropagation();
+    };
+    
+    const resetLock = () => {
+      isSelectingFile = false;
+    };
+    
+    fileInput.onchange = (e) => {
+      resetLock();
       if (e.target.files.length > 0) {
         handleSupplierExcelFile(e.target.files[0]);
-        // Xóa value để chọn lại cùng một file (sau khi chỉnh sửa) vẫn kích hoạt sự kiện change
-        fileInput.value = '';
       }
-    });
+    };
+    fileInput.oncancel = resetLock;
   }
   
   if (dropzone) {
-    dropzone.addEventListener('dragover', (e) => {
+    dropzone.ondragover = (e) => {
       e.preventDefault();
       dropzone.classList.add('dragover');
-    });
-    dropzone.addEventListener('dragleave', () => {
+    };
+    dropzone.ondragleave = () => {
       dropzone.classList.remove('dragover');
-    });
-    dropzone.addEventListener('drop', (e) => {
+    };
+    dropzone.ondrop = (e) => {
       e.preventDefault();
       dropzone.classList.remove('dragover');
       if (e.dataTransfer.files.length > 0) {
         handleSupplierExcelFile(e.dataTransfer.files[0]);
       }
-    });
+    };
   }
   
   const submitImportBtn = document.getElementById('btn-save-supplier-excel-submit');
   if (submitImportBtn) {
-    submitImportBtn.addEventListener('click', processSupplierExcelImport);
+    submitImportBtn.onclick = processSupplierExcelImport;
   }
   
   const downloadTemplateBtn = document.getElementById('btn-download-supplier-excel-template');
@@ -320,6 +337,7 @@ function handleDeleteSupplier(idx) {
 
 // --- Excel Import & Template Helpers for Suppliers ---
 let supplierExcelImportData = [];
+let isSelectingFile = false;
 
 export function downloadSupplierExcelTemplate() {
   const headers = [[
@@ -495,6 +513,9 @@ function handleSupplierExcelFile(file) {
     } catch(err) {
       console.error(err);
       showToast("Lỗi đọc tệp Excel: " + err.message, "danger");
+    } finally {
+      const el = document.getElementById('supplier-excel-file-input');
+      if (el) el.value = '';
     }
   };
   reader.readAsArrayBuffer(file);

@@ -4,6 +4,7 @@ import { dbSaveProduct, dbDeleteProduct } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 
 let excelImportData = [];
+let isSelectingFile = false;
 
 export function renderProductsTable() {
   const tableBody = document.getElementById('products-table-body');
@@ -352,7 +353,7 @@ export function setupExcelImportAndTemplate() {
   const saveImportBtn = document.getElementById('btn-save-excel-submit');
 
   if (downloadTemplateBtn) {
-    downloadTemplateBtn.addEventListener('click', downloadExcelTemplate);
+    downloadTemplateBtn.onclick = downloadExcelTemplate;
   }
 
   const toggleImportModal = (show) => {
@@ -370,46 +371,72 @@ export function setupExcelImportAndTemplate() {
     }
   };
 
-  if (openImportModalBtn) openImportModalBtn.addEventListener('click', () => toggleImportModal(true));
-  if (closeImportModalBtn) closeImportModalBtn.addEventListener('click', () => toggleImportModal(false));
-  if (cancelImportBtn) cancelImportBtn.addEventListener('click', () => toggleImportModal(false));
+  if (openImportModalBtn) openImportModalBtn.onclick = () => toggleImportModal(true);
+  if (closeImportModalBtn) closeImportModalBtn.onclick = () => toggleImportModal(false);
+  if (cancelImportBtn) cancelImportBtn.onclick = () => toggleImportModal(false);
 
   // Kéo thả file Excel
   if (excelDropzone && excelFileInput) {
-    excelDropzone.addEventListener('click', () => excelFileInput.click());
+    if (browseExcelBtn) {
+      browseExcelBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (isSelectingFile) return;
+        isSelectingFile = true;
+        excelFileInput.click();
+      };
+    }
+
+    excelDropzone.onclick = (e) => {
+      // Tránh kích hoạt click 2 lần khi nhấp trúng nút browseExcelBtn hoặc bản thân excelFileInput
+      if (browseExcelBtn && (e.target === browseExcelBtn || browseExcelBtn.contains(e.target) || e.target === excelFileInput)) {
+        return;
+      }
+      e.stopPropagation();
+      if (isSelectingFile) return;
+      isSelectingFile = true;
+      excelFileInput.click();
+    };
+
+    excelFileInput.onclick = (e) => {
+      e.stopPropagation();
+    };
     
-    excelDropzone.addEventListener('dragover', (e) => {
+    excelDropzone.ondragover = (e) => {
       e.preventDefault();
       excelDropzone.classList.add('dragover');
-    });
+    };
 
-    excelDropzone.addEventListener('dragleave', () => {
+    excelDropzone.ondragleave = () => {
       excelDropzone.classList.remove('dragover');
-    });
+    };
 
-    excelDropzone.addEventListener('drop', (e) => {
+    excelDropzone.ondrop = (e) => {
       e.preventDefault();
       excelDropzone.classList.remove('dragover');
       if (e.dataTransfer.files.length > 0) {
         excelFileInput.files = e.dataTransfer.files;
         handleExcelFileSelect(excelFileInput.files[0]);
       }
-    });
+    };
 
-    excelFileInput.addEventListener('change', () => {
+    const resetLock = () => {
+      isSelectingFile = false;
+    };
+
+    excelFileInput.onchange = () => {
+      resetLock();
       if (excelFileInput.files.length > 0) {
         handleExcelFileSelect(excelFileInput.files[0]);
-        // Xóa value để chọn lại cùng một file (sau khi chỉnh sửa) vẫn kích hoạt sự kiện change
-        excelFileInput.value = '';
       }
-    });
+    };
+    excelFileInput.oncancel = resetLock;
   }
 
   if (saveImportBtn) {
-    saveImportBtn.addEventListener('click', async () => {
+    saveImportBtn.onclick = async () => {
       await processExcelImport();
       toggleImportModal(false);
-    });
+    };
   }
 
   const onFilterChange = () => {
@@ -543,6 +570,9 @@ function handleExcelFileSelect(file) {
     } catch (err) {
       console.error(err);
       showToast("Lỗi đọc tệp Excel: " + err.message, "danger");
+    } finally {
+      const el = document.getElementById('excel-file-input');
+      if (el) el.value = '';
     }
   };
   reader.readAsArrayBuffer(file);
