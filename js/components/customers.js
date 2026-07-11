@@ -992,10 +992,10 @@ function handleCustExcelFile(file) {
         const row = rows[i];
         if (!row || row.length === 0) continue;
         
-        let name = colMap.name !== -1 ? (row[colMap.name] || '').toString().trim() : '';
+        let name = colMap.name !== -1 ? (row[colMap.name] || '').toString().trim().normalize('NFC') : '';
         if (!name) continue; // skip rows without name
         
-        let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim().toUpperCase() : '';
+        let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim().toUpperCase().normalize('NFC') : '';
         let phone = colMap.phone !== -1 ? (row[colMap.phone] || '').toString().trim() : '';
         let address = colMap.address !== -1 ? (row[colMap.address] || '').toString().trim() : '';
         let debt = colMap.debt !== -1 ? parseFloat(row[colMap.debt]) || 0 : 0;
@@ -1185,10 +1185,9 @@ async function processCustomerExcelImport() {
     for (const c of custExcelImportData) {
       let idx = -1;
       if (mode === 'merge') {
-        const cCodeClean = c.code.trim().toUpperCase();
+        const cCodeClean = c.code.trim().toUpperCase().normalize('NFC');
         idx = state.customers.findIndex(oc => 
-          oc.code.trim().toUpperCase() === cCodeClean || 
-          (c.phone && oc.phone && oc.phone.replace(/\D/g, '') === c.phone.replace(/\D/g, ''))
+          (oc.code || '').toString().trim().toUpperCase().normalize('NFC') === cCodeClean
         );
       }
       
