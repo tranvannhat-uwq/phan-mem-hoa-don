@@ -406,12 +406,18 @@
               <button class="btn btn-xs inner-tab-btn" data-inner-target="inv-finished-tab" style="padding: 0.45rem 1rem; border-radius: 6px;">Thành phẩm</button>
             </div>
             
-            <div id="inventory-actions-container">
+            <div id="inventory-actions-container" style="display: flex; gap: 0.5rem;">
               <button class="btn btn-primary btn-sm" id="btn-add-raw-material-modal">
                 <i data-lucide="plus"></i> Thêm nguyên liệu
               </button>
+              <button class="btn btn-secondary btn-sm" id="btn-open-raw-excel-modal">
+                <i data-lucide="file-up"></i> Nhập Excel
+              </button>
               <button class="btn btn-primary btn-sm" id="btn-add-semi-finished-modal" style="display: none;">
                 <i data-lucide="plus"></i> Thêm bán thành phẩm
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-open-semi-excel-modal" style="display: none;">
+                <i data-lucide="file-up"></i> Nhập Excel
               </button>
             </div>
           </div>
@@ -433,6 +439,7 @@
                       <th>Mã NL</th>
                       <th>Tên nguyên liệu</th>
                       <th>Đơn vị tính</th>
+                      <th style="text-align: right;">Giá nhập (đ)</th>
                       <th style="text-align: right;">Số lượng tồn kho</th>
                       <th>Ghi chú</th>
                       <th style="text-align: center; width: 100px;">Thao tác</th>
@@ -2372,6 +2379,133 @@
     </div>
   </div>
 
+  <!-- Modal Nhập Nguyên Liệu từ Excel -->
+  <div class="modal-overlay" id="raw-excel-modal">
+    <div class="modal-content" style="max-width: 850px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Nhập nguyên liệu từ file Excel</h3>
+        <button class="modal-close" id="btn-close-raw-excel-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="raw-excel-dropzone" class="upload-dropzone">
+          <i data-lucide="file-spreadsheet" class="upload-icon" style="width: 48px; height: 48px; color: var(--color-primary); margin-bottom: 0.75rem;"></i>
+          <p class="upload-text" style="font-weight: 600; margin-bottom: 0.25rem;">Kéo thả tệp Excel (.xlsx, .xls) hoặc CSV vào đây</p>
+          <p class="upload-subtext" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Hoặc nhấp chuột để chọn tệp từ máy tính</p>
+          <input type="file" id="raw-excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-raw-excel">Chọn tệp</button>
+        </div>
+        
+        <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px dashed var(--border-color); padding-bottom: 1rem;">
+          <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
+            <input type="radio" name="raw-import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
+            Gộp thêm (Giữ lại nguyên liệu cũ, trùng mã sẽ cập nhật)
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
+            <input type="radio" name="raw-import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
+            Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
+          </label>
+        </div>
+
+        <div id="raw-excel-preview-container" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+          <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--color-primary); display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="eye" style="width:16px;"></i> Xem trước dữ liệu nguyên liệu (Hiển thị tối đa 5 dòng):
+          </h4>
+          <div class="table-responsive" style="max-height: 220px;">
+            <table class="table" style="font-size: 0.8rem;">
+              <thead>
+                <tr>
+                  <th style="width: 50px; text-align: center;">STT</th>
+                  <th>Mã NL</th>
+                  <th>Tên nguyên liệu</th>
+                  <th>ĐVT</th>
+                  <th style="text-align: right;">Giá nhập (đ)</th>
+                  <th style="text-align: right;">Số lượng tồn</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody id="raw-excel-preview-table-body">
+                <!-- JS dynamically fills -->
+              </tbody>
+            </table>
+          </div>
+          <p id="raw-excel-preview-summary" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; font-style: italic;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-raw-excel">Hủy bỏ</button>
+        <button type="button" class="btn btn-primary" id="btn-save-raw-excel-submit" disabled>
+          <i data-lucide="check"></i> Lưu nguyên liệu vào hệ thống
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Nhập Bán Thành Phẩm từ Excel -->
+  <div class="modal-overlay" id="semi-excel-modal">
+    <div class="modal-content" style="max-width: 850px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Nhập bán thành phẩm từ file Excel</h3>
+        <button class="modal-close" id="btn-close-semi-excel-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="semi-excel-dropzone" class="upload-dropzone">
+          <i data-lucide="file-spreadsheet" class="upload-icon" style="width: 48px; height: 48px; color: var(--color-primary); margin-bottom: 0.75rem;"></i>
+          <p class="upload-text" style="font-weight: 600; margin-bottom: 0.25rem;">Kéo thả tệp Excel (.xlsx, .xls) hoặc CSV vào đây</p>
+          <p class="upload-subtext" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Hoặc nhấp chuột để chọn tệp từ máy tính</p>
+          <input type="file" id="semi-excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-semi-excel">Chọn tệp</button>
+        </div>
+        
+        <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px dashed var(--border-color); padding-bottom: 1rem;">
+          <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
+            <input type="radio" name="semi-import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
+            Gộp thêm (Giữ lại cũ, trùng mã sẽ cập nhật)
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
+            <input type="radio" name="semi-import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
+            Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
+          </label>
+        </div>
+
+        <div id="semi-excel-preview-container" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+          <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--color-primary); display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="eye" style="width:16px;"></i> Xem trước dữ liệu bán thành phẩm (Hiển thị tối đa 5 dòng):
+          </h4>
+          <div class="table-responsive" style="max-height: 220px;">
+            <table class="table" style="font-size: 0.8rem;">
+              <thead>
+                <tr>
+                  <th style="width: 50px; text-align: center;">STT</th>
+                  <th>Mã BTP</th>
+                  <th>Tên bán thành phẩm</th>
+                  <th>ĐVT</th>
+                  <th style="text-align: right;">Số lượng tồn</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody id="semi-excel-preview-table-body">
+                <!-- JS dynamically fills -->
+              </tbody>
+            </table>
+          </div>
+          <p id="semi-excel-preview-summary" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; font-style: italic;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-semi-excel">Hủy bỏ</button>
+        <button type="button" class="btn btn-primary" id="btn-save-semi-excel-submit" disabled>
+          <i data-lucide="check"></i> Lưu bán thành phẩm vào hệ thống
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Thêm/Sửa Nhà Cung Cấp Modal -->
   <div class="modal-overlay" id="supplier-modal">
     <div class="modal-content" style="max-width: 500px;">
@@ -2645,6 +2779,10 @@
           <div class="form-group">
             <label class="form-label" for="raw-unit">Đơn vị tính <span style="color: red;">*</span></label>
             <input type="text" class="form-control" id="raw-unit" placeholder="Ví dụ: kg, g, lít" value="kg" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="raw-import-price">Giá nhập (đ)</label>
+            <input type="number" class="form-control" id="raw-import-price" placeholder="0" value="0" min="0" step="any" style="width: 100%;">
           </div>
           <div class="form-group">
             <label class="form-label" for="raw-quantity">Số lượng tồn ban đầu</label>

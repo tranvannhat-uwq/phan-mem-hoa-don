@@ -662,6 +662,7 @@ export async function fetchCloudData() {
             code: r.code,
             name: r.name,
             unit: r.unit || 'kg',
+            importPrice: parseFloat(r.import_price || 0),
             quantity: parseFloat(r.quantity || 0),
             notes: r.notes || ''
           }));
@@ -1027,6 +1028,7 @@ export async function syncLocalToCloud() {
           code: r.code,
           name: r.name,
           unit: r.unit || 'kg',
+          import_price: parseFloat(r.importPrice || 0),
           quantity: parseFloat(r.quantity || 0),
           notes: r.notes || ''
         }));
@@ -1765,6 +1767,7 @@ export async function dbSaveRawMaterial(item) {
         code: item.code,
         name: item.name,
         unit: item.unit || 'kg',
+        import_price: parseFloat(item.importPrice || 0),
         quantity: parseFloat(item.quantity || 0),
         notes: item.notes || ''
       };
@@ -1908,6 +1911,93 @@ export async function dbSaveFinishedGoodsStock(item) {
       if (error) throw error;
     } catch (err) {
       console.warn("Cloud save finished goods stock failed, using local fallback:", err.message);
+    }
+  }
+  return true;
+}
+
+export async function dbSaveRawMaterialsBulk(items) {
+  if (isCloudActive && supabaseClient && items.length > 0) {
+    try {
+      const dbRows = items.map(item => ({
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        unit: item.unit || 'kg',
+        import_price: parseFloat(item.importPrice || 0),
+        quantity: parseFloat(item.quantity || 0),
+        notes: item.notes || ''
+      }));
+      const { error } = await supabaseClient
+        .from(tableRawMaterialsName)
+        .upsert(dbRows, { onConflict: 'id' });
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error(err);
+      showToast('Không thể lưu danh sách nguyên liệu lên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function dbDeleteAllRawMaterials() {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableRawMaterialsName)
+        .delete()
+        .neq('id', '');
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể xóa danh sách nguyên liệu trên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function dbSaveSemiFinishedBulk(items) {
+  if (isCloudActive && supabaseClient && items.length > 0) {
+    try {
+      const dbRows = items.map(item => ({
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        unit: item.unit || 'kg',
+        quantity: parseFloat(item.quantity || 0),
+        notes: item.notes || ''
+      }));
+      const { error } = await supabaseClient
+        .from(tableSemiFinishedName)
+        .upsert(dbRows, { onConflict: 'id' });
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error(err);
+      showToast('Không thể lưu danh sách bán thành phẩm lên đám mây: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function dbDeleteAllSemiFinished() {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tableSemiFinishedName)
+        .delete()
+        .neq('id', '');
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('Không thể xóa danh sách bán thành phẩm trên đám mây: ' + err.message, 'danger');
+      return false;
     }
   }
   return true;

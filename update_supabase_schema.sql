@@ -143,6 +143,10 @@ ALTER TABLE draft_orders ADD COLUMN IF NOT EXISTS created_by text;
 -- Cập nhật bảng pricelists
 ALTER TABLE pricelists ADD COLUMN IF NOT EXISTS brand_discounts jsonb DEFAULT '{}'::jsonb;
 
+-- Cập nhật bảng raw_materials (Cả 2 khả năng bảng gốc và bảng có tiền tố wl_)
+ALTER TABLE raw_materials ADD COLUMN IF NOT EXISTS import_price numeric DEFAULT 0;
+ALTER TABLE wl_raw_materials ADD COLUMN IF NOT EXISTS import_price numeric DEFAULT 0;
+
 
 -- 3. KÍCH HOẠT ROW LEVEL SECURITY (RLS) TRÊN TẤT CẢ CÁC BẢNG
 
@@ -463,6 +467,7 @@ CREATE TABLE IF NOT EXISTS public.raw_materials (
     code text UNIQUE NOT NULL,
     name text NOT NULL,
     unit text NOT NULL DEFAULT 'kg',
+    import_price numeric DEFAULT 0,
     quantity numeric NOT NULL DEFAULT 0,
     notes text,
     created_at timestamptz DEFAULT now()

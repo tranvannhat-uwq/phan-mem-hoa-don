@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatDateTime, safeCreateIcons } from '../utils.js';
+import { showToast, formatDateTime, safeCreateIcons, formatCurrency } from '../utils.js';
 import {
   dbSaveRawMaterial,
   dbDeleteRawMaterial,
@@ -8,7 +8,11 @@ import {
   dbSaveRecipe,
   dbDeleteRecipe,
   dbSaveProductionLog,
-  dbSaveFinishedGoodsStock
+  dbSaveFinishedGoodsStock,
+  dbSaveRawMaterialsBulk,
+  dbDeleteAllRawMaterials,
+  dbSaveSemiFinishedBulk,
+  dbDeleteAllSemiFinished
 } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 
@@ -40,7 +44,7 @@ function renderRawMaterials() {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
           Không có nguyên liệu nào.
         </td>
       </tr>
@@ -54,6 +58,7 @@ function renderRawMaterials() {
       <td style="font-weight: 600; color: #fff;">${r.code}</td>
       <td style="font-weight: 500;">${r.name}</td>
       <td><span class="suggestion-brand-badge" style="background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15);">${r.unit}</span></td>
+      <td style="text-align: right; font-weight: 600; color: #fbbf24;">${formatCurrency(r.importPrice || 0)}</td>
       <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${r.quantity.toLocaleString('vi-VN')}</td>
       <td style="color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.notes || ''}">${r.notes || '-'}</td>
       <td style="text-align: center;">
@@ -359,6 +364,7 @@ function openRawMaterialModal(id = '') {
       document.getElementById('raw-code').disabled = true; // Không cho sửa mã
       document.getElementById('raw-name').value = item.name;
       document.getElementById('raw-unit').value = item.unit;
+      document.getElementById('raw-import-price').value = item.importPrice || 0;
       document.getElementById('raw-quantity').value = item.quantity;
       document.getElementById('raw-notes').value = item.notes || '';
     }
@@ -366,6 +372,7 @@ function openRawMaterialModal(id = '') {
     title.innerText = 'Thêm nguyên liệu mới';
     document.getElementById('raw-id').value = '';
     document.getElementById('raw-code').disabled = false;
+    document.getElementById('raw-import-price').value = 0;
   }
 }
 
@@ -846,16 +853,24 @@ export function setupGoodsPanel() {
       // Điều khiển hiển thị các nút thao tác tương ứng ở góc trên bên phải
       const rawBtn = document.getElementById('btn-add-raw-material-modal');
       const semiBtn = document.getElementById('btn-add-semi-finished-modal');
+      const rawExcelBtn = document.getElementById('btn-open-raw-excel-modal');
+      const semiExcelBtn = document.getElementById('btn-open-semi-excel-modal');
       
       if (targetId === 'inv-raw-tab') {
-        rawBtn.style.display = 'inline-flex';
-        semiBtn.style.display = 'none';
+        if (rawBtn) rawBtn.style.display = 'inline-flex';
+        if (rawExcelBtn) rawExcelBtn.style.display = 'inline-flex';
+        if (semiBtn) semiBtn.style.display = 'none';
+        if (semiExcelBtn) semiExcelBtn.style.display = 'none';
       } else if (targetId === 'inv-semi-tab') {
-        rawBtn.style.display = 'none';
-        semiBtn.style.display = 'inline-flex';
+        if (rawBtn) rawBtn.style.display = 'none';
+        if (rawExcelBtn) rawExcelBtn.style.display = 'none';
+        if (semiBtn) semiBtn.style.display = 'inline-flex';
+        if (semiExcelBtn) semiExcelBtn.style.display = 'inline-flex';
       } else {
-        rawBtn.style.display = 'none';
-        semiBtn.style.display = 'none';
+        if (rawBtn) rawBtn.style.display = 'none';
+        if (rawExcelBtn) rawExcelBtn.style.display = 'none';
+        if (semiBtn) semiBtn.style.display = 'none';
+        if (semiExcelBtn) semiExcelBtn.style.display = 'none';
       }
 
       renderGoodsPanel();
@@ -866,6 +881,8 @@ export function setupGoodsPanel() {
   document.getElementById('btn-add-raw-material-modal')?.addEventListener('click', () => openRawMaterialModal());
   document.getElementById('btn-add-semi-finished-modal')?.addEventListener('click', () => openSemiFinishedModal());
   document.getElementById('btn-add-recipe-modal')?.addEventListener('click', () => openRecipeModal());
+  document.getElementById('btn-open-raw-excel-modal')?.addEventListener('click', () => openRawExcelModal());
+  document.getElementById('btn-open-semi-excel-modal')?.addEventListener('click', () => openSemiExcelModal());
 
   // 4. Modal Close listeners
   const modalCloseMappings = [
@@ -876,7 +893,11 @@ export function setupGoodsPanel() {
     { btn: 'btn-close-recipe-modal', modal: 'recipe-modal' },
     { btn: 'btn-cancel-recipe-modal', modal: 'recipe-modal' },
     { btn: 'btn-close-finished-stock-modal', modal: 'finished-stock-adjust-modal' },
-    { btn: 'btn-cancel-finished-stock-modal', modal: 'finished-stock-adjust-modal' }
+    { btn: 'btn-cancel-finished-stock-modal', modal: 'finished-stock-adjust-modal' },
+    { btn: 'btn-close-raw-excel-modal', modal: 'raw-excel-modal' },
+    { btn: 'btn-cancel-raw-excel', modal: 'raw-excel-modal' },
+    { btn: 'btn-close-semi-excel-modal', modal: 'semi-excel-modal' },
+    { btn: 'btn-cancel-semi-excel', modal: 'semi-excel-modal' }
   ];
 
   modalCloseMappings.forEach(mapping => {
@@ -894,6 +915,118 @@ export function setupGoodsPanel() {
   });
   document.getElementById('recipe-excel-file-input')?.addEventListener('change', handleRecipeExcelImport);
 
+  // Nhập Nguyên liệu từ file Excel
+  const rawFileInput = document.getElementById('raw-excel-file-input');
+  const rawBrowseBtn = document.getElementById('btn-browse-raw-excel');
+  const rawDropzone = document.getElementById('raw-excel-dropzone');
+  
+  if (rawBrowseBtn && rawFileInput) {
+    rawBrowseBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (isSelectingRawFile) return;
+      isSelectingRawFile = true;
+      rawFileInput.click();
+    };
+  }
+  if (rawDropzone && rawFileInput) {
+    rawDropzone.onclick = (e) => {
+      if (e.target === rawBrowseBtn || rawBrowseBtn.contains(e.target) || e.target === rawFileInput) {
+        return;
+      }
+      e.stopPropagation();
+      if (isSelectingRawFile) return;
+      isSelectingRawFile = true;
+      rawFileInput.click();
+    };
+  }
+  if (rawFileInput) {
+    rawFileInput.onclick = (e) => {
+      e.stopPropagation();
+    };
+    rawFileInput.onchange = (e) => {
+      isSelectingRawFile = false;
+      if (e.target.files.length > 0) {
+        handleRawExcelFile(e.target.files[0]);
+      }
+    };
+    rawFileInput.oncancel = () => {
+      isSelectingRawFile = false;
+    };
+  }
+  if (rawDropzone) {
+    rawDropzone.ondragover = (e) => {
+      e.preventDefault();
+      rawDropzone.classList.add('dragover');
+    };
+    rawDropzone.ondragleave = () => {
+      rawDropzone.classList.remove('dragover');
+    };
+    rawDropzone.ondrop = (e) => {
+      e.preventDefault();
+      rawDropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleRawExcelFile(e.dataTransfer.files[0]);
+      }
+    };
+  }
+  document.getElementById('btn-save-raw-excel-submit')?.addEventListener('click', processRawExcelImport);
+
+  // Nhập Bán thành phẩm từ file Excel
+  const semiFileInput = document.getElementById('semi-excel-file-input');
+  const semiBrowseBtn = document.getElementById('btn-browse-semi-excel');
+  const semiDropzone = document.getElementById('semi-excel-dropzone');
+  
+  if (semiBrowseBtn && semiFileInput) {
+    semiBrowseBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (isSelectingSemiFile) return;
+      isSelectingSemiFile = true;
+      semiFileInput.click();
+    };
+  }
+  if (semiDropzone && semiFileInput) {
+    semiDropzone.onclick = (e) => {
+      if (e.target === semiBrowseBtn || semiBrowseBtn.contains(e.target) || e.target === semiFileInput) {
+        return;
+      }
+      e.stopPropagation();
+      if (isSelectingSemiFile) return;
+      isSelectingSemiFile = true;
+      semiFileInput.click();
+    };
+  }
+  if (semiFileInput) {
+    semiFileInput.onclick = (e) => {
+      e.stopPropagation();
+    };
+    semiFileInput.onchange = (e) => {
+      isSelectingSemiFile = false;
+      if (e.target.files.length > 0) {
+        handleSemiExcelFile(e.target.files[0]);
+      }
+    };
+    semiFileInput.oncancel = () => {
+      isSelectingSemiFile = false;
+    };
+  }
+  if (semiDropzone) {
+    semiDropzone.ondragover = (e) => {
+      e.preventDefault();
+      semiDropzone.classList.add('dragover');
+    };
+    semiDropzone.ondragleave = () => {
+      semiDropzone.classList.remove('dragover');
+    };
+    semiDropzone.ondrop = (e) => {
+      e.preventDefault();
+      semiDropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleSemiExcelFile(e.dataTransfer.files[0]);
+      }
+    };
+  }
+  document.getElementById('btn-save-semi-excel-submit')?.addEventListener('click', processSemiExcelImport);
+
   // 6. Xử lý lưu Nguyên liệu (Form Submit)
   document.getElementById('raw-material-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -901,6 +1034,7 @@ export function setupGoodsPanel() {
     const code = document.getElementById('raw-code').value.trim().toUpperCase();
     const name = document.getElementById('raw-name').value.trim();
     const unit = document.getElementById('raw-unit').value.trim();
+    const importPrice = parseFloat(document.getElementById('raw-import-price').value) || 0;
     const quantity = parseFloat(document.getElementById('raw-quantity').value) || 0;
     const notes = document.getElementById('raw-notes').value.trim();
 
@@ -908,7 +1042,7 @@ export function setupGoodsPanel() {
       // Edit mode
       const idx = state.rawMaterials.findIndex(r => r.id === idInput);
       if (idx !== -1) {
-        state.rawMaterials[idx] = { ...state.rawMaterials[idx], name, unit, quantity, notes };
+        state.rawMaterials[idx] = { ...state.rawMaterials[idx], name, unit, importPrice, quantity, notes };
         localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
         await dbSaveRawMaterial(state.rawMaterials[idx]);
         showToast('Cập nhật nguyên liệu thành công.');
@@ -919,7 +1053,7 @@ export function setupGoodsPanel() {
         showToast(`Mã nguyên liệu "${code}" đã tồn tại!`, 'danger');
         return;
       }
-      const newItem = { id: `raw-${Date.now()}`, code, name, unit, quantity, notes };
+      const newItem = { id: `raw-${Date.now()}`, code, name, unit, importPrice, quantity, notes };
       state.rawMaterials.push(newItem);
       localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
       await dbSaveRawMaterial(newItem);
@@ -1152,4 +1286,410 @@ export function setupGoodsPanel() {
   document.getElementById('finished-stock-search-input')?.addEventListener('input', renderFinishedGoodsStock);
   document.getElementById('finished-stock-brand-filter')?.addEventListener('change', renderFinishedGoodsStock);
   document.getElementById('recipe-search-input')?.addEventListener('input', renderRecipes);
+}
+
+// --- LOGIC NHẬP FILE EXCEL NGUYÊN LIỆU & BÁN THÀNH PHẨM ---
+
+let rawExcelImportData = [];
+let semiExcelImportData = [];
+let isSelectingRawFile = false;
+let isSelectingSemiFile = false;
+
+export function openRawExcelModal() {
+  const modal = document.getElementById('raw-excel-modal');
+  if (modal) {
+    modal.classList.add('active');
+    rawExcelImportData = [];
+    const fileInput = document.getElementById('raw-excel-file-input');
+    if (fileInput) fileInput.value = '';
+    const previewContainer = document.getElementById('raw-excel-preview-container');
+    if (previewContainer) previewContainer.style.display = 'none';
+    const submitBtn = document.getElementById('btn-save-raw-excel-submit');
+    if (submitBtn) {
+      submitBtn.setAttribute('disabled', 'true');
+      submitBtn.disabled = true;
+    }
+    const dropzone = document.getElementById('raw-excel-dropzone');
+    if (dropzone) dropzone.className = 'upload-dropzone';
+  }
+}
+
+export function closeRawExcelModal() {
+  const modal = document.getElementById('raw-excel-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+export function openSemiExcelModal() {
+  const modal = document.getElementById('semi-excel-modal');
+  if (modal) {
+    modal.classList.add('active');
+    semiExcelImportData = [];
+    const fileInput = document.getElementById('semi-excel-file-input');
+    if (fileInput) fileInput.value = '';
+    const previewContainer = document.getElementById('semi-excel-preview-container');
+    if (previewContainer) previewContainer.style.display = 'none';
+    const submitBtn = document.getElementById('btn-save-semi-excel-submit');
+    if (submitBtn) {
+      submitBtn.setAttribute('disabled', 'true');
+      submitBtn.disabled = true;
+    }
+    const dropzone = document.getElementById('semi-excel-dropzone');
+    if (dropzone) dropzone.className = 'upload-dropzone';
+  }
+}
+
+export function closeSemiExcelModal() {
+  const modal = document.getElementById('semi-excel-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function handleRawExcelFile(file) {
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      if (rows.length === 0) {
+        showToast("Tập tin Excel trống!", "danger");
+        return;
+      }
+      
+      const headers = rows[0].map(h => (h || '').toString().trim().toLowerCase());
+      
+      // Map columns based on headers
+      const colMap = {
+        code: headers.findIndex(h => h.includes('mã nguyên liệu') || h.includes('mã nl') || h.includes('ma nl') || h === 'mã' || h === 'code'),
+        name: headers.findIndex(h => h.includes('tên nguyên liệu') || h.includes('tên nl') || h.includes('ten nl') || h === 'tên' || h === 'name'),
+        unit: headers.findIndex(h => h.includes('đơn vị tính') || h.includes('đvt') || h === 'đơn vị' || h === 'unit'),
+        importPrice: headers.findIndex(h => h.includes('giá nhập') || h.includes('giá') || h.includes('price')),
+        quantity: headers.findIndex(h => h.includes('tồn') || h.includes('số lượng') || h.includes('quantity') || h.includes('qty')),
+        notes: headers.findIndex(h => h.includes('ghi chú') || h === 'notes' || h === 'note')
+      };
+      
+      // Fallback map if columns are not matched (try to find by position)
+      if (colMap.name === -1) {
+        colMap.code = 0;
+        colMap.name = 1;
+        colMap.unit = 2;
+        colMap.importPrice = 3;
+        colMap.quantity = 4;
+        colMap.notes = 5;
+      }
+      
+      if (colMap.name === -1 || !rows[0][colMap.name]) {
+        showToast("Tập tin không có cột tên nguyên liệu hợp lệ!", "danger");
+        return;
+      }
+      
+      rawExcelImportData = [];
+      const previewRows = [];
+      
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        
+        let name = colMap.name !== -1 ? (row[colMap.name] || '').toString().trim().normalize('NFC') : '';
+        if (!name) continue; // Bỏ qua nếu không có tên
+        
+        let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim().toUpperCase().normalize('NFC') : '';
+        if (!code) {
+          code = `RAW-NEW-${Date.now()}-${i}`;
+        }
+        
+        let unit = colMap.unit !== -1 ? (row[colMap.unit] || '').toString().trim() : 'kg';
+        let importPrice = colMap.importPrice !== -1 ? parseFloat(row[colMap.importPrice]) || 0 : 0;
+        let quantity = colMap.quantity !== -1 ? parseFloat(row[colMap.quantity]) || 0 : 0;
+        let notes = colMap.notes !== -1 ? (row[colMap.notes] || '').toString().trim() : '';
+        
+        const item = {
+          id: `raw-${Date.now()}-${i}-${Math.floor(Math.random() * 1000)}`,
+          code,
+          name,
+          unit,
+          importPrice,
+          quantity,
+          notes
+        };
+        
+        rawExcelImportData.push(item);
+        if (previewRows.length < 5) {
+          previewRows.push(item);
+        }
+      }
+      
+      // Render preview
+      const previewBody = document.getElementById('raw-excel-preview-table-body');
+      if (previewBody) {
+        previewBody.innerHTML = previewRows.map((r, idx) => `
+          <tr>
+            <td style="text-align: center; color: var(--text-muted);">${idx + 1}</td>
+            <td style="font-weight: 600; color: #fff;">${r.code}</td>
+            <td style="font-weight: bold; color: #fbbf24;">${r.name}</td>
+            <td><span class="suggestion-brand-badge" style="background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15);">${r.unit}</span></td>
+            <td style="text-align: right; color: #fbbf24;">${formatCurrency(r.importPrice)}</td>
+            <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${r.quantity.toLocaleString('vi-VN')}</td>
+            <td>${r.notes || '<span style="color: var(--text-muted);">-</span>'}</td>
+          </tr>
+        `).join('');
+      }
+      
+      const summaryEl = document.getElementById('raw-excel-preview-summary');
+      if (summaryEl) {
+        summaryEl.innerText = `Hiển thị 5 trên tổng số ${rawExcelImportData.length} nguyên liệu đọc được từ tệp.`;
+      }
+      
+      const container = document.getElementById('raw-excel-preview-container');
+      if (container) container.style.display = 'block';
+      
+      const submitBtn = document.getElementById('btn-save-raw-excel-submit');
+      if (submitBtn) {
+        submitBtn.removeAttribute('disabled');
+        submitBtn.disabled = false;
+      }
+      
+      const dropzone = document.getElementById('raw-excel-dropzone');
+      if (dropzone) dropzone.className = 'upload-dropzone success-uploaded';
+      
+      showToast(`Đọc tệp thành công! Tìm thấy ${rawExcelImportData.length} nguyên liệu.`, "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Lỗi đọc tệp Excel: " + err.message, "danger");
+    } finally {
+      const el = document.getElementById('raw-excel-file-input');
+      if (el) el.value = '';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function processRawExcelImport() {
+  if (rawExcelImportData.length === 0) return;
+  
+  const mode = document.querySelector('input[name="raw-import-mode"]:checked').value;
+  
+  try {
+    showToast("Đang nhập dữ liệu nguyên liệu...", "info");
+    
+    if (mode === 'overwrite') {
+      if (confirm("Chế độ ghi đè sẽ xóa sạch toàn bộ nguyên liệu hiện tại của bạn. Bạn chắc chắn chứ?")) {
+        const deleted = await dbDeleteAllRawMaterials();
+        if (!deleted) return;
+        state.rawMaterials = [];
+      } else {
+        return;
+      }
+    }
+    
+    // Xử lý gộp dữ liệu
+    for (const c of rawExcelImportData) {
+      let idx = -1;
+      if (mode === 'merge') {
+        const cCodeClean = c.code.trim().toUpperCase().normalize('NFC');
+        idx = state.rawMaterials.findIndex(oc => 
+          (oc.code || '').toString().trim().toUpperCase().normalize('NFC') === cCodeClean
+        );
+      }
+      
+      if (idx > -1) {
+        const oldId = state.rawMaterials[idx].id;
+        c.id = oldId;
+        state.rawMaterials[idx] = c;
+      } else {
+        state.rawMaterials.push(c);
+      }
+    }
+    
+    localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
+    
+    const success = await dbSaveRawMaterialsBulk(rawExcelImportData);
+    if (success) {
+      showToast("Nhập danh sách nguyên liệu từ Excel thành công!", "success");
+    } else {
+      showToast("Nhập dữ liệu thành công cục bộ, nhưng đồng bộ đám mây thất bại.", "warning");
+    }
+    
+    closeRawExcelModal();
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    showToast("Lỗi khi nhập dữ liệu: " + err.message, "danger");
+  }
+}
+
+function handleSemiExcelFile(file) {
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      if (rows.length === 0) {
+        showToast("Tập tin Excel trống!", "danger");
+        return;
+      }
+      
+      const headers = rows[0].map(h => (h || '').toString().trim().toLowerCase());
+      
+      const colMap = {
+        code: headers.findIndex(h => h.includes('mã bán thành phẩm') || h.includes('mã btp') || h.includes('ma btp') || h === 'mã' || h === 'code'),
+        name: headers.findIndex(h => h.includes('tên bán thành phẩm') || h.includes('tên btp') || h.includes('ten btp') || h === 'tên' || h === 'name'),
+        unit: headers.findIndex(h => h.includes('đơn vị tính') || h.includes('đvt') || h === 'đơn vị' || h === 'unit'),
+        quantity: headers.findIndex(h => h.includes('tồn') || h.includes('số lượng') || h.includes('quantity') || h.includes('qty')),
+        notes: headers.findIndex(h => h.includes('ghi chú') || h === 'notes' || h === 'note')
+      };
+      
+      if (colMap.name === -1) {
+        colMap.code = 0;
+        colMap.name = 1;
+        colMap.unit = 2;
+        colMap.quantity = 3;
+        colMap.notes = 4;
+      }
+      
+      if (colMap.name === -1 || !rows[0][colMap.name]) {
+        showToast("Tập tin không có cột tên bán thành phẩm hợp lệ!", "danger");
+        return;
+      }
+      
+      semiExcelImportData = [];
+      const previewRows = [];
+      
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        
+        let name = colMap.name !== -1 ? (row[colMap.name] || '').toString().trim().normalize('NFC') : '';
+        if (!name) continue;
+        
+        let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim().toUpperCase().normalize('NFC') : '';
+        if (!code) {
+          code = `SEMI-NEW-${Date.now()}-${i}`;
+        }
+        
+        let unit = colMap.unit !== -1 ? (row[colMap.unit] || '').toString().trim() : 'kg';
+        let quantity = colMap.quantity !== -1 ? parseFloat(row[colMap.quantity]) || 0 : 0;
+        let notes = colMap.notes !== -1 ? (row[colMap.notes] || '').toString().trim() : '';
+        
+        const item = {
+          id: `semi-${Date.now()}-${i}-${Math.floor(Math.random() * 1000)}`,
+          code,
+          name,
+          unit,
+          quantity,
+          notes
+        };
+        
+        semiExcelImportData.push(item);
+        if (previewRows.length < 5) {
+          previewRows.push(item);
+        }
+      }
+      
+      // Render preview
+      const previewBody = document.getElementById('semi-excel-preview-table-body');
+      if (previewBody) {
+        previewBody.innerHTML = previewRows.map((r, idx) => `
+          <tr>
+            <td style="text-align: center; color: var(--text-muted);">${idx + 1}</td>
+            <td style="font-weight: 600; color: #fff;">${r.code}</td>
+            <td style="font-weight: bold; color: #10b981;">${r.name}</td>
+            <td><span class="suggestion-brand-badge" style="background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15);">${r.unit}</span></td>
+            <td style="text-align: right; font-weight: 600; color: #10b981;">${r.quantity.toLocaleString('vi-VN')}</td>
+            <td>${r.notes || '<span style="color: var(--text-muted);">-</span>'}</td>
+          </tr>
+        `).join('');
+      }
+      
+      const summaryEl = document.getElementById('semi-excel-preview-summary');
+      if (summaryEl) {
+        summaryEl.innerText = `Hiển thị 5 trên tổng số ${semiExcelImportData.length} bán thành phẩm đọc được từ tệp.`;
+      }
+      
+      const container = document.getElementById('semi-excel-preview-container');
+      if (container) container.style.display = 'block';
+      
+      const submitBtn = document.getElementById('btn-save-semi-excel-submit');
+      if (submitBtn) {
+        submitBtn.removeAttribute('disabled');
+        submitBtn.disabled = false;
+      }
+      
+      const dropzone = document.getElementById('semi-excel-dropzone');
+      if (dropzone) dropzone.className = 'upload-dropzone success-uploaded';
+      
+      showToast(`Đọc tệp thành công! Tìm thấy ${semiExcelImportData.length} bán thành phẩm.`, "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Lỗi đọc tệp Excel: " + err.message, "danger");
+    } finally {
+      const el = document.getElementById('semi-excel-file-input');
+      if (el) el.value = '';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function processSemiExcelImport() {
+  if (semiExcelImportData.length === 0) return;
+  
+  const mode = document.querySelector('input[name="semi-import-mode"]:checked').value;
+  
+  try {
+    showToast("Đang nhập dữ liệu bán thành phẩm...", "info");
+    
+    if (mode === 'overwrite') {
+      if (confirm("Chế độ ghi đè sẽ xóa sạch toàn bộ bán thành phẩm hiện tại của bạn. Bạn chắc chắn chứ?")) {
+        const deleted = await dbDeleteAllSemiFinished();
+        if (!deleted) return;
+        state.semiFinished = [];
+      } else {
+        return;
+      }
+    }
+    
+    // Xử lý gộp dữ liệu
+    for (const c of semiExcelImportData) {
+      let idx = -1;
+      if (mode === 'merge') {
+        const cCodeClean = c.code.trim().toUpperCase().normalize('NFC');
+        idx = state.semiFinished.findIndex(oc => 
+          (oc.code || '').toString().trim().toUpperCase().normalize('NFC') === cCodeClean
+        );
+      }
+      
+      if (idx > -1) {
+        const oldId = state.semiFinished[idx].id;
+        c.id = oldId;
+        state.semiFinished[idx] = c;
+      } else {
+        state.semiFinished.push(c);
+      }
+    }
+    
+    localStorage.setItem('billing_system_semi_finished', JSON.stringify(state.semiFinished));
+    
+    const success = await dbSaveSemiFinishedBulk(semiExcelImportData);
+    if (success) {
+      showToast("Nhập danh sách bán thành phẩm từ Excel thành công!", "success");
+    } else {
+      showToast("Nhập dữ liệu thành công cục bộ, nhưng đồng bộ đám mây thất bại.", "warning");
+    }
+    
+    closeSemiExcelModal();
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    showToast("Lỗi khi nhập dữ liệu: " + err.message, "danger");
+  }
 }

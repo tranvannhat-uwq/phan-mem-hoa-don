@@ -157,9 +157,9 @@ export function renderInvoiceTable() {
     }
     const discDisabledAttr = isDiscountDisabled ? 'disabled' : '';
 
-    // Kiểm tra sản phẩm sơn lót hoặc bột bả
+    // Kiểm tra sản phẩm sơn lót hoặc bột bả (loại trừ trường hợp sơn giả đá)
     const nameLower = p.name.toLowerCase();
-    const isPrimerOrPutty = nameLower.includes('lót') || nameLower.includes('bả');
+    const isPrimerOrPutty = (nameLower.includes('lót') || nameLower.includes('bả')) && !nameLower.includes('giả đá');
     if (isPrimerOrPutty) {
       item.colorCode = '';
       item.colorPercent = 0;
