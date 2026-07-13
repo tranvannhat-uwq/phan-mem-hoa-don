@@ -1295,6 +1295,11 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     }
 
     const avgDiscountPercent = order.totalMarket > 0 ? Math.round((order.totalDiscount / order.totalMarket) * 100) : 0;
+    let sumSubTotal = 0;
+    const isRetail = type === 'retail';
+
+    const headerPriceText = isRetail ? 'Giá bán x % màu' : 'Giá nhập';
+    const headerSubtotalText = isRetail ? 'Thành tiền X % màu' : 'Thành tiền';
 
     table.innerHTML = `
       <thead>
@@ -1305,14 +1310,18 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           <th style="width: 12%; text-align: center;">Mã màu/ % Màu</th>
           <th style="width: 10%;">ĐVT</th>
           <th style="width: 6%; text-align: center;">SL</th>
-          <th style="width: 12%; text-align: right;">Giá bán x % màu</th>
-          <th style="width: 13%; text-align: right;">Thành tiền X % màu</th>
+          <th style="width: 12%; text-align: right;">${headerPriceText}</th>
+          <th style="width: 13%; text-align: right;">${headerSubtotalText}</th>
         </tr>
       </thead>
       <tbody>
         ${order.items.map((item, idx) => {
-          const basePrice = item.price;
-          const subTotal = Math.round(item.quantity * basePrice);
+          const discountMultiplier = 1 - (item.discountPercent || 0) / 100;
+          const displayPrice = isRetail ? item.price : Math.round(item.price * discountMultiplier);
+          const subTotal = isRetail ?
+            Math.round(item.quantity * item.price) :
+            Math.round(Math.round(item.quantity * item.price) * discountMultiplier);
+          sumSubTotal += subTotal;
           
           const itemBrand = item.brand || (item.product && item.product.brand);
           const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
@@ -1361,7 +1370,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
               <td style="text-align: center; font-weight: bold;">${colorCodeDisplay}</td>
               <td style="text-align: center;">${packageDisplay}</td>
               <td style="text-align: center;">${item.quantity}</td>
-              <td style="text-align: right;">${formatNumber(basePrice)}</td>
+              <td style="text-align: right;">${formatNumber(displayPrice)}</td>
               <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
             </tr>
           `;
@@ -1369,14 +1378,16 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         
         <tr>
           <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng:</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalMarket)}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(sumSubTotal)}</td>
         </tr>
         
+        ${isRetail ? `
         <tr>
-          <td colspan="6" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán hàng</td>
+          <td colspan="6" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán lẻ</td>
           <td style="text-align: center; font-weight: bold; padding: 4px 8px;">${avgDiscountPercent > 0 ? avgDiscountPercent + '%' : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalDiscount)}</td>
         </tr>
+        ` : ''}
         
         <tr>
           <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cước Vận Chuyển</td>
@@ -1384,7 +1395,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng tiền sau chiết khấu</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">${isRetail ? 'Tổng tiền sau chiết khấu' : 'Tổng tiền thanh toán'}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalPayable)}</td>
         </tr>
         
