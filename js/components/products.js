@@ -282,23 +282,40 @@ export async function saveProduct() {
     weightBao,
     weightTui
   };
+
+  const submitBtn = document.getElementById('btn-save-product-submit');
+  const originalText = submitBtn ? submitBtn.innerText : 'Lưu sản phẩm';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Đang lưu...';
+  }
   
-  const saved = await dbSaveProduct(productData);
-  if (saved) {
-    if (index === -1) {
-      showToast('Thêm sản phẩm thành công!');
-    } else {
-      showToast('Cập nhật sản phẩm thành công!');
+  try {
+    const saved = await dbSaveProduct(productData);
+    if (saved) {
+      if (index === -1) {
+        showToast('Thêm sản phẩm thành công!');
+      } else {
+        showToast('Cập nhật sản phẩm thành công!');
+      }
+      
+      // Cập nhật State local
+      const idx = state.products.findIndex(p => p.code === code && p.brand === brand);
+      if (idx > -1) state.products[idx] = productData;
+      else state.products.push(productData);
+      localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+      
+      closeProductModal();
+      renderAll();
     }
-    
-    // Cập nhật State local
-    const idx = state.products.findIndex(p => p.code === code && p.brand === brand);
-    if (idx > -1) state.products[idx] = productData;
-    else state.products.push(productData);
-    localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-    
-    closeProductModal();
-    renderAll();
+  } catch (err) {
+    console.error(err);
+    showToast('Lỗi khi lưu sản phẩm: ' + err.message, 'danger');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = originalText;
+    }
   }
 }
 
@@ -439,55 +456,6 @@ export function setupExcelImportAndTemplate() {
     };
   }
 
-  const onFilterChange = () => {
-    state.productsPage = 1;
-    renderProductsTable();
-  };
-
-  // Lắng nghe sự kiện đổi Hãng sơn trên bảng Sản phẩm
-  const brandFilter = document.getElementById('product-brand-filter');
-  if (brandFilter) {
-    brandFilter.addEventListener('change', onFilterChange);
-  }
-
-  const searchInput = document.getElementById('product-search-input');
-  if (searchInput) {
-    searchInput.addEventListener('input', onFilterChange);
-  }
-
-  const openAddModalBtn = document.getElementById('btn-open-add-product-modal');
-  if (openAddModalBtn) {
-    openAddModalBtn.addEventListener('click', () => openProductModal(-1));
-  }
-
-  const closeProductModalBtn = document.getElementById('btn-close-product-modal');
-  if (closeProductModalBtn) {
-    closeProductModalBtn.addEventListener('click', closeProductModal);
-  }
-
-  const cancelProductBtn = document.getElementById('btn-cancel-product');
-  if (cancelProductBtn) {
-    cancelProductBtn.addEventListener('click', closeProductModal);
-  }
-
-  const productForm = document.getElementById('product-form');
-  if (productForm) {
-    productForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      saveProduct();
-    });
-  }
-
-  // Tự hiển thị khung nhập hãng sơn mới nếu chọn "Khác"
-  const prodBrandSelect = document.getElementById('prod-brand');
-  if (prodBrandSelect) {
-    prodBrandSelect.addEventListener('change', () => {
-      const customBrandGroup = document.getElementById('prod-brand-custom-group');
-      if (customBrandGroup) {
-        customBrandGroup.style.display = prodBrandSelect.value === 'Khác' ? 'block' : 'none';
-      }
-    });
-  }
 }
 
 function handleExcelFileSelect(file) {
@@ -623,8 +591,24 @@ async function processExcelImport() {
 }
 
 export function setupProductManagement() {
+  const onFilterChange = () => {
+    state.productsPage = 1;
+    renderProductsTable();
+  };
+
+  // Lắng nghe sự kiện đổi Hãng sơn trên bảng Sản phẩm
+  const brandFilter = document.getElementById('product-brand-filter');
+  if (brandFilter) {
+    brandFilter.addEventListener('change', onFilterChange);
+  }
+
+  const searchInput = document.getElementById('product-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', onFilterChange);
+  }
+
   const addBtn = document.getElementById('btn-open-add-product-modal');
-  if (addBtn) addBtn.addEventListener('click', () => openProductModal());
+  if (addBtn) addBtn.addEventListener('click', () => openProductModal(-1));
   
   const closeBtn = document.getElementById('btn-close-product-modal');
   if (closeBtn) closeBtn.addEventListener('click', closeProductModal);
@@ -637,6 +621,17 @@ export function setupProductManagement() {
     productForm.addEventListener('submit', (e) => {
       e.preventDefault();
       saveProduct();
+    });
+  }
+
+  // Tự hiển thị khung nhập hãng sơn mới nếu chọn "Khác"
+  const prodBrandSelect = document.getElementById('prod-brand');
+  if (prodBrandSelect) {
+    prodBrandSelect.addEventListener('change', () => {
+      const customBrandGroup = document.getElementById('prod-brand-custom-group');
+      if (customBrandGroup) {
+        customBrandGroup.style.display = prodBrandSelect.value === 'Khác' ? 'block' : 'none';
+      }
     });
   }
 }

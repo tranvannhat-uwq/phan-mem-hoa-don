@@ -211,6 +211,9 @@ function setupSupabaseSettings() {
 
 // Khởi chạy ứng dụng
 async function initApp() {
+  if (window.__app_initialized) return;
+  window.__app_initialized = true;
+
   const today = new Date();
   const dateLbl = document.getElementById('current-date-lbl');
   if (dateLbl) dateLbl.innerText = today.toLocaleDateString('vi-VN');
