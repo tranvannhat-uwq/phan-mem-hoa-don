@@ -245,6 +245,42 @@ export function openCustomerModal(index = -1) {
   const form = document.getElementById('customer-form');
   
   if (!modal) return;
+
+  // Dynamic rendering of brand discount inputs in customer modal
+  const container = document.getElementById('customer-brand-discounts-container');
+  if (container) {
+    const brands = state.brands && state.brands.length > 0
+      ? state.brands
+      : [
+          { name: 'Nano10*' },
+          { name: 'Hatacco nano' },
+          { name: 'mutsutec' },
+          { name: 'tdkaw' },
+          { name: 'cova' },
+          { name: 'festivanano' }
+        ];
+        
+    container.innerHTML = brands.map(b => `
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label">Chiết khấu ${b.name} (%)</label>
+        <input type="number" class="form-control cust-brand-disc" data-brand="${b.name}" value="0" min="0" max="100" step="any">
+      </div>
+    `).join('');
+  }
+
+  // Dynamic population of cust-assigned-brand
+  const assignedBrandSelect = document.getElementById('cust-assigned-brand');
+  if (assignedBrandSelect) {
+    const brands = state.brands && state.brands.length > 0
+      ? state.brands.map(b => b.name)
+      : ['Nano10*', 'Hatacco nano', 'mutsutec', 'tdkaw', 'cova', 'festivanano'];
+      
+    assignedBrandSelect.innerHTML = `
+      <option value="Tất cả">Chọn nhãn sơn</option>
+      ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
+    `;
+  }
+
   modal.classList.add('active');
   form.reset();
   

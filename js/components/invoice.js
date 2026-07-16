@@ -858,13 +858,25 @@ export function enableQuickCustomerMode() {
     }
   }
   
+  const quickBrandSelect = document.getElementById('quick-cust-assigned-brand');
+  if (quickBrandSelect) {
+    const brands = state.brands && state.brands.length > 0
+      ? state.brands.map(b => b.name)
+      : ['Nano10*', 'Hatacco nano', 'mutsutec', 'tdkaw', 'cova', 'festivanano'];
+    quickBrandSelect.innerHTML = `
+      <option value="Tất cả">Chọn nhãn sơn</option>
+      ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
+    `;
+    quickBrandSelect.value = 'Tất cả';
+    makeSelectSearchable('quick-cust-assigned-brand', 'Chọn nhãn sơn', false);
+  }
+  
   // Hide info card
   const infoCard = document.getElementById('invoice-customer-info-card');
   if (infoCard) infoCard.style.display = 'none';
   
   // Update state active customer to represent quick customer
   state.activeCustomerId = '';
-  const quickBrandSelect = document.getElementById('quick-cust-assigned-brand');
   state.activeCustomerBrand = quickBrandSelect ? quickBrandSelect.value : 'Tất cả';
   
   // Reset invoice item discounts to 0 since new customer has no predefined discounts

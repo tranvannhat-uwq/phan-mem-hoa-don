@@ -13,10 +13,33 @@ export function renderPricelistsTable() {
   
   const filtered = state.pricelists.filter(pl => pl.name.toLowerCase().includes(searchVal));
   
+  const brands = state.brands && state.brands.length > 0
+    ? state.brands
+    : [
+        { name: 'Nano10*' },
+        { name: 'Hatacco nano' },
+        { name: 'mutsutec' },
+        { name: 'tdkaw' },
+        { name: 'cova' },
+        { name: 'festivanano' }
+      ];
+
+  const thead = document.querySelector('#pricelists-panel .table thead');
+  if (thead) {
+    thead.innerHTML = `
+      <tr>
+        <th>Tên bảng giá</th>
+        ${brands.map(b => `<th style="text-align: center;">${b.name} (%)</th>`).join('')}
+        <th style="text-align: center;">Thao tác</th>
+      </tr>
+    `;
+  }
+
   if (filtered.length === 0) {
+    const colspan = brands.length + 2;
     tableBody.innerHTML = `
       <tr>
-        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="${colspan}" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không tìm thấy bảng giá nào.
         </td>
       </tr>
@@ -29,16 +52,12 @@ export function renderPricelistsTable() {
   tableBody.innerHTML = filtered.map((pl) => {
     const actualIndex = state.pricelists.findIndex(p => p.id === pl.id);
     const getDisc = (brand) => (pl.brandDiscounts && pl.brandDiscounts[brand] !== undefined) ? pl.brandDiscounts[brand] : 0;
+    const cols = brands.map(b => `<td style="text-align: center;">${getDisc(b.name)}%</td>`).join('');
     
     return `
       <tr>
         <td style="font-weight: 600; color: #fff;">${pl.name}</td>
-        <td style="text-align: center;">${getDisc('Nano10*')}%</td>
-        <td style="text-align: center;">${getDisc('Hatacco nano')}%</td>
-        <td style="text-align: center;">${getDisc('mutsutec')}%</td>
-        <td style="text-align: center;">${getDisc('tdkaw')}%</td>
-        <td style="text-align: center;">${getDisc('cova')}%</td>
-        <td style="text-align: center;">${getDisc('festivanano')}%</td>
+        ${cols}
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-pl-btn" data-index="${actualIndex}" title="Sửa">
@@ -76,6 +95,27 @@ export function openPricelistModal(index = -1) {
   const form = document.getElementById('pricelist-form');
   
   if (!modal) return;
+
+  const container = document.getElementById('pricelist-brand-discounts-container');
+  if (container) {
+    const brands = state.brands && state.brands.length > 0
+      ? state.brands
+      : [
+          { name: 'Nano10*' },
+          { name: 'Hatacco nano' },
+          { name: 'mutsutec' },
+          { name: 'tdkaw' },
+          { name: 'cova' },
+          { name: 'festivanano' }
+        ];
+    container.innerHTML = brands.map(b => `
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label">Chiết khấu ${b.name} (%)</label>
+        <input type="number" class="form-control pl-brand-disc" data-brand="${b.name}" value="0" min="0" max="100" step="any">
+      </div>
+    `).join('');
+  }
+
   modal.classList.add('active');
   form.reset();
   
