@@ -348,4 +348,16 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+// Bắt và xử lý các lỗi Uncaught Promise Rejection từ extension hoặc script bên ngoài (như onboarding.js)
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason && (
+    (typeof event.reason.message === 'string' && event.reason.message.includes('getImageNode')) ||
+    (typeof event.reason.stack === 'string' && event.reason.stack.includes('onboarding.js'))
+  )) {
+    console.warn('Đã xử lý an toàn lỗi Uncaught Promise Rejection từ Extension/Script bên ngoài:', event.reason?.message || event.reason);
+    event.preventDefault(); // Ngăn chặn lỗi đỏ hiển thị ra Console
+  }
+});
+
 window.addEventListener('DOMContentLoaded', initApp);
+
