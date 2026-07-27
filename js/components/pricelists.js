@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons } from '../utils.js';
-import { dbSavePricelist, dbDeletePricelist } from '../services/supabase.js';
+import { dbSavePricelist, dbDeletePricelist } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice } from './invoice.js';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20260727-advance-payment';
 
 export function renderPricelistsTable() {
   const tableBody = document.getElementById('pricelists-table-body');

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand } from '../services/supabase.js';
+import { dbSaveBrand, dbDeleteBrand } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 
 export function renderBrandsTable() {

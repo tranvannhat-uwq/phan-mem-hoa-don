@@ -13,7 +13,7 @@ import {
   dbDeleteAllRawMaterials,
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished
-} from '../services/supabase.js';
+} from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---

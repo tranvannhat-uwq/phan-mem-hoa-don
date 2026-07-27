@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
-import { openPrintTypeModal } from './invoice.js';
+import { openPrintTypeModal } from './invoice.js?v=20260727-advance-payment';
 
 
 export function setupHistoryPanel() {
@@ -1013,5 +1013,3 @@ export function printReturnSlip(ret) {
 window.openSalesReturnModal = openSalesReturnModal;
 window.cancelSalesReturn = cancelSalesReturn;
 window.printReturnSlip = printReturnSlip;
-
-

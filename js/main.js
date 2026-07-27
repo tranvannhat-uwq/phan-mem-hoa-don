@@ -1,43 +1,77 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260727-debt-audit2';
 import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260727-customer-payments';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260727-advance-payment';
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260727-debt-audit3';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260727-receipt-id';
 import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js';
 import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js';
 import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderKpiReport } from './components/reports.js';
 import { setupPayrollPanel, renderPayrollTable } from './components/payroll.js';
 import { showToast, safeCreateIcons, updateDbStatusUI, isSameUser } from './utils.js';
 
-// Vẽ lại toàn bộ giao diện của tất cả các Tab
+// Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
+// chuyển tab, tránh dựng hàng nghìn dòng DOM ẩn trong mỗi lần cập nhật.
 export function renderAll() {
   backfillMultiCompanyAndRevenueData();
-  updateDashboardStats();
-  renderProductsTable();
-  renderCustomersTable();
-  renderSuppliersTable();
-  renderInvoiceTable();
-  renderPricelistsTable();
-  renderHistoryOrders();
-  renderSoQuyTable();
-  renderUsersTable();
-  renderBrandsTable();
-  populateCustomerEmployeeFilter();
-  populatePricelistsDropdowns();
-  populateSupplierDatalist();
-  renderGoodsPanel();
-  renderDebtReport();
-  renderReturnsReport();
-  renderKpiReport();
-  renderPayrollTable();
+
+  switch (state.currentTab) {
+    case 'products-panel':
+      renderProductsTable();
+      break;
+    case 'customers-panel':
+      renderCustomersTable();
+      break;
+    case 'suppliers-panel':
+      renderSuppliersTable();
+      populateSupplierDatalist();
+      break;
+    case 'invoice-panel':
+      renderInvoiceTable();
+      populatePricelistsDropdowns();
+      break;
+    case 'pricelists-panel':
+      renderPricelistsTable();
+      break;
+    case 'history-panel':
+      renderHistoryOrders();
+      break;
+    case 'so-quy-panel':
+      renderSoQuyTable();
+      break;
+    case 'users-panel':
+      renderUsersTable();
+      break;
+    case 'brands-panel':
+      renderBrandsTable();
+      break;
+    case 'goods-panel':
+      renderGoodsPanel();
+      break;
+    case 'reports-panel': {
+      populateCustomerEmployeeFilter();
+      const activeReport = document.querySelector('.report-subtab-btn.active')?.getAttribute('data-subtab') || 'debt';
+      if (activeReport === 'returns') renderReturnsReport();
+      else if (activeReport === 'kpi') renderKpiReport();
+      else renderDebtReport();
+      break;
+    }
+    case 'payroll-panel':
+      renderPayrollTable();
+      break;
+    case 'dashboard-panel':
+    default:
+      updateDashboardStats();
+      break;
+  }
+
   checkAndShowBackupReminder();
   safeCreateIcons();
 }
@@ -371,4 +405,3 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 window.addEventListener('DOMContentLoaded', initApp);
-

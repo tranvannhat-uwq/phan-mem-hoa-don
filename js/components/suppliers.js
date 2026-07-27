@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 
 export function renderSuppliersTable() {
@@ -588,4 +588,3 @@ async function processSupplierExcelImport() {
     showToast("Lỗi khi nhập danh sách nhà cung cấp: " + err.message, "danger");
   }
 }
-

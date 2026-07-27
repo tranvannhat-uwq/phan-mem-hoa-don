@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder, dbConfirmOrder } from '../services/supabase.js';
+import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js';
-import { addCashbookTransaction } from './so_quy.js';
+import { generateUniqueCustomerCode } from './customers.js?v=20260727-customer-payments';
+import { addCashbookTransaction } from './so_quy.js?v=20260727-receipt-id';
 
 let currentOrderToPrint = null;
 let isSavingOrder = false;
@@ -403,7 +403,7 @@ export function calculateInvoiceTotals() {
   }
   discountAmount = Math.max(0, discountAmount);
 
-  // 2. Tính Thu khác
+  // 2. Khoản khách đã cọc / đã thu trước
   const feeData = parseDiscountOrFeeInput('invoice-other-fee-value', 'invoice-other-fee-type');
   let otherFeeAmount = 0;
   if (feeData.type === 'percent') {
@@ -413,8 +413,10 @@ export function calculateInvoiceTotals() {
   }
   otherFeeAmount = Math.max(0, otherFeeAmount);
 
-  // 3. Tổng thanh toán = Tạm tính - Tiền giảm giá + Tiền thu khác (không nhỏ hơn 0)
-  const totalPayable = Math.max(0, subtotal - discountAmount + otherFeeAmount);
+  // Doanh thu đơn giữ nguyên; tiền đã cọc chỉ làm giảm số còn phải thanh toán.
+  const orderTotal = Math.max(0, subtotal - discountAmount);
+  otherFeeAmount = Math.min(otherFeeAmount, orderTotal);
+  const amountDue = Math.max(0, orderTotal - otherFeeAmount);
 
   // Cập nhật lên UI với đúng ID trong index.html
   const qtyEl = document.getElementById('summary-total-qty');
@@ -432,8 +434,8 @@ export function calculateInvoiceTotals() {
   if (discountEl) discountEl.innerText = `-${formatCurrency(totalDiscount)}`;
   if (subtotalEl) subtotalEl.innerText = formatCurrency(subtotal);
   if (discActualEl) discActualEl.innerText = `-${formatCurrency(discountAmount)}`;
-  if (feeActualEl) feeActualEl.innerText = `+${formatCurrency(otherFeeAmount)}`;
-  if (payableEl) payableEl.innerText = formatCurrency(totalPayable);
+  if (feeActualEl) feeActualEl.innerText = `-${formatCurrency(otherFeeAmount)}`;
+  if (payableEl) payableEl.innerText = formatCurrency(amountDue);
 
   const totalCombinedDiscount = totalDiscount + discountAmount;
   if (savingBadge && crossedMarket) {
@@ -598,7 +600,10 @@ export function compileActiveOrder() {
   }
   otherFeeAmount = Math.max(0, otherFeeAmount);
 
-  const totalPayable = Math.max(0, subtotal - discountAmount + otherFeeAmount);
+  const totalPayable = Math.max(0, subtotal - discountAmount);
+  otherFeeAmount = Math.min(otherFeeAmount, totalPayable);
+  const paidAmount = otherFeeAmount;
+  const amountDue = Math.max(0, totalPayable - paidAmount);
 
   const plSelect = document.getElementById('invoice-pricelist-select');
   const pricelistId = plSelect ? plSelect.value : 'retail';
@@ -651,6 +656,8 @@ export function compileActiveOrder() {
     otherFeeValue: feeData.value,
     otherFeeType: feeData.type,
     otherFeeAmount: otherFeeAmount,
+    paidAmount,
+    amountDue,
     totalPayable,
     pricelistId,
     createdBy: state.currentUser ? state.currentUser.username : 'admin'
@@ -790,19 +797,6 @@ export async function saveActiveOrder(status = 'settled') {
 
     showToast('Đang lưu hóa đơn...', 'info');
 
-    // Nếu là đơn sửa, kiểm tra trạng thái cũ để chuyển bảng nếu cần
-    if (editOrderId) {
-      const oldOrder = state.savedOrders.find(o => o.id === editOrderId);
-      const oldStatus = oldOrder ? oldOrder.status : null;
-      
-      state.savedOrders = state.savedOrders.filter(o => o.id !== editOrderId);
-
-      // Nếu đơn cũ là nháp và đơn mới là chốt chính thức, cần xóa bản ghi cũ ở bảng draft_orders
-      if (oldStatus === 'draft' && status === 'settled') {
-        await dbDeleteOrder(editOrderId, 'draft');
-      }
-    }
-
     const saved = status === 'settled' ? await dbConfirmOrder(order) : await dbSaveOrder(order);
     if (saved) {
       if (status === 'draft') {
@@ -814,7 +808,13 @@ export async function saveActiveOrder(status = 'settled') {
         if (order.customerId) {
           const cust = state.customers.find(c => c.id === order.customerId);
           if (cust) {
-            cust.debt = Math.round((cust.debt || 0) + order.totalPayable);
+            const debtBefore = Number(cust.debt) || 0;
+            const paidAmount = Number(order.paidAmount) || 0;
+            const debtAmount = Math.max(0, (Number(order.totalPayable) || 0) - paidAmount);
+            const rpcDebt = Number(saved.new_debt);
+            cust.debt = Number.isFinite(rpcDebt)
+              ? rpcDebt
+              : Math.round(debtBefore <= 0 ? debtBefore - debtAmount : debtBefore + debtAmount);
             cust.totalTransaction = Math.round((cust.totalTransaction || 0) + order.totalPayable);
             cust.netRevenue = Math.round((cust.netRevenue || 0) + order.totalPayable);
             cust.lastOrderAt = new Date().toISOString();
@@ -834,6 +834,9 @@ export async function saveActiveOrder(status = 'settled') {
       }
       
       // Lưu local
+      if (editOrderId) {
+        state.savedOrders = state.savedOrders.filter(o => o.id !== editOrderId);
+      }
       state.savedOrders.unshift(order);
       localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
 
@@ -851,6 +854,7 @@ export async function saveActiveOrder(status = 'settled') {
     return null;
   } finally {
     isSavingOrder = false;
+    enableButtons();
   }
 }
 
@@ -1502,13 +1506,13 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu khác${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">+${formatNumber(printOtherFee)}</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu khác / Khách đã cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printOtherFee)}</td>
         </tr>
         
         <tr>
           <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px; font-size: 13pt;">${formatNumber(order.totalPayable)}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px; font-size: 13pt;">${formatNumber(order.amountDue !== undefined ? order.amountDue : Math.max(0, order.totalPayable - (order.paidAmount || 0)))}</td>
         </tr>
         
         ${debtRowsHtml}
@@ -1527,7 +1531,11 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       wordsContainer.style.display = 'none';
     } else {
       wordsContainer.style.display = 'block';
-      const amountInWords = docSoTienBangChu(order.totalPayable);
+      const amountInWords = docSoTienBangChu(
+        order.amountDue !== undefined
+          ? order.amountDue
+          : Math.max(0, order.totalPayable - (order.paidAmount || 0))
+      );
       const wordsTextEl = document.getElementById('print-amount-in-words');
       if (wordsTextEl) {
         wordsTextEl.innerText = amountInWords;

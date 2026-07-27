@@ -430,10 +430,19 @@ export async function fetchCloudData() {
           console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
         }
 
-        const [rawOrders, rawDrafts] = await Promise.all([
-          fetchFullTableData(tableOrdersName),
+        const [{ data: orderPage, error: orderPageError }, rawDrafts] = await Promise.all([
+          supabaseClient.rpc('rpc_get_orders_paginated', {
+            p_search: '',
+            p_status: null,
+            p_customer_id: null,
+            p_limit: 10000,
+            p_offset: 0
+          }),
           fetchFullTableData(tableDraftOrdersName)
         ]);
+        const rawOrders = !orderPageError && orderPage && Array.isArray(orderPage.data)
+          ? orderPage.data
+          : await fetchFullTableData(tableOrdersName);
 
         const mapOrderRow = (order, isDraft) => {
           let status = isDraft ? 'draft' : (order.status || 'settled');
@@ -455,6 +464,12 @@ export async function fetchCloudData() {
             otherFeeType: order.other_fee_type || order.otherFeeType || 'amount',
             otherFeeAmount: parseFloat(order.other_fee_amount !== undefined ? order.other_fee_amount : (order.otherFeeAmount || 0)),
             totalPayable: parseFloat(order.total_payable || 0),
+            paidAmount: parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)),
+            amountDue: Math.max(
+              0,
+              parseFloat(order.total_payable || 0) -
+              parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0))
+            ),
             pricelistId: order.pricelist_id || 'retail',
             createdBy: order.created_by || 'admin',
             companyId: order.company_id || order.companyId || 'ABS_NORTH',
@@ -484,7 +499,13 @@ export async function fetchCloudData() {
     // Các luồng tải phụ trợ (lỗi từng bảng sẽ được bắt riêng biệt để tránh hỏng cả ứng dụng)
     const fetchCustomers = async () => {
       try {
-        const customerData = await fetchFullTableData(tableCustomersName);
+        const { data: customerPage, error: customerPageError } = await supabaseClient.rpc(
+          'rpc_get_customers_paginated',
+          { p_search: '', p_managed_by: null, p_limit: 10000, p_offset: 0 }
+        );
+        const customerData = !customerPageError && customerPage && Array.isArray(customerPage.data)
+          ? customerPage.data
+          : await fetchFullTableData(tableCustomersName);
         const localCust = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
 
         if (customerData && customerData.length > 0) {
@@ -1539,14 +1560,11 @@ export async function dbSaveOrder(order) {
   if (isCloudActive && supabaseClient) {
     try {
       const targetTable = order.status === 'draft' ? tableDraftOrdersName : tableOrdersName;
-      const dbRow = {
+      const commonRow = {
         id: order.id,
         customer_id: order.customerId || null,
         customer_name: order.customerName,
-        salesperson_id: order.salespersonId || order.createdBy || null,
-        customer_manager_id: order.customerManagerId || order.managedBy || null,
         company_id: order.companyId || 'ABS_NORTH',
-        revenue_brand_id: order.revenueBrandId || null,
         notes: order.notes,
         items: order.items,
         total_market: order.totalMarket || 0,
@@ -1559,18 +1577,25 @@ export async function dbSaveOrder(order) {
         other_fee_type: order.otherFeeType || 'amount',
         other_fee_amount: order.otherFeeAmount || 0,
         total_payable: order.totalPayable,
+        status: order.status || 'settled',
+        created_by: order.createdBy || 'admin',
+        created_at: order.date || order.createdAt || new Date().toISOString(),
+        pricelist_id: order.pricelistId || 'retail'
+      };
+
+      const dbRow = order.status === 'draft' ? commonRow : {
+        ...commonRow,
+        salesperson_id: order.salespersonId || order.createdBy || null,
+        customer_manager_id: order.customerManagerId || order.managedBy || null,
+        revenue_brand_id: order.revenueBrandId || null,
         total_amount: order.totalPayable || order.totalAmount || 0,
         paid_amount: order.paidAmount || 0,
         debt_amount: order.debtAmount || (order.totalPayable - (order.paidAmount || 0)),
         returned_amount: order.returnedAmount || 0,
         net_revenue: order.netRevenue || (order.totalPayable - (order.returnedAmount || 0)),
-        status: order.status || 'settled',
         order_date: order.date || order.orderDate || new Date().toISOString(),
         confirmed_at: order.confirmedAt || (order.status === 'settled' ? (order.date || new Date().toISOString()) : null),
-        created_by: order.createdBy || 'admin',
-        created_at: order.date || order.createdAt || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        pricelist_id: order.pricelistId || 'retail'
+        updated_at: new Date().toISOString()
       };
       
       let { error } = await supabaseClient
@@ -1580,29 +1605,32 @@ export async function dbSaveOrder(order) {
       if (error) throw error;
 
       // Đồng bộ chi tiết mặt hàng đơn vào bảng order_items nếu có
-      if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+      if (order.status !== 'draft' && order.items && Array.isArray(order.items) && order.items.length > 0) {
         const itemRows = order.items.map((item, idx) => ({
           id: item.id || `${order.id}-item-${idx}`,
           order_id: order.id,
-          product_id: item.productId || item.code || null,
+          product_id: item.productId || item.productCode || item.code || null,
           brand_id: item.brandId || item.brand || null,
-          product_code_snapshot: item.code || '',
-          product_name_snapshot: item.name || '',
-          unit_snapshot: item.unit || item.packageType || '',
+          product_code_snapshot: item.productCode || item.code || '',
+          product_name_snapshot: item.productName || item.name || '',
+          unit_snapshot: item.unit || item.package || item.packageType || '',
           quantity: parseFloat(item.quantity || 0),
           list_price: parseFloat(item.price || item.listPrice || 0),
           sale_price: parseFloat(item.salePrice || item.finalPrice || item.price || 0),
           discount_percent: parseFloat(item.discountPercent || item.discount || 0),
           discount_amount: parseFloat(item.discountAmount || 0),
-          line_total: parseFloat(item.total || item.lineTotal || 0),
+          line_total: parseFloat(item.total || item.lineTotal || ((item.quantity || 0) * (item.price || 0) * (1 - (item.discountPercent || 0) / 100))),
           cost_price: parseFloat(item.costPrice || 0),
           profit_amount: parseFloat(item.profitAmount || 0),
           returned_quantity: parseFloat(item.returnedQuantity || 0),
           returned_amount: parseFloat(item.returnedAmount || 0),
-          net_amount: parseFloat(item.netAmount || item.total || 0),
+          net_amount: parseFloat(item.netAmount || item.total || item.lineTotal || ((item.quantity || 0) * (item.price || 0) * (1 - (item.discountPercent || 0) / 100))),
           created_at: order.date || new Date().toISOString()
         }));
-        await supabaseClient.from(tableOrderItemsName).upsert(itemRows, { onConflict: 'id' });
+        const { error: itemError } = await supabaseClient
+          .from(tableOrderItemsName)
+          .upsert(itemRows, { onConflict: 'id' });
+        if (itemError) throw itemError;
       }
       return true;
     } catch(err) {
@@ -2432,14 +2460,14 @@ export async function dbConfirmOrder(order) {
   if (isCloudActive && supabaseClient) {
     try {
       const { data, error } = await supabaseClient.rpc('rpc_confirm_order', { p_order: order });
-      if (error) {
-        console.warn('RPC rpc_confirm_order error, falling back to standard dbSaveOrder:', error.message);
-        return await dbSaveOrder(order);
+      if (error) throw error;
+      if (data && data.success === false) {
+        throw new Error(data.message || 'Transaction chốt đơn không thành công');
       }
-      return true;
+      return data || { success: true };
     } catch (err) {
-      console.warn('RPC confirm order error:', err);
-      return await dbSaveOrder(order);
+      console.error('RPC confirm order error:', err);
+      throw new Error('Không thể chốt đơn: ' + (err.message || 'Transaction thất bại'));
     }
   }
   return true;
@@ -2455,14 +2483,32 @@ export async function dbRecordCustomerPayment(customerId, amount, notes, created
         p_created_by: createdBy || 'admin'
       });
       if (error) throw error;
-      return true;
+      return data || { success: true };
     } catch (err) {
       console.error('RPC customer payment error:', err);
       showToast('Lỗi ghi nhận thu tiền: ' + err.message, 'danger');
       return false;
     }
   }
-  return true;
+  return { success: true, new_debt: null };
+}
+
+export async function dbCancelCustomerPayment(cashbookId, createdBy) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_cancel_customer_payment', {
+        p_cashbook_id: cashbookId,
+        p_created_by: createdBy || 'admin'
+      });
+      if (error) throw error;
+      return data || { success: true };
+    } catch (err) {
+      console.error('RPC cancel customer payment error:', err);
+      showToast('Lá»—i há»§y phiáº¿u thu: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return { success: true, new_debt: null };
 }
 
 export async function dbRecordSalesReturn(ret, items, orderStatus) {
@@ -2550,4 +2596,3 @@ export async function dbFetchOrdersPaginated(search = '', status = null, custome
   }
   return { total: (state.savedOrders || []).length, data: (state.savedOrders || []).slice(offset, offset + limit) };
 }
-

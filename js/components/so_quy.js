@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
 import { renderAll } from '../main.js';
-import { dbSaveCustomer, dbSaveCashbookTransaction, dbSaveStartingBalances } from '../services/supabase.js';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCustomerPayment } from '../services/supabase.js?v=20260727-debt-audit2';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -387,11 +387,82 @@ export function setupSoQuyPanel() {
         starred: false
       };
       
+      const normalizedCategory = category.toLowerCase();
+      const affectsCustomerDebt = normalizedCategory.includes('nợ') || normalizedCategory.includes('tiền hàng');
+      let paymentResult = null;
+      let matchedCustomer = null;
+
+      if (affectsCustomerDebt) {
+        const selectedOption = Array.from(
+          document.getElementById('receipt-payer-list')?.options || []
+        ).find(option => option.value === payer);
+        const selectedCustomerId = selectedOption?.dataset.customerId || '';
+        const customerMatches = state.customers.filter(c =>
+          String(c.name || '').trim().toLowerCase() === payer.toLowerCase()
+        );
+        matchedCustomer = selectedCustomerId
+          ? state.customers.find(c => String(c.id) === selectedCustomerId)
+          : (customerMatches.length === 1 ? customerMatches[0] : null);
+
+        if (!matchedCustomer) {
+          showToast('Phiếu thu công nợ phải chọn đúng một khách hàng trong danh sách!', 'danger');
+          return;
+        }
+
+        newTx.partner = matchedCustomer.name;
+        const currentDebt = Number(matchedCustomer.debt) || 0;
+        if (currentDebt === 0) {
+          showToast('Khách hàng này hiện không có công nợ cần thu!', 'danger');
+          return;
+        }
+        if (value <= 0 || value > Math.abs(currentDebt)) {
+          showToast(`Số tiền thu phải lớn hơn 0 và không vượt quá công nợ hiện tại (${formatCurrency(currentDebt)})!`, 'danger');
+          return;
+        }
+
+        paymentResult = await dbRecordCustomerPayment(
+          matchedCustomer.id,
+          value,
+          note || `${category} - ${finalCode}`,
+          newTx.creator
+        );
+        if (!paymentResult) return;
+
+        const newDebt = Number(paymentResult.new_debt);
+        if (!Number.isFinite(newDebt)) {
+          showToast('Database không trả về số công nợ mới. Phiếu thu chưa được ghi nhận trên giao diện.', 'danger');
+          return;
+        }
+
+        matchedCustomer.debt = newDebt;
+        matchedCustomer.lastPaymentAt = new Date().toISOString();
+        if (!matchedCustomer.debtHistory) matchedCustomer.debtHistory = [];
+        matchedCustomer.debtHistory.push({
+          id: `pay-${Date.now()}`,
+          date: new Date().toISOString(),
+          type: 'payment',
+          amount: value,
+          notes: note || `${category} - ${finalCode}`,
+          debtAfter: newDebt
+        });
+        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+
+        newTx.customerId = matchedCustomer.id;
+        newTx.cloudId = paymentResult.cashbook_id || null;
+        newTx.debtImpact = true;
+      } else {
+        const savedToCloud = await dbSaveCashbookTransaction(newTx);
+        if (!savedToCloud) {
+          showToast('Không thể lưu phiếu thu lên Cloud. Dữ liệu trên form được giữ nguyên.', 'danger');
+          return;
+        }
+        newTx.debtImpact = false;
+      }
+
       txs.unshift(newTx);
       saveCashbookTransactions(txs);
       
       // Update customer debt (subtract debt balance)
-      await updateCustomerDebtOnReceipt(payer, value, true, finalCode, category);
       
       showToast(`Đã tạo phiếu thu ${finalCode} thành công!`, 'success');
       hideReceiptModal();
@@ -520,7 +591,21 @@ export function setupSoQuyPanel() {
 }
 
 // External helper to add automated transactions from Sales / Payments
-export function addCashbookTransaction({ type, category, partner, value, method, accounting = true, note = '', creator = '' }) {
+export function addCashbookTransaction({
+  id = '',
+  type,
+  category,
+  partner,
+  value,
+  method,
+  accounting = true,
+  note = '',
+  creator = '',
+  customerId = null,
+  cloudId = null,
+  debtImpact = false,
+  syncToCloud = true
+}) {
   const txs = getCashbookTransactions();
   
   const prefix = type === 'thu' ? 'TTM' : 'TCM';
@@ -532,7 +617,7 @@ export function addCashbookTransaction({ type, category, partner, value, method,
     }
   });
   
-  const finalCode = `${prefix}${String(maxSeq + 1).padStart(6, '0')}`;
+  const finalCode = id || `${prefix}${String(maxSeq + 1).padStart(6, '0')}`;
   
   const newTx = {
     id: finalCode,
@@ -546,14 +631,17 @@ export function addCashbookTransaction({ type, category, partner, value, method,
     status: 'Đã thanh toán',
     creator: creator || (state.currentUser ? state.currentUser.displayName : 'Administrator'),
     note,
-    starred: false
+    starred: false,
+    customerId,
+    cloudId,
+    debtImpact
   };
   
   txs.unshift(newTx);
   saveCashbookTransactions(txs);
   
   // Sync to Supabase in background
-  dbSaveCashbookTransaction(newTx);
+  if (syncToCloud) dbSaveCashbookTransaction(newTx);
   
   // Re-render when added dynamically
   setTimeout(() => renderAll(), 100);
@@ -844,7 +932,9 @@ function refreshDynamicFilters(txs) {
     payerList.innerHTML = '';
     state.customers.forEach(c => {
       const opt = document.createElement('option');
-      opt.value = c.name;
+      const uniqueRef = c.code || c.phone || c.id;
+      opt.value = `${c.name} — ${uniqueRef}`;
+      opt.dataset.customerId = String(c.id);
       const subText = (c.code && c.code !== c.name) ? `${c.code} ${c.phone ? `• SĐT: ${c.phone}` : ''}` : (c.phone ? `SĐT: ${c.phone}` : '');
       opt.textContent = subText;
       payerList.appendChild(opt);
@@ -1008,16 +1098,48 @@ function showTransactionDetails(txId) {
       
       newCancelBtn.addEventListener('click', async () => {
         if (confirm(`Bạn có chắc chắn muốn hủy phiếu [${t.id}]? Số tiền giao dịch sẽ không còn được hạch toán vào Sổ quỹ và sẽ khôi phục lại công nợ đối tác nếu có.`)) {
+          const currentUserDisp = state.currentUser
+            ? (state.currentUser.displayName || state.currentUser.username)
+            : 'Administrator';
+
+          if (t.type === 'thu' && t.debtImpact) {
+            const cancelResult = await dbCancelCustomerPayment(
+              t.cloudId || t.id,
+              currentUserDisp
+            );
+            if (!cancelResult) return;
+
+            const customer = state.customers.find(c =>
+              c.id === t.customerId ||
+              String(c.name || '').trim().toLowerCase() === String(t.partner || '').trim().toLowerCase()
+            );
+            const newDebt = Number(cancelResult.new_debt);
+            if (customer && Number.isFinite(newDebt)) {
+              customer.debt = newDebt;
+              if (!customer.debtHistory) customer.debtHistory = [];
+              customer.debtHistory.push({
+                id: `void-${Date.now()}`,
+                date: new Date().toISOString(),
+                type: 'adjust',
+                amount: Number(t.value) || 0,
+                notes: `Hủy phiếu thu ${t.id} - khôi phục công nợ`,
+                debtAfter: newDebt
+              });
+              localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+            }
+          } else {
+            const savedToCloud = await dbSaveCashbookTransaction({
+              ...t,
+              status: 'Đã hủy'
+            });
+            if (!savedToCloud) {
+              showToast('Không thể hủy phiếu trên Cloud. Dữ liệu chưa thay đổi.', 'danger');
+              return;
+            }
+          }
+
           t.status = 'Đã hủy';
           saveCashbookTransactions(txs);
-          
-          // Sync cancelled status to cloud
-          dbSaveCashbookTransaction(t);
-          
-          // Restore customer debt if it's a receipt
-          if (t.type === 'thu') {
-            await updateCustomerDebtOnReceipt(t.partner, t.value, false, t.id, t.category);
-          }
           
           showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
           detailModal.classList.remove('active');
@@ -1079,38 +1201,3 @@ function exportSoQuyToExcel(filteredTxs) {
   XLSX.writeFile(wb, `So_quy_bao_cao_${dateStr}.xlsx`);
   showToast('Xuất báo cáo Sổ quỹ Excel thành công!', 'success');
 }
-
-// Helper: updates customer debt and records debt history when manual receipt is created or cancelled
-async function updateCustomerDebtOnReceipt(payerName, amount, isSubtract = true, receiptCode = '', category = '') {
-  const cust = state.customers.find(c => c.name === payerName);
-  if (!cust) return;
-  
-  if (isSubtract) {
-    cust.debt = cust.debt - amount;
-    if (!cust.debtHistory) cust.debtHistory = [];
-    cust.debtHistory.push({
-      id: `pay-${Date.now()}`,
-      date: new Date().toISOString(),
-      type: 'payment',
-      amount: amount,
-      notes: `Thu tiền từ phiếu thu ${receiptCode} (${category})`,
-      debtAfter: cust.debt
-    });
-  } else {
-    cust.debt = cust.debt + amount;
-    if (!cust.debtHistory) cust.debtHistory = [];
-    cust.debtHistory.push({
-      id: `void-${Date.now()}`,
-      date: new Date().toISOString(),
-      type: 'adjust',
-      amount: amount,
-      notes: `Hủy phiếu thu ${receiptCode} - khôi phục công nợ`,
-      debtAfter: cust.debt
-    });
-  }
-  
-  // Save locally and cloud
-  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-  await dbSaveCustomer(cust);
-}
-

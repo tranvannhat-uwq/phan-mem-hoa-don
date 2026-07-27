@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt } from '../services/supabase.js';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
-import { addCashbookTransaction } from './so_quy.js';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260727-advance-payment';
+import { addCashbookTransaction } from './so_quy.js?v=20260727-receipt-id';
 
 export function getCustomerMetrics(c) {
   if (!c) return { grossSales: 0, totalReturns: 0, netSales: 0, returnRate: '0', currentDebt: 0, totalPayments: 0 };
@@ -22,7 +22,17 @@ export function getCustomerMetrics(c) {
   const netSales = Math.max(0, grossSales - totalReturns);
   const returnRate = grossSales > 0 ? ((totalReturns / grossSales) * 100).toFixed(1) : '0';
   const currentDebt = parseFloat(c.debt || 0);
-  const totalPayments = Math.max(0, grossSales - totalReturns - currentDebt);
+  const debtHistory = Array.isArray(c.debtHistory) ? c.debtHistory : [];
+  const collectedPayments = debtHistory
+    .filter(entry => entry.type === 'payment')
+    .reduce((sum, entry) => sum + Math.abs(parseFloat(entry.amount) || 0), 0);
+  const cancelledPayments = debtHistory
+    .filter(entry =>
+      entry.type === 'adjust' &&
+      String(entry.notes || entry.note || '').toLowerCase().includes('hủy phiếu thu')
+    )
+    .reduce((sum, entry) => sum + Math.abs(parseFloat(entry.amount) || 0), 0);
+  const totalPayments = Math.max(0, collectedPayments - cancelledPayments);
   
   return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
 }
@@ -204,9 +214,9 @@ export function renderCustomersTable() {
           ${c.managedBy ? getManagerDisplayName(c.managedBy, state.users) : '<span style="color: #ef4444; font-weight: 500;">Chưa bàn giao</span>'}
         </td>
         <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
-        <td style="text-align: right; font-weight: 600; color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
-        <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
-        <td style="text-align: right; font-weight: 700; color: #10b981;">${formatCurrency(metrics.netSales)}</td>
+        <td class="customer-money-cell" style="color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
+        <td class="customer-money-cell" style="color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
+        <td class="customer-money-cell" style="color: #10b981;">${formatCurrency(metrics.netSales)}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-cust-btn" data-index="${actualIndex}" title="Sửa">
@@ -634,14 +644,22 @@ export async function handlePayDebtSubmit(e) {
   
   const cust = state.customers.find(c => c.id === customerId);
   if (!cust) return;
-  
-  if (amountPaid > cust.debt) {
+
+  const debtBefore = Number(cust.debt) || 0;
+  if (amountPaid > Math.abs(debtBefore)) {
     if (!confirm(`Số tiền khách trả (${formatCurrency(amountPaid)}) lớn hơn số công nợ hiện tại (${formatCurrency(cust.debt)}). Bạn có muốn tiếp tục?`)) {
       return;
     }
   }
   
-  cust.debt = cust.debt - amountPaid;
+  const currentUserDisp = state.currentUser ? (state.currentUser.displayName || state.currentUser.username) : 'Administrator';
+  const paymentResult = await dbRecordCustomerPayment(cust.id, amountPaid, notes, currentUserDisp);
+  if (!paymentResult) return;
+
+  const rpcDebt = Number(paymentResult.new_debt);
+  cust.debt = Number.isFinite(rpcDebt)
+    ? rpcDebt
+    : (debtBefore < 0 ? debtBefore + amountPaid : debtBefore - amountPaid);
   cust.lastPaymentAt = new Date().toISOString();
   
   // Ghi nhận lịch sử thu nợ
@@ -655,11 +673,8 @@ export async function handlePayDebtSubmit(e) {
     debtAfter: cust.debt
   });
   
-  const currentUserDisp = state.currentUser ? (state.currentUser.displayName || state.currentUser.username) : 'Administrator';
-  await dbRecordCustomerPayment(cust.id, amountPaid, notes, currentUserDisp);
-  const saved = await dbSaveCustomer(cust);
-  if (saved) {
-    addCashbookTransaction({
+  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  addCashbookTransaction({
       type: 'thu',
       category: 'Thu nợ khách hàng',
       partner: cust.name,
@@ -667,12 +682,16 @@ export async function handlePayDebtSubmit(e) {
       method: 'cash',
       accounting: true,
       note: notes,
-      creator: currentUserDisp
+      creator: currentUserDisp,
+      id: paymentResult.cashbook_id || '',
+      cloudId: paymentResult.cashbook_id || null,
+      customerId: cust.id,
+      debtImpact: true,
+      syncToCloud: !paymentResult.cashbook_id
     });
     closePayDebtModal();
     renderAll();
     showToast(`Đã thu nợ ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}!`, 'success');
-  }
 }
 
 export function setupCustomerManagement() {

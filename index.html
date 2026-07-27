@@ -17,7 +17,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=1.1.0">
+  <link rel="stylesheet" href="style.css?v=1.1.2">
 </head>
 <body>
 
@@ -1082,7 +1082,7 @@
 
                 <!-- 2. Thu khác -->
                 <div class="summary-row summary-input-row" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.25rem;">
-                  <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Thu khác:</span>
+                  <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Thu khác / Khách đã cọc:</span>
                   <div style="display: flex; align-items: center; gap: 0.25rem; width: 65%; max-width: 200px; justify-content: flex-end;">
                     <input type="text" id="invoice-other-fee-value" class="form-control" value="0" style="text-align: right; padding: 0.3rem 0.5rem; font-size: 0.85rem; width: 100%; min-width: 0;" placeholder="0">
                     <select id="invoice-other-fee-type" class="form-control" style="width: auto; min-width: 65px; padding: 0.3rem 0.3rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center;">
@@ -1092,8 +1092,8 @@
                   </div>
                 </div>
                 <div class="summary-row" id="summary-other-fee-actual-row" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); padding-left: 0.5rem;">
-                  <span class="label" style="font-size: 0.75rem; color: var(--text-muted);">Số tiền thu khác:</span>
-                  <span class="value" style="color: var(--color-success); font-weight: 500;" id="summary-other-fee-actual">+0 ₫</span>
+                  <span class="label" style="font-size: 0.75rem; color: var(--text-muted);">Số tiền đã thu:</span>
+                  <span class="value" style="color: var(--color-success); font-weight: 500;" id="summary-other-fee-actual">-0 ₫</span>
                 </div>
 
                 <div class="saving-badge" id="summary-saving-badge" style="display: none; margin-bottom: 1rem;">
@@ -1459,7 +1459,7 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table" style="table-layout: fixed; min-width: 1250px;">
+            <table class="table customers-table" style="table-layout: fixed; min-width: 1550px;">
               <colgroup>
                 <col style="width: 100px;">  <!-- Mã KH -->
                 <col style="width: 165px;">  <!-- Tên khách hàng -->
@@ -2509,8 +2509,8 @@
         <span id="print-discount-amount">-0 ₫</span>
       </div>
       <div class="print-summary-row" id="print-other-fee-row">
-        <span>Thu khác:</span>
-        <span id="print-other-fee-amount">+0 ₫</span>
+        <span>Thu khác / Khách đã cọc:</span>
+        <span id="print-other-fee-amount">-0 ₫</span>
       </div>
       <div class="print-summary-row grand-total">
         <span>TỔNG THANH TOÁN:</span>
@@ -3635,6 +3635,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=20260727-advance-payment"></script>
 </body>
 </html>

@@ -588,6 +588,33 @@ select option {
   background-color: rgba(255, 255, 255, 0.02);
 }
 
+.customers-table col:nth-child(4) {
+  width: 220px !important;
+}
+
+.customers-table col:nth-child(8) {
+  width: 170px !important;
+}
+
+.customers-table col:nth-child(9) {
+  width: 160px !important;
+}
+
+.customers-table col:nth-child(10) {
+  width: 180px !important;
+}
+
+.customers-table .customer-money-cell,
+.customers-table tbody td:nth-child(8),
+.customers-table tbody td:nth-child(9),
+.customers-table tbody td:nth-child(10) {
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Color Indicator Badges */
 .color-badge {
   display: inline-flex;
@@ -3174,8 +3201,6 @@ select.default-red ~ .searchable-select-trigger .searchable-select-label {
 .global-settings-menu.active {
   display: block !important;
 }
-
-
 
 
 

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProduct, dbDeleteProduct } from '../services/supabase.js';
+import { dbSaveProduct, dbDeleteProduct } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 
 let excelImportData = [];

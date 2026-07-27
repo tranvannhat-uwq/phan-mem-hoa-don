@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll, switchTab } from '../main.js';
-import { populateManagedByDropdown } from './customers.js';
+import { populateManagedByDropdown } from './customers.js?v=20260727-customer-payments';
 import { exportBackupToExcel } from '../services/backup.js';
 
 export function renderUsersTable() {
