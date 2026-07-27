@@ -1,7 +1,14 @@
+export const DEFAULT_COMPANIES = [
+  { id: 'ABS_NORTH', code: 'ABS_NORTH', name: 'Công ty Cổ phần ABS JAPAN (Miền Bắc)', address: 'Tiên Kha - Phúc Thịnh - Hà Nội', status: 'active' },
+  { id: 'ABS_SOUTH', code: 'ABS_SOUTH', name: 'Công ty Cổ phần ABS JAPAN - Chi nhánh Miền Nam', address: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh', status: 'active' },
+  { id: 'EMP_USA', code: 'EMP_USA', name: 'Công ty Cổ phần EMP Hoa Kỳ', address: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', status: 'active' }
+];
+
 // Đối tượng trạng thái toàn cục của ứng dụng (State)
 export const state = {
   products: [],
   brands: [],
+  companies: [...DEFAULT_COMPANIES],
   invoiceItems: [], // [{ product, brand, package, colorCode, colorPercent, quantity, discountPercent, price }]
   savedOrders: [],
   customers: [],
@@ -16,7 +23,11 @@ export const state = {
     timeRange: 'month',
     startDate: '',
     endDate: '',
-    saleUser: 'all'
+    companyId: 'all',
+    brand: 'all',
+    includeFestivalAllocation: true,
+    saleUser: 'all',
+    customerId: 'all'
   },
   dashboardChartView: 'month', // 'day', 'week', 'month', 'year'
   historyPage: 1,

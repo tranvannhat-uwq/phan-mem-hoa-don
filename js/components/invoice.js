@@ -1,6 +1,6 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu } from '../utils.js';
-import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder } from '../services/supabase.js';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
+import { dbSaveOrder, dbSaveCustomer, dbDeleteOrder, dbConfirmOrder } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js';
@@ -319,10 +319,62 @@ function recalculateItemPriceWithColorMarkup(index) {
   item.price = Math.round(basePrice * markupMultiplier);
 }
 
+export function parseDiscountOrFeeInput(inputId, typeId) {
+  const inputEl = document.getElementById(inputId);
+  const typeSelectEl = document.getElementById(typeId);
+  if (!inputEl) return { value: 0, type: 'amount' };
+  
+  const type = typeSelectEl ? typeSelectEl.value : 'amount';
+  const valStr = inputEl.value || '0';
+  
+  if (type === 'percent') {
+    let num = parseFloat(valStr.replace(/[^0-9.]/g, '')) || 0;
+    if (num < 0) num = 0;
+    if (num > 100) num = 100;
+    return { value: num, type: 'percent' };
+  } else {
+    let num = parseInt(valStr.replace(/\D/g, ''), 10) || 0;
+    if (num < 0) num = 0;
+    return { value: num, type: 'amount' };
+  }
+}
+
+function handleDiscountOrFeeInputChange(inputEl, typeSelectEl) {
+  const isPercent = typeSelectEl.value === 'percent';
+  let valStr = inputEl.value;
+
+  if (isPercent) {
+    valStr = valStr.replace(/[^0-9.]/g, '');
+    const parts = valStr.split('.');
+    if (parts.length > 2) {
+      valStr = parts[0] + '.' + parts.slice(1).join('');
+    }
+    let num = parseFloat(valStr);
+    if (!isNaN(num)) {
+      if (num < 0) num = 0;
+      if (num > 100) num = 100;
+      valStr = num.toString();
+    } else if (valStr !== '' && valStr !== '.') {
+      valStr = '0';
+    }
+    inputEl.value = valStr;
+  } else {
+    let rawDigits = valStr.replace(/\D/g, '');
+    if (!rawDigits) {
+      inputEl.value = '0';
+    } else {
+      let num = parseInt(rawDigits, 10);
+      if (isNaN(num) || num < 0) num = 0;
+      inputEl.value = formatNumber(num);
+    }
+  }
+  calculateInvoiceTotals();
+}
+
 export function calculateInvoiceTotals() {
   let totalQty = 0;
   let totalMarket = 0;
-  let totalPayable = 0;
+  let totalProductSubtotal = 0;
   
   state.invoiceItems.forEach(item => {
     const originalPrice = item.price; 
@@ -335,27 +387,42 @@ export function calculateInvoiceTotals() {
     
     totalQty += qty;
     totalMarket += originalSubtotal;
-    totalPayable += discountedSubtotal;
+    totalProductSubtotal += discountedSubtotal;
   });
   
-  const totalDiscount = Math.round(totalMarket - totalPayable);
-  
-  // Tính chiết khấu hỗ trợ vận chuyển (3%) nếu khách hàng có hoặc checkbox bật
-  let shippingDiscount = 0;
-  const shipCheck = document.getElementById('invoice-shipping-support');
-  const isShippingActive = shipCheck ? shipCheck.checked : false;
-  
-  if (isShippingActive && totalPayable > 0) {
-    shippingDiscount = Math.round(totalPayable * 0.03);
-    totalPayable -= shippingDiscount;
+  const totalDiscount = Math.round(totalMarket - totalProductSubtotal);
+  const subtotal = totalProductSubtotal; // Tạm tính = Tổng giá trị sản phẩm sau chiết khấu sản phẩm
+
+  // 1. Tính Giảm giá
+  const discData = parseDiscountOrFeeInput('invoice-discount-value', 'invoice-discount-type');
+  let discountAmount = 0;
+  if (discData.type === 'percent') {
+    discountAmount = Math.round(subtotal * (discData.value / 100));
+  } else {
+    discountAmount = discData.value;
   }
+  discountAmount = Math.max(0, discountAmount);
+
+  // 2. Tính Thu khác
+  const feeData = parseDiscountOrFeeInput('invoice-other-fee-value', 'invoice-other-fee-type');
+  let otherFeeAmount = 0;
+  if (feeData.type === 'percent') {
+    otherFeeAmount = Math.round(subtotal * (feeData.value / 100));
+  } else {
+    otherFeeAmount = feeData.value;
+  }
+  otherFeeAmount = Math.max(0, otherFeeAmount);
+
+  // 3. Tổng thanh toán = Tạm tính - Tiền giảm giá + Tiền thu khác (không nhỏ hơn 0)
+  const totalPayable = Math.max(0, subtotal - discountAmount + otherFeeAmount);
 
   // Cập nhật lên UI với đúng ID trong index.html
   const qtyEl = document.getElementById('summary-total-qty');
   const marketEl = document.getElementById('summary-market-total');
   const discountEl = document.getElementById('summary-discount-total');
-  const shippingRow = document.getElementById('summary-shipping-discount-row');
-  const shippingValEl = document.getElementById('summary-shipping-discount-total');
+  const subtotalEl = document.getElementById('summary-subtotal');
+  const discActualEl = document.getElementById('summary-discount-actual');
+  const feeActualEl = document.getElementById('summary-other-fee-actual');
   const payableEl = document.getElementById('summary-final-total');
   const savingBadge = document.getElementById('summary-saving-badge');
   const crossedMarket = document.getElementById('summary-final-market-crossed');
@@ -363,18 +430,12 @@ export function calculateInvoiceTotals() {
   if (qtyEl) qtyEl.innerText = totalQty;
   if (marketEl) marketEl.innerText = formatCurrency(totalMarket);
   if (discountEl) discountEl.innerText = `-${formatCurrency(totalDiscount)}`;
+  if (subtotalEl) subtotalEl.innerText = formatCurrency(subtotal);
+  if (discActualEl) discActualEl.innerText = `-${formatCurrency(discountAmount)}`;
+  if (feeActualEl) feeActualEl.innerText = `+${formatCurrency(otherFeeAmount)}`;
   if (payableEl) payableEl.innerText = formatCurrency(totalPayable);
-  
-  if (shippingRow && shippingValEl) {
-    if (shippingDiscount > 0) {
-      shippingRow.style.display = 'flex';
-      shippingValEl.innerText = `-${formatCurrency(shippingDiscount)}`;
-    } else {
-      shippingRow.style.display = 'none';
-    }
-  }
 
-  const totalCombinedDiscount = totalDiscount + shippingDiscount;
+  const totalCombinedDiscount = totalDiscount + discountAmount;
   if (savingBadge && crossedMarket) {
     if (totalMarket > 0 && totalCombinedDiscount > 0) {
       const savingPercent = ((totalCombinedDiscount / totalMarket) * 100).toFixed(0);
@@ -468,6 +529,7 @@ export function compileActiveOrder() {
   let phone = 'N/A';
   let address = 'N/A';
   let custId = null;
+  let agencyBrand = 'Nano10*';
   
   if (state.isQuickCustomerMode) {
     const qName = document.getElementById('quick-cust-name').value.trim();
@@ -479,6 +541,10 @@ export function compileActiveOrder() {
     phone = document.getElementById('quick-cust-phone').value.trim() || 'N/A';
     address = document.getElementById('quick-cust-address').value.trim() || 'N/A';
     custId = state.activeCustomerId || null;
+    const qBrand = document.getElementById('quick-cust-assigned-brand');
+    if (qBrand && qBrand.value && qBrand.value !== 'Tất cả') {
+      agencyBrand = qBrand.value;
+    }
   } else if (state.activeCustomerId) {
     const cust = state.customers.find(c => c.id === state.activeCustomerId);
     if (cust) {
@@ -486,6 +552,9 @@ export function compileActiveOrder() {
       customerName = cust.name;
       phone = cust.phone || 'N/A';
       address = cust.address || 'N/A';
+      if (cust.assignedBrand && cust.assignedBrand !== 'Tất cả') {
+        agencyBrand = cust.assignedBrand;
+      }
     }
   } else {
     const searchInput = document.getElementById('invoice-customer-search');
@@ -497,26 +566,39 @@ export function compileActiveOrder() {
     }
   }
 
+  const companyId = getUserCompanyId(state.currentUser);
+
   // Tính các con số và làm tròn số nguyên VND để lưu trữ và hiển thị sạch sẽ
   let totalMarket = 0;
-  let totalPayable = 0;
+  let subtotal = 0;
   state.invoiceItems.forEach(item => {
     const originalSubtotal = Math.round(item.quantity * item.price);
     const discountedSubtotal = Math.round(originalSubtotal * (1 - item.discountPercent / 100));
     totalMarket += originalSubtotal;
-    totalPayable += discountedSubtotal;
+    subtotal += discountedSubtotal;
   });
   
-  const totalDiscount = Math.round(totalMarket - totalPayable);
+  const totalDiscount = Math.round(totalMarket - subtotal);
   
-  let shippingSupport = false;
-  let shippingDiscount = 0;
-  const shipCheck = document.getElementById('invoice-shipping-support');
-  if (shipCheck && shipCheck.checked && totalPayable > 0) {
-    shippingSupport = true;
-    shippingDiscount = Math.round(totalPayable * 0.03);
-    totalPayable -= shippingDiscount;
+  const discData = parseDiscountOrFeeInput('invoice-discount-value', 'invoice-discount-type');
+  let discountAmount = 0;
+  if (discData.type === 'percent') {
+    discountAmount = Math.round(subtotal * (discData.value / 100));
+  } else {
+    discountAmount = discData.value;
   }
+  discountAmount = Math.max(0, discountAmount);
+
+  const feeData = parseDiscountOrFeeInput('invoice-other-fee-value', 'invoice-other-fee-type');
+  let otherFeeAmount = 0;
+  if (feeData.type === 'percent') {
+    otherFeeAmount = Math.round(subtotal * (feeData.value / 100));
+  } else {
+    otherFeeAmount = feeData.value;
+  }
+  otherFeeAmount = Math.max(0, otherFeeAmount);
+
+  const totalPayable = Math.max(0, subtotal - discountAmount + otherFeeAmount);
 
   const plSelect = document.getElementById('invoice-pricelist-select');
   const pricelistId = plSelect ? plSelect.value : 'retail';
@@ -528,22 +610,33 @@ export function compileActiveOrder() {
   const orderId = editOrderId || `HD-${Date.now().toString().slice(-6)}`;
   const orderDate = new Date().toISOString();
 
-  // Đóng gói các dòng hoá đơn để lưu (giản lược đối tượng tránh đệ quy sâu)
-  const itemsToSave = state.invoiceItems.map(item => ({
-    brand: item.brand,
-    productCode: item.product.code,
-    productName: item.product.name,
-    package: item.package,
-    colorCode: item.colorCode || '',
-    colorPercent: item.colorPercent || 0,
-    quantity: item.quantity,
-    discountPercent: item.discountPercent,
-    price: item.price,
-    notes: item.notes || ''
-  }));
+  // Đóng gói các dòng hoá đơn để lưu cùng với thuộc tính doanh thu Multi-Company
+  const itemsToSave = state.invoiceItems.map(item => {
+    const productBrand = item.brand || (item.product && item.product.brand) || 'Nano10*';
+    const revAttrs = getRevenueAttributes(productBrand, agencyBrand, companyId, state.brands);
+
+    return {
+      brand: productBrand,
+      productCode: item.product.code,
+      productName: item.product.name,
+      package: item.package,
+      colorCode: item.colorCode || '',
+      colorPercent: item.colorPercent || 0,
+      quantity: item.quantity,
+      discountPercent: item.discountPercent,
+      price: item.price,
+      notes: item.notes || '',
+      companyId: companyId,
+      productBrand: revAttrs.productBrand,
+      agencyBrand: revAttrs.agencyBrand,
+      revenueBrand: revAttrs.revenueBrand,
+      revenueCompany: revAttrs.revenueCompany
+    };
+  });
 
   const order = {
     id: orderId,
+    companyId: companyId,
     customerId: custId,
     customerName,
     notes: document.getElementById('invoice-notes').value.trim(),
@@ -551,8 +644,13 @@ export function compileActiveOrder() {
     date: orderDate,
     totalMarket,
     totalDiscount,
-    shippingSupport,
-    shippingDiscount,
+    subtotal,
+    discountValue: discData.value,
+    discountType: discData.type,
+    discountAmount: discountAmount,
+    otherFeeValue: feeData.value,
+    otherFeeType: feeData.type,
+    otherFeeAmount: otherFeeAmount,
     totalPayable,
     pricelistId,
     createdBy: state.currentUser ? state.currentUser.username : 'admin'
@@ -638,8 +736,6 @@ export async function saveActiveOrder(status = 'settled') {
         return null;
       }
       
-      const qShippingSupport = document.getElementById('quick-cust-shipping-support').checked;
-      
       const qManagerSelect = document.getElementById('quick-cust-manager');
       const qManager = qManagerSelect ? qManagerSelect.value : '';
       if (!qManager) {
@@ -659,7 +755,6 @@ export async function saveActiveOrder(status = 'settled') {
         address: qAddress,
         assignedBrand: qAssignedBrand,
         brandDiscounts: { province: qProvince },
-        shippingSupport: qShippingSupport,
         debt: 0,
         totalTransaction: 0,
         notes: 'Thêm nhanh từ màn hình lên đơn',
@@ -708,33 +803,22 @@ export async function saveActiveOrder(status = 'settled') {
       }
     }
 
-    const saved = await dbSaveOrder(order);
+    const saved = status === 'settled' ? await dbConfirmOrder(order) : await dbSaveOrder(order);
     if (saved) {
       if (status === 'draft') {
-        showToast(`Đã lưu đơn nháp ${order.id} thành công!`);
+        showToast(`Đã lưu đơn nháp ${order.id} thành công!`, 'success');
       } else {
-        showToast(`Đã thanh toán và lưu đơn hàng ${order.id} thành công!`);
+        showToast(`Đã chốt và lưu đơn hàng ${order.id} thành công!`, 'success');
         
-        // Ghi nhận phiếu thu tự động vào Sổ quỹ
-        addCashbookTransaction({
-          type: 'thu',
-          category: 'Thu thu tiền hàng',
-          partner: order.customerName,
-          value: order.totalPayable,
-          method: 'cash',
-          accounting: true,
-          note: `Thu tiền hàng cho hóa đơn ${order.id}`,
-          creator: state.currentUser ? state.currentUser.displayName : 'Administrator'
-        });
-        
-        // Cập nhật công nợ và tổng giao dịch nếu chốt đơn (settled) và có khách hàng liên kết (làm tròn số nguyên)
+        // Cập nhật state in-memory của khách hàng sau khi DB đã chốt thành công
         if (order.customerId) {
           const cust = state.customers.find(c => c.id === order.customerId);
           if (cust) {
             cust.debt = Math.round((cust.debt || 0) + order.totalPayable);
             cust.totalTransaction = Math.round((cust.totalTransaction || 0) + order.totalPayable);
+            cust.netRevenue = Math.round((cust.netRevenue || 0) + order.totalPayable);
+            cust.lastOrderAt = new Date().toISOString();
             
-            // Ghi nhận biến động công nợ do mua hàng
             if (!cust.debtHistory) cust.debtHistory = [];
             cust.debtHistory.push({
               id: order.id,
@@ -744,8 +828,7 @@ export async function saveActiveOrder(status = 'settled') {
               notes: `Mua hàng (Hóa đơn ${order.id})`,
               debtAfter: cust.debt
             });
-            
-            await dbSaveCustomer(cust);
+            localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
           }
         }
       }
@@ -758,15 +841,16 @@ export async function saveActiveOrder(status = 'settled') {
       renderAll();
       
       return order;
+    } else {
+      showToast('Lưu đơn hàng không thành công. Vui lòng kiểm tra kết nối và thử lại!', 'danger');
+      return null;
     }
-    return null;
   } catch (error) {
     console.error("Lỗi khi lưu đơn hàng:", error);
-    showToast('Có lỗi xảy ra khi lưu đơn hàng. Vui lòng thử lại!', 'danger');
+    showToast('Có lỗi xảy ra khi lưu đơn hàng: ' + (error.message || 'Lỗi hệ thống'), 'danger');
     return null;
   } finally {
     isSavingOrder = false;
-    enableButtons();
   }
 }
 
@@ -793,8 +877,14 @@ export function resetInvoiceCustomer() {
   const clearCustBtn = document.getElementById('btn-clear-invoice-customer');
   if (clearCustBtn) clearCustBtn.style.display = 'none';
   
-  const shipCheck = document.getElementById('invoice-shipping-support');
-  if (shipCheck) shipCheck.checked = false;
+  const discVal = document.getElementById('invoice-discount-value');
+  if (discVal) discVal.value = '0';
+  const discType = document.getElementById('invoice-discount-type');
+  if (discType) discType.value = 'percent';
+  const feeVal = document.getElementById('invoice-other-fee-value');
+  if (feeVal) feeVal.value = '0';
+  const feeType = document.getElementById('invoice-other-fee-type');
+  if (feeType) feeType.value = 'amount';
   
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
@@ -884,12 +974,11 @@ export function enableQuickCustomerMode() {
     item.discountPercent = 0;
   });
   
-  // Move the price list selector inside quick customer fields (above the shipping support container)
+  // Move the price list selector inside quick customer fields
   const plGroup = document.getElementById('invoice-pricelist-group');
-  const shipContainer = document.getElementById('quick-cust-shipping-support-container');
-  if (plGroup && quickFields && shipContainer) {
+  if (plGroup && quickFields) {
     plGroup.style.display = 'block';
-    quickFields.insertBefore(plGroup, shipContainer);
+    quickFields.appendChild(plGroup);
   }
   
   renderInvoiceTable();
@@ -922,9 +1011,6 @@ export function disableQuickCustomerMode() {
     qBrand.value = 'Tất cả';
     makeSelectSearchable('quick-cust-assigned-brand', 'Chọn nhãn sơn', false);
   }
-  const qShip = document.getElementById('quick-cust-shipping-support');
-  if (qShip) qShip.checked = false;
-  
   const qManager = document.getElementById('quick-cust-manager');
   if (qManager) {
     if (state.currentUser) {
@@ -1313,6 +1399,71 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     const headerPriceText = isRetail ? 'Giá bán x % màu' : 'Giá nhập';
     const headerSubtotalText = isRetail ? 'Thành tiền X % màu' : 'Thành tiền';
 
+    const itemRowsHtml = order.items.map((item, idx) => {
+      const discountMultiplier = 1 - (item.discountPercent || 0) / 100;
+      const displayPrice = isRetail ? item.price : Math.round(item.price * discountMultiplier);
+      const subTotal = isRetail ?
+        Math.round(item.quantity * item.price) :
+        Math.round(Math.round(item.quantity * item.price) * discountMultiplier);
+      sumSubTotal += subTotal;
+      
+      const itemBrand = item.brand || (item.product && item.product.brand);
+      const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
+      let weight = '';
+      if (p) {
+        if (item.package === 'Bo') {
+          const wLon = p.weightLon ? `Lon: ${p.weightLon}` : '';
+          const wBao = p.weightBao ? `Bao: ${p.weightBao}` : '';
+          weight = [wLon, wBao].filter(Boolean).join(' + ') || 'N/A';
+        }
+        else if (item.package === 'Thung') weight = p.weightThung;
+        else if (item.package === 'Lon') weight = p.weightLon;
+        else if (item.package === 'Hop') weight = p.weightHop;
+        else if (item.package === 'Bao') weight = p.weightBao;
+        else if (item.package === 'Tui') weight = p.weightTui;
+      }
+      
+      let packageDisplay = item.package;
+      let prefix = '';
+      if (packageDisplay === 'Bo') {
+        prefix = 'Bộ';
+        packageDisplay = `Bộ (${weight})`;
+      } else {
+        if (packageDisplay === 'Thung') prefix = 'Thùng';
+        else if (packageDisplay === 'Lon') prefix = 'Lon';
+        else if (packageDisplay === 'Hop') prefix = 'Hộp';
+        else if (packageDisplay === 'Bao') prefix = 'Bao';
+        else if (packageDisplay === 'Tui') prefix = 'Túi';
+        
+        if (weight && weight !== 'N/A') {
+          let formattedWeight = weight.replace(/\s+/g, '').toUpperCase();
+          packageDisplay = `${prefix} ${formattedWeight}`;
+        } else {
+          packageDisplay = prefix;
+        }
+      }
+
+      const colorPercentText = item.colorPercent > 0 ? ` (+${item.colorPercent}% màu)` : '';
+      const colorCodeDisplay = item.colorCode ? `${item.colorCode}${colorPercentText}` : '';
+      
+      return `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td>${item.productName}</td>
+          <td style="font-weight: bold; text-align: center;">${item.productCode}</td>
+          <td style="text-align: center; font-weight: bold;">${colorCodeDisplay}</td>
+          <td style="text-align: center;">${packageDisplay}</td>
+          <td style="text-align: center;">${item.quantity}</td>
+          <td style="text-align: right;">${formatNumber(displayPrice)}</td>
+          <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const printSubtotal = order.subtotal !== undefined ? order.subtotal : (isRetail ? sumSubTotal - order.totalDiscount : sumSubTotal);
+    const printDiscount = order.discountAmount || 0;
+    const printOtherFee = order.otherFeeAmount || 0;
+
     table.innerHTML = `
       <thead>
         <tr>
@@ -1327,93 +1478,37 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         </tr>
       </thead>
       <tbody>
-        ${order.items.map((item, idx) => {
-          const discountMultiplier = 1 - (item.discountPercent || 0) / 100;
-          const displayPrice = isRetail ? item.price : Math.round(item.price * discountMultiplier);
-          const subTotal = isRetail ?
-            Math.round(item.quantity * item.price) :
-            Math.round(Math.round(item.quantity * item.price) * discountMultiplier);
-          sumSubTotal += subTotal;
-          
-          const itemBrand = item.brand || (item.product && item.product.brand);
-          const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
-          let weight = '';
-          if (p) {
-            if (item.package === 'Bo') {
-              const wLon = p.weightLon ? `Lon: ${p.weightLon}` : '';
-              const wBao = p.weightBao ? `Bao: ${p.weightBao}` : '';
-              weight = [wLon, wBao].filter(Boolean).join(' + ') || 'N/A';
-            }
-            else if (item.package === 'Thung') weight = p.weightThung;
-            else if (item.package === 'Lon') weight = p.weightLon;
-            else if (item.package === 'Hop') weight = p.weightHop;
-            else if (item.package === 'Bao') weight = p.weightBao;
-            else if (item.package === 'Tui') weight = p.weightTui;
-          }
-          
-          let packageDisplay = item.package;
-          let prefix = '';
-          if (packageDisplay === 'Bo') {
-            prefix = 'Bộ';
-            packageDisplay = `Bộ (${weight})`;
-          } else {
-            if (packageDisplay === 'Thung') prefix = 'Thùng';
-            else if (packageDisplay === 'Lon') prefix = 'Lon';
-            else if (packageDisplay === 'Hop') prefix = 'Hộp';
-            else if (packageDisplay === 'Bao') prefix = 'Bao';
-            else if (packageDisplay === 'Tui') prefix = 'Túi';
-            
-            if (weight && weight !== 'N/A') {
-              let formattedWeight = weight.replace(/\s+/g, '').toUpperCase();
-              packageDisplay = `${prefix} ${formattedWeight}`;
-            } else {
-              packageDisplay = prefix;
-            }
-          }
-
-          const colorPercentText = item.colorPercent > 0 ? ` (+${item.colorPercent}% màu)` : '';
-          const colorCodeDisplay = item.colorCode ? `${item.colorCode}${colorPercentText}` : '';
-          
-          return `
-            <tr>
-              <td style="text-align: center;">${idx + 1}</td>
-              <td>${item.productName}</td>
-              <td style="font-weight: bold; text-align: center;">${item.productCode}</td>
-              <td style="text-align: center; font-weight: bold;">${colorCodeDisplay}</td>
-              <td style="text-align: center;">${packageDisplay}</td>
-              <td style="text-align: center;">${item.quantity}</td>
-              <td style="text-align: right;">${formatNumber(displayPrice)}</td>
-              <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
-            </tr>
-          `;
-        }).join('')}
-        
+        ${itemRowsHtml}
+        ${isRetail ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng:</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng tiền hàng:</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(sumSubTotal)}</td>
         </tr>
-        
-        ${isRetail ? `
         <tr>
           <td colspan="6" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán lẻ</td>
           <td style="text-align: center; font-weight: bold; padding: 4px 8px;">${avgDiscountPercent > 0 ? avgDiscountPercent + '%' : ''}</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalDiscount)}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(order.totalDiscount)}</td>
         </tr>
         ` : ''}
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cước Vận Chuyển</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.shippingDiscount)}</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tạm tính</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printSubtotal)}</td>
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">${isRetail ? 'Tổng tiền sau chiết khấu' : 'Tổng tiền thanh toán'}</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(order.totalPayable)}</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Giảm giá${order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printDiscount)}</td>
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thanh toán</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">0</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu khác${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">+${formatNumber(printOtherFee)}</td>
+        </tr>
+        
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px; font-size: 13pt;">${formatNumber(order.totalPayable)}</td>
         </tr>
         
         ${debtRowsHtml}
@@ -1641,7 +1736,7 @@ export function setupInvoiceCreator() {
         suggestionsList.innerHTML = matches.map(p => `
           <li class="suggestion-item" data-code="${p.code}" data-brand="${p.brand || 'Nano10*'}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <div class="suggestion-info" style="text-align: left; align-items: flex-start; display: flex; flex-direction: column;">
-              <span class="suggestion-code" style="font-weight: 600; color: #fff; font-size: 0.8rem;">${p.code}</span>
+              <span class="suggestion-code" style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem;">${p.code}</span>
               <span class="suggestion-name" style="color: var(--text-secondary); font-size: 0.85rem;">${p.name}</span>
             </div>
             <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3);">${p.brand || 'Nano10*'}</span>
@@ -1719,11 +1814,26 @@ export function setupInvoiceCreator() {
     });
   }
 
-  const shipCheck = document.getElementById('invoice-shipping-support');
-  if (shipCheck) {
-    shipCheck.addEventListener('change', () => {
+  const discValInput = document.getElementById('invoice-discount-value');
+  const discTypeSelect = document.getElementById('invoice-discount-type');
+  if (discValInput && discTypeSelect) {
+    discValInput.addEventListener('input', () => handleDiscountOrFeeInputChange(discValInput, discTypeSelect));
+    discValInput.addEventListener('blur', () => {
+      if (discValInput.value.trim() === '') discValInput.value = '0';
       calculateInvoiceTotals();
     });
+    discTypeSelect.addEventListener('change', () => handleDiscountOrFeeInputChange(discValInput, discTypeSelect));
+  }
+
+  const feeValInput = document.getElementById('invoice-other-fee-value');
+  const feeTypeSelect = document.getElementById('invoice-other-fee-type');
+  if (feeValInput && feeTypeSelect) {
+    feeValInput.addEventListener('input', () => handleDiscountOrFeeInputChange(feeValInput, feeTypeSelect));
+    feeValInput.addEventListener('blur', () => {
+      if (feeValInput.value.trim() === '') feeValInput.value = '0';
+      calculateInvoiceTotals();
+    });
+    feeTypeSelect.addEventListener('change', () => handleDiscountOrFeeInputChange(feeValInput, feeTypeSelect));
   }
 
   // Sự kiện tìm kiếm khách hàng trong invoice panel
@@ -1744,16 +1854,6 @@ export function setupInvoiceCreator() {
   if (quickBrandSelect) {
     quickBrandSelect.addEventListener('change', () => {
       handleQuickCustomerBrandChange(quickBrandSelect.value);
-    });
-  }
-
-  const quickShipCheck = document.getElementById('quick-cust-shipping-support');
-  if (quickShipCheck) {
-    quickShipCheck.addEventListener('change', () => {
-      if (shipCheck) {
-        shipCheck.checked = quickShipCheck.checked;
-      }
-      calculateInvoiceTotals();
     });
   }
 
@@ -1801,7 +1901,7 @@ function setupInvoiceCustomerSearch() {
       suggestions.innerHTML = matches.map(c => `
         <li class="suggestion-item select-cust-suggestion" data-id="${c.id}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
           <div class="suggestion-info">
-            <span style="font-weight: 600; color: #fff;">${c.name} (${c.code})</span>
+            <span style="font-weight: 600; color: var(--text-primary);">${c.name} (${c.code})</span>
             <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-top: 2px;">SĐT: ${c.phone || 'N/A'} • Nợ: ${formatCurrency(c.debt)}</span>
           </div>
         </li>
@@ -1869,10 +1969,6 @@ function selectInvoiceCustomer(customer) {
     }
   }
 
-  const shipCheck = document.getElementById('invoice-shipping-support');
-  if (shipCheck) {
-    shipCheck.checked = customer.shippingSupport || false;
-  }
 
   // Tự động gán bảng giá mặc định của đại lý
   const plSelect = document.getElementById('invoice-pricelist-select');

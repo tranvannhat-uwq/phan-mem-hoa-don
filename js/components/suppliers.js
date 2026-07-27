@@ -7,12 +7,17 @@ export function renderSuppliersTable() {
   const tableBody = document.getElementById('suppliers-table-body');
   if (!tableBody) return;
   
-  const searchVal = document.getElementById('supplier-search-input').value.toLowerCase().trim();
+  console.log("[SUPPLIERS] RENDER INPUT:", state.suppliers?.length || 0);
+
+  const searchInput = document.getElementById('supplier-search-input');
+  const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
   
-  const filtered = state.suppliers.filter(s => {
-    return s.code.toLowerCase().includes(searchVal) || 
-           s.name.toLowerCase().includes(searchVal) || 
-           (s.phone && s.phone.includes(searchVal));
+  const filtered = (state.suppliers || []).filter(s => {
+    if (!s) return false;
+    const sCode = (s.code || s.id || '').toLowerCase();
+    const sName = (s.name || '').toLowerCase();
+    const sPhone = (s.phone || '');
+    return sCode.includes(searchVal) || sName.includes(searchVal) || sPhone.includes(searchVal);
   });
   
   // Sắp xếp theo tên nhà cung cấp

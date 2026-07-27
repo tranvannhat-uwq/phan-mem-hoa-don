@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers } from '../services/supabase.js';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
 import { addCashbookTransaction } from './so_quy.js';
@@ -32,11 +32,19 @@ export function renderCustomersTable() {
   const tableBody = document.getElementById('customers-table-body');
   if (!tableBody) return;
   
-  const searchVal = document.getElementById('customer-search-input').value.toLowerCase().trim();
+  const searchInput = document.getElementById('customer-search-input');
+  const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
   const filterSelect = document.getElementById('customer-managed-filter');
   const filterEmployee = filterSelect ? filterSelect.value : '';
   
-  const filtered = state.customers.filter(c => {
+  const filtered = (state.customers || []).filter(c => {
+    if (!c) return false;
+    const cCode = (c.code || c.id || '').toLowerCase();
+    const cName = (c.name || '').toLowerCase();
+    const cPhone = (c.phone || c.phone2 || '');
+    if (searchVal && !cCode.includes(searchVal) && !cName.includes(searchVal) && !cPhone.includes(searchVal)) {
+      return false;
+    }
     if (state.currentUser && state.currentUser.role === 'sale') {
       if (!isSameUser(c.managedBy, state.currentUser.username)) return false;
     } else if (filterEmployee) {
@@ -55,7 +63,11 @@ export function renderCustomersTable() {
   
   // Tính toán tổng nợ và doanh thu đại lý lọc được
   const totalDebt = filtered.reduce((sum, c) => sum + (parseFloat(c.debt) || 0), 0);
-  const totalSales = filtered.reduce((sum, c) => sum + (parseFloat(c.totalTransaction) || 0), 0);
+  const totalSales = filtered.reduce((sum, c) => {
+    const metrics = getCustomerMetrics(c);
+    c.totalTransaction = metrics.grossSales;
+    return sum + metrics.grossSales;
+  }, 0);
   
   const debtEl = document.getElementById('cust-summary-total-debt');
   const salesEl = document.getElementById('cust-summary-total-sales');
@@ -166,9 +178,7 @@ export function renderCustomersTable() {
       }
     }
     
-    const shippingBadge = c.shippingSupport 
-      ? `<span style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); margin-left: 0.35rem; display: inline-block; vertical-align: middle; font-weight: 600;">Hỗ trợ VC</span>` 
-      : '';
+
     
     const provinceName = getProvinceNameByCode(c.brandDiscounts && c.brandDiscounts.province);
     const displayAddr = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '<span style="color: var(--text-muted);">N/A</span>');
@@ -184,7 +194,6 @@ export function renderCustomersTable() {
           <span class="view-cust-detail-link" data-index="${actualIndex}" style="cursor: pointer; color: #22c55e; text-decoration: underline; font-weight: 600;" title="Xem chi tiết & Lịch sử công nợ">
             ${c.name}
           </span>
-          ${shippingBadge}
         </td>
         <td>${c.phone || '<span style="color: var(--text-muted);">N/A</span>'}</td>
         <td style="font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${addrTitle}">${displayAddr}</td>
@@ -195,10 +204,9 @@ export function renderCustomersTable() {
           ${c.managedBy ? getManagerDisplayName(c.managedBy, state.users) : '<span style="color: #ef4444; font-weight: 500;">Chưa bàn giao</span>'}
         </td>
         <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
-        <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
-        <td style="text-align: right; font-weight: 600; color: #f59e0b;">${formatCurrency(metrics.totalReturns)}</td>
-        <td style="text-align: right; font-weight: 700; color: #10b981;">${formatCurrency(metrics.netSales)}</td>
         <td style="text-align: right; font-weight: 600; color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
+        <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
+        <td style="text-align: right; font-weight: 700; color: #10b981;">${formatCurrency(metrics.netSales)}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-cust-btn" data-index="${actualIndex}" title="Sửa">
@@ -355,7 +363,7 @@ export function openCustomerModal(index = -1) {
     document.getElementById('customer-edit-index').value = '-1';
     document.getElementById('customer-edit-id').value = '';
     
-    document.getElementById('cust-shipping-support').checked = false;
+
     document.getElementById('cust-code').value = generateUniqueCustomerCode('');
     
     if (plSelect) {
@@ -390,7 +398,6 @@ export function openCustomerModal(index = -1) {
     makeSelectSearchable('cust-assigned-brand', 'Chọn nhãn sơn', false);
     document.getElementById('cust-debt').value = customer.debt || 0;
     document.getElementById('cust-notes').value = customer.notes || '';
-    document.getElementById('cust-shipping-support').checked = customer.shippingSupport || false;
     
     const cPlId = customer.pricelistId || 'custom';
     if (plSelect) plSelect.value = cPlId;
@@ -499,7 +506,6 @@ export async function saveCustomer() {
     brandDiscounts.province = provinceSelect.value;
   }
   
-  const shippingSupport = document.getElementById('cust-shipping-support').checked;
   const customerId = index === -1 ? `cust-${Date.now()}` : editId;
   
   // Ghi nhận biến động công nợ nếu Admin/Kế toán trực tiếp điều chỉnh công nợ khách hàng
@@ -516,7 +522,12 @@ export async function saveCustomer() {
       notes: index === -1 ? 'Khởi tạo công nợ ban đầu' : 'Điều chỉnh số dư công nợ thủ công',
       debtAfter: debt
     });
+    const currentUserDisp = state.currentUser ? (state.currentUser.displayName || state.currentUser.username) : 'Administrator';
+    await dbAdjustCustomerDebt(customerId, debt, index === -1 ? 'Khởi tạo công nợ ban đầu' : 'Điều chỉnh số dư công nợ thủ công', currentUserDisp);
   }
+
+  const matchedCustBrand = (state.brands || []).find(b => b.name.toLowerCase() === (assignedBrand || '').toLowerCase() || b.id === assignedBrand);
+  const assignedBrandId = matchedCustBrand ? matchedCustBrand.id : (assignedBrand === 'Tất cả' ? 'Tất cả' : ('brand_' + String(assignedBrand).toLowerCase().replace(/[^a-z0-9]/g, '')));
 
   const customerData = {
     id: customerId,
@@ -525,8 +536,8 @@ export async function saveCustomer() {
     phone,
     address,
     assignedBrand,
+    assignedBrandId,
     brandDiscounts,
-    shippingSupport,
     debt,
     totalTransaction: index === -1 ? 0 : state.customers[index].totalTransaction || 0,
     notes,
@@ -555,8 +566,7 @@ export async function saveCustomer() {
       
       document.getElementById('selected-customer-debt-lbl').innerText = formatCurrency(debt);
       
-      const shipCheck = document.getElementById('invoice-shipping-support');
-      if (shipCheck) shipCheck.checked = shippingSupport;
+
       
       const invoicePlSelect = document.getElementById('invoice-pricelist-select');
       if (invoicePlSelect) invoicePlSelect.value = pricelistId;
@@ -632,6 +642,7 @@ export async function handlePayDebtSubmit(e) {
   }
   
   cust.debt = cust.debt - amountPaid;
+  cust.lastPaymentAt = new Date().toISOString();
   
   // Ghi nhận lịch sử thu nợ
   if (!cust.debtHistory) cust.debtHistory = [];
@@ -644,6 +655,8 @@ export async function handlePayDebtSubmit(e) {
     debtAfter: cust.debt
   });
   
+  const currentUserDisp = state.currentUser ? (state.currentUser.displayName || state.currentUser.username) : 'Administrator';
+  await dbRecordCustomerPayment(cust.id, amountPaid, notes, currentUserDisp);
   const saved = await dbSaveCustomer(cust);
   if (saved) {
     addCashbookTransaction({
@@ -654,7 +667,7 @@ export async function handlePayDebtSubmit(e) {
       method: 'cash',
       accounting: true,
       note: notes,
-      creator: state.currentUser ? state.currentUser.displayName : 'Administrator'
+      creator: currentUserDisp
     });
     closePayDebtModal();
     renderAll();
@@ -1205,6 +1218,9 @@ function handleCustExcelFile(file) {
         let debt = colMap.debt !== -1 ? parseFloat(row[colMap.debt]) || 0 : 0;
         let totalTransaction = colMap.totalTransaction !== -1 ? parseFloat(row[colMap.totalTransaction]) || 0 : 0;
         
+        const nameLower = name.toLowerCase();
+        const codeLower = code.toLowerCase();
+
         // Brand assignment
         let assignedBrand = defaultBrand;
         let excelBrandVal = colMap.excelBrand !== -1 && row[colMap.excelBrand] ? row[colMap.excelBrand].toString().trim() : '';
@@ -1212,8 +1228,6 @@ function handleCustExcelFile(file) {
           assignedBrand = excelBrandVal;
         } else {
           // Auto detect brand if not explicitly provided
-          const nameLower = name.toLowerCase();
-          const codeLower = code.toLowerCase();
           if (nameLower.includes('nano10') || nameLower.includes('nano 10') || codeLower.includes('nano10') || codeLower.includes('nano 10')) assignedBrand = 'Nano10*';
           else if (nameLower.includes('hatacco') || codeLower.includes('hatacco')) assignedBrand = 'Hatacco nano';
           else if (nameLower.includes('mutsutec') || nameLower.includes('mutsu') || codeLower.includes('mutsutec') || codeLower.includes('mutsu')) assignedBrand = 'mutsutec';

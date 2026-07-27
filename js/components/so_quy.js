@@ -11,9 +11,13 @@ export function getCashbookTransactions() {
   const stored = localStorage.getItem('billing_system_cashbook_transactions');
   if (stored) {
     let txs = JSON.parse(stored);
-    // Filter out old seed transaction IDs to clear the sample data from user's storage
+    // Filter out old seed transaction IDs and auto-generated order receipts from storage
     const seedIds = ["TTM001686", "TTM001685", "TTM001684", "TTM001683", "TTM001682", "TTM001681", "TTM001680", "TTM001678", "TTM001679", "TTM001600"];
-    const filtered = txs.filter(t => !seedIds.includes(t.id));
+    const filtered = txs.filter(t => {
+      if (seedIds.includes(t.id)) return false;
+      const isAutoOrderReceipt = t.note && t.note.startsWith('Thu tiền hàng cho hóa đơn');
+      return !isAutoOrderReceipt;
+    });
     if (filtered.length !== txs.length) {
       localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(filtered));
       return filtered;

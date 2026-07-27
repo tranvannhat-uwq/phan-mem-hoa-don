@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
-import { showToast, updateDbStatusUI, isSameUser } from '../utils.js';
+import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
 
 export let supabaseClient = null;
@@ -23,6 +23,11 @@ export let tableProductionLogsName = 'production_logs';
 export let tableFinishedGoodsStockName = 'finished_goods_stock';
 export let tableSalesReturnsName = 'sales_returns';
 export let tableSalesReturnItemsName = 'sales_return_items';
+export let tableOrderItemsName = 'order_items';
+export let tableCustomerDebtTransactionsName = 'customer_debt_transactions';
+export let tableCustomerAssignmentsName = 'customer_assignments';
+export let tableCommissionRulesName = 'commission_rules';
+export let tableCommissionTransactionsName = 'commission_transactions';
 
 
 export function setCloudActive(active) {
@@ -34,7 +39,7 @@ export function loadLocalStorageBackup() {
   const storedProducts = localStorage.getItem('billing_system_products');
   const storedOrders = localStorage.getItem('billing_system_orders');
   
-  if (storedProducts) {
+  if (storedProducts && JSON.parse(storedProducts).length > 0) {
     state.products = JSON.parse(storedProducts);
   } else {
     state.products = [...defaultProducts];
@@ -49,7 +54,7 @@ export function loadLocalStorageBackup() {
   }
 
   const storedCustomers = localStorage.getItem('billing_system_customers');
-  if (storedCustomers) {
+  if (storedCustomers && JSON.parse(storedCustomers).length > 0) {
     state.customers = JSON.parse(storedCustomers);
   } else {
     state.customers = [];
@@ -57,7 +62,7 @@ export function loadLocalStorageBackup() {
   }
 
   const storedSuppliers = localStorage.getItem('billing_system_suppliers');
-  if (storedSuppliers) {
+  if (storedSuppliers && JSON.parse(storedSuppliers).length > 0) {
     state.suppliers = JSON.parse(storedSuppliers);
   } else {
     state.suppliers = [
@@ -208,6 +213,9 @@ export async function connectSupabase(url, key, verbose = true) {
       tableRecipesName = 'recipes';
       tableProductionLogsName = 'production_logs';
       tableFinishedGoodsStockName = 'finished_goods_stock';
+      tableSalesReturnsName = 'sales_returns';
+      tableSalesReturnItemsName = 'sales_return_items';
+      tableOrderItemsName = 'order_items';
     } else {
       let { error: testWlErr } = await client.from('wl_products').select('code').limit(1);
       if (!testWlErr) {
@@ -225,6 +233,9 @@ export async function connectSupabase(url, key, verbose = true) {
         tableRecipesName = 'wl_recipes';
         tableProductionLogsName = 'wl_production_logs';
         tableFinishedGoodsStockName = 'wl_finished_goods_stock';
+        tableSalesReturnsName = 'wl_sales_returns';
+        tableSalesReturnItemsName = 'wl_sales_return_items';
+        tableOrderItemsName = 'wl_order_items';
       } else {
         tableProductsName = 'products';
         tableOrdersName = 'orders';
@@ -240,6 +251,9 @@ export async function connectSupabase(url, key, verbose = true) {
         tableRecipesName = 'recipes';
         tableProductionLogsName = 'production_logs';
         tableFinishedGoodsStockName = 'finished_goods_stock';
+        tableSalesReturnsName = 'sales_returns';
+        tableSalesReturnItemsName = 'sales_return_items';
+        tableOrderItemsName = 'order_items';
       }
     }
     
@@ -263,11 +277,10 @@ export async function connectSupabase(url, key, verbose = true) {
     
     updateDbStatusUI('cloud');
     
-    // Chỉ tải dữ liệu đám mây nếu có phiên đăng nhập hợp lệ
-    const { data: { session } } = await client.auth.getSession();
-    if (session) {
+    try {
       await fetchCloudData();
-    } else {
+    } catch (cloudErr) {
+      console.warn('Lỗi tải dữ liệu đám mây, chuyển về dùng LocalStorage backup:', cloudErr);
       loadLocalStorageBackup();
     }
     
@@ -362,104 +375,142 @@ export async function fetchCloudData() {
   try {
     // Luồng tải dữ liệu lõi (nếu lỗi sẽ dừng và báo lỗi toàn cục)
     const fetchProducts = async () => {
-      const { data: prodData, error: prodErr } = await supabaseClient
-        .from(tableProductsName)
-        .select('*')
-        .order('code', { ascending: true });
+      try {
+        const { data: prodData, error: prodErr } = await supabaseClient
+          .from(tableProductsName)
+          .select('*')
+          .order('code', { ascending: true });
+          
+        if (prodErr) throw prodErr;
         
-      if (prodErr) throw prodErr;
-      
-      const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
-      state.products = (prodData || []).map(row => {
-        const local = localProducts.find(lp => lp.code === row.code);
-        return {
-          code: row.code,
-          name: row.name,
-          brand: row.brand !== undefined && row.brand !== null ? row.brand : (local ? local.brand : 'Nano10*'),
-          priceThung: row.price_thung !== undefined && row.price_thung !== null ? row.price_thung : (local && local.priceThung !== undefined ? local.priceThung : (row.price !== undefined ? row.price : 0)),
-          priceLon: row.price_lon !== undefined && row.price_lon !== null ? row.price_lon : (local && local.priceLon !== undefined ? local.priceLon : 0),
-          priceHop: row.price_hop !== undefined && row.price_hop !== null ? row.price_hop : (local && local.priceHop !== undefined ? local.priceHop : 0),
-          priceBao: row.price_bao !== undefined && row.price_bao !== null ? row.price_bao : (local && local.priceBao !== undefined ? local.priceBao : 0),
-          priceTui: row.price_tui !== undefined && row.price_tui !== null ? row.price_tui : (local && local.priceTui !== undefined ? local.priceTui : 0),
-          weightThung: row.weight_thung !== undefined && row.weight_thung !== null ? row.weight_thung : (local && local.weightThung !== undefined ? local.weightThung : ''),
-          weightBao: row.weight_bao !== undefined && row.weight_bao !== null ? row.weight_bao : (local && local.weightBao !== undefined ? local.weightBao : ''),
-          weightLon: row.weight_lon !== undefined && row.weight_lon !== null ? row.weight_lon : (local && local.weightLon !== undefined ? local.weightLon : ''),
-          weightHop: row.weight_hop !== undefined && row.weight_hop !== null ? row.weight_hop : (local && local.weightHop !== undefined ? local.weightHop : ''),
-          weightTui: row.weight_tui !== undefined && row.weight_tui !== null ? row.weight_tui : (local && local.weightTui !== undefined ? local.weightTui : '')
-        };
-      });
-      localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+        const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
+        if (prodData && prodData.length > 0) {
+          state.products = prodData.map(row => {
+            const local = localProducts.find(lp => lp.code === row.code);
+            const def = defaultProducts.find(dp => dp.code === row.code);
+            return {
+              code: row.code,
+              name: row.name,
+              brand: row.brand || (local ? local.brand : 'Nano10*'),
+              brandId: row.brand_id || (local ? local.brandId : null),
+              priceThung: row.price_thung || (local ? local.priceThung : 0) || (def ? def.priceThung : 0),
+              priceLon: row.price_lon || (local ? local.priceLon : 0) || (def ? def.priceLon : 0),
+              priceHop: row.price_hop || (local ? local.priceHop : 0) || (def ? def.priceHop : 0),
+              priceBao: row.price_bao || (local ? local.priceBao : 0) || (def ? def.priceBao : 0),
+              priceTui: row.price_tui || (local ? local.priceTui : 0) || (def ? def.priceTui : 0),
+              weightThung: row.weight_thung || (local ? local.weightThung : '') || (def ? def.weightThung : ''),
+              weightBao: row.weight_bao || (local ? local.weightBao : '') || (def ? def.weightBao : ''),
+              weightLon: row.weight_lon || (local ? local.weightLon : '') || (def ? def.weightLon : ''),
+              weightHop: row.weight_hop || (local ? local.weightHop : '') || (def ? def.weightHop : ''),
+              weightTui: row.weight_tui || (local ? local.weightTui : '') || (def ? def.weightTui : '')
+            };
+          });
+        } else if (localProducts.length > 0) {
+          state.products = localProducts;
+        } else {
+          state.products = [...defaultProducts];
+        }
+        localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+      } catch (prodErr) {
+        console.warn("Could not load products from Supabase, fallback to local:", prodErr.message);
+        state.products = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
+      }
     };
 
     const fetchOrders = async () => {
-      // Tự động xóa đơn nháp cũ hơn 2 ngày trên cloud trước khi tải dữ liệu
       try {
-        const twoDaysAgo = new Date();
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-        await supabaseClient
-          .from(tableDraftOrdersName)
-          .delete()
-          .lt('created_at', twoDaysAgo.toISOString());
-      } catch (cleanErr) {
-        console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
-      }
+        try {
+          const twoDaysAgo = new Date();
+          twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+          await supabaseClient
+            .from(tableDraftOrdersName)
+            .delete()
+            .lt('created_at', twoDaysAgo.toISOString());
+        } catch (cleanErr) {
+          console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
+        }
 
-      const [rawOrders, rawDrafts] = await Promise.all([
-        fetchFullTableData(tableOrdersName),
-        fetchFullTableData(tableDraftOrdersName)
-      ]);
+        const [rawOrders, rawDrafts] = await Promise.all([
+          fetchFullTableData(tableOrdersName),
+          fetchFullTableData(tableDraftOrdersName)
+        ]);
 
-      const mapOrderRow = (order, isDraft) => {
-        let status = isDraft ? 'draft' : (order.status || 'settled');
-        let notes = order.notes || '';
-        return {
-          id: order.id,
-          customerId: order.customer_id || null,
-          customerName: order.customer_name,
-          notes: notes,
-          items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
-          date: order.created_at,
-          totalMarket: parseFloat(order.total_market || 0),
-          totalDiscount: parseFloat(order.total_discount || 0),
-          shippingSupport: order.shipping_support || false,
-          shippingDiscount: parseFloat(order.shipping_discount || 0),
-          totalPayable: parseFloat(order.total_payable || 0),
-          pricelistId: order.pricelist_id || 'retail',
-          createdBy: order.created_by || 'admin',
-          status: status
+        const mapOrderRow = (order, isDraft) => {
+          let status = isDraft ? 'draft' : (order.status || 'settled');
+          let notes = order.notes || '';
+          return {
+            id: order.id,
+            customerId: order.customer_id || null,
+            customerName: order.customer_name,
+            notes: notes,
+            items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
+            date: order.created_at,
+            totalMarket: parseFloat(order.total_market || 0),
+            totalDiscount: parseFloat(order.total_discount || 0),
+            subtotal: parseFloat(order.subtotal !== undefined ? order.subtotal : (order.total_payable || 0)),
+            discountValue: parseFloat(order.discount_value !== undefined ? order.discount_value : (order.discountValue || 0)),
+            discountType: order.discount_type || order.discountType || 'amount',
+            discountAmount: parseFloat(order.discount_amount !== undefined ? order.discount_amount : (order.discountAmount || 0)),
+            otherFeeValue: parseFloat(order.other_fee_value !== undefined ? order.other_fee_value : (order.otherFeeValue || 0)),
+            otherFeeType: order.other_fee_type || order.otherFeeType || 'amount',
+            otherFeeAmount: parseFloat(order.other_fee_amount !== undefined ? order.other_fee_amount : (order.otherFeeAmount || 0)),
+            totalPayable: parseFloat(order.total_payable || 0),
+            pricelistId: order.pricelist_id || 'retail',
+            createdBy: order.created_by || 'admin',
+            companyId: order.company_id || order.companyId || 'ABS_NORTH',
+            status: status
+          };
         };
-      };
 
-      const mappedOrders = rawOrders.map(o => mapOrderRow(o, false));
-      const mappedDrafts = rawDrafts.map(o => mapOrderRow(o, true));
+        const mappedOrders = rawOrders.map(o => mapOrderRow(o, false));
+        const mappedDrafts = rawDrafts.map(o => mapOrderRow(o, true));
 
-      state.savedOrders = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
+        const combined = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (combined.length > 0) {
+          state.savedOrders = combined;
+        } else {
+          const localOrders = JSON.parse(localStorage.getItem('billing_system_orders') || '[]');
+          if (localOrders.length > 0) {
+            state.savedOrders = localOrders;
+          }
+        }
+        localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+      } catch (ordErr) {
+        console.warn("Could not load orders from Supabase, fallback to local:", ordErr.message);
+        state.savedOrders = JSON.parse(localStorage.getItem('billing_system_orders') || '[]');
+      }
     };
 
     // Các luồng tải phụ trợ (lỗi từng bảng sẽ được bắt riêng biệt để tránh hỏng cả ứng dụng)
     const fetchCustomers = async () => {
       try {
         const customerData = await fetchFullTableData(tableCustomersName);
+        const localCust = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
 
-        state.customers = (customerData || []).map(cust => ({
-          id: cust.id,
-          code: cust.code,
-          name: cust.name,
-          phone: cust.phone,
-          address: cust.address,
-          assignedBrand: cust.assigned_brand || 'Tất cả',
-          brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
-          shippingSupport: cust.shipping_support || false,
-          debt: parseFloat(cust.debt || 0),
-          totalTransaction: parseFloat(cust.total_transaction || 0),
-          notes: cust.notes || '',
-          pricelistId: cust.pricelist_id || '',
-          managedBy: cust.managed_by || '',
-          debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
-        }));
+        if (customerData && customerData.length > 0) {
+          state.customers = customerData.map(cust => ({
+            id: cust.id,
+            code: cust.code,
+            name: cust.name,
+            phone: cust.phone,
+            address: cust.address,
+            assignedBrand: cust.assigned_brand || 'Tất cả',
+            brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
+            shippingSupport: cust.shipping_support || false,
+            debt: parseFloat(cust.debt || 0),
+            totalTransaction: parseFloat(cust.total_transaction || 0),
+            notes: cust.notes || '',
+            pricelistId: cust.pricelist_id || '',
+            managedBy: cust.managed_by || '',
+            debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
+          }));
+        } else if (localCust.length > 0) {
+          state.customers = localCust;
+        }
         localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
       } catch (custErr) {
-        console.warn("Could not load customers from Supabase:", custErr.message);
+        console.warn("Could not load customers from Supabase, using local fallback:", custErr.message);
+        state.customers = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
       }
     };
 
@@ -471,14 +522,20 @@ export async function fetchCloudData() {
 
         if (plErr) throw plErr;
 
-        state.pricelists = (plData || []).map(pl => ({
-          id: pl.id,
-          name: pl.name,
-          brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
-        }));
+        const localPl = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
+        if (plData && plData.length > 0) {
+          state.pricelists = plData.map(pl => ({
+            id: pl.id,
+            name: pl.name,
+            brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
+          }));
+        } else if (localPl.length > 0) {
+          state.pricelists = localPl;
+        }
         localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
       } catch (plErr) {
-        console.warn("Could not load pricelists from Supabase:", plErr.message);
+        console.warn("Could not load pricelists from Supabase, using local fallback:", plErr.message);
+        state.pricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
       }
     };
 
@@ -510,6 +567,7 @@ export async function fetchCloudData() {
             password: pwd,
             displayName: u.display_name,
             role: u.role || 'sale',
+            companyId: u.company_id || u.companyId || 'ABS_NORTH',
             isExternal: u.is_external || false
           };
         });
@@ -541,7 +599,8 @@ export async function fetchCloudData() {
         state.users = uniqueUsers;
         localStorage.setItem('billing_system_users', JSON.stringify(state.users));
       } catch (uErr) {
-        console.warn("Could not load users from Supabase:", uErr.message);
+        console.warn("Could not load users from Supabase, using local fallback:", uErr.message);
+        state.users = JSON.parse(localStorage.getItem('billing_system_users') || '[]');
       }
     };
 
@@ -554,17 +613,35 @@ export async function fetchCloudData() {
 
         if (brandErr) throw brandErr;
 
-        state.brands = (brandData || []).map(b => ({
-          name: b.name,
-          companyName: b.company_name,
-          logoFilename: b.logo_filename,
-          hotline: b.hotline,
-          cskh: b.cskh,
-          email: b.email,
-          addressMain: b.address_main,
-          addressFactory: b.address_factory,
-          addressBusiness: b.address_business || null
-        }));
+        const localBrands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
+        let sourceData = (brandData && brandData.length > 0) ? brandData : localBrands;
+
+        const uniqueBrands = [];
+        const seenIds = new Set();
+        const seenNames = new Set();
+        (sourceData || []).forEach(b => {
+          const bId = b.id || ('brand_' + String(b.name).toLowerCase().replace(/[^a-z0-9]/g, ''));
+          const normName = String(b.name).toLowerCase();
+          if (!seenIds.has(bId) && !seenNames.has(normName)) {
+            seenIds.add(bId);
+            seenNames.add(normName);
+            uniqueBrands.push({
+              id: bId,
+              name: b.name,
+              companyId: b.company_id || b.companyId || null,
+              companyName: b.company_name || b.companyName || 'Dùng chung',
+              logoFilename: b.logo_filename || b.logoFilename || '',
+              hotline: b.hotline || '',
+              cskh: b.cskh || '',
+              email: b.email || '',
+              addressMain: b.address_main || b.addressMain || '',
+              addressFactory: b.address_factory || b.addressFactory || '',
+              addressBusiness: b.address_business || b.addressBusiness || null
+            });
+          }
+        });
+
+        state.brands = uniqueBrands;
         localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
       } catch (brandErr) {
         console.warn("Could not load brands from Supabase:", brandErr.message);
@@ -581,7 +658,7 @@ export async function fetchCloudData() {
 
         if (txErr) throw txErr;
 
-        if (txData) {
+        if (txData && txData.length > 0) {
           const cloudTxs = txData.map(t => ({
             id: t.id,
             date: t.date,
@@ -595,7 +672,7 @@ export async function fetchCloudData() {
             creator: t.creator,
             note: t.note,
             starred: t.starred
-          }));
+          })).filter(t => !(t.note && t.note.startsWith('Thu tiền hàng cho hóa đơn')));
           localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
         }
       } catch (txErr) {
@@ -633,6 +710,7 @@ export async function fetchCloudData() {
           .select('*')
           .order('name', { ascending: true });
         if (error) throw error;
+        console.log("[SUPPLIERS] API:", data?.length || 0);
         if (data) {
           state.suppliers = data.map(s => ({
             id: s.id,
@@ -645,6 +723,7 @@ export async function fetchCloudData() {
           }));
           localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
         }
+        console.log("[SUPPLIERS] STATE:", state.suppliers?.length || 0);
       } catch (err) {
         console.warn("Could not load suppliers from Supabase:", err.message);
         const stored = localStorage.getItem('billing_system_suppliers');
@@ -654,6 +733,7 @@ export async function fetchCloudData() {
           state.suppliers = [];
           localStorage.setItem('billing_system_suppliers', JSON.stringify([]));
         }
+        console.log("[SUPPLIERS] STATE Fallback:", state.suppliers?.length || 0);
       }
     };
     const fetchRawMaterials = async () => {
@@ -888,8 +968,13 @@ export async function syncLocalToCloud() {
         items: o.items,
         total_market: o.totalMarket,
         total_discount: o.totalDiscount,
-        shipping_support: o.shippingSupport || false,
-        shipping_discount: o.shippingDiscount || 0,
+        subtotal: o.subtotal !== undefined ? o.subtotal : o.totalPayable,
+        discount_value: o.discountValue || 0,
+        discount_type: o.discountType || 'amount',
+        discount_amount: o.discountAmount || 0,
+        other_fee_value: o.otherFeeValue || 0,
+        other_fee_type: o.otherFeeType || 'amount',
+        other_fee_amount: o.otherFeeAmount || 0,
         total_payable: o.totalPayable,
         created_at: o.date,
         pricelist_id: o.pricelistId || 'retail',
@@ -905,8 +990,13 @@ export async function syncLocalToCloud() {
         items: o.items,
         total_market: o.totalMarket,
         total_discount: o.totalDiscount,
-        shipping_support: o.shippingSupport || false,
-        shipping_discount: o.shippingDiscount || 0,
+        subtotal: o.subtotal !== undefined ? o.subtotal : o.totalPayable,
+        discount_value: o.discountValue || 0,
+        discount_type: o.discountType || 'amount',
+        discount_amount: o.discountAmount || 0,
+        other_fee_value: o.otherFeeValue || 0,
+        other_fee_type: o.otherFeeType || 'amount',
+        other_fee_amount: o.otherFeeAmount || 0,
         total_payable: o.totalPayable,
         created_at: o.date,
         pricelist_id: o.pricelistId || 'retail',
@@ -975,8 +1065,10 @@ export async function syncLocalToCloud() {
       const dbRows = localUsers.map(u => ({
         id: u.id,
         username: u.username,
-        display_name: u.displayName,
-        role: u.role,
+        password: u.password || '',
+        display_name: u.displayName || u.username,
+        role: u.role || 'sale',
+        company_id: u.companyId || 'ABS_NORTH',
         is_external: u.isExternal || false
       }));
       
@@ -990,14 +1082,16 @@ export async function syncLocalToCloud() {
     // 6. Sync Brands
     if (localBrands.length > 0) {
       const dbRows = localBrands.map(b => ({
+        id: b.id || ('brand_' + String(b.name).toLowerCase().replace(/[^a-z0-9]/g, '')),
         name: b.name,
-        company_name: b.companyName,
-        logo_filename: b.logoFilename,
-        hotline: b.hotline,
-        cskh: b.cskh,
-        email: b.email,
-        address_main: b.addressMain,
-        address_factory: b.addressFactory,
+        company_id: b.companyId || null,
+        company_name: b.companyName || 'Dùng chung',
+        logo_filename: b.logoFilename || '',
+        hotline: b.hotline || '',
+        cskh: b.cskh || '',
+        email: b.email || '',
+        address_main: b.addressMain || '',
+        address_factory: b.addressFactory || '',
         address_business: b.addressBusiness || null
       }));
       
@@ -1177,6 +1271,7 @@ export async function dbSaveProduct(product) {
         code: product.code,
         name: product.name,
         brand: product.brand || '',
+        brand_id: product.brandId || ('brand_' + String(product.brand).toLowerCase().replace(/[^a-z0-9]/g, '')),
         price: product.priceThung || product.priceBao || product.priceLon || product.priceHop || product.priceTui || 0,
         price_thung: product.priceThung || 0,
         price_lon: product.priceLon || 0,
@@ -1226,25 +1321,51 @@ export async function dbDeleteProduct(code, brand) {
 }
 
 // --- Thao tác CSDL chi tiết (Khách hàng) ---
+function mapCustomerToDbRow(customer) {
+  return {
+    id: customer.id,
+    code: customer.code,
+    name: customer.name,
+    phone: customer.phone,
+    phone2: customer.phone2 || null,
+    email: customer.email || null,
+    facebook: customer.facebook || null,
+    birthday: customer.birthday || null,
+    gender: customer.gender || null,
+    avatar_url: customer.avatarUrl || customer.avatar_url || null,
+    province: customer.province || null,
+    ward: customer.ward || null,
+    customer_group_id: customer.customerGroupId || customer.customer_group_id || null,
+    company_name: customer.companyName || customer.company_name || null,
+    tax_code: customer.taxCode || customer.tax_code || null,
+    invoice_address: customer.invoiceAddress || customer.invoice_address || null,
+    address: customer.address,
+    status: customer.status || 'active',
+    created_by: customer.createdBy || customer.created_by || null,
+    assigned_brand: customer.assignedBrand,
+    assigned_brand_id: customer.assignedBrandId || null,
+    brand_discounts: customer.brandDiscounts,
+    shipping_support: customer.shippingSupport || false,
+    debt: customer.debt,
+    total_transaction: customer.totalTransaction,
+    total_return: customer.totalReturn || customer.total_return || 0,
+    net_revenue: customer.netRevenue || customer.net_revenue || 0,
+    last_order_at: customer.lastOrderAt || customer.last_order_at || null,
+    last_payment_at: customer.lastPaymentAt || customer.last_payment_at || null,
+    notes: customer.notes,
+    pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
+    managed_by: customer.managedBy === undefined ? null : customer.managedBy,
+    debt_history: customer.debtHistory || [],
+    created_at: customer.createdAt || customer.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: customer.deletedAt || customer.deleted_at || null
+  };
+}
+
 export async function dbSaveCustomer(customer) {
   if (isCloudActive && supabaseClient) {
     try {
-      const dbRow = {
-        id: customer.id,
-        code: customer.code,
-        name: customer.name,
-        phone: customer.phone,
-        address: customer.address,
-        assigned_brand: customer.assignedBrand,
-        brand_discounts: customer.brandDiscounts,
-        shipping_support: customer.shippingSupport || false,
-        debt: customer.debt,
-        total_transaction: customer.totalTransaction,
-        notes: customer.notes,
-        pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
-        managed_by: customer.managedBy === undefined ? null : customer.managedBy,
-        debt_history: customer.debtHistory || []
-      };
+      const dbRow = mapCustomerToDbRow(customer);
       
       const { error } = await supabaseClient
         .from(tableCustomersName)
@@ -1264,22 +1385,7 @@ export async function dbSaveCustomer(customer) {
 export async function dbSaveCustomersBulk(customers) {
   if (isCloudActive && supabaseClient) {
     try {
-      const dbRows = customers.map(customer => ({
-        id: customer.id,
-        code: customer.code,
-        name: customer.name,
-        phone: customer.phone,
-        address: customer.address,
-        assigned_brand: customer.assignedBrand,
-        brand_discounts: customer.brandDiscounts,
-        shipping_support: customer.shippingSupport || false,
-        debt: customer.debt,
-        total_transaction: customer.totalTransaction,
-        notes: customer.notes,
-        pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
-        managed_by: customer.managedBy === undefined ? null : customer.managedBy,
-        debt_history: customer.debtHistory || []
-      }));
+      const dbRows = customers.map(customer => mapCustomerToDbRow(customer));
       
       const { error } = await supabaseClient
         .from(tableCustomersName)
@@ -1305,16 +1411,37 @@ export async function dbFetchCustomers() {
         code: cust.code,
         name: cust.name,
         phone: cust.phone,
+        phone2: cust.phone2 || '',
+        email: cust.email || '',
+        facebook: cust.facebook || '',
+        birthday: cust.birthday || '',
+        gender: cust.gender || '',
+        avatarUrl: cust.avatar_url || '',
+        province: cust.province || '',
+        ward: cust.ward || '',
+        customerGroupId: cust.customer_group_id || '',
+        companyName: cust.company_name || '',
+        taxCode: cust.tax_code || '',
+        invoiceAddress: cust.invoice_address || '',
         address: cust.address,
+        status: cust.status || 'active',
+        createdBy: cust.created_by || '',
         assignedBrand: cust.assigned_brand || 'Tất cả',
         brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
         shippingSupport: cust.shipping_support || false,
         debt: parseFloat(cust.debt || 0),
         totalTransaction: parseFloat(cust.total_transaction || 0),
+        totalReturn: parseFloat(cust.total_return || 0),
+        netRevenue: parseFloat(cust.net_revenue || 0),
+        lastOrderAt: cust.last_order_at || null,
+        lastPaymentAt: cust.last_payment_at || null,
         notes: cust.notes || '',
         pricelistId: cust.pricelist_id || '',
         managedBy: cust.managed_by || '',
-        debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
+        debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || []),
+        createdAt: cust.created_at || null,
+        updatedAt: cust.updated_at || null,
+        deletedAt: cust.deleted_at || null
       }));
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
       return true;
@@ -1416,17 +1543,34 @@ export async function dbSaveOrder(order) {
         id: order.id,
         customer_id: order.customerId || null,
         customer_name: order.customerName,
+        salesperson_id: order.salespersonId || order.createdBy || null,
+        customer_manager_id: order.customerManagerId || order.managedBy || null,
+        company_id: order.companyId || 'ABS_NORTH',
+        revenue_brand_id: order.revenueBrandId || null,
         notes: order.notes,
         items: order.items,
-        total_market: order.totalMarket,
-        total_discount: order.totalDiscount,
-        shipping_support: order.shippingSupport || false,
-        shipping_discount: order.shippingDiscount || 0,
+        total_market: order.totalMarket || 0,
+        total_discount: order.totalDiscount || 0,
+        subtotal: order.subtotal !== undefined ? order.subtotal : order.totalPayable,
+        discount_value: order.discountValue || 0,
+        discount_type: order.discountType || 'amount',
+        discount_amount: order.discountAmount || order.totalDiscount || 0,
+        other_fee_value: order.otherFeeValue || 0,
+        other_fee_type: order.otherFeeType || 'amount',
+        other_fee_amount: order.otherFeeAmount || 0,
         total_payable: order.totalPayable,
-        created_at: order.date,
-        pricelist_id: order.pricelistId || 'retail',
+        total_amount: order.totalPayable || order.totalAmount || 0,
+        paid_amount: order.paidAmount || 0,
+        debt_amount: order.debtAmount || (order.totalPayable - (order.paidAmount || 0)),
+        returned_amount: order.returnedAmount || 0,
+        net_revenue: order.netRevenue || (order.totalPayable - (order.returnedAmount || 0)),
+        status: order.status || 'settled',
+        order_date: order.date || order.orderDate || new Date().toISOString(),
+        confirmed_at: order.confirmedAt || (order.status === 'settled' ? (order.date || new Date().toISOString()) : null),
         created_by: order.createdBy || 'admin',
-        status: order.status || 'settled'
+        created_at: order.date || order.createdAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        pricelist_id: order.pricelistId || 'retail'
       };
       
       let { error } = await supabaseClient
@@ -1434,6 +1578,32 @@ export async function dbSaveOrder(order) {
         .upsert(dbRow, { onConflict: 'id' });
         
       if (error) throw error;
+
+      // Đồng bộ chi tiết mặt hàng đơn vào bảng order_items nếu có
+      if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+        const itemRows = order.items.map((item, idx) => ({
+          id: item.id || `${order.id}-item-${idx}`,
+          order_id: order.id,
+          product_id: item.productId || item.code || null,
+          brand_id: item.brandId || item.brand || null,
+          product_code_snapshot: item.code || '',
+          product_name_snapshot: item.name || '',
+          unit_snapshot: item.unit || item.packageType || '',
+          quantity: parseFloat(item.quantity || 0),
+          list_price: parseFloat(item.price || item.listPrice || 0),
+          sale_price: parseFloat(item.salePrice || item.finalPrice || item.price || 0),
+          discount_percent: parseFloat(item.discountPercent || item.discount || 0),
+          discount_amount: parseFloat(item.discountAmount || 0),
+          line_total: parseFloat(item.total || item.lineTotal || 0),
+          cost_price: parseFloat(item.costPrice || 0),
+          profit_amount: parseFloat(item.profitAmount || 0),
+          returned_quantity: parseFloat(item.returnedQuantity || 0),
+          returned_amount: parseFloat(item.returnedAmount || 0),
+          net_amount: parseFloat(item.netAmount || item.total || 0),
+          created_at: order.date || new Date().toISOString()
+        }));
+        await supabaseClient.from(tableOrderItemsName).upsert(itemRows, { onConflict: 'id' });
+      }
       return true;
     } catch(err) {
       console.error(err);
@@ -1627,26 +1797,40 @@ export async function dbDeleteUser(id) {
 }
 
 // --- Thao tác CSDL chi tiết (Hãng sơn) ---
-export async function dbSaveBrand(brand) {
+export async function dbSaveBrand(brand, oldName = null) {
   if (isCloudActive && supabaseClient) {
     try {
+      const brandId = brand.id || ('brand_' + String(brand.name).toLowerCase().replace(/[^a-z0-9]/g, ''));
       const dbRow = {
+        id: brandId,
         name: brand.name,
-        company_name: brand.companyName,
-        logo_filename: brand.logoFilename,
-        hotline: brand.hotline,
-        cskh: brand.cskh,
-        email: brand.email,
-        address_main: brand.addressMain,
-        address_factory: brand.addressFactory,
+        company_id: brand.companyId || null,
+        company_name: brand.companyName || 'Dùng chung',
+        logo_filename: brand.logoFilename || '',
+        hotline: brand.hotline || '',
+        cskh: brand.cskh || '',
+        email: brand.email || '',
+        address_main: brand.addressMain || '',
+        address_factory: brand.addressFactory || '',
         address_business: brand.addressBusiness || null
       };
+
+      // Xóa các dòng cũ trên Cloud trùng ID hoặc Tên (bất kể chữ hoa/thường)
+      if (brandId) {
+        await supabaseClient.from(tableBrandsName).delete().eq('id', brandId);
+      }
+      if (oldName) {
+        await supabaseClient.from(tableBrandsName).delete().ilike('name', oldName);
+      }
+      if (brand.name) {
+        await supabaseClient.from(tableBrandsName).delete().ilike('name', brand.name);
+      }
       
-      const { error } = await supabaseClient
+      const { error: upsertErr } = await supabaseClient
         .from(tableBrandsName)
-        .upsert(dbRow, { onConflict: 'name' });
-        
-      if (error) throw error;
+        .upsert(dbRow);
+
+      if (upsertErr) throw upsertErr;
       return true;
     } catch(err) {
       console.error(err);
@@ -1657,19 +1841,18 @@ export async function dbSaveBrand(brand) {
   return true;
 }
 
-export async function dbDeleteBrand(name) {
+export async function dbDeleteBrand(name, id = null) {
   if (isCloudActive && supabaseClient) {
     try {
-      const { error } = await supabaseClient
-        .from(tableBrandsName)
-        .delete()
-        .eq('name', name);
-        
-      if (error) throw error;
+      if (id) {
+        await supabaseClient.from(tableBrandsName).delete().eq('id', id);
+      }
+      if (name) {
+        await supabaseClient.from(tableBrandsName).delete().ilike('name', name);
+      }
       return true;
     } catch(err) {
       console.error(err);
-      showToast('Không thể xóa hãng sơn trên đám mây: ' + err.message, 'danger');
       return false;
     }
   }
@@ -1682,17 +1865,27 @@ export async function dbSaveCashbookTransaction(tx) {
     try {
       const dbRow = {
         id: tx.id,
-        date: tx.date,
+        date: tx.date || new Date().toISOString(),
+        transaction_date: tx.date || tx.transactionDate || new Date().toISOString(),
         type: tx.type,
+        transaction_type: tx.transactionType || tx.category || tx.type,
+        direction: tx.direction || (tx.type === 'thu' ? 'in' : 'out'),
+        payment_method: tx.paymentMethod || tx.method || 'cash',
         category: tx.category,
         partner: tx.partner,
-        value: tx.value,
-        method: tx.method,
-        accounting: tx.accounting,
-        status: tx.status,
+        customer_id: tx.customerId || null,
+        supplier_id: tx.supplierId || null,
+        order_id: tx.orderId || null,
+        sales_return_id: tx.salesReturnId || null,
+        employee_id: tx.employeeId || null,
+        value: parseFloat(tx.value || 0),
+        method: tx.method || 'cash',
+        accounting: tx.accounting !== undefined ? tx.accounting : true,
+        status: tx.status || 'completed',
         creator: tx.creator,
+        created_by: tx.createdBy || tx.creator || null,
         note: tx.note,
-        starred: tx.starred
+        starred: tx.starred || false
       };
       
       const { error } = await supabaseClient
@@ -2073,13 +2266,19 @@ export async function dbSaveSalesReturn(ret) {
     try {
       const dbRow = {
         id: ret.id,
-        sale_id: ret.saleId,
+        sale_id: ret.saleId || ret.orderId,
+        order_id: ret.orderId || ret.saleId,
         customer_id: ret.customerId || null,
+        salesperson_id: ret.salespersonId || ret.createdBy || null,
+        total_return_amount: ret.totalRefund || ret.totalReturnAmount || 0,
+        debt_reduction_amount: ret.debtReductionAmount || ret.totalRefund || 0,
+        refund_amount: ret.refundAmount || 0,
+        status: ret.status || 'completed',
+        return_date: ret.returnDate || ret.createdAt || new Date().toISOString(),
         created_by: ret.createdBy,
-        created_at: ret.createdAt,
+        created_at: ret.createdAt || new Date().toISOString(),
         reason: ret.reason,
-        total_refund: ret.totalRefund,
-        status: ret.status
+        total_refund: ret.totalRefund
       };
       await supabaseClient.from(tableSalesReturnsName).upsert(dbRow, { onConflict: 'id' });
       
@@ -2107,5 +2306,248 @@ export async function dbSaveSalesReturn(ret) {
     }
   }
   return true;
+}
+
+export function backfillMultiCompanyAndRevenueData() {
+  // 1. Backfill Brands ID & Deduplicate
+  if (state.brands && state.brands.length > 0) {
+    const uniqueBrands = [];
+    const seenIds = new Set();
+    state.brands.forEach(b => {
+      if (!b.id && b.name) {
+        b.id = 'brand_' + String(b.name).toLowerCase().replace(/[^a-z0-9]/g, '');
+      }
+      if (b.id && !seenIds.has(b.id)) {
+        seenIds.add(b.id);
+        uniqueBrands.push(b);
+      }
+    });
+    state.brands = uniqueBrands;
+    localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
+  }
+
+  // 2. Clean Sweep & Normalize Product Brands
+  if (state.products && state.products.length > 0) {
+    let prodChanged = false;
+    state.products.forEach(p => {
+      const canonical = getBrandById(p.brandId || p.brand);
+      if (canonical) {
+        if (p.brand !== canonical.name || p.brandId !== canonical.id) {
+          p.brand = canonical.name;
+          p.brandId = canonical.id;
+          prodChanged = true;
+        }
+      }
+    });
+    if (prodChanged) {
+      localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+    }
+  }
+
+  // 3. Clean Sweep & Normalize Customer Brands
+  if (state.customers && state.customers.length > 0) {
+    let custChanged = false;
+    state.customers.forEach(c => {
+      if (c.assignedBrand && c.assignedBrand !== 'Tất cả') {
+        const canonical = getBrandById(c.assignedBrandId || c.assignedBrand);
+        if (canonical) {
+          if (c.assignedBrand !== canonical.name || c.assignedBrandId !== canonical.id) {
+            c.assignedBrand = canonical.name;
+            c.assignedBrandId = canonical.id;
+            custChanged = true;
+          }
+        }
+      }
+    });
+    if (custChanged) {
+      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    }
+  }
+
+  // 4. Backfill Orders & Items
+  if (state.savedOrders && state.savedOrders.length > 0) {
+    state.savedOrders.forEach(order => {
+      if (!order.companyId) {
+        const creator = (state.users || []).find(u => isSameUser(u.username, order.createdBy));
+        order.companyId = creator ? (creator.companyId || creator.company_id || 'ABS_NORTH') : 'ABS_NORTH';
+      }
+
+      let customerAgencyBrand = 'Nano10*';
+      if (order.customerId) {
+        const cust = (state.customers || []).find(c => c.id === order.customerId);
+        if (cust && cust.assignedBrand && cust.assignedBrand !== 'Tất cả') {
+          customerAgencyBrand = cust.assignedBrand;
+        }
+      }
+
+      if (order.items) {
+        order.items.forEach(item => {
+          if (!item.companyId) item.companyId = order.companyId;
+          if (!item.productBrand) item.productBrand = item.brand || 'Nano10*';
+          if (!item.agencyBrand) item.agencyBrand = customerAgencyBrand;
+          if (!item.revenueBrand || !item.revenueCompany) {
+            const revAttrs = getRevenueAttributes(item.productBrand, item.agencyBrand, order.companyId, state.brands);
+            item.revenueBrand = revAttrs.revenueBrand;
+            item.revenueCompany = revAttrs.revenueCompany;
+          }
+        });
+      }
+    });
+  }
+
+  if (state.salesReturns && state.salesReturns.length > 0) {
+    state.salesReturns.forEach(ret => {
+      if (!ret.companyId) {
+        const creator = (state.users || []).find(u => isSameUser(u.username, ret.createdBy));
+        ret.companyId = creator ? (creator.companyId || creator.company_id || 'ABS_NORTH') : 'ABS_NORTH';
+      }
+
+      let customerAgencyBrand = 'Nano10*';
+      if (ret.customerId) {
+        const cust = (state.customers || []).find(c => c.id === ret.customerId);
+        if (cust && cust.assignedBrand && cust.assignedBrand !== 'Tất cả') {
+          customerAgencyBrand = cust.assignedBrand;
+        }
+      }
+
+      if (ret.items) {
+        ret.items.forEach(item => {
+          if (!item.companyId) item.companyId = ret.companyId;
+          if (!item.productBrand) item.productBrand = item.brand || 'Nano10*';
+          if (!item.agencyBrand) item.agencyBrand = customerAgencyBrand;
+          if (!item.revenueBrand || !item.revenueCompany) {
+            const revAttrs = getRevenueAttributes(item.productBrand, item.agencyBrand, ret.companyId, state.brands);
+            item.revenueBrand = revAttrs.revenueBrand;
+            item.revenueCompany = revAttrs.revenueCompany;
+          }
+        });
+      }
+    });
+  }
+}
+
+// --- THỦ TỤC TRANSACTIONAL CSDL (DATABASE TRANSACTIONS) ---
+
+export async function dbConfirmOrder(order) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_confirm_order', { p_order: order });
+      if (error) {
+        console.warn('RPC rpc_confirm_order error, falling back to standard dbSaveOrder:', error.message);
+        return await dbSaveOrder(order);
+      }
+      return true;
+    } catch (err) {
+      console.warn('RPC confirm order error:', err);
+      return await dbSaveOrder(order);
+    }
+  }
+  return true;
+}
+
+export async function dbRecordCustomerPayment(customerId, amount, notes, createdBy) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_record_customer_payment', {
+        p_customer_id: customerId,
+        p_amount: amount,
+        p_notes: notes || 'Thu tiền nợ',
+        p_created_by: createdBy || 'admin'
+      });
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('RPC customer payment error:', err);
+      showToast('Lỗi ghi nhận thu tiền: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function dbRecordSalesReturn(ret, items, orderStatus) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_record_sales_return', {
+        p_return_id: ret.id,
+        p_sale_id: ret.saleId || ret.orderId,
+        p_customer_id: ret.customerId || null,
+        p_total_refund: ret.totalRefund || 0,
+        p_reason: ret.reason || '',
+        p_created_by: ret.createdBy || 'admin',
+        p_items: items || [],
+        p_order_status: orderStatus || 'partially_returned'
+      });
+      if (error) {
+        console.warn('RPC rpc_record_sales_return error, falling back:', error.message);
+        return await dbSaveSalesReturn(ret);
+      }
+      return true;
+    } catch (err) {
+      console.warn('RPC sales return error:', err);
+      return await dbSaveSalesReturn(ret);
+    }
+  }
+  return true;
+}
+
+export async function dbAdjustCustomerDebt(customerId, newDebt, description, createdBy) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_adjust_customer_debt', {
+        p_customer_id: customerId,
+        p_new_debt: newDebt,
+        p_description: description || 'Điều chỉnh công nợ',
+        p_created_by: createdBy || 'admin'
+      });
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('RPC adjust customer debt error:', err);
+      return false;
+    }
+  }
+  return true;
+}
+
+// --- BỘ LỌC VÀ PHÂN TRANG HIỆU NĂNG CAO (SERVER-SIDE PAGINATION & LAZY LOADING) ---
+
+export async function dbFetchCustomersPaginated(search = '', managedBy = null, limit = 50, offset = 0) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_get_customers_paginated', {
+        p_search: search,
+        p_managed_by: managedBy,
+        p_limit: limit,
+        p_offset: offset
+      });
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.warn('Lỗi tải dữ liệu khách hàng phân trang:', err);
+      return { total: 0, data: [] };
+    }
+  }
+  return { total: (state.customers || []).length, data: (state.customers || []).slice(offset, offset + limit) };
+}
+
+export async function dbFetchOrdersPaginated(search = '', status = null, customerId = null, limit = 50, offset = 0) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_get_orders_paginated', {
+        p_search: search,
+        p_status: status,
+        p_customer_id: customerId,
+        p_limit: limit,
+        p_offset: offset
+      });
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.warn('Lỗi tải dữ liệu đơn hàng phân trang:', err);
+      return { total: 0, data: [] };
+    }
+  }
+  return { total: (state.savedOrders || []).length, data: (state.savedOrders || []).slice(offset, offset + limit) };
 }
 

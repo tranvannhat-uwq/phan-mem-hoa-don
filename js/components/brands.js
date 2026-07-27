@@ -19,9 +19,13 @@ export function renderBrandsTable() {
   }
   
   tableBody.innerHTML = state.brands.map((b) => {
+    const brandId = b.id || ('brand_' + String(b.name).toLowerCase().replace(/[^a-z0-9]/g, ''));
     return `
       <tr>
-        <td style="font-weight: 600; color: #fff;">${b.name}</td>
+        <td style="font-weight: 600; color: #fff;">
+          ${b.name}
+          <div style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; font-weight: normal; margin-top: 2px;">ID: ${brandId}</div>
+        </td>
         <td>${b.companyName}</td>
         <td><code>${b.logoFilename}</code></td>
         <td>${b.hotline}</td>
@@ -67,20 +71,43 @@ function openBrandModal(brandName = null) {
   const title = document.getElementById('brand-modal-title');
   const form = document.getElementById('brand-form');
   const nameInput = document.getElementById('brand-name');
+  const compSelect = document.getElementById('brand-company-id');
+  const compNameInput = document.getElementById('brand-company-name');
   
   if (!modal || !title || !form) return;
   
   form.reset();
+
+  // Populate company dropdown
+  if (compSelect) {
+    const compOptions = (state.companies || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    compSelect.innerHTML = `<option value="">-- Nhãn dùng chung (Không thuộc công ty riêng) --</option>${compOptions}`;
+    
+    compSelect.onchange = () => {
+      const selectedId = compSelect.value;
+      if (selectedId) {
+        const found = (state.companies || []).find(c => c.id === selectedId);
+        if (found && compNameInput) compNameInput.value = found.name;
+      } else if (compNameInput) {
+        compNameInput.value = 'Dùng chung';
+      }
+    };
+  }
   
+  const idDisplay = document.getElementById('brand-id-display');
   if (brandName) {
     title.innerText = 'Chỉnh sửa hãng sơn';
     document.getElementById('brand-edit-is-new').value = 'false';
+    document.getElementById('brand-old-name').value = brandName;
     nameInput.value = brandName;
-    nameInput.setAttribute('disabled', 'true'); // Không cho sửa tên hãng sơn vì là khóa chính
+    nameInput.removeAttribute('disabled');
     
     const brand = state.brands.find(b => b.name === brandName);
     if (brand) {
-      document.getElementById('brand-company-name').value = brand.companyName;
+      const brandId = brand.id || ('brand_' + String(brand.name).toLowerCase().replace(/[^a-z0-9]/g, ''));
+      if (idDisplay) idDisplay.value = brandId;
+      if (compSelect) compSelect.value = brand.companyId || '';
+      document.getElementById('brand-company-name').value = brand.companyName || 'Dùng chung';
       document.getElementById('brand-logo-filename').value = brand.logoFilename;
       document.getElementById('brand-hotline').value = brand.hotline;
       document.getElementById('brand-cskh').value = brand.cskh;
@@ -92,7 +119,9 @@ function openBrandModal(brandName = null) {
   } else {
     title.innerText = 'Thêm hãng sơn mới';
     document.getElementById('brand-edit-is-new').value = 'true';
+    document.getElementById('brand-old-name').value = '';
     nameInput.removeAttribute('disabled');
+    if (idDisplay) idDisplay.value = '(Tự động sinh mã ID khi lưu)';
   }
   
   modal.classList.add('active');
@@ -105,8 +134,11 @@ function closeBrandModal() {
 
 async function saveBrand() {
   const isNew = document.getElementById('brand-edit-is-new').value === 'true';
+  const oldName = document.getElementById('brand-old-name').value.trim();
   const name = document.getElementById('brand-name').value.trim();
-  const companyName = document.getElementById('brand-company-name').value.trim();
+  const compSelect = document.getElementById('brand-company-id');
+  const companyId = compSelect ? (compSelect.value || null) : null;
+  const companyName = document.getElementById('brand-company-name').value.trim() || 'Dùng chung';
   const logoFilename = document.getElementById('brand-logo-filename').value.trim();
   const hotline = document.getElementById('brand-hotline').value.trim();
   const cskh = document.getElementById('brand-cskh').value.trim();
@@ -120,8 +152,13 @@ async function saveBrand() {
     return;
   }
   
+  const existingBrand = state.brands.find(b => b.name === oldName || b.name === name);
+  const id = existingBrand && existingBrand.id ? existingBrand.id : ('brand_' + name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
   const brandObj = {
+    id,
     name,
+    companyId,
     companyName,
     logoFilename,
     hotline,
@@ -139,18 +176,65 @@ async function saveBrand() {
       showToast(`Hãng sơn "${name}" đã tồn tại!`, 'danger');
       return;
     }
+  } else if (oldName && oldName !== name) {
+    const exists = state.brands.some(b => b.name.toLowerCase() === name.toLowerCase() && b.id !== id);
+    if (exists) {
+      showToast(`Tên hãng sơn "${name}" đã tồn tại!`, 'danger');
+      return;
+    }
   }
   
-  const success = await dbSaveBrand(brandObj);
+  const success = await dbSaveBrand(brandObj, oldName);
   if (success) {
     if (isNew) {
       state.brands.push(brandObj);
       showToast(`Đã thêm hãng sơn "${name}" thành công!`);
     } else {
-      const idx = state.brands.findIndex(b => b.name === name);
-      if (idx !== -1) {
-        state.brands[idx] = brandObj;
+      state.brands = (state.brands || []).filter(b => 
+        b.id !== id && 
+        b.name.toLowerCase() !== (oldName || '').toLowerCase() && 
+        b.name.toLowerCase() !== name.toLowerCase()
+      );
+      state.brands.push(brandObj);
+
+      // Cập nhật liên kết nếu đổi tên hãng sơn
+      if (oldName && oldName !== name) {
+        // Cập nhật Sản phẩm
+        (state.products || []).forEach(p => {
+          if (p.brand === oldName) p.brand = name;
+        });
+        localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+
+        // Cập nhật Khách hàng
+        (state.customers || []).forEach(c => {
+          if (c.assignedBrand === oldName) c.assignedBrand = name;
+          if (c.brandDiscounts && c.brandDiscounts[oldName] !== undefined) {
+            c.brandDiscounts[name] = c.brandDiscounts[oldName];
+            delete c.brandDiscounts[oldName];
+          }
+        });
+        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+
+        // Cập nhật Bảng giá
+        (state.pricelists || []).forEach(pl => {
+          if (pl.brandDiscounts && pl.brandDiscounts[oldName] !== undefined) {
+            pl.brandDiscounts[name] = pl.brandDiscounts[oldName];
+            delete pl.brandDiscounts[oldName];
+          }
+        });
+        localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
+
+        // Cập nhật các ô lọc giao diện đang chọn tên cũ
+        const prodFilter = document.getElementById('product-brand-filter');
+        if (prodFilter && (prodFilter.value === oldName || prodFilter.value.toLowerCase() === oldName.toLowerCase())) {
+          prodFilter.value = name;
+        }
+        const dashFilter = document.getElementById('dashboard-filter-brand');
+        if (dashFilter && (dashFilter.value === oldName || dashFilter.value.toLowerCase() === oldName.toLowerCase())) {
+          dashFilter.value = name;
+        }
       }
+
       showToast(`Đã cập nhật hãng sơn "${name}" thành công!`);
     }
     

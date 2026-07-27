@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, getBrandName } from '../utils.js';
 import { dbSaveProduct, dbDeleteProduct } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 
@@ -10,8 +10,31 @@ export function renderProductsTable() {
   const tableBody = document.getElementById('products-table-body');
   if (!tableBody) return;
   
+  const filterSelect = document.getElementById('product-brand-filter');
+  const activeBrandFilter = filterSelect ? filterSelect.value : '';
+  
+  // Cập nhật danh sách Hãng sơn trong ô lọc dropdown nếu chưa đủ options
+  const uniqueBrands = state.brands && state.brands.length > 0
+    ? state.brands.map(b => b.name)
+    : [...new Set(state.products.map(p => p.brand).filter(Boolean))];
+
+  if (filterSelect) {
+    const currentOptions = Array.from(filterSelect.options).map(o => o.value);
+    const needRebuild = uniqueBrands.some(bn => !currentOptions.includes(bn)) || currentOptions.length <= 1;
+    
+    if (needRebuild) {
+      filterSelect.innerHTML = `
+        <option value="">-- Tất cả hãng sơn --</option>
+        ${uniqueBrands.map(b => `<option value="${b}">${b}</option>`).join('')}
+      `;
+      if (activeBrandFilter && Array.from(filterSelect.options).some(o => o.value === activeBrandFilter)) {
+        filterSelect.value = activeBrandFilter;
+      }
+    }
+  }
+
   const searchVal = document.getElementById('product-search-input').value.toLowerCase().trim();
-  const brandFilter = document.getElementById('product-brand-filter').value;
+  const brandFilter = filterSelect ? filterSelect.value : '';
   
   const searchValNormalized = searchVal.replace(/[^a-z0-9]/g, '');
   const filtered = state.products.filter(p => {
@@ -19,30 +42,31 @@ export function renderProductsTable() {
     const matchesSearch = (searchValNormalized !== '' && codeNormalized.includes(searchValNormalized)) ||
                           p.code.toLowerCase().includes(searchVal) || 
                           p.name.toLowerCase().includes(searchVal);
-    const matchesBrand = brandFilter === '' || p.brand === brandFilter;
-    return matchesSearch && matchesBrand;
+                          
+    if (!matchesSearch) return false;
+    if (!brandFilter || brandFilter === '') return true;
+
+    const resolvedBrand = getBrandName(p.brandId || p.brand, p.brand);
+    const filterNorm = brandFilter.trim().toLowerCase();
+    
+    if (resolvedBrand.toLowerCase() === filterNorm || (p.brand && p.brand.toLowerCase() === filterNorm)) {
+      return true;
+    }
+    
+    const filterBrandObj = (state.brands || []).find(b => b.name.toLowerCase() === filterNorm || b.id === brandFilter);
+    if (filterBrandObj) {
+      if (resolvedBrand.toLowerCase() === filterBrandObj.name.toLowerCase()) return true;
+      if (p.brandId && p.brandId === filterBrandObj.id) return true;
+    }
+    
+    return false;
   });
-  
-  // Điền dữ liệu vào Dropdown Hãng sơn (lọc trùng) nếu dropdown trống hoặc cần update
-  const filterSelect = document.getElementById('product-brand-filter');
-  const activeBrandFilter = filterSelect.value;
-  
-  const uniqueBrands = state.brands && state.brands.length > 0
-    ? state.brands.map(b => b.name)
-    : [...new Set(state.products.map(p => p.brand).filter(Boolean))];
-  
-  filterSelect.innerHTML = `
-    <option value="">-- Tất cả hãng sơn --</option>
-    ${uniqueBrands.map(b => `<option value="${b}">${b}</option>`).join('')}
-  `;
-  filterSelect.value = activeBrandFilter;
 
   // Lọc dropdown trong modal sản phẩm (nếu có)
   const prodBrandSelect = document.getElementById('prod-brand');
   if (prodBrandSelect) {
     const currentVal = prodBrandSelect.value;
     
-    // Gộp cả các hãng từ bảng brands và hãng thực tế từ sản phẩm
     const brandList = state.brands && state.brands.length > 0
       ? state.brands.map(b => b.name)
       : ['Nano10*', 'mutsutec', 'tdkaw', 'cova', 'festivanano', 'Hatacco nano'];
@@ -52,7 +76,6 @@ export function renderProductsTable() {
     
     prodBrandSelect.innerHTML = allBrands.map(b => `<option value="${b}">${b}</option>`).join('');
     
-    // Khôi phục giá trị cũ
     if (currentVal && Array.from(prodBrandSelect.options).some(o => o.value === currentVal)) {
       prodBrandSelect.value = currentVal;
     }
@@ -104,7 +127,7 @@ export function renderProductsTable() {
         <td style="font-weight: 600; color: #fff;">${p.code}</td>
         <td style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${p.name}">${p.name}</td>
         <td>
-          <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.12); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.25); display: inline-block;">${p.brand || 'Nano10*'}</span>
+          <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.12); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.25); display: inline-block;">${getBrandName(p.brandId || p.brand, p.brand || 'Nano10*')}</span>
         </td>
         <td style="font-size: 0.75rem; color: var(--text-secondary); white-space: pre-line; line-height: 1.3;" title="${getWeightStr()}">${getWeightStr().replace(/\n/g, ', ')}</td>
         <td style="text-align: right; font-weight: 600; color: #fff;">${p.priceThung > 0 ? formatCurrency(p.priceThung) : '<span style="color: var(--text-muted); font-weight: normal;">-</span>'}</td>
@@ -267,10 +290,14 @@ export async function saveProduct() {
     return;
   }
   
+  const matchedBrand = (state.brands || []).find(b => b.name.toLowerCase() === brand.toLowerCase() || b.id === brand);
+  const brandId = matchedBrand ? matchedBrand.id : ('brand_' + String(brand).toLowerCase().replace(/[^a-z0-9]/g, ''));
+  
   const productData = {
     code,
     name,
     brand,
+    brandId,
     priceThung,
     priceLon,
     priceHop,

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder } from '../services/supabase.js';
+import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName } from '../utils.js';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js';
 import { renderAll } from '../main.js';
 import { openPrintTypeModal } from './invoice.js';
 
@@ -546,10 +546,24 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
     plSelect.dispatchEvent(new Event('change'));
   }
   
-  // Thiết lập checkbox hỗ trợ vận chuyển
-  const shipCheck = document.getElementById('invoice-shipping-support');
-  if (shipCheck) {
-    shipCheck.checked = order.shippingSupport || false;
+  // Thiết lập Giảm giá & Thu khác
+  const discValInput = document.getElementById('invoice-discount-value');
+  const discTypeSelect = document.getElementById('invoice-discount-type');
+  const feeValInput = document.getElementById('invoice-other-fee-value');
+  const feeTypeSelect = document.getElementById('invoice-other-fee-type');
+
+  const discType = order.discountType || 'amount';
+  const discVal = order.discountValue || 0;
+  if (discTypeSelect) discTypeSelect.value = discType;
+  if (discValInput) {
+    discValInput.value = discType === 'percent' ? discVal : formatNumber(discVal);
+  }
+
+  const feeType = order.otherFeeType || 'amount';
+  const feeVal = order.otherFeeValue || 0;
+  if (feeTypeSelect) feeTypeSelect.value = feeType;
+  if (feeValInput) {
+    feeValInput.value = feeType === 'percent' ? feeVal : formatNumber(feeVal);
   }
   
   // Đổi tiêu đề và trạng thái nút chốt đơn trên giao diện lập hóa đơn
@@ -852,28 +866,7 @@ export async function processSalesReturnSubmit(e) {
   });
   localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify(state.finishedGoodsStock));
 
-  // 3. Update Customer Debt & Debt History
-  if (order.customerId) {
-    const cust = state.customers.find(c => c.id === order.customerId);
-    if (cust) {
-      const oldDebt = parseFloat(cust.debt || 0);
-      const newDebt = oldDebt - totalRefund;
-      cust.debt = newDebt;
-
-      if (!cust.debtHistory) cust.debtHistory = [];
-      cust.debtHistory.push({
-        date: new Date().toISOString(),
-        type: 'return',
-        amount: totalRefund,
-        debtAfter: newDebt,
-        note: `Phiếu trả hàng ${returnId} cho đơn ${order.id}: ${reason}`
-      });
-
-      await dbSaveCustomer(cust);
-    }
-  }
-
-  // 4. Update Order Status
+  // 3. Update Order Status
   const allOrderReturns = state.salesReturns.filter(r => r.saleId === order.id && r.status !== 'cancelled');
   const totalReturnedMap = {};
   allOrderReturns.forEach(r => {
@@ -893,6 +886,32 @@ export async function processSalesReturnSubmit(e) {
   });
 
   order.status = isFullyReturned ? 'returned' : 'partially_returned';
+
+  // 4. Update Customer Debt, Total Return & Net Revenue
+  if (order.customerId) {
+    const cust = state.customers.find(c => c.id === order.customerId);
+    if (cust) {
+      const oldDebt = parseFloat(cust.debt || 0);
+      const newDebt = oldDebt - totalRefund;
+      cust.debt = newDebt;
+      cust.totalReturn = (cust.totalReturn || 0) + totalRefund;
+      cust.netRevenue = Math.max(0, (cust.netRevenue || 0) - totalRefund);
+
+      if (!cust.debtHistory) cust.debtHistory = [];
+      cust.debtHistory.push({
+        date: new Date().toISOString(),
+        type: 'return',
+        amount: totalRefund,
+        debtAfter: newDebt,
+        note: `Phiếu trả hàng ${returnId} cho đơn ${order.id}: ${reason}`
+      });
+
+      await dbSaveCustomer(cust);
+    }
+  }
+
+  // Record Sales Return via Transactional RPC
+  await dbRecordSalesReturn(salesReturnObj, returnItems, order.status);
   await dbSaveOrder(order);
 
   document.getElementById('sales-return-modal').classList.remove('active');

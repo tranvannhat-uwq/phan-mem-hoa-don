@@ -1,3 +1,24 @@
+// Hàm chuyển đổi chuỗi tiếng Việt sang dạng không dấu
+export function removeVietnameseTones(str) {
+  if (!str) return '';
+  let result = String(str);
+  result = result.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+  result = result.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+  result = result.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+  result = result.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+  result = result.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+  result = result.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+  result = result.replace(/đ/g, "d");
+  result = result.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+  result = result.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+  result = result.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
+  result = result.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+  result = result.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+  result = result.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, "Y");
+  result = result.replace(/Đ/g, "D");
+  return result;
+}
+
 // Hàm hiển thị icon Lucide an toàn
 export function safeCreateIcons() {
   if (typeof lucide !== 'undefined' && typeof lucide.createIcons === 'function') {
@@ -37,6 +58,156 @@ export function getColorPercentFromCode(colorCode) {
 export function formatDateTime(dateStr) {
   const d = new Date(dateStr);
   return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+
+// Trả về nhãn sơn gốc (giữ nguyên tên nhãn sơn sẵn có trong hệ thống)
+export function getNormalizedBrandName(brandStr) {
+  if (!brandStr || brandStr === 'Tất cả') return '';
+  return String(brandStr).trim();
+}
+
+// Kiểm tra xem nhãn sơn có phải là FESTIVAL (nhãn dùng chung) hay không
+export function isFestivalBrand(brandName) {
+  if (!brandName) return false;
+  const b = String(brandName).trim().toLowerCase();
+  return b.includes('festiv');
+}
+
+// Kiểm tra xem nhãn sơn có phải là nhãn dùng chung (không chọn công ty quản lý riêng) hay không
+export function isSharedBrand(brandName, brandsList = []) {
+  if (!brandName) return false;
+  if (isFestivalBrand(brandName)) return true;
+  if (Array.isArray(brandsList) && brandsList.length > 0) {
+    const found = brandsList.find(b => b.name && b.name.toLowerCase() === String(brandName).trim().toLowerCase());
+    if (found && (!found.companyId || found.companyId === '' || found.companyName === 'Dùng chung')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// --- BỘ GIẢI ÁNH XẠ CHÍNH (FOREIGN KEY LOOKUP RESOLVERS) ---
+import { state } from './state.js';
+
+export function getBrandId(brandInput, brandsList = state.brands) {
+  if (!brandInput || brandInput === 'Tất cả') return 'all';
+  const str = String(brandInput).trim();
+  const found = (brandsList || []).find(b => (b.id && b.id === str) || (b.name && b.name.toLowerCase() === str.toLowerCase()));
+  if (found) return found.id || found.name;
+  return str;
+}
+
+export function getBrandById(brandId, brandsList = state.brands) {
+  if (!brandId || brandId === 'all' || brandId === 'Tất cả') return null;
+  const str = String(brandId).trim();
+  const list = brandsList || [];
+  
+  let found = list.find(b => (b.id && b.id === str) || (b.name && b.name.toLowerCase() === str.toLowerCase()));
+  if (found) return found;
+
+  const aliasMap = {
+    'cova': 'COVA NANO',
+    'covanano': 'COVA NANO',
+    'cova nano': 'COVA NANO',
+    'festivanano': 'FESTIVA NANO',
+    'festiva nano': 'FESTIVA NANO',
+    'festiva': 'FESTIVA NANO',
+    'hatacco': 'Hatacco nano',
+    'hatacconano': 'Hatacco nano',
+    'hatacco nano': 'Hatacco nano',
+    'nano10': 'Nano10*',
+    'nano10*': 'Nano10*',
+    'mutsutec': 'mutsutec',
+    'tdkaw': 'tdkaw'
+  };
+
+  const norm = str.toLowerCase();
+  if (aliasMap[norm]) {
+    const canonicalName = aliasMap[norm];
+    found = list.find(b => b.name && b.name.toLowerCase() === canonicalName.toLowerCase());
+  }
+
+  return found || null;
+}
+
+export function getBrandName(brandId, fallback = '', brandsList = state.brands) {
+  if (!brandId || brandId === 'all' || brandId === 'Tất cả') return fallback || 'Tất cả';
+  const brand = getBrandById(brandId, brandsList);
+  return brand ? brand.name : (fallback || brandId);
+}
+
+export function getCompanyById(companyId, companiesList = state.companies) {
+  if (!companyId || companyId === 'all') return null;
+  const str = String(companyId).trim();
+  return (companiesList || []).find(c => c.id === str || c.code === str || c.name === str) || null;
+}
+
+export function getCompanyName(companyId, companiesList = state.companies) {
+  if (!companyId || companyId === 'all') return 'Tất cả công ty';
+  const comp = getCompanyById(companyId, companiesList);
+  return comp ? comp.name : (companyId === 'ABS_NORTH' ? 'Công ty Cổ phần ABS JAPAN (Miền Bắc)' : (companyId === 'ABS_SOUTH' ? 'Công ty Cổ phần ABS JAPAN - Chi nhánh Miền Nam' : (companyId === 'EMP_USA' ? 'Công ty Cổ phần EMP Hoa Kỳ' : companyId)));
+}
+
+export function getCustomerById(customerId, customersList = state.customers) {
+  if (!customerId || customerId === 'all') return null;
+  const str = String(customerId).trim();
+  return (customersList || []).find(c => c.id === str || c.code === str) || null;
+}
+
+export function getCustomerName(customerId, fallbackName = '', customersList = state.customers) {
+  if (!customerId || customerId === 'all') return fallbackName || 'Khách hàng';
+  const cust = getCustomerById(customerId, customersList);
+  return cust ? cust.name : (fallbackName || customerId);
+}
+
+export function getUserById(userIdOrUsername, usersList = state.users) {
+  if (!userIdOrUsername || userIdOrUsername === 'all') return null;
+  const str = String(userIdOrUsername).trim();
+  return (usersList || []).find(u => u.id === str || isSameUser(u.username, str)) || null;
+}
+
+export function getUserDisplayName(userIdOrUsername, fallbackName = '', usersList = state.users) {
+  if (!userIdOrUsername || userIdOrUsername === 'all') return fallbackName || 'Nhân viên';
+  const user = getUserById(userIdOrUsername, usersList);
+  return user ? user.displayName : (fallbackName || userIdOrUsername);
+}
+
+export function getPricelistById(pricelistId, pricelistsList = state.pricelists) {
+  if (!pricelistId) return null;
+  const str = String(pricelistId).trim();
+  return (pricelistsList || []).find(p => p.id === str) || null;
+}
+
+export function getPricelistName(pricelistId, pricelistsList = state.pricelists) {
+  if (!pricelistId || pricelistId === 'retail') return 'Bán lẻ (Giá chuẩn)';
+  const pl = getPricelistById(pricelistId, pricelistsList);
+  return pl ? pl.name : pricelistId;
+}
+
+// Lấy tên công ty theo ID
+export function getCompanyNameById(companyId, companiesList = state.companies) {
+  return getCompanyName(companyId, companiesList);
+}
+
+// Lấy ID công ty của nhân viên hiện tại
+export function getUserCompanyId(user) {
+  if (!user) return 'ABS_NORTH';
+  return user.companyId || user.company_id || 'ABS_NORTH';
+}
+
+// Xác định các thuộc tính doanh thu cho một dòng sản phẩm đơn hàng
+export function getRevenueAttributes(itemBrand, customerAgencyBrand, orderCompanyId, brandsList = []) {
+  const productBrand = itemBrand || 'Nano10*';
+  const agencyBrand = (customerAgencyBrand && customerAgencyBrand !== 'Tất cả') ? customerAgencyBrand : productBrand;
+  const revenueCompany = orderCompanyId || 'ABS_NORTH';
+  const revenueBrand = (isFestivalBrand(productBrand) || isSharedBrand(productBrand, brandsList)) ? agencyBrand : productBrand;
+
+  return {
+    productBrand,
+    agencyBrand,
+    revenueBrand,
+    revenueCompany
+  };
 }
 
 // Định dạng chỉ hiển thị ngày

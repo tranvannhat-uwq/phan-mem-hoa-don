@@ -13,6 +13,70 @@ import {
   fetchCloudData
 } from './supabase.js';
 
+export async function clearAllSampleData(onCompleteCallback) {
+  if (!confirm('CẢNH BÁO: Thao tác này sẽ XÓA SẠCH toàn bộ dữ liệu sản phẩm mẫu, đơn hàng mẫu, khách hàng mẫu, nhà cung cấp mẫu, bảng giá mẫu và nguyên vật liệu mẫu!\n\nCác tài khoản đăng nhập của bạn sẽ giữ nguyên.\n\nBạn có chắc chắn muốn xóa sạch dữ liệu mẫu không?')) {
+    return;
+  }
+
+  showToast('Đang tiến hành xóa sạch dữ liệu mẫu...', 'info');
+
+  // 1. Xóa toàn bộ dữ liệu trong State (trừ tài khoản người dùng)
+  state.products = [];
+  state.savedOrders = [];
+  state.customers = [];
+  state.suppliers = [];
+  state.pricelists = [];
+  state.rawMaterials = [];
+  state.semiFinished = [];
+  state.recipes = [];
+  state.productionLogs = [];
+  state.finishedGoodsStock = [];
+  state.salesReturns = [];
+
+  // Lọc danh sách hãng sơn: xóa các hãng sơn mẫu cova, mutsutec, tdkaw
+  if (state.brands) {
+    state.brands = state.brands.filter(b => {
+      const bName = (b.name || '').trim().toLowerCase();
+      return bName !== 'cova' && bName !== 'mutsutec' && bName !== 'tdkaw';
+    });
+  }
+
+  // 2. Cập nhật LocalStorage
+  localStorage.setItem('billing_system_products', JSON.stringify([]));
+  localStorage.setItem('billing_system_orders', JSON.stringify([]));
+  localStorage.setItem('billing_system_customers', JSON.stringify([]));
+  localStorage.setItem('billing_system_suppliers', JSON.stringify([]));
+  localStorage.setItem('billing_system_pricelists', JSON.stringify([]));
+  localStorage.setItem('billing_system_raw_materials', JSON.stringify([]));
+  localStorage.setItem('billing_system_semi_finished', JSON.stringify([]));
+  localStorage.setItem('billing_system_recipes', JSON.stringify([]));
+  localStorage.setItem('billing_system_production_logs', JSON.stringify([]));
+  localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify([]));
+  localStorage.setItem('billing_system_brands', JSON.stringify(state.brands || []));
+
+  // 3. Nếu đang kết nối Cloud (Supabase), xóa trên Cloud
+  if (isCloudActive && supabaseClient) {
+    try {
+      await Promise.allSettled([
+        supabaseClient.from(tableProductsName).delete().neq('code', '___NONE___'),
+        supabaseClient.from(tableOrdersName).delete().neq('id', '___NONE___'),
+        supabaseClient.from(tableDraftOrdersName).delete().neq('id', '___NONE___'),
+        supabaseClient.from(tableCustomersName).delete().neq('id', '___NONE___'),
+        supabaseClient.from(tablePricelistsName).delete().neq('id', '___NONE___'),
+        supabaseClient.from(tableBrandsName).delete().in('name', ['cova', 'mutsutec', 'tdkaw'])
+      ]);
+    } catch (err) {
+      console.warn('Xóa dữ liệu cloud một phần:', err);
+    }
+  }
+
+  showToast('Đã xóa sạch tất cả dữ liệu mẫu thành công!', 'success');
+
+  if (typeof onCompleteCallback === 'function') {
+    onCompleteCallback();
+  }
+}
+
 // Xuất file sao lưu Excel (nhiều trang chứa dữ liệu các bảng)
 export async function exportBackupToExcel() {
   if (!isCloudActive || !supabaseClient) {
@@ -223,6 +287,13 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
       if (fileInput.files.length > 0) {
         importBackupFromExcel(fileInput.files[0], onRestoreComplete);
       }
+    });
+  }
+
+  const clearSampleBtn = document.getElementById('btn-clear-sample-data');
+  if (clearSampleBtn) {
+    clearSampleBtn.addEventListener('click', () => {
+      clearAllSampleData(onRestoreComplete);
     });
   }
 

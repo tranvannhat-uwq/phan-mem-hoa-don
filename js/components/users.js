@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, safeCreateIcons, isSameUser } from '../utils.js';
+import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
 import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js';
 import { renderAll, switchTab } from '../main.js';
 import { populateManagedByDropdown } from './customers.js';
@@ -12,9 +12,11 @@ export function renderUsersTable() {
   const searchInput = document.getElementById('user-search-input');
   const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
   
-  const filtered = state.users.filter(u => {
-    return u.username.toLowerCase().includes(searchVal) || 
-           u.displayName.toLowerCase().includes(searchVal);
+  const filtered = (state.users || []).filter(u => {
+    if (!u) return false;
+    const uname = (u.username || u.code || '').toLowerCase();
+    const dname = (u.displayName || u.display_name || u.name || '').toLowerCase();
+    return uname.includes(searchVal) || dname.includes(searchVal);
   });
   
   if (filtered.length === 0) {
@@ -36,14 +38,17 @@ export function renderUsersTable() {
                       (u.role === 'admin' ? 'var(--color-danger)' : 
                        u.role === 'accounting' ? 'var(--color-secondary)' : 'var(--color-primary)');
                       
+    const compName = getCompanyNameById(u.companyId || u.company_id, state.companies);
+    const dName = u.displayName || u.display_name || u.name || u.username;
     return `
       <tr>
         <td style="text-align: center; color: var(--text-muted);">${index + 1}</td>
         <td style="font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${u.username}">${u.username}</td>
-        <td>${u.displayName}</td>
+        <td>${dName}</td>
         <td>
           <span style="color: ${roleColor}; font-weight: 500;">${roleText}</span>
         </td>
+        <td style="font-size: 0.8rem; color: var(--text-secondary);">${compName}</td>
         <td style="text-align: center;">
           <div style="display: inline-flex; gap: 0.5rem; justify-content: center;">
             <button class="btn btn-secondary btn-sm btn-circle edit-user-btn" data-id="${u.id}" title="Sửa">
@@ -89,6 +94,11 @@ export function openUserModal(userId = '') {
   modal.classList.add('active');
   form.reset();
   
+  const compSelect = document.getElementById('user-company');
+  if (compSelect && state.companies && state.companies.length > 0) {
+    compSelect.innerHTML = state.companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
+  
   if (!userId) {
     title.innerText = 'Thêm tài khoản mới';
     document.getElementById('user-edit-id').value = '';
@@ -99,6 +109,7 @@ export function openUserModal(userId = '') {
     if (isExternalSelect) isExternalSelect.value = 'false';
     passwordInput.disabled = false;
     if (roleSelect) roleSelect.disabled = false;
+    if (compSelect) compSelect.value = 'ABS_NORTH';
   } else {
     title.innerText = 'Chỉnh sửa tài khoản';
     document.getElementById('user-edit-id').value = userId;
@@ -109,6 +120,7 @@ export function openUserModal(userId = '') {
       usernameInput.removeAttribute('disabled');
       document.getElementById('user-displayname').value = user.displayName;
       if (roleSelect) roleSelect.value = user.role;
+      if (compSelect) compSelect.value = user.companyId || user.company_id || 'ABS_NORTH';
       
       const isExt = user.isExternal || false;
       if (isExternalSelect) isExternalSelect.value = isExt ? 'true' : 'false';
@@ -181,13 +193,15 @@ export async function saveUser() {
       return;
     }
     
+    const companyId = document.getElementById('user-company') ? document.getElementById('user-company').value : 'ABS_NORTH';
     user = {
       id: 'u-' + Date.now(),
       username,
       displayName,
       password: isExternal ? '' : password,
       role: isExternal ? 'sale' : role,
-      isExternal
+      isExternal,
+      companyId
     };
   } else {
     const existingUser = state.users.find(u => u.id === editId);
@@ -199,12 +213,14 @@ export async function saveUser() {
       return;
     }
     
+    const companyId = document.getElementById('user-company') ? document.getElementById('user-company').value : 'ABS_NORTH';
     user = {
       ...existingUser,
       username,
       displayName,
       role: isExternal ? 'sale' : role,
-      isExternal
+      isExternal,
+      companyId
     };
     if (!isExternal && password) {
       user.password = password;

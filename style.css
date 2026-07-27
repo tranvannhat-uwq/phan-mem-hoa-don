@@ -1112,14 +1112,14 @@ select option {
   top: 100%;
   left: 0;
   right: 0;
-  background-color: #1f2937;
+  background-color: #ffffff;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   margin-top: 0.25rem;
   max-height: 280px;
   overflow-y: auto;
-  z-index: 1000;
-  box-shadow: var(--shadow-lg);
+  z-index: 1050;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
   list-style: none;
 }
 
@@ -1127,6 +1127,7 @@ select option {
   padding: 0.625rem 0.875rem;
   cursor: pointer;
   font-size: 0.875rem;
+  color: var(--text-primary);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1134,8 +1135,8 @@ select option {
 }
 
 .suggestion-item:hover {
-  background-color: var(--color-primary-light);
-  color: #fff;
+  background-color: var(--bg-primary);
+  color: var(--color-primary);
 }
 
 .suggestion-info {
@@ -1146,7 +1147,7 @@ select option {
 
 .suggestion-code {
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.8rem;
 }
 
@@ -1185,6 +1186,9 @@ select option {
 
 /* Dashboard Filter Toolbar */
 .dashboard-toolbar {
+  position: relative;
+  z-index: 100;
+  overflow: visible;
   display: flex;
   gap: 1.25rem;
   align-items: center;
@@ -2223,11 +2227,12 @@ select.form-control {
 .suggestions-list {
   background-color: #ffffff !important;
   border: 1px solid var(--border-color) !important;
-  box-shadow: var(--shadow-md) !important;
-  z-index: 1000 !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+  z-index: 1050 !important;
 }
 .suggestion-item:hover {
   background-color: var(--bg-primary) !important;
+  color: var(--color-primary) !important;
 }
 
 /* Modal and Dropzone overrides */
