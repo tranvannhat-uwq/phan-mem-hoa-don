@@ -181,6 +181,14 @@
             <input type="date" class="form-control" id="dashboard-end-date" style="width: auto; height: 38px; border-radius: 6px; padding: 0 0.5rem;">
           </div>
 
+          <div class="filter-group">
+            <label class="filter-label"><i data-lucide="calculator"></i> Chế độ doanh số:</label>
+            <select class="form-control" id="dashboard-sales-mode-filter" style="width: auto; height: 38px; min-width: 170px; border-radius: 6px; cursor: pointer;">
+              <option value="net" selected>Doanh số sau trả (Mặc định)</option>
+              <option value="gross">Doanh số gốc (Chưa trừ trả)</option>
+            </select>
+          </div>
+
           <div class="filter-group" id="dashboard-sale-filter-group" style="display: none; align-items: center; gap: 0.5rem; margin-left: auto;">
             <label class="filter-label"><i data-lucide="users"></i> Nhân viên Sale:</label>
             <select class="form-control" id="dashboard-sale-filter" style="width: auto; height: 38px; min-width: 185px; border-radius: 6px; cursor: pointer; ">
@@ -188,6 +196,7 @@
             </select>
           </div>
         </div>
+
 
         <!-- Widgets Grid -->
         <div class="widgets-grid">
@@ -1223,18 +1232,20 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table" style="table-layout: fixed; min-width: 1100px;">
+            <table class="table" style="table-layout: fixed; min-width: 1250px;">
               <colgroup>
-                <col style="width: 90px;">   <!-- Mã KH -->
-                <col style="width: 170px;">  <!-- Tên KH -->
-                <col style="width: 110px;">  <!-- SĐT -->
+                <col style="width: 85px;">   <!-- Mã KH -->
+                <col style="width: 160px;">  <!-- Tên KH -->
+                <col style="width: 105px;">  <!-- SĐT -->
                 <col style="width: auto;">   <!-- Địa chỉ -->
-                <col style="width: 110px;">  <!-- Nhãn đại lý -->
-                <col style="width: 140px;">  <!-- Kinh doanh -->
-                <col style="width: 150px;">  <!-- Bảng giá áp dụng -->
-                <col style="width: 110px;">  <!-- Công nợ -->
-                <col style="width: 110px;">  <!-- Doanh số -->
-                <col style="width: 135px;">   <!-- Thao tác -->
+                <col style="width: 90px;">   <!-- Nhãn đại lý -->
+                <col style="width: 120px;">  <!-- Kinh doanh -->
+                <col style="width: 110px;">  <!-- Bảng giá -->
+                <col style="width: 115px;">  <!-- Tổng doanh số -->
+                <col style="width: 110px;">  <!-- Tổng trả hàng -->
+                <col style="width: 120px;">  <!-- Doanh số sau trả -->
+                <col style="width: 110px;">  <!-- Công nợ hiện tại -->
+                <col style="width: 110px;">  <!-- Thao tác -->
               </colgroup>
               <thead>
                 <tr>
@@ -1242,14 +1253,17 @@
                   <th>Tên khách hàng</th>
                   <th>Số điện thoại</th>
                   <th>Địa chỉ</th>
-                  <th>Nhãn đại lý</th>
+                  <th>Nhãn</th>
                   <th>Kinh doanh</th>
-                  <th>Bảng giá áp dụng</th>
-                  <th style="text-align: right;">Công nợ</th>
-                  <th style="text-align: right;">Doanh số</th>
+                  <th>Bảng giá</th>
+                  <th style="text-align: right;">Tổng doanh số</th>
+                  <th style="text-align: right;">Tổng trả hàng</th>
+                  <th style="text-align: right;">Doanh số sau trả</th>
+                  <th style="text-align: right;">Công nợ hiện tại</th>
                   <th style="text-align: center;">Thao tác</th>
                 </tr>
               </thead>
+
               <tbody id="customers-table-body">
                 <!-- Dynamic load -->
               </tbody>
@@ -1830,14 +1844,33 @@
                 <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Nhân viên quản lý</div>
                 <div id="detail-cust-manager" style="font-weight: 500; color: var(--text-secondary); margin-top: 2px;"></div>
               </div>
-              <div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Tổng doanh thu giao dịch</div>
-                <div id="detail-cust-sales" style="font-weight: 700; color: var(--color-primary); font-size: 1.1rem; margin-top: 2px;">0 ₫</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Tổng doanh số gốc</div>
+                  <div id="detail-cust-sales-gross" style="font-weight: 700; color: var(--color-primary); font-size: 0.95rem; margin-top: 2px;">0 ₫</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Tổng trả hàng</div>
+                  <div id="detail-cust-returns-total" style="font-weight: 700; color: #f59e0b; font-size: 0.95rem; margin-top: 2px;">0 ₫</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Doanh số sau trả</div>
+                  <div id="detail-cust-sales-net" style="font-weight: 700; color: #10b981; font-size: 0.95rem; margin-top: 2px;">0 ₫</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Tỷ lệ trả hàng</div>
+                  <div id="detail-cust-return-rate" style="font-weight: 700; color: #a855f7; font-size: 0.95rem; margin-top: 2px;">0%</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Tổng thanh toán</div>
+                  <div id="detail-cust-total-payments" style="font-weight: 700; color: #3b82f6; font-size: 0.95rem; margin-top: 2px;">0 ₫</div>
+                </div>
+                <div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Công nợ hiện tại</div>
+                  <div id="detail-cust-debt" style="font-weight: 700; color: var(--color-danger); font-size: 0.95rem; margin-top: 2px;">0 ₫</div>
+                </div>
               </div>
-              <div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 500;">Công nợ hiện tại</div>
-                <div id="detail-cust-debt" style="font-weight: 700; color: var(--color-danger); font-size: 1.1rem; margin-top: 2px;">0 ₫</div>
-              </div>
+
             </div>
           </div>
           
@@ -1856,16 +1889,24 @@
             Lịch sử biến động công nợ
           </h4>
           
-          <div class="table-container" style="max-height: 350px; overflow-y: auto; border-radius: 8px;">
-            <table class="table" style="font-size: 0.85rem; margin-bottom: 0;">
+          <div class="table-container" style="max-height: 350px; overflow-y: scroll; scrollbar-gutter: stable; border-radius: 8px;">
+            <table class="table" style="font-size: 0.85rem; margin-bottom: 0; table-layout: fixed; width: 100%;">
+              <colgroup>
+                <col style="width: 20%;">  <!-- Thời gian -->
+                <col style="width: 12%;">  <!-- Loại -->
+                <col style="width: 15%;">  <!-- Nợ trước GD -->
+                <col style="width: 15%;">  <!-- Giá trị GD -->
+                <col style="width: 15%;">  <!-- Nợ sau GD -->
+                <col style="width: 23%;">  <!-- Ghi chú -->
+              </colgroup>
               <thead>
                 <tr>
-                  <th style="width: 20%;">Thời gian</th>
-                  <th style="width: 12%; text-align: center;">Loại</th>
-                  <th style="width: 15%; text-align: right;">Nợ trước GD</th>
-                  <th style="width: 15%; text-align: right;">Giá trị GD</th>
-                  <th style="width: 15%; text-align: right;">Nợ sau GD</th>
-                  <th style="width: 23%;">Ghi chú</th>
+                  <th>Thời gian</th>
+                  <th style="text-align: center;">Loại</th>
+                  <th style="text-align: right;">Nợ trước GD</th>
+                  <th style="text-align: right;">Giá trị GD</th>
+                  <th style="text-align: right;">Nợ sau GD</th>
+                  <th>Ghi chú</th>
                 </tr>
               </thead>
               <tbody id="detail-debt-history-body">
@@ -1873,6 +1914,7 @@
               </tbody>
             </table>
           </div>
+
         </div>
 
       </div>
@@ -2148,8 +2190,67 @@
     </div>
   </div>
 
+  <!-- Printable Return Slip Template -->
+  <div id="print-return-slip-template">
+    <div style="text-align: center; margin-bottom: 1rem; border-bottom: 2px solid #000; padding-bottom: 0.5rem;">
+      <h2 style="font-size: 1.6rem; font-weight: 800; margin: 0; text-transform: uppercase;">PHIẾU TRẢ HÀNG</h2>
+      <p style="margin: 4px 0 0 0; font-size: 0.9rem;">Mã phiếu: <strong id="print-return-id">-</strong> | Mã đơn gốc: <strong id="print-return-sale-id">-</strong></p>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 1rem; line-height: 1.5;">
+      <div>
+        <div>Khách hàng: <strong id="print-return-customer-name">-</strong></div>
+        <div>Ngày lập phiếu: <span id="print-return-date">-</span></div>
+      </div>
+      <div style="text-align: right;">
+        <div>Người lập phiếu: <strong id="print-return-creator">-</strong></div>
+        <div>Lý do trả: <span id="print-return-reason" style="font-style: italic;">-</span></div>
+      </div>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 1rem;">
+      <thead>
+        <tr style="background: #eee;">
+          <th style="border: 1px solid #000; padding: 6px; width: 5%;">STT</th>
+          <th style="border: 1px solid #000; padding: 6px; width: 35%;">Tên sản phẩm</th>
+          <th style="border: 1px solid #000; padding: 6px; width: 10%; text-align: center;">ĐVT</th>
+          <th style="border: 1px solid #000; padding: 6px; width: 8%; text-align: center;">SL Trả</th>
+          <th style="border: 1px solid #000; padding: 6px; width: 14%; text-align: right;">Đơn giá</th>
+          <th style="border: 1px solid #000; padding: 6px; width: 13%; text-align: right;">Giá hoàn</th>
+          <th style="border: 1px solid #000; padding: 6px; width: 15%; text-align: right;">Thành tiền</th>
+        </tr>
+      </thead>
+      <tbody id="print-return-items-body"></tbody>
+    </table>
+
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 1.5rem; font-size: 0.95rem;">
+      <div style="text-align: right; line-height: 1.6;">
+        <div>Tổng tiền hoàn trả: <strong id="print-return-total-refund" style="font-size: 1.15rem; color: #000;">0 ₫</strong></div>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-around; text-align: center; font-size: 0.85rem; margin-top: 2rem;">
+      <div>
+        <p><strong>Người lập phiếu</strong></p>
+        <p style="font-size: 0.75rem; font-style: italic; color: #555;">(Ký, ghi rõ họ tên)</p>
+        <div style="height: 60px;"></div>
+      </div>
+      <div>
+        <p><strong>Thủ kho</strong></p>
+        <p style="font-size: 0.75rem; font-style: italic; color: #555;">(Ký, nhập hàng)</p>
+        <div style="height: 60px;"></div>
+      </div>
+      <div>
+        <p><strong>Khách hàng / Đại lý</strong></p>
+        <p style="font-size: 0.75rem; font-style: italic; color: #555;">(Ký, ghi rõ họ tên)</p>
+        <div style="height: 60px;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Print Type Selection Modal -->
   <div class="modal-overlay" id="print-type-modal">
+
     <div class="modal-content" style="max-width: 450px;">
       <div class="modal-header" style="justify-content: center; position: relative;">
         <h3 class="modal-title">Chọn loại hóa đơn cần in</h3>
@@ -2265,7 +2366,12 @@
           <p class="upload-text" style="font-weight: 600; margin-bottom: 0.25rem;">Kéo thả tệp Excel (.xlsx, .xls) hoặc CSV vào đây</p>
           <p class="upload-subtext" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Hoặc nhấp chuột để chọn tệp từ máy tính</p>
           <input type="file" id="cust-excel-file-input" accept=".xlsx, .xls, .csv" style="display: none;">
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-cust-excel">Chọn tệp</button>
+          <div style="display: flex; gap: 0.75rem; justify-content: center; align-items: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-cust-excel">Chọn tệp từ máy</button>
+            <button type="button" class="btn btn-emerald btn-sm" id="btn-download-cust-excel-template" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="download" style="width: 15px; height: 15px;"></i> Tải file mẫu Excel (.xlsx)
+            </button>
+          </div>
         </div>
         
         <div class="import-options" style="display: flex; gap: 1.5rem; margin: 1.25rem 0; font-size: 0.875rem; align-items: center; justify-content: center; flex-wrap: wrap; border-bottom: 1px dashed var(--border-color); padding-bottom: 1rem;">
@@ -2702,7 +2808,7 @@
     <div class="modal-content" style="max-width: 450px;">
       <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
         <h3 class="modal-title" id="so-quy-detail-title">Chi tiết phiếu thu/chi</h3>
-        <button class="modal-close" id="btn-close-detail-modal">&times;</button>
+        <button class="modal-close" id="btn-close-detail-modal" onclick="document.getElementById('so-quy-detail-modal').classList.remove('active')">&times;</button>
       </div>
       <div class="modal-body" style="padding: 1rem 5px 1rem 0; display: flex; flex-direction: column; gap: 0.25rem; max-height: 65vh; overflow-y: auto;">
         <div class="detail-item-row">
@@ -2753,10 +2859,79 @@
         <button type="button" class="btn btn-danger btn-sm" id="btn-cancel-transaction" style="display: flex; align-items: center; gap: 0.35rem;">
           <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Hủy phiếu
         </button>
-        <button type="button" class="btn btn-secondary btn-sm" id="btn-close-detail-modal-footer" style="min-width: 80px;">Đóng</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-close-detail-modal-footer" onclick="document.getElementById('so-quy-detail-modal').classList.remove('active')" style="min-width: 80px;">Đóng</button>
       </div>
     </div>
   </div>
+
+  <!-- Modal Tạo Phiếu Trả Hàng -->
+  <div class="modal-overlay" id="sales-return-modal">
+
+    <div class="modal-content" style="max-width: 950px; width: 95%;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="sales-return-modal-title">Tạo phiếu trả hàng</h3>
+        <button type="button" class="modal-close" onclick="document.getElementById('sales-return-modal').classList.remove('active')">&times;</button>
+      </div>
+      <form id="sales-return-form">
+        <input type="hidden" id="return-order-id">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto;">
+          <!-- Meta Info Card -->
+          <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); padding: 0.75rem 1rem; border-radius: 8px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; font-size: 0.85rem;">
+            <div>Mã đơn hàng: <strong id="return-meta-order-id" style="color: #fff;">-</strong></div>
+            <div>Khách hàng: <strong id="return-meta-customer" style="color: var(--color-primary);">-</strong></div>
+            <div>Ngày lập đơn: <span id="return-meta-date">-</span></div>
+            <div>Người thực hiện: <strong id="return-meta-creator">-</strong></div>
+          </div>
+
+          <!-- Product Items Table -->
+          <div class="table-responsive" style="max-height: 300px;">
+            <table class="table" style="font-size: 0.82rem; table-layout: auto;">
+              <thead>
+                <tr>
+                  <th style="width: 4%;">STT</th>
+                  <th style="width: 24%;">Sản phẩm</th>
+                  <th style="width: 8%;">ĐVT</th>
+                  <th style="width: 10%; text-align: right;">Đơn giá</th>
+                  <th style="width: 7%; text-align: center;">Đã bán</th>
+                  <th style="width: 7%; text-align: center;">Đã trả</th>
+                  <th style="width: 10%; text-align: center;">SL trả lần này</th>
+                  <th style="width: 9%;">Loại CK</th>
+                  <th style="width: 9%;">Giá trị CK</th>
+                  <th style="width: 11%; text-align: right;">Giá hoàn</th>
+                  <th style="width: 11%; text-align: right;">Thành tiền</th>
+                </tr>
+              </thead>
+              <tbody id="sales-return-items-body"></tbody>
+            </table>
+          </div>
+
+          <!-- Reason & Summary -->
+          <div style="display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; border-top: 1px dashed var(--border-color); padding-top: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="return-reason-input">Lý do trả hàng <span style="color: red;">*</span></label>
+              <textarea class="form-control" id="return-reason-input" rows="3" placeholder="Nhập lý do trả hàng (ví dụ: Hàng lỗi bao bì, Khách đổi ý, Trả lại hàng thừa...)" required style="width: 100%; font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
+            </div>
+            <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
+                <span>Tổng tiền hoàn trả:</span>
+                <strong id="return-total-refund-lbl" style="font-size: 1.2rem; color: #f59e0b;">0 ₫</strong>
+              </div>
+              <div id="return-excess-warning" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.5rem; border-radius: 6px; font-size: 0.78rem; color: #ef4444; line-height: 1.4;">
+                ⚠️ Khách đã thanh toán nhiều hơn nợ. Tiền thừa cần hoàn lại cho khách: <strong id="return-excess-amount">0 ₫</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('sales-return-modal').classList.remove('active')">Hủy bỏ</button>
+          <button type="submit" class="btn btn-warning btn-sm" style="background: #f59e0b; border-color: #f59e0b; color: #fff; font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="check-circle" style="width: 14px; height: 14px;"></i> Xác nhận trả hàng
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 
   <!-- Modal Thêm/Sửa Nguyên Liệu -->
   <div class="modal-overlay" id="raw-material-modal">

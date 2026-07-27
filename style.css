@@ -1730,6 +1730,10 @@ select option {
   }
 }
 
+#print-return-slip-template {
+  display: none;
+}
+
 /* PRINT STYLES - Tối ưu in hóa đơn A4 */
 @media print {
   html {
@@ -1767,6 +1771,24 @@ select option {
     padding: 20px;
     background-color: #fff;
   }
+
+  body.printing-return #print-invoice-template {
+    display: none !important;
+  }
+
+  #print-return-slip-template {
+    display: none;
+  }
+
+  body.printing-return #print-return-slip-template {
+    display: block !important;
+    width: 100%;
+    font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #000 !important;
+    padding: 20px;
+    background-color: #fff;
+  }
+
 
   .print-header {
     display: flex;

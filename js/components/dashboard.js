@@ -321,9 +321,15 @@ export function updateDashboardStats() {
   const soldLabel = document.getElementById('stat-sold-products-label');
   if (soldLabel) soldLabel.innerText = `Sản phẩm đã bán ${labelSuffix}`;
 
-  const totalRevenue = filteredOrders.reduce((sum, order) => sum + (order.totalPayable || 0), 0);
+  const grossRevenue = filteredOrders.reduce((sum, order) => sum + (order.totalPayable || 0), 0);
+  const validReturns = (state.salesReturns || []).filter(r => r.status !== 'cancelled');
+  const totalReturns = validReturns.reduce((sum, r) => sum + (r.totalRefund || 0), 0);
+
+  const isNetMode = state.dashboardSalesMode !== 'gross';
+  const totalRevenue = isNetMode ? Math.max(0, grossRevenue - totalReturns) : grossRevenue;
   const totalOrders = filteredOrders.length;
   const totalDebt = userCustomers.reduce((sum, c) => sum + (c.debt || 0), 0);
+
   
   let totalSoldProducts = 0;
   filteredOrders.forEach(order => {
@@ -470,6 +476,15 @@ export function setupDashboardFilters() {
       updateDashboardStats();
     });
   }
+
+  const modeFilter = document.getElementById('dashboard-sales-mode-filter');
+  if (modeFilter) {
+    modeFilter.addEventListener('change', () => {
+      state.dashboardSalesMode = modeFilter.value;
+      updateDashboardStats();
+    });
+  }
+
 
   document.querySelectorAll('.chart-view-btn').forEach(btn => {
     btn.addEventListener('click', () => {

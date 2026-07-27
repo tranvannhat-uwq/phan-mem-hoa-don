@@ -102,60 +102,61 @@ CREATE TABLE IF NOT EXISTS users (
 -- 2. ĐẢM BẢO CÁC CỘT ĐÃ TỒN TẠI (NẾU BẢNG ĐÃ ĐƯỢC TẠO TỪ TRƯỚC)
 
 -- Cập nhật bảng customers
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS assigned_brand text DEFAULT 'Tất cả';
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS brand_discounts jsonb DEFAULT '{}'::jsonb;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS shipping_support boolean DEFAULT false;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS debt numeric DEFAULT 0;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_transaction numeric DEFAULT 0;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS pricelist_id text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS managed_by text;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS debt_history jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS assigned_brand text DEFAULT 'Tất cả';
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS brand_discounts jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS shipping_support boolean DEFAULT false;
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS debt numeric DEFAULT 0;
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS total_transaction numeric DEFAULT 0;
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS pricelist_id text;
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS managed_by text;
+ALTER TABLE IF EXISTS customers ADD COLUMN IF NOT EXISTS debt_history jsonb DEFAULT '[]'::jsonb;
 
 -- Cập nhật bảng products
-ALTER TABLE products ADD COLUMN IF NOT EXISTS brand text DEFAULT 'Nano10*';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS price_thung numeric DEFAULT 0;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS price_lon numeric DEFAULT 0;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS price_hop numeric DEFAULT 0;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS price_bao numeric DEFAULT 0;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS price_tui numeric DEFAULT 0;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_thung text DEFAULT '';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_bao text DEFAULT '';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_lon text DEFAULT '';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_hop text DEFAULT '';
-ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_tui text DEFAULT '';
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS brand text DEFAULT 'Nano10*';
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS price_thung numeric DEFAULT 0;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS price_lon numeric DEFAULT 0;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS price_hop numeric DEFAULT 0;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS price_bao numeric DEFAULT 0;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS price_tui numeric DEFAULT 0;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS weight_thung text DEFAULT '';
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS weight_bao text DEFAULT '';
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS weight_lon text DEFAULT '';
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS weight_hop text DEFAULT '';
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS weight_tui text DEFAULT '';
 
 -- Cập nhật bảng orders
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id text;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_support boolean DEFAULT false;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_discount numeric DEFAULT 0;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS status text DEFAULT 'settled';
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS pricelist_id text;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_by text;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_id text;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS shipping_support boolean DEFAULT false;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS shipping_discount numeric DEFAULT 0;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS status text DEFAULT 'settled';
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS pricelist_id text;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS created_by text;
 
 -- Cập nhật bảng draft_orders
-ALTER TABLE draft_orders ADD COLUMN IF NOT EXISTS customer_id text;
-ALTER TABLE draft_orders ADD COLUMN IF NOT EXISTS shipping_support boolean DEFAULT false;
-ALTER TABLE draft_orders ADD COLUMN IF NOT EXISTS shipping_discount numeric DEFAULT 0;
-ALTER TABLE draft_orders ADD COLUMN IF NOT EXISTS status text DEFAULT 'draft';
-ALTER TABLE draft_orders ADD COLUMN IF NOT EXISTS pricelist_id text;
-ALTER TABLE draft_orders ADD COLUMN IF NOT EXISTS created_by text;
+ALTER TABLE IF EXISTS draft_orders ADD COLUMN IF NOT EXISTS customer_id text;
+ALTER TABLE IF EXISTS draft_orders ADD COLUMN IF NOT EXISTS shipping_support boolean DEFAULT false;
+ALTER TABLE IF EXISTS draft_orders ADD COLUMN IF NOT EXISTS shipping_discount numeric DEFAULT 0;
+ALTER TABLE IF EXISTS draft_orders ADD COLUMN IF NOT EXISTS status text DEFAULT 'draft';
+ALTER TABLE IF EXISTS draft_orders ADD COLUMN IF NOT EXISTS pricelist_id text;
+ALTER TABLE IF EXISTS draft_orders ADD COLUMN IF NOT EXISTS created_by text;
 
 -- Cập nhật bảng pricelists
-ALTER TABLE pricelists ADD COLUMN IF NOT EXISTS brand_discounts jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE IF EXISTS pricelists ADD COLUMN IF NOT EXISTS brand_discounts jsonb DEFAULT '{}'::jsonb;
 
 -- Cập nhật bảng raw_materials (Cả 2 khả năng bảng gốc và bảng có tiền tố wl_)
-ALTER TABLE raw_materials ADD COLUMN IF NOT EXISTS import_price numeric DEFAULT 0;
-ALTER TABLE wl_raw_materials ADD COLUMN IF NOT EXISTS import_price numeric DEFAULT 0;
+ALTER TABLE IF EXISTS raw_materials ADD COLUMN IF NOT EXISTS import_price numeric DEFAULT 0;
+ALTER TABLE IF EXISTS wl_raw_materials ADD COLUMN IF NOT EXISTS import_price numeric DEFAULT 0;
 
 
 -- 3. KÍCH HOẠT ROW LEVEL SECURITY (RLS) TRÊN TẤT CẢ CÁC BẢNG
 
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE draft_orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE pricelists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS draft_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS pricelists ENABLE ROW LEVEL SECURITY;
+
 
 
 -- 4. TẠO CÁC HÀM HỖ TRỢ PHÂN QUYỀN (SECURITY DEFINER để tránh đệ quy RLS)
@@ -549,3 +550,63 @@ DROP POLICY IF EXISTS select_finished_goods_stock ON finished_goods_stock;
 DROP POLICY IF EXISTS manage_finished_goods_stock ON finished_goods_stock;
 CREATE POLICY select_finished_goods_stock ON finished_goods_stock FOR SELECT TO authenticated USING (true);
 CREATE POLICY manage_finished_goods_stock ON finished_goods_stock FOR ALL TO authenticated USING (public.is_admin_or_accounting());
+
+-- 10. TẠO BẢNG SỔ QUỸ (cashbook_transactions) VÀ CẤP QUYỀN RLS
+CREATE TABLE IF NOT EXISTS public.cashbook_transactions (
+    id text PRIMARY KEY,
+    date timestamptz DEFAULT now(),
+    type text NOT NULL,
+    category text,
+    partner text,
+    value numeric DEFAULT 0,
+    method text DEFAULT 'cash',
+    accounting boolean DEFAULT true,
+    status text DEFAULT 'Đã thanh toán',
+    creator text,
+    note text,
+    starred boolean DEFAULT false
+);
+
+ALTER TABLE public.cashbook_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS select_cashbook ON cashbook_transactions;
+DROP POLICY IF EXISTS manage_cashbook ON cashbook_transactions;
+CREATE POLICY select_cashbook ON cashbook_transactions FOR SELECT USING (true);
+CREATE POLICY manage_cashbook ON cashbook_transactions FOR ALL USING (true) WITH CHECK (true);
+
+-- 11. TẠO BẢNG TRẢ HÀNG (sales_returns & sales_return_items) VÀ CẤP QUYỀN RLS
+CREATE TABLE IF NOT EXISTS public.sales_returns (
+    id text PRIMARY KEY,
+    sale_id text NOT NULL,
+    customer_id text,
+    created_by text,
+    created_at timestamptz DEFAULT now(),
+    reason text,
+    total_refund numeric DEFAULT 0,
+    status text DEFAULT 'completed'
+);
+
+CREATE TABLE IF NOT EXISTS public.sales_return_items (
+    id text PRIMARY KEY,
+    return_id text NOT NULL,
+    sale_item_id text,
+    product_id text,
+    product_name text,
+    quantity numeric DEFAULT 0,
+    import_price numeric DEFAULT 0,
+    discount_type text DEFAULT 'percent',
+    discount_value numeric DEFAULT 0,
+    refund_price numeric DEFAULT 0,
+    subtotal numeric DEFAULT 0,
+    package_type text
+);
+
+ALTER TABLE public.sales_returns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_return_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS manage_sales_returns ON sales_returns;
+CREATE POLICY manage_sales_returns ON sales_returns FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS manage_sales_return_items ON sales_return_items;
+CREATE POLICY manage_sales_return_items ON sales_return_items FOR ALL USING (true) WITH CHECK (true);
+
+

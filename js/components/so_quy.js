@@ -841,8 +841,8 @@ function refreshDynamicFilters(txs) {
     state.customers.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.name;
-      // Show Customer Code, Name, and Phone for easy visual matching in suggestions dropdown
-      opt.textContent = `${c.code} - ${c.name} ${c.phone ? `(${c.phone})` : ''}`;
+      const subText = (c.code && c.code !== c.name) ? `${c.code} ${c.phone ? `• SĐT: ${c.phone}` : ''}` : (c.phone ? `SĐT: ${c.phone}` : '');
+      opt.textContent = subText;
       payerList.appendChild(opt);
     });
   }

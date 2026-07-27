@@ -28,5 +28,8 @@ export const state = {
   semiFinished: [],
   recipes: [],
   productionLogs: [],
-  finishedGoodsStock: []
+  finishedGoodsStock: [],
+  salesReturns: [],
+  dashboardSalesMode: 'net' // 'net' (after returns) or 'gross' (original)
 };
+

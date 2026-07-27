@@ -5,7 +5,30 @@ import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js';
 import { addCashbookTransaction } from './so_quy.js';
 
+export function getCustomerMetrics(c) {
+  if (!c) return { grossSales: 0, totalReturns: 0, netSales: 0, returnRate: '0', currentDebt: 0, totalPayments: 0 };
+  const customerOrders = state.savedOrders.filter(o => 
+    (o.customerId === c.id || (o.customerName && o.customerName.toLowerCase() === c.name.toLowerCase())) &&
+    (o.status === 'settled' || o.status === 'partially_returned' || o.status === 'returned')
+  );
+  const grossSales = customerOrders.reduce((sum, o) => sum + (parseFloat(o.totalPayable) || 0), 0);
+  
+  const customerReturns = (state.salesReturns || []).filter(r => 
+    (r.customerId === c.id || (r.customerName && r.customerName.toLowerCase() === c.name.toLowerCase())) &&
+    r.status !== 'cancelled'
+  );
+  const totalReturns = customerReturns.reduce((sum, r) => sum + (parseFloat(r.totalRefund) || 0), 0);
+  
+  const netSales = Math.max(0, grossSales - totalReturns);
+  const returnRate = grossSales > 0 ? ((totalReturns / grossSales) * 100).toFixed(1) : '0';
+  const currentDebt = parseFloat(c.debt || 0);
+  const totalPayments = Math.max(0, grossSales - totalReturns - currentDebt);
+  
+  return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
+}
+
 export function renderCustomersTable() {
+
   const tableBody = document.getElementById('customers-table-body');
   if (!tableBody) return;
   
@@ -151,6 +174,9 @@ export function renderCustomersTable() {
     const displayAddr = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '<span style="color: var(--text-muted);">N/A</span>');
     const addrTitle = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '');
     
+    const metrics = getCustomerMetrics(c);
+    c.totalTransaction = metrics.grossSales;
+    
     return `
       <tr>
         <td style="font-weight: 600; color: #fff;">${c.code}</td>
@@ -168,9 +194,11 @@ export function renderCustomersTable() {
         <td style="font-size: 0.85rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
           ${c.managedBy ? getManagerDisplayName(c.managedBy, state.users) : '<span style="color: #ef4444; font-weight: 500;">Chưa bàn giao</span>'}
         </td>
-        <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
+        <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
+        <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
+        <td style="text-align: right; font-weight: 600; color: #f59e0b;">${formatCurrency(metrics.totalReturns)}</td>
+        <td style="text-align: right; font-weight: 700; color: #10b981;">${formatCurrency(metrics.netSales)}</td>
         <td style="text-align: right; font-weight: 600; color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
-        <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(c.totalTransaction)}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-cust-btn" data-index="${actualIndex}" title="Sửa">
@@ -187,6 +215,7 @@ export function renderCustomersTable() {
       </tr>
     `;
   }).join('');
+
   
   // Gán sự kiện click cho các nút hành động
   document.querySelectorAll('.view-cust-detail-link').forEach(link => {
@@ -787,11 +816,111 @@ export function setupCustomerManagement() {
     };
   }
   
+  const downloadTemplateBtn = document.getElementById('btn-download-cust-excel-template');
+  if (downloadTemplateBtn) {
+    downloadTemplateBtn.onclick = (e) => {
+      e.stopPropagation();
+      downloadCustomerExcelTemplate();
+    };
+  }
+
   const submitImportBtn = document.getElementById('btn-save-cust-excel-submit');
   if (submitImportBtn) {
     submitImportBtn.onclick = processCustomerExcelImport;
   }
 }
+
+export function downloadCustomerExcelTemplate() {
+  const sampleData = [
+    {
+      "Mã khách hàng": "BG01-HN-001",
+      "Tên khách hàng": "Đại lý Sơn Tuấn Anh",
+      "Điện thoại": "0987654321",
+      "Địa chỉ": "Số 12 Phố Vọng, Phường Phương Mai, Quận Đống Đa, Hà Nội",
+      "Nhãn sơn": "Nano10*",
+      "Bảng giá": "Bảng giá BG01",
+      "Người quản lý": "Nguyễn Thanh Thụy",
+      "Tổng doanh số": 85000000,
+      "Tổng giá trị trả hàng": 5000000,
+      "Doanh số sau trả": 80000000,
+      "Công nợ hiện tại": 15000000
+    },
+    {
+      "Mã khách hàng": "BG02-HP-002",
+      "Tên khách hàng": "Cửa hàng Vật Tư Minh Đức",
+      "Điện thoại": "0912345678",
+      "Địa chỉ": "45 Đường Lạch Tray, Quận Ngô Quyền, Hải Phòng",
+      "Nhãn sơn": "Hatacco nano",
+      "Bảng giá": "Bảng giá đại lý cấp 1",
+      "Người quản lý": "Dương Như Hoàn",
+      "Tổng doanh số": 42000000,
+      "Tổng giá trị trả hàng": 0,
+      "Doanh số sau trả": 42000000,
+      "Công nợ hiện tại": 0
+    },
+    {
+      "Mã khách hàng": "BG03-DN-003",
+      "Tên khách hàng": "Đại lý Sơn & Hóa Chất Hoàng Long",
+      "Điện thoại": "0905123456",
+      "Địa chỉ": "78 Đường Nguyễn Văn Linh, Quận Thanh Khê, Đà Nẵng",
+      "Nhãn sơn": "mutsutec",
+      "Bảng giá": "Chiết khấu riêng",
+      "Người quản lý": "ctyabs@lendon.com",
+      "Tổng doanh số": 120000000,
+      "Tổng giá trị trả hàng": 10000000,
+      "Doanh số sau trả": 110000000,
+      "Công nợ hiện tại": 5500000
+    },
+    {
+      "Mã khách hàng": "BG04-TH-004",
+      "Tên khách hàng": "NPP Anh Chung Thanh Hóa",
+      "Điện thoại": "0943218765",
+      "Địa chỉ": "156 Đường Lê Lai, Phường Đông Sơn, TP Thanh Hóa, Thanh Hóa",
+      "Nhãn sơn": "Tất cả",
+      "Bảng giá": "Bảng giá 04",
+      "Người quản lý": "Trần Văn Nhất",
+      "Tổng doanh số": 65000000,
+      "Tổng giá trị trả hàng": 2000000,
+      "Doanh số sau trả": 63000000,
+      "Công nợ hiện tại": 2550000
+    },
+    {
+      "Mã khách hàng": "BG05-BD-005",
+      "Tên khách hàng": "Công Ty TNHH XD Sơn Nam Dương",
+      "Điện thoại": "0978112233",
+      "Địa chỉ": "89 Đại Lộ Bình Dương, Phường Phú Hòa, TP Thủ Dầu Một, Bình Dương",
+      "Nhãn sơn": "tdkaw",
+      "Bảng giá": "Chiết khấu riêng",
+      "Người quản lý": "Dương Như Hoàn",
+      "Tổng doanh số": 195000000,
+      "Tổng giá trị trả hàng": 0,
+      "Doanh số sau trả": 195000000,
+      "Công nợ hiện tại": 0
+    }
+  ];
+
+  const worksheet = XLSX.utils.json_to_sheet(sampleData);
+  worksheet['!cols'] = [
+    { wch: 18 }, // Mã khách hàng
+    { wch: 38 }, // Tên khách hàng
+    { wch: 16 }, // Điện thoại
+    { wch: 55 }, // Địa chỉ
+    { wch: 18 }, // Nhãn sơn
+    { wch: 25 }, // Bảng giá
+    { wch: 25 }, // Người quản lý
+    { wch: 18 }, // Tổng doanh số
+    { wch: 22 }, // Tổng giá trị trả hàng
+    { wch: 20 }, // Doanh số sau trả
+    { wch: 20 }  // Công nợ hiện tại
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "DanhSachKhachHang");
+  XLSX.writeFile(workbook, "Mau_Nhap_Danh_Sach_Khach_Hang.xlsx");
+}
+
+
+
 
 // --- Logic hiển thị chi tiết đại lý và lịch sử công nợ ---
 export function openCustomerDetailModal(index) {
@@ -848,12 +977,28 @@ export function openCustomerDetailModal(index) {
   document.getElementById('detail-cust-pricelist').innerText = plName;
   document.getElementById('detail-cust-notes').innerText = cust.notes || 'N/A';
   
-  document.getElementById('detail-cust-sales').innerText = formatCurrency(cust.totalTransaction || 0);
+  const metrics = getCustomerMetrics(cust);
+  const grossEl = document.getElementById('detail-cust-sales-gross');
+  if (grossEl) grossEl.innerText = formatCurrency(metrics.grossSales);
+  
+  const retTotEl = document.getElementById('detail-cust-returns-total');
+  if (retTotEl) retTotEl.innerText = formatCurrency(metrics.totalReturns);
+
+  const netEl = document.getElementById('detail-cust-sales-net');
+  if (netEl) netEl.innerText = formatCurrency(metrics.netSales);
+
+  const rateEl = document.getElementById('detail-cust-return-rate');
+  if (rateEl) rateEl.innerText = `${metrics.returnRate}%`;
+
+  const payEl = document.getElementById('detail-cust-total-payments');
+  if (payEl) payEl.innerText = formatCurrency(metrics.totalPayments);
+
   const detailDebtEl = document.getElementById('detail-cust-debt');
   if (detailDebtEl) {
     detailDebtEl.innerText = formatCurrency(cust.debt || 0);
     detailDebtEl.style.color = (cust.debt > 0) ? 'var(--color-danger)' : ((cust.debt < 0) ? 'var(--color-success)' : 'var(--text-muted)');
   }
+
 
   // Vẽ danh sách lịch sử biến động công nợ
   const historyBody = document.getElementById('detail-debt-history-body');
@@ -897,16 +1042,18 @@ export function openCustomerDetailModal(index) {
           hour: '2-digit', minute: '2-digit', second: '2-digit'
         }).format(new Date(h.date));
         
+        const noteText = h.note || h.notes || '-';
         return `
           <tr>
-            <td>${formattedTime}</td>
+            <td style="font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
             <td style="text-align: center;">${typeBadge}</td>
             <td style="text-align: right;">${formatCurrency(debtBefore)}</td>
             <td style="text-align: right;">${amountText}</td>
             <td style="text-align: right; font-weight: 600;">${formatCurrency(h.debtAfter)}</td>
-            <td title="${h.notes}">${h.notes}</td>
+            <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${noteText}">${noteText}</td>
           </tr>
         `;
+
       }).join('');
     }
   }
@@ -986,8 +1133,11 @@ function handleCustExcelFile(file) {
         name: headers.indexOf('Tên khách hàng'),
         phone: headers.indexOf('Điện thoại'),
         address: headers.indexOf('Địa chỉ'),
-        debt: headers.indexOf('Nợ cần thu hiện tại'),
-        totalTransaction: headers.indexOf('Tổng bán'),
+        excelBrand: headers.indexOf('Nhãn sơn') !== -1 ? headers.indexOf('Nhãn sơn') : headers.indexOf('Nhãn đại lý'),
+        debt: headers.indexOf('Công nợ hiện tại') !== -1 ? headers.indexOf('Công nợ hiện tại') : (headers.indexOf('Công nợ') !== -1 ? headers.indexOf('Công nợ') : headers.indexOf('Nợ cần thu hiện tại')),
+        totalTransaction: headers.indexOf('Tổng doanh số') !== -1 ? headers.indexOf('Tổng doanh số') : (headers.indexOf('Tổng bán') !== -1 ? headers.indexOf('Tổng bán') : headers.indexOf('Doanh số gốc')),
+        totalReturns: headers.indexOf('Tổng giá trị trả hàng') !== -1 ? headers.indexOf('Tổng giá trị trả hàng') : headers.indexOf('Tổng trả hàng'),
+        netSales: headers.indexOf('Doanh số sau trả'),
         excelPricelist: headers.indexOf('Bảng giá'),
         excelManager: headers.indexOf('Nhóm khách hàng') !== -1 ? headers.indexOf('Nhóm khách hàng') : (headers.indexOf('Người quản lý') !== -1 ? headers.indexOf('Người quản lý') : headers.indexOf('Người tạo')),
       };
@@ -1055,16 +1205,23 @@ function handleCustExcelFile(file) {
         let debt = colMap.debt !== -1 ? parseFloat(row[colMap.debt]) || 0 : 0;
         let totalTransaction = colMap.totalTransaction !== -1 ? parseFloat(row[colMap.totalTransaction]) || 0 : 0;
         
-        // Auto detect brand
-        const nameLower = name.toLowerCase();
-        const codeLower = code.toLowerCase();
+        // Brand assignment
         let assignedBrand = defaultBrand;
-        if (nameLower.includes('nano10') || nameLower.includes('nano 10') || codeLower.includes('nano10') || codeLower.includes('nano 10')) assignedBrand = 'Nano10*';
-        else if (nameLower.includes('hatacco') || codeLower.includes('hatacco')) assignedBrand = 'Hatacco nano';
-        else if (nameLower.includes('mutsutec') || nameLower.includes('mutsu') || codeLower.includes('mutsutec') || codeLower.includes('mutsu')) assignedBrand = 'mutsutec';
-        else if (nameLower.includes('tdkaw') || codeLower.includes('tdkaw')) assignedBrand = 'tdkaw';
-        else if (nameLower.includes('cova') || codeLower.includes('cova')) assignedBrand = 'cova';
-        else if (nameLower.includes('festiva') || codeLower.includes('festiva')) assignedBrand = 'festiva';
+        let excelBrandVal = colMap.excelBrand !== -1 && row[colMap.excelBrand] ? row[colMap.excelBrand].toString().trim() : '';
+        if (excelBrandVal) {
+          assignedBrand = excelBrandVal;
+        } else {
+          // Auto detect brand if not explicitly provided
+          const nameLower = name.toLowerCase();
+          const codeLower = code.toLowerCase();
+          if (nameLower.includes('nano10') || nameLower.includes('nano 10') || codeLower.includes('nano10') || codeLower.includes('nano 10')) assignedBrand = 'Nano10*';
+          else if (nameLower.includes('hatacco') || codeLower.includes('hatacco')) assignedBrand = 'Hatacco nano';
+          else if (nameLower.includes('mutsutec') || nameLower.includes('mutsu') || codeLower.includes('mutsutec') || codeLower.includes('mutsu')) assignedBrand = 'mutsutec';
+          else if (nameLower.includes('tdkaw') || codeLower.includes('tdkaw')) assignedBrand = 'tdkaw';
+          else if (nameLower.includes('cova') || codeLower.includes('cova')) assignedBrand = 'cova';
+          else if (nameLower.includes('festiva') || codeLower.includes('festiva')) assignedBrand = 'festiva';
+        }
+
         
         // Auto detect pricelist
         let pricelistId = '';

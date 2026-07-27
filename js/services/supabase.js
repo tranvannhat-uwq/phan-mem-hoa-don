@@ -21,6 +21,9 @@ export let tableSemiFinishedName = 'semi_finished';
 export let tableRecipesName = 'recipes';
 export let tableProductionLogsName = 'production_logs';
 export let tableFinishedGoodsStockName = 'finished_goods_stock';
+export let tableSalesReturnsName = 'sales_returns';
+export let tableSalesReturnItemsName = 'sales_return_items';
+
 
 export function setCloudActive(active) {
   isCloudActive = active;
@@ -753,6 +756,52 @@ export async function fetchCloudData() {
       }
     };
 
+    const fetchSalesReturns = async () => {
+      try {
+        const returnsData = await fetchFullTableData(tableSalesReturnsName);
+        const itemsData = await fetchFullTableData(tableSalesReturnItemsName);
+        if (returnsData) {
+          const itemsMap = new Map();
+          if (itemsData) {
+            itemsData.forEach(i => {
+              const arr = itemsMap.get(i.return_id) || [];
+              arr.push({
+                id: i.id,
+                returnId: i.return_id,
+                saleItemId: i.sale_item_id,
+                productId: i.product_id,
+                productName: i.product_name,
+                quantity: parseFloat(i.quantity || 0),
+                importPrice: parseFloat(i.import_price || 0),
+                discountType: i.discount_type,
+                discountValue: parseFloat(i.discount_value || 0),
+                refundPrice: parseFloat(i.refund_price || 0),
+                subtotal: parseFloat(i.subtotal || 0),
+                packageType: i.package_type
+              });
+              itemsMap.set(i.return_id, arr);
+            });
+          }
+          
+          state.salesReturns = returnsData.map(r => ({
+            id: r.id,
+            saleId: r.sale_id,
+            customerId: r.customer_id,
+            createdBy: r.created_by,
+            createdAt: r.created_at,
+            reason: r.reason,
+            totalRefund: parseFloat(r.total_refund || 0),
+            status: r.status,
+            items: itemsMap.get(r.id) || []
+          }));
+          saveSalesReturns(state.salesReturns);
+        }
+      } catch (err) {
+        console.warn("Could not load sales returns from Supabase, using local:", err.message);
+        state.salesReturns = getSalesReturns();
+      }
+    };
+
     // Tải song song tất cả các bảng dữ liệu bằng Promise.all để tăng tốc độ phản hồi tối đa
     await Promise.all([
       fetchProducts(),
@@ -768,7 +817,8 @@ export async function fetchCloudData() {
       fetchSemiFinished(),
       fetchRecipes(),
       fetchProductionLogs(),
-      fetchFinishedGoodsStock()
+      fetchFinishedGoodsStock(),
+      fetchSalesReturns()
     ]);
 
   } catch(err) {
@@ -1649,11 +1699,13 @@ export async function dbSaveCashbookTransaction(tx) {
         .from(tableCashbookTransactionsName)
         .upsert(dbRow, { onConflict: 'id' });
         
-      if (error) throw error;
+      if (error) {
+        console.warn('Lưu sổ quỹ lên Supabase cảnh báo (RLS):', error.message);
+        return false;
+      }
       return true;
     } catch(err) {
-      console.error(err);
-      showToast('Không thể lưu giao dịch Sổ quỹ lên đám mây: ' + err.message, 'danger');
+      console.warn('Lưu giao dịch Sổ quỹ lên đám mây bị tạm hoãn:', err.message || err);
       return false;
     }
   }
@@ -2002,3 +2054,58 @@ export async function dbDeleteAllSemiFinished() {
   }
   return true;
 }
+
+export function getSalesReturns() {
+  const stored = localStorage.getItem('billing_system_sales_returns');
+  if (stored) {
+    try { return JSON.parse(stored); } catch(e) { return []; }
+  }
+  return [];
+}
+
+export function saveSalesReturns(returns) {
+  localStorage.setItem('billing_system_sales_returns', JSON.stringify(returns));
+}
+
+export async function dbSaveSalesReturn(ret) {
+  saveSalesReturns(state.salesReturns);
+  if (isCloudActive && supabaseClient) {
+    try {
+      const dbRow = {
+        id: ret.id,
+        sale_id: ret.saleId,
+        customer_id: ret.customerId || null,
+        created_by: ret.createdBy,
+        created_at: ret.createdAt,
+        reason: ret.reason,
+        total_refund: ret.totalRefund,
+        status: ret.status
+      };
+      await supabaseClient.from(tableSalesReturnsName).upsert(dbRow, { onConflict: 'id' });
+      
+      if (ret.items && ret.items.length > 0) {
+        const itemRows = ret.items.map(i => ({
+          id: i.id || `thitem_${ret.id}_${Math.random().toString(36).substr(2, 6)}`,
+          return_id: ret.id,
+          sale_item_id: i.saleItemId || null,
+          product_id: i.productId || null,
+          product_name: i.productName || '',
+          quantity: i.quantity || 0,
+          import_price: i.importPrice || 0,
+          discount_type: i.discountType || 'percent',
+          discount_value: i.discountValue || 0,
+          refund_price: i.refundPrice || 0,
+          subtotal: i.subtotal || 0,
+          package_type: i.packageType || ''
+        }));
+        await supabaseClient.from(tableSalesReturnItemsName).upsert(itemRows, { onConflict: 'id' });
+      }
+      return true;
+    } catch(err) {
+      console.warn('Lưu phiếu trả hàng đám mây:', err.message || err);
+      return false;
+    }
+  }
+  return true;
+}
+
