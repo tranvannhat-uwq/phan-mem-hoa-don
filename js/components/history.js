@@ -1,11 +1,86 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName } from '../utils.js';
+import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
 import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 import { openPrintTypeModal } from './invoice.js?v=20260727-advance-payment';
 import { openHistoryOrderExportModal } from './customers.js?v=20260727-debt-audit2';
 
 const selectedHistoryOrderIdsForExport = new Set();
+const HISTORY_SETTLED_STATUSES = new Set(['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
+
+function updateHistorySummary(orders) {
+  const totalEl = document.getElementById('history-total-settled-amount');
+  const countEl = document.getElementById('history-total-settled-count');
+  if (!totalEl || !countEl) return;
+
+  const settledOrders = (orders || []).filter(o => HISTORY_SETTLED_STATUSES.has(String(o.status || 'settled').toLowerCase()));
+  const total = settledOrders.reduce((sum, order) => sum + (Number(order.totalPayable ?? order.total_payable ?? order.totalAmount ?? 0) || 0), 0);
+
+  totalEl.innerText = formatCurrency(total);
+  countEl.innerText = `${settledOrders.length} / ${(orders || []).length} đơn hợp lệ`;
+}
+
+function getHistoryOrderAmountBreakdown(order) {
+  const totalAfterDiscount = Number(order.totalPayable ?? order.total_payable ?? order.totalAmount ?? 0) || 0;
+  const productSubtotal = Number(order.subtotal ?? 0) || 0;
+  const productDiscount = Number(order.totalDiscount ?? 0) || 0;
+  const invoiceDiscount = Number(order.discountAmount ?? 0) || 0;
+  const totalBeforeDiscount = Number(order.totalMarket ?? 0) || (productSubtotal + productDiscount) || (totalAfterDiscount + productDiscount + invoiceDiscount);
+  const totalDiscountAmount = productDiscount + invoiceDiscount;
+
+  return {
+    totalBeforeDiscount,
+    totalDiscountAmount,
+    totalAfterDiscount
+  };
+}
+
+function populateHistoryCompanyAndBrandFilters() {
+  const companySelect = document.getElementById('history-company-filter');
+  const brandSelect = document.getElementById('history-brand-filter');
+
+  if (companySelect) {
+    const currentCompany = companySelect.value || 'all';
+    const companyOptions = (state.companies || [])
+      .map(c => `<option value="${c.id}">${c.name || c.id}</option>`)
+      .join('');
+    companySelect.innerHTML = `<option value="all">Tất cả công ty</option>${companyOptions}`;
+    companySelect.value = Array.from(companySelect.options).some(opt => opt.value === currentCompany) ? currentCompany : 'all';
+  }
+
+  if (brandSelect) {
+    const currentBrand = brandSelect.value || 'all';
+    const brandOptions = Array.from(new Set((state.brands || []).map(b => b.name).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, 'vi'))
+      .map(name => `<option value="${name}">${name}</option>`)
+      .join('');
+    brandSelect.innerHTML = `<option value="all">Tất cả nhãn sơn</option>${brandOptions}`;
+    brandSelect.value = Array.from(brandSelect.options).some(opt => opt.value === currentBrand) ? currentBrand : 'all';
+  }
+}
+
+function orderMatchesHistoryCompany(order, companyId) {
+  if (!companyId || companyId === 'all') return true;
+  const selectedCompanyId = normalizeCompanyId(companyId);
+  if (normalizeCompanyId(order.companyId || order.company_id) === selectedCompanyId) return true;
+
+  return (order.items || []).some(item => {
+    const itemCompany = item.revenueCompany || item.companyId || item.company_id ||
+      getCompanyIdByBrand(item.revenueBrand || item.agencyBrand || item.productBrand || item.brand, state.brands);
+    return normalizeCompanyId(itemCompany) === selectedCompanyId;
+  });
+}
+
+function orderMatchesHistoryBrand(order, brandName) {
+  if (!brandName || brandName === 'all') return true;
+  const selectedBrand = getCanonicalBrandName(brandName, state.brands).toLowerCase();
+
+  return (order.items || []).some(item =>
+    [item.revenueBrand, item.agencyBrand, item.productBrand, item.brand]
+      .filter(Boolean)
+      .some(brand => getCanonicalBrandName(brand, state.brands).toLowerCase() === selectedBrand)
+  );
+}
 
 export function setupHistoryPanel() {
   const searchInput = document.getElementById('history-search-input');
@@ -19,7 +94,7 @@ export function setupHistoryPanel() {
     searchInput.addEventListener('input', onFilterChange);
   }
   
-  // Thiết lập các bộ lọc thời gian, khách hàng, nhân viên
+  // Thiết lập các bộ lọc thời gian, công ty, nhãn sơn, nhân viên
   const dateModeSelect = document.getElementById('history-date-mode');
   const filterDateInput = document.getElementById('history-filter-date');
   const filterMonthInput = document.getElementById('history-filter-month');
@@ -64,16 +139,38 @@ export function setupHistoryPanel() {
     document.getElementById('history-filter-from').addEventListener('input', onFilterChange);
     document.getElementById('history-filter-to').addEventListener('input', onFilterChange);
   }
-  
-  const customerFilter = document.getElementById('history-customer-filter');
-  if (customerFilter) {
-    customerFilter.addEventListener('input', onFilterChange);
-  }
+
+  ['history-company-filter', 'history-brand-filter'].forEach(id => {
+    const select = document.getElementById(id);
+    if (select) select.addEventListener('change', onFilterChange);
+  });
   
   const creatorFilter = document.getElementById('history-creator-filter');
   if (creatorFilter) {
-    creatorFilter.addEventListener('input', onFilterChange);
+    creatorFilter.addEventListener('input', () => {
+      renderHistoryCreatorSuggestions();
+      onFilterChange();
+    });
+    creatorFilter.addEventListener('focus', renderHistoryCreatorSuggestions);
   }
+
+  document.addEventListener('click', (e) => {
+    const creatorWrap = document.querySelector('.history-creator-filter-wrap');
+    const suggestions = document.getElementById('history-creator-suggestions');
+    if (creatorWrap && suggestions && !creatorWrap.contains(e.target)) {
+      suggestions.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('.history-creator-suggestion');
+    if (!item) return;
+    const creatorFilter = document.getElementById('history-creator-filter');
+    const suggestions = document.getElementById('history-creator-suggestions');
+    if (creatorFilter) creatorFilter.value = decodeURIComponent(item.getAttribute('data-name') || '');
+    if (suggestions) suggestions.style.display = 'none';
+    onFilterChange();
+  });
 
   const refreshBtn = document.getElementById('btn-refresh-history');
   if (refreshBtn) {
@@ -157,40 +254,54 @@ export async function deleteOrder(id) {
   }
 }
 
-let lastCustomerLength = 0;
 let lastUserLength = 0;
 
 export function populateHistoryFilters() {
-  const customerList = document.getElementById('history-customer-list');
-  const creatorList = document.getElementById('history-creator-list');
+  const creatorSuggestions = document.getElementById('history-creator-suggestions');
+  populateHistoryCompanyAndBrandFilters();
+  if (!creatorSuggestions) return;
   
-  if (!customerList || !creatorList) return;
-  
-  // Chỉ cập nhật nếu số lượng khách hàng hoặc người dùng thay đổi
-  if (state.customers.length === lastCustomerLength && state.users.length === lastUserLength) {
+  // Chỉ cập nhật nếu số lượng người dùng thay đổi
+  if (state.users.length === lastUserLength) {
     return;
   }
   
-  lastCustomerLength = state.customers.length;
   lastUserLength = state.users.length;
-  
-  customerList.innerHTML = '';
-  state.customers.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.name;
-    const subText = (c.code && c.code !== c.name) ? c.code : (c.phone ? `SĐT: ${c.phone}` : '');
-    opt.textContent = subText;
-    customerList.appendChild(opt);
-  });
-  
-  creatorList.innerHTML = '';
-  state.users.forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u.displayName;
-    const roleText = u.isExternal ? 'Kinh doanh ngoài' : (u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale');
-    opt.textContent = `@${u.username} • ${roleText}`;
-    creatorList.appendChild(opt);
-  });
+  renderHistoryCreatorSuggestions();
+}
+
+function renderHistoryCreatorSuggestions() {
+  const input = document.getElementById('history-creator-filter');
+  const suggestions = document.getElementById('history-creator-suggestions');
+  if (!input || !suggestions) return;
+
+  const query = input.value.toLowerCase().trim();
+  const users = state.users
+    .filter(u => {
+      if (!query) return true;
+      return (u.displayName || '').toLowerCase().includes(query) ||
+        (u.username || '').toLowerCase().includes(query);
+    })
+    .slice(0, 12);
+
+  if (users.length === 0) {
+    suggestions.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Không tìm thấy nhân viên</li>`;
+  } else {
+    suggestions.innerHTML = users.map(u => {
+      const roleText = u.isExternal ? 'Kinh doanh ngoài' : (u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale');
+      return `
+        <li class="suggestion-item history-creator-suggestion" data-name="${encodeURIComponent(u.displayName || u.username || '')}">
+          <div class="suggestion-info">
+            <span class="suggestion-code">${u.displayName || u.username}</span>
+            <span class="suggestion-name">@${u.username || ''}</span>
+          </div>
+          <span class="suggestion-brand-badge">${roleText}</span>
+        </li>
+      `;
+    }).join('');
+  }
+
+  suggestions.style.display = document.activeElement === input ? 'block' : 'none';
 }
 
 export function renderHistoryOrders() {
@@ -222,7 +333,8 @@ export function renderHistoryOrders() {
   const filterYearSelect = document.getElementById('history-filter-year');
   const filterFromInput = document.getElementById('history-filter-from');
   const filterToInput = document.getElementById('history-filter-to');
-  const customerFilterSelect = document.getElementById('history-customer-filter');
+  const companyFilterSelect = document.getElementById('history-company-filter');
+  const brandFilterSelect = document.getElementById('history-brand-filter');
   const creatorFilterSelect = document.getElementById('history-creator-filter');
   
   const dateMode = dateModeSelect ? dateModeSelect.value : 'all';
@@ -231,7 +343,8 @@ export function renderHistoryOrders() {
   const filterYear = filterYearSelect ? filterYearSelect.value : '';
   const filterFrom = filterFromInput ? filterFromInput.value : '';
   const filterTo = filterToInput ? filterToInput.value : '';
-  const selectedCust = customerFilterSelect ? customerFilterSelect.value : '';
+  const selectedCompany = companyFilterSelect ? companyFilterSelect.value : 'all';
+  const selectedBrand = brandFilterSelect ? brandFilterSelect.value : 'all';
   const selectedCreator = creatorFilterSelect ? creatorFilterSelect.value : '';
 
   const filtered = state.savedOrders.filter(o => {
@@ -243,35 +356,50 @@ export function renderHistoryOrders() {
     // 2. Lọc theo tìm kiếm từ khóa
     const matchesSearch = o.id.toLowerCase().includes(searchVal) || o.customerName.toLowerCase().includes(searchVal);
     if (!matchesSearch) return false;
+
+    if (!orderMatchesHistoryCompany(o, selectedCompany)) return false;
+    if (!orderMatchesHistoryBrand(o, selectedBrand)) return false;
     
-    // 3. Lọc theo khách hàng (Tìm kiếm tương đối)
-    if (selectedCust && !o.customerName.toLowerCase().includes(selectedCust.toLowerCase().trim())) return false;
-    
-    // 4. Lọc theo nhân viên lên đơn (Tìm kiếm tương đối)
+    // 3. Lọc theo nhân viên quản lý đại lý (Tìm kiếm tương đối)
     if (selectedCreator) {
       const filterLower = selectedCreator.toLowerCase().trim();
       
       const matchingUsers = state.users.filter(u => 
-        u.displayName.toLowerCase().includes(filterLower) || 
-        u.username.toLowerCase().includes(filterLower)
+        (u.displayName || '').toLowerCase().includes(filterLower) || 
+        (u.username || '').toLowerCase().includes(filterLower)
       );
       
+      const orderCustomer = o.customerId
+        ? state.customers.find(c => String(c.id) === String(o.customerId))
+        : state.customers.find(c => (c.name || '').toLowerCase() === (o.customerName || '').toLowerCase());
+      const managerValue = orderCustomer ? (orderCustomer.managedBy || orderCustomer.managed_by || '') : '';
+      const managerDisplay = managerValue ? getManagerDisplayName(managerValue, state.users) : '';
+
       let matched = false;
       if (matchingUsers.length > 0) {
-        matched = matchingUsers.some(u => isSameUser(o.createdBy, u.username));
+        matched = matchingUsers.some(u => isSameUser(managerValue, u.username));
+      }
+
+      if (!matched && managerValue) {
+        const managerClean = managerValue.toLowerCase();
+        const managerDisplayClean = managerDisplay.toLowerCase();
+        matched = managerClean.includes(filterLower) || managerDisplayClean.includes(filterLower);
       }
       
       if (!matched) {
+        // Fallback cho đơn cũ chưa liên kết được đại lý: vẫn cho lọc theo người tạo đơn.
         const creatorClean = (o.createdBy || '').toLowerCase();
         if (creatorClean.includes(filterLower)) {
           matched = true;
+        } else if (matchingUsers.length > 0) {
+          matched = matchingUsers.some(u => isSameUser(o.createdBy, u.username));
         }
       }
       
       if (!matched) return false;
     }
     
-    // 5. Lọc theo thời gian
+    // 4. Lọc theo thời gian
     if (o.date) {
       const oDate = new Date(o.date);
       if (isNaN(oDate.getTime())) return true;
@@ -309,6 +437,8 @@ export function renderHistoryOrders() {
     return true;
   });
 
+  updateHistorySummary(filtered);
+
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
@@ -340,7 +470,7 @@ export function renderHistoryOrders() {
     // ---------------------- DẠNG CHI TIẾT (DETAILS TABLE VIEW) ----------------------
     const tableRows = paginatedItems.map((order, idx) => {
       const indexNumber = startIndex + idx + 1;
-      const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
+      const amountBreakdown = getHistoryOrderAmountBreakdown(order);
 
       let statusBadge = '';
       if (order.status === 'draft') {
@@ -353,21 +483,16 @@ export function renderHistoryOrders() {
         statusBadge = `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
       }
 
-      const creator = state.users.find(u => isSameUser(u.username, order.createdBy));
-      const creatorName = creator ? creator.displayName : (order.createdBy && order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy);
-
       let showDeleteBtn = true;
       if ((order.status === 'settled' || order.status === 'partially_returned' || order.status === 'returned') && state.currentUser && state.currentUser.role !== 'admin') {
         showDeleteBtn = false;
       }
 
       const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
-      let managerName = 'Chưa phân công';
       let plName = 'Nhập tay';
       let debtText = '0 ₫';
       
       if (cust) {
-        managerName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa phân công';
         const pl = state.pricelists.find(p => p.id === cust.pricelistId);
         plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
         debtText = formatCurrency(cust.debt || 0);
@@ -376,24 +501,6 @@ export function renderHistoryOrders() {
         const pl = state.pricelists.find(p => p.id === orderPlId);
         plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
       }
-
-      const itemsPreviewHtml = `
-        <div class="history-details-items-preview">
-          <div style="font-weight: 600; color: var(--text-primary); font-size: 0.72rem; margin-bottom: 2px;">
-            Mặt hàng (${totalItemsCount}):
-          </div>
-          <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px;">
-            ${order.items.map(item => `
-              <li style="display: flex; justify-content: space-between; gap: 8px; color: var(--text-secondary);">
-                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;" title="${item.productName || item.product.name} (${item.package})">
-                  • ${item.productName || item.product.name} (${item.package})
-                </span>
-                <span style="font-weight: 500; white-space: nowrap;">${item.quantity} x ${formatCurrency(item.price)}</span>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      `;
 
       return `
         <tr>
@@ -410,39 +517,38 @@ export function renderHistoryOrders() {
             <div style="font-weight: 600; color: var(--text-primary);">${order.customerName}</div>
             <div style="font-size: 0.78rem; color: var(--text-muted);">Nợ hiện tại: <span style="color: var(--color-danger); font-weight: 600;">${debtText}</span></div>
           </td>
-          <td style="font-size: 0.8rem;">
-            <div>Tạo: <strong>${creatorName}</strong></div>
-            <div style="color: var(--text-muted);">QL: ${managerName}</div>
-          </td>
           <td>
             <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${plName}</span>
           </td>
-          <td style="min-width: 240px;">
-            ${itemsPreviewHtml}
+          <td style="text-align: right;">
+            <div class="history-money-cell">${formatCurrency(amountBreakdown.totalBeforeDiscount)}</div>
           </td>
           <td style="text-align: right;">
-            <div style="font-weight: 700; color: var(--color-primary); font-size: 0.95rem;">${formatCurrency(order.totalPayable)}</div>
+            <div class="history-money-cell history-money-discount">${formatCurrency(amountBreakdown.totalDiscountAmount)}</div>
+          </td>
+          <td style="text-align: right;">
+            <div class="history-money-cell history-money-total">${formatCurrency(amountBreakdown.totalAfterDiscount)}</div>
           </td>
           <td style="text-align: center;">
-            <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
-              <button class="btn btn-indigo btn-xs history-print-btn" data-id="${order.id}" title="In đơn" style="padding: 4px 8px;">
-                <i data-lucide="printer" style="width: 13px; height: 13px;"></i> In
+            <div class="history-table-actions">
+              <button class="history-action-btn history-action-print history-print-btn" data-id="${order.id}" title="In đơn">
+                <i data-lucide="printer"></i> In
               </button>
               ${order.status === 'draft' ? `
-                <button class="btn btn-primary btn-xs history-edit-btn" data-id="${order.id}" title="Sửa đơn" style="padding: 4px 8px;">
-                  <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
+                <button class="history-action-btn history-action-edit history-edit-btn" data-id="${order.id}" title="Sửa đơn">
+                  <i data-lucide="edit"></i> Sửa
                 </button>
               ` : `
-                <button class="btn btn-teal btn-xs history-view-btn" data-id="${order.id}" title="Xem chi tiết" style="padding: 4px 8px;">
-                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Xem
+                <button class="history-action-btn history-action-view history-view-btn" data-id="${order.id}" title="Xem chi tiết">
+                  <i data-lucide="eye"></i> Xem
                 </button>
-                <button class="btn btn-warning btn-xs history-return-btn" data-id="${order.id}" title="Trả hàng" style="padding: 4px 8px; background: #f59e0b; border-color: #f59e0b; color: #fff;">
-                  <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
+                <button class="history-action-btn history-action-return history-return-btn" data-id="${order.id}" title="Trả hàng">
+                  <i data-lucide="rotate-ccw"></i> Trả
                 </button>
               `}
               ${showDeleteBtn ? `
-                <button class="btn btn-danger btn-xs history-delete-btn" data-id="${order.id}" title="Xóa đơn hàng" style="padding: 4px 6px; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35);">
-                  <i data-lucide="x" style="width: 13px; height: 13px;"></i>
+                <button class="history-action-btn history-action-delete history-delete-btn" data-id="${order.id}" title="Xóa đơn hàng">
+                  <i data-lucide="x"></i>
                 </button>
               ` : ''}
             </div>
@@ -453,7 +559,7 @@ export function renderHistoryOrders() {
 
     ordersContentHtml = `
       <div class="table-responsive glass-panel" style="padding: 0.5rem; width: 100%; border-radius: 12px; grid-column: 1 / -1;">
-        <table class="table history-details-table" style="min-width: 1050px;">
+        <table class="table history-details-table" style="min-width: 980px;">
           <thead>
             <tr>
               <th style="width: 42px; text-align: center;"><input type="checkbox" id="history-select-all-export" title="Chọn tất cả đơn trên trang"></th>
@@ -461,10 +567,10 @@ export function renderHistoryOrders() {
               <th style="width: 120px;">Mã đơn</th>
               <th style="width: 135px;">Ngày lập</th>
               <th style="width: 170px;">Khách hàng</th>
-              <th style="width: 150px;">Người tạo / NVQL</th>
               <th style="width: 120px;">Bảng giá</th>
-              <th>Chi tiết mặt hàng</th>
-              <th style="width: 130px; text-align: right;">Tổng tiền</th>
+              <th style="width: 140px; text-align: right;">Tổng tiền hàng</th>
+              <th style="width: 125px; text-align: right;">Giảm giá</th>
+              <th style="width: 145px; text-align: right;">Tổng sau giảm giá</th>
               <th style="width: 140px; text-align: center;">Thao tác</th>
             </tr>
           </thead>
@@ -766,6 +872,7 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   const discTypeSelect = document.getElementById('invoice-discount-type');
   const feeValInput = document.getElementById('invoice-other-fee-value');
   const feeTypeSelect = document.getElementById('invoice-other-fee-type');
+  const shippingFeeValInput = document.getElementById('invoice-shipping-fee-value');
 
   const discType = order.discountType || 'amount';
   const discVal = order.discountValue || 0;
@@ -779,6 +886,9 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   if (feeTypeSelect) feeTypeSelect.value = feeType;
   if (feeValInput) {
     feeValInput.value = feeType === 'percent' ? feeVal : formatNumber(feeVal);
+  }
+  if (shippingFeeValInput) {
+    shippingFeeValInput.value = formatNumber(order.shippingFeeValue || order.shippingFeeAmount || 0);
   }
   
   // Đổi tiêu đề và trạng thái nút chốt đơn trên giao diện lập hóa đơn

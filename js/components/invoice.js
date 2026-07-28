@@ -412,11 +412,13 @@ export function calculateInvoiceTotals() {
     otherFeeAmount = feeData.value;
   }
   otherFeeAmount = Math.max(0, otherFeeAmount);
+  const shippingFeeData = parseDiscountOrFeeInput('invoice-shipping-fee-value', null);
+  const shippingFeeAmount = Math.max(0, shippingFeeData.value || 0);
 
-  // Doanh thu đơn giữ nguyên; tiền đã cọc chỉ làm giảm số còn phải thanh toán.
+  // Doanh thu đơn giữ nguyên; tiền đã cọc trừ đi, tiền cước khách nhờ thanh toán cộng thêm vào phải thu.
   const orderTotal = Math.max(0, subtotal - discountAmount);
-  otherFeeAmount = Math.min(otherFeeAmount, orderTotal);
-  const amountDue = Math.max(0, orderTotal - otherFeeAmount);
+  otherFeeAmount = Math.min(otherFeeAmount, orderTotal + shippingFeeAmount);
+  const amountDue = Math.max(0, orderTotal + shippingFeeAmount - otherFeeAmount);
 
   // Cập nhật lên UI với đúng ID trong index.html
   const qtyEl = document.getElementById('summary-total-qty');
@@ -425,6 +427,7 @@ export function calculateInvoiceTotals() {
   const subtotalEl = document.getElementById('summary-subtotal');
   const discActualEl = document.getElementById('summary-discount-actual');
   const feeActualEl = document.getElementById('summary-other-fee-actual');
+  const shippingFeeActualEl = document.getElementById('summary-shipping-fee-actual');
   const payableEl = document.getElementById('summary-final-total');
   const savingBadge = document.getElementById('summary-saving-badge');
   const crossedMarket = document.getElementById('summary-final-market-crossed');
@@ -435,6 +438,7 @@ export function calculateInvoiceTotals() {
   if (subtotalEl) subtotalEl.innerText = formatCurrency(subtotal);
   if (discActualEl) discActualEl.innerText = `-${formatCurrency(discountAmount)}`;
   if (feeActualEl) feeActualEl.innerText = `-${formatCurrency(otherFeeAmount)}`;
+  if (shippingFeeActualEl) shippingFeeActualEl.innerText = `+${formatCurrency(shippingFeeAmount)}`;
   if (payableEl) payableEl.innerText = formatCurrency(amountDue);
 
   const totalCombinedDiscount = totalDiscount + discountAmount;
@@ -599,11 +603,13 @@ export function compileActiveOrder() {
     otherFeeAmount = feeData.value;
   }
   otherFeeAmount = Math.max(0, otherFeeAmount);
+  const shippingFeeData = parseDiscountOrFeeInput('invoice-shipping-fee-value', null);
+  const shippingFeeAmount = Math.max(0, shippingFeeData.value || 0);
 
   const totalPayable = Math.max(0, subtotal - discountAmount);
-  otherFeeAmount = Math.min(otherFeeAmount, totalPayable);
+  otherFeeAmount = Math.min(otherFeeAmount, totalPayable + shippingFeeAmount);
   const paidAmount = otherFeeAmount;
-  const amountDue = Math.max(0, totalPayable - paidAmount);
+  const amountDue = Math.max(0, totalPayable + shippingFeeAmount - paidAmount);
 
   const plSelect = document.getElementById('invoice-pricelist-select');
   const pricelistId = plSelect ? plSelect.value : 'retail';
@@ -656,6 +662,8 @@ export function compileActiveOrder() {
     otherFeeValue: feeData.value,
     otherFeeType: feeData.type,
     otherFeeAmount: otherFeeAmount,
+    shippingFeeValue: shippingFeeAmount,
+    shippingFeeAmount,
     paidAmount,
     amountDue,
     totalPayable,
@@ -809,8 +817,7 @@ export async function saveActiveOrder(status = 'settled') {
           const cust = state.customers.find(c => c.id === order.customerId);
           if (cust) {
             const debtBefore = Number(cust.debt) || 0;
-            const paidAmount = Number(order.paidAmount) || 0;
-            const debtAmount = Math.max(0, (Number(order.totalPayable) || 0) - paidAmount);
+            const debtAmount = Number(order.amountDue) || 0;
             const rpcDebt = Number(saved.new_debt);
             cust.debt = Number.isFinite(rpcDebt)
               ? rpcDebt
@@ -824,7 +831,7 @@ export async function saveActiveOrder(status = 'settled') {
               id: order.id,
               date: order.date,
               type: 'charge',
-              amount: order.totalPayable,
+              amount: debtAmount,
               notes: `Mua hàng (Hóa đơn ${order.id})`,
               debtAfter: cust.debt
             });
@@ -889,6 +896,8 @@ export function resetInvoiceCustomer() {
   if (feeVal) feeVal.value = '0';
   const feeType = document.getElementById('invoice-other-fee-type');
   if (feeType) feeType.value = 'amount';
+  const shippingFeeVal = document.getElementById('invoice-shipping-fee-value');
+  if (shippingFeeVal) shippingFeeVal.value = '0';
   
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
@@ -1467,6 +1476,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     const printSubtotal = order.subtotal !== undefined ? order.subtotal : (isRetail ? sumSubTotal - order.totalDiscount : sumSubTotal);
     const printDiscount = order.discountAmount || 0;
     const printOtherFee = order.otherFeeAmount || 0;
+    const printShippingFee = order.shippingFeeAmount || order.shippingFeeValue || 0;
 
     table.innerHTML = `
       <thead>
@@ -1506,9 +1516,16 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu khác / Khách đã cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printOtherFee)}</td>
         </tr>
+
+        ${printShippingFee > 0 ? `
+        <tr>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách nhờ thanh toán cước</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">+${formatNumber(printShippingFee)}</td>
+        </tr>
+        ` : ''}
         
         <tr>
           <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
@@ -1842,6 +1859,19 @@ export function setupInvoiceCreator() {
       calculateInvoiceTotals();
     });
     feeTypeSelect.addEventListener('change', () => handleDiscountOrFeeInputChange(feeValInput, feeTypeSelect));
+  }
+
+  const shippingFeeValInput = document.getElementById('invoice-shipping-fee-value');
+  if (shippingFeeValInput) {
+    shippingFeeValInput.addEventListener('input', () => {
+      let rawDigits = shippingFeeValInput.value.replace(/\D/g, '');
+      shippingFeeValInput.value = rawDigits ? formatNumber(parseInt(rawDigits, 10) || 0) : '0';
+      calculateInvoiceTotals();
+    });
+    shippingFeeValInput.addEventListener('blur', () => {
+      if (shippingFeeValInput.value.trim() === '') shippingFeeValInput.value = '0';
+      calculateInvoiceTotals();
+    });
   }
 
   // Sự kiện tìm kiếm khách hàng trong invoice panel

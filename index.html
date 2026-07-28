@@ -1069,7 +1069,7 @@
                   <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Giảm giá:</span>
                   <div style="display: flex; align-items: center; gap: 0.25rem; width: 65%; max-width: 200px; justify-content: flex-end;">
                     <input type="text" id="invoice-discount-value" class="form-control" value="0" style="text-align: right; padding: 0.3rem 0.5rem; font-size: 0.85rem; width: 100%; min-width: 0;" placeholder="0">
-                    <select id="invoice-discount-type" class="form-control" style="width: auto; min-width: 65px; padding: 0.3rem 0.3rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center;">
+                    <select id="invoice-discount-type" class="form-control" style="width: auto; min-width: 78px; padding: 0.3rem 0.45rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center;">
                       <option value="percent" selected>%</option>
                       <option value="amount">VNĐ</option>
                     </select>
@@ -1080,20 +1080,31 @@
                   <span class="value" style="color: var(--color-danger); font-weight: 500;" id="summary-discount-actual">-0 ₫</span>
                 </div>
 
-                <!-- 2. Thu khác -->
+                <!-- 2. Khách cọc -->
                 <div class="summary-row summary-input-row" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.25rem;">
-                  <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Thu khác / Khách đã cọc:</span>
+                  <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Khách cọc:</span>
                   <div style="display: flex; align-items: center; gap: 0.25rem; width: 65%; max-width: 200px; justify-content: flex-end;">
                     <input type="text" id="invoice-other-fee-value" class="form-control" value="0" style="text-align: right; padding: 0.3rem 0.5rem; font-size: 0.85rem; width: 100%; min-width: 0;" placeholder="0">
-                    <select id="invoice-other-fee-type" class="form-control" style="width: auto; min-width: 65px; padding: 0.3rem 0.3rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center;">
+                    <select id="invoice-other-fee-type" class="form-control" style="width: auto; min-width: 78px; padding: 0.3rem 0.45rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center;">
                       <option value="amount">VNĐ</option>
                       <option value="percent">%</option>
                     </select>
                   </div>
                 </div>
                 <div class="summary-row" id="summary-other-fee-actual-row" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); padding-left: 0.5rem;">
-                  <span class="label" style="font-size: 0.75rem; color: var(--text-muted);">Số tiền đã thu:</span>
+                  <span class="label" style="font-size: 0.75rem; color: var(--text-muted);">Số tiền khách cọc:</span>
                   <span class="value" style="color: var(--color-success); font-weight: 500;" id="summary-other-fee-actual">-0 ₫</span>
+                </div>
+
+                <div class="summary-row summary-input-row" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.25rem;">
+                  <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Khách nhờ thanh toán cước:</span>
+                  <div style="display: flex; align-items: center; gap: 0.25rem; width: 65%; max-width: 200px; justify-content: flex-end;">
+                    <input type="text" id="invoice-shipping-fee-value" class="form-control" value="0" style="text-align: right; padding: 0.3rem 0.5rem; font-size: 0.85rem; width: 100%; min-width: 0;" placeholder="0">
+                  </div>
+                </div>
+                <div class="summary-row" id="summary-shipping-fee-row" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); padding-left: 0.5rem;">
+                  <span class="label" style="font-size: 0.75rem; color: var(--text-muted);">Số tiền cước:</span>
+                  <span class="value" style="color: var(--color-warning); font-weight: 500;" id="summary-shipping-fee-actual">+0 ₫</span>
                 </div>
 
                 <div class="saving-badge" id="summary-saving-badge" style="display: none; margin-bottom: 1rem;">
@@ -1186,17 +1197,27 @@
               </div>
             </div>
 
-            <!-- Bộ lọc khách hàng (Tích hợp tìm kiếm) -->
-            <div style="width: 200px; min-width: 160px; position: relative;">
-              <input type="text" class="form-control" id="history-customer-filter" list="history-customer-list" placeholder="Tìm khách hàng..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem;">
-              <datalist id="history-customer-list"></datalist>
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+              <select class="form-control" id="history-company-filter" style="width: 180px; height: 42px; border-radius: 8px; cursor: pointer;">
+                <option value="all">Tất cả công ty</option>
+              </select>
+              <select class="form-control" id="history-brand-filter" style="width: 170px; height: 42px; border-radius: 8px; cursor: pointer;">
+                <option value="all">Tất cả nhãn sơn</option>
+              </select>
             </div>
 
             <!-- Bộ lọc nhân viên lên đơn (Tích hợp tìm kiếm) -->
-            <div style="width: 180px; min-width: 150px; position: relative;">
-              <input type="text" class="form-control" id="history-creator-filter" list="history-creator-list" placeholder="Tìm nhân viên..." style="width: 100%; height: 42px; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.8rem;">
-              <datalist id="history-creator-list"></datalist>
+            <div class="history-creator-filter-wrap">
+              <input type="text" class="form-control" id="history-creator-filter" placeholder="Tìm nhân viên..." autocomplete="off">
+              <ul class="suggestions-list" id="history-creator-suggestions" style="display: none;"></ul>
             </div>
+          </div>
+          <div class="history-summary-bar" id="history-summary-bar">
+            <div class="history-summary-item">
+              <span class="history-summary-label">Tổng tiền đơn đã chốt trong danh sách</span>
+              <strong id="history-total-settled-amount">0 ₫</strong>
+            </div>
+            <div class="history-summary-meta" id="history-total-settled-count">0 đơn hợp lệ</div>
           </div>
           
           <div class="history-grid" id="history-orders-container">
@@ -2437,7 +2458,21 @@
             </select>
           </div>
         </div>
-                        <div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
+          <div>
+            <label class="form-label" for="customer-order-export-company">C&#244;ng ty</label>
+            <select class="form-control" id="customer-order-export-company" style="width: 100%;">
+              <option value="all">T&#7845;t c&#7843;</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="customer-order-export-brand">Nh&#227;n s&#417;n</label>
+            <select class="form-control" id="customer-order-export-brand" style="width: 100%;">
+              <option value="all">T&#7845;t c&#7843;</option>
+            </select>
+          </div>
+        </div>
+        <div>
           <label class="form-label" for="customer-order-export-customer">Kh&#225;ch h&#224;ng</label>
           <select class="form-control" id="customer-order-export-customer" style="width: 100%;">
             <option value="all">T&#7845;t c&#7843;</option>
@@ -2606,8 +2641,12 @@
         <span id="print-discount-amount">-0 ₫</span>
       </div>
       <div class="print-summary-row" id="print-other-fee-row">
-        <span>Thu khác / Khách đã cọc:</span>
+        <span>Khách cọc:</span>
         <span id="print-other-fee-amount">-0 ₫</span>
+      </div>
+      <div class="print-summary-row" id="print-shipping-fee-row" style="display: none;">
+        <span>Khách nhờ thanh toán cước:</span>
+        <span id="print-shipping-fee-amount">+0 ₫</span>
       </div>
       <div class="print-summary-row grand-total">
         <span>TỔNG THANH TOÁN:</span>

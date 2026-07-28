@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId } from '../utils.js';
 import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260727-advance-payment';
@@ -1338,7 +1338,7 @@ function populateCustomerOrderExportManagerFilter() {
   const currentCustomerFilter = document.getElementById('customer-managed-filter')?.value || '';
   const hasCurrent = Array.from(select.options).some(opt => opt.value === currentCustomerFilter);
   select.value = currentCustomerFilter && hasCurrent && !['unassigned', 'unassigned_pricelist'].includes(currentCustomerFilter) ? currentCustomerFilter : 'all';
-  makeSelectSearchable('customer-order-export-manager', 'T&#7845;t c&#7843;');
+  makeSelectSearchable('customer-order-export-manager', 'Tất cả');
 }
 
 function getSelectedExportManagerId() {
@@ -1348,12 +1348,80 @@ function getSelectedExportManagerId() {
 function populateCustomerOrderExportCustomerFilter() {
   const select = resetSearchableSelect('customer-order-export-customer');
   if (!select) return;
-  select.innerHTML = `<option value="all">T&#7845;t c&#7843;</option>${(state.customers || []).map(c => `<option value="${c.id}">${c.name || c.code || c.id}</option>`).join('')}`;
+  select.innerHTML = `<option value="all">T&#7845;t c&#7843;</option>${(state.customers || []).map(c => {
+    const phone = c.phone ? `SĐT: ${formatPhoneNumber(c.phone)}` : 'Chưa có SĐT';
+    const provinceName = getProvinceNameByCode(c.brandDiscounts && c.brandDiscounts.province);
+    const addressParts = [c.address, c.ward, provinceName].filter(Boolean);
+    const address = addressParts.length > 0 ? addressParts.join(', ') : 'Chưa có địa chỉ';
+    return `<option value="${c.id}">${c.name || c.code || c.id} • ${phone} • ${address}</option>`;
+  }).join('')}`;
   select.value = activeExportCustomerId || 'all';
-  makeSelectSearchable('customer-order-export-customer', 'T&#7845;t c&#7843;');
+  makeSelectSearchable('customer-order-export-customer', 'Tất cả');
 }
 function getSelectedExportCustomerId() {
   return document.getElementById('customer-order-export-customer')?.value || 'all';
+}
+
+function populateCustomerOrderExportCompanyFilter() {
+  const select = resetSearchableSelect('customer-order-export-company');
+  if (!select) return;
+  const companies = state.companies || [];
+  select.innerHTML = `<option value="all">T&#7845;t c&#7843;</option>${companies.map(c => `<option value="${c.id}">${c.name || c.id}</option>`).join('')}`;
+  select.value = 'all';
+  makeSelectSearchable('customer-order-export-company', 'Tất cả');
+}
+
+function populateCustomerOrderExportBrandFilter() {
+  const select = resetSearchableSelect('customer-order-export-brand');
+  if (!select) return;
+  const brandNames = Array.from(new Set((state.brands || [])
+    .map(b => b.name)
+    .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'vi'));
+  select.innerHTML = `<option value="all">T&#7845;t c&#7843;</option>${brandNames.map(name => `<option value="${name}">${name}</option>`).join('')}`;
+  select.value = 'all';
+  makeSelectSearchable('customer-order-export-brand', 'Tất cả');
+}
+
+function getSelectedExportCompanyId() {
+  return document.getElementById('customer-order-export-company')?.value || 'all';
+}
+
+function getSelectedExportBrand() {
+  return document.getElementById('customer-order-export-brand')?.value || 'all';
+}
+
+function customerMatchesExportCompany(customer, companyId) {
+  if (!companyId || companyId === 'all') return true;
+  const selectedCompanyId = normalizeCompanyId(companyId);
+  const customerCompanyId = customer.companyId || customer.company_id || getCompanyIdByBrand(customer.assignedBrand, state.brands);
+  return normalizeCompanyId(customerCompanyId) === selectedCompanyId;
+}
+
+function customerMatchesExportBrand(customer, brandName) {
+  if (!brandName || brandName === 'all') return true;
+  const customerBrand = customer.assignedBrand || customer.assigned_brand || '';
+  return customerBrand.toLowerCase() === brandName.toLowerCase();
+}
+
+function orderMatchesExportCompany(order, companyId) {
+  if (!companyId || companyId === 'all') return true;
+  const selectedCompanyId = normalizeCompanyId(companyId);
+  if (normalizeCompanyId(order.companyId || order.company_id) === selectedCompanyId) return true;
+  return (order.items || []).some(item => {
+    const itemCompany = item.revenueCompany || item.companyId || item.company_id || getCompanyIdByBrand(item.revenueBrand || item.agencyBrand || item.productBrand || item.brand, state.brands);
+    return normalizeCompanyId(itemCompany) === selectedCompanyId;
+  });
+}
+
+function orderMatchesExportBrand(order, brandName) {
+  if (!brandName || brandName === 'all') return true;
+  const selected = brandName.toLowerCase();
+  return (order.items || []).some(item =>
+    [item.revenueBrand, item.agencyBrand, item.productBrand, item.brand]
+      .filter(Boolean)
+      .some(b => String(b).toLowerCase() === selected)
+  );
 }
 
 function getOrderStatusLabel(status) {
@@ -1411,6 +1479,8 @@ function openCustomerOrderExportModal(customerId = null) {
   const lastMonthRange = getCustomerOrderExportDateRange();
   if (fromInput) fromInput.value = lastMonthRange.fromDate;
   if (toInput) toInput.value = lastMonthRange.toDate;
+  populateCustomerOrderExportCompanyFilter();
+  populateCustomerOrderExportBrandFilter();
   populateCustomerOrderExportManagerFilter();
   populateCustomerOrderExportCustomerFilter();
   renderCustomerOrderExportColumnOptions();
@@ -1435,6 +1505,8 @@ export function openHistoryOrderExportModal(orders, selectedOrderIds = []) {
   const toInput = document.getElementById('customer-order-export-to');
   if (fromInput) fromInput.value = range.fromDate;
   if (toInput) toInput.value = range.toDate;
+  populateCustomerOrderExportCompanyFilter();
+  populateCustomerOrderExportBrandFilter();
   populateCustomerOrderExportManagerFilter();
   populateCustomerOrderExportCustomerFilter();
   const statusSelect = document.getElementById('customer-order-export-status');
@@ -1486,11 +1558,19 @@ async function exportCustomerOrderHistoryExcel() {
   }
   try {
     const { startIso, endExclusiveIso } = getVnRangeIso(fromDate, toDate);
+    const selectedCompanyId = getSelectedExportCompanyId();
+    const selectedBrand = getSelectedExportBrand();
     const selectedManagerId = getSelectedExportManagerId();
     const selectedCustomerId = getSelectedExportCustomerId();
     let scopedCustomers = customers;
     if (selectedCustomerId !== 'all') {
       scopedCustomers = scopedCustomers.filter(c => String(c.id) === String(selectedCustomerId));
+    }
+    if (!activeExportOrders && selectedCompanyId !== 'all') {
+      scopedCustomers = scopedCustomers.filter(c => customerMatchesExportCompany(c, selectedCompanyId));
+    }
+    if (!activeExportOrders && selectedBrand !== 'all') {
+      scopedCustomers = scopedCustomers.filter(c => customerMatchesExportBrand(c, selectedBrand));
     }
     if (selectedManagerId !== 'all') {
       scopedCustomers = scopedCustomers.filter(c => isSameUser(c.managedBy || c.managed_by, selectedManagerId));
@@ -1506,6 +1586,12 @@ async function exportCustomerOrderHistoryExcel() {
         const orderTime = new Date(order.date || order.createdAt || order.created_at).getTime();
         if (!Number.isFinite(orderTime) || orderTime < startTime || orderTime >= endTime) return false;
         if (status && status !== 'all' && String(order.status || 'settled') !== String(status)) return false;
+        if (selectedCompanyId !== 'all' && !orderMatchesExportCompany(order, selectedCompanyId)) return false;
+        if (selectedBrand !== 'all') {
+          const cust = customerById.get(String(order.customerId || order.customer_id));
+          const matchedCustomerBrand = cust && customerMatchesExportBrand(cust, selectedBrand);
+          if (!matchedCustomerBrand && !orderMatchesExportBrand(order, selectedBrand)) return false;
+        }
         if (selectedManagerId !== 'all') {
           const cust = customerById.get(String(order.customerId || order.customer_id));
           if (!cust || !isSameUser(cust.managedBy || cust.managed_by, selectedManagerId)) return false;

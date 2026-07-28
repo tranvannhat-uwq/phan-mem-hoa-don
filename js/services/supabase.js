@@ -464,12 +464,15 @@ export async function fetchCloudData() {
             otherFeeValue: parseFloat(order.other_fee_value !== undefined ? order.other_fee_value : (order.otherFeeValue || 0)),
             otherFeeType: order.other_fee_type || order.otherFeeType || 'amount',
             otherFeeAmount: parseFloat(order.other_fee_amount !== undefined ? order.other_fee_amount : (order.otherFeeAmount || 0)),
+            shippingFeeValue: parseFloat(order.shipping_fee_value !== undefined ? order.shipping_fee_value : (order.shippingFeeValue || 0)),
+            shippingFeeAmount: parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0)),
             totalPayable: parseFloat(order.total_payable || 0),
             paidAmount: parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)),
             amountDue: Math.max(
               0,
               parseFloat(order.total_payable || 0) -
-              parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0))
+              parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)) +
+              parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0))
             ),
             pricelistId: order.pricelist_id || 'retail',
             createdBy: order.created_by || 'admin',
@@ -1601,7 +1604,7 @@ export async function dbSaveOrder(order) {
         revenue_brand_id: order.revenueBrandId || null,
         total_amount: order.totalPayable || order.totalAmount || 0,
         paid_amount: order.paidAmount || 0,
-        debt_amount: order.debtAmount || (order.totalPayable - (order.paidAmount || 0)),
+        debt_amount: order.debtAmount || order.amountDue || (order.totalPayable - (order.paidAmount || 0)),
         returned_amount: order.returnedAmount || 0,
         net_revenue: order.netRevenue || (order.totalPayable - (order.returnedAmount || 0)),
         order_date: order.date || order.orderDate || new Date().toISOString(),
@@ -2653,9 +2656,16 @@ export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExc
     discountType: order.discount_type || order.discountType || 'amount',
     discountAmount: parseFloat(order.discount_amount ?? order.discountAmount ?? 0),
     otherFeeAmount: parseFloat(order.other_fee_amount ?? order.otherFeeAmount ?? 0),
+    shippingFeeValue: parseFloat(order.shipping_fee_value ?? order.shippingFeeValue ?? 0),
+    shippingFeeAmount: parseFloat(order.shipping_fee_amount ?? order.shippingFeeAmount ?? 0),
     totalPayable: parseFloat(order.total_payable ?? order.totalPayable ?? 0),
     paidAmount: parseFloat(order.paid_amount ?? order.paidAmount ?? order.other_fee_amount ?? order.otherFeeAmount ?? 0),
-    amountDue: parseFloat(order.debt_amount ?? order.amountDue ?? Math.max(0, parseFloat(order.total_payable ?? order.totalPayable ?? 0) - parseFloat(order.paid_amount ?? order.paidAmount ?? 0))),
+    amountDue: parseFloat(order.debt_amount ?? order.amountDue ?? Math.max(
+      0,
+      parseFloat(order.total_payable ?? order.totalPayable ?? 0) -
+      parseFloat(order.paid_amount ?? order.paidAmount ?? 0) +
+      parseFloat(order.shipping_fee_amount ?? order.shippingFeeAmount ?? 0)
+    )),
     pricelistId: order.pricelist_id || order.pricelistId || 'retail',
     createdBy: order.created_by || order.createdBy || '',
     salespersonId: order.salesperson_id || order.salespersonId || order.created_by || order.createdBy || '',
