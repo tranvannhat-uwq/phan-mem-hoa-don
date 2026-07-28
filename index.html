@@ -1130,9 +1130,24 @@
         <div class="glass-panel">
           <div class="panel-header">
             <h2 class="panel-title"><i data-lucide="clock"></i> Lịch sử hóa đơn đã lập</h2>
-            <button class="btn btn-secondary btn-sm" id="btn-refresh-history" style="background-color: var(--color-secondary-light); color: var(--color-secondary); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; gap: 0.5rem;">
-              <i data-lucide="refresh-cw"></i> Làm mới dữ liệu
-            </button>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <!-- View Switcher Toggle -->
+              <div class="history-view-toggle-group" style="display: flex; background: rgba(0,0,0,0.06); padding: 3px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <button class="history-view-mode-btn active" id="btn-history-view-card" type="button" title="Hiển thị dạng thẻ">
+                  <i data-lucide="layout-grid" style="width: 15px; height: 15px;"></i> Dạng thẻ
+                </button>
+                <button class="history-view-mode-btn" id="btn-history-view-details" type="button" title="Hiển thị dạng chi tiết">
+                  <i data-lucide="list" style="width: 15px; height: 15px;"></i> Dạng chi tiết
+                </button>
+              </div>
+
+                            <button class="btn btn-primary btn-sm" id="btn-open-history-export-modal" style="display: flex; align-items: center; gap: 0.5rem; height: 36px;">
+                <i data-lucide="download"></i> Xu&#7845;t Excel
+              </button>
+<button class="btn btn-secondary btn-sm" id="btn-refresh-history" style="background-color: var(--color-secondary-light); color: var(--color-secondary); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; gap: 0.5rem; height: 36px;">
+                <i data-lucide="refresh-cw"></i> Làm mới dữ liệu
+              </button>
+            </div>
           </div>
 
           <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.25rem;">
@@ -1314,8 +1329,8 @@
               <span class="filter-group-sec-title">Người nộp/nhận <span style="color:#0070d2; font-size:12px;">●</span></span>
               <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                 <select id="so-quy-partner-type" class="form-control" style="font-size: 0.85rem; padding: 0.35rem 0.5rem; height: 36px; border-radius: 6px; border-color: #0070d2; font-weight: 500;">
-                  <option value="all">Tất cả đối tác</option>
-                  <option value="customer" selected>Khách hàng</option>
+                  <option value="all" selected>Tất cả đối tác</option>
+                  <option value="customer">Khách hàng</option>
                   <option value="supplier">Nhà cung cấp</option>
                   <option value="other">Khác</option>
                 </select>
@@ -1422,7 +1437,9 @@
               <button class="btn btn-indigo btn-sm" id="btn-open-cust-excel-modal">
                 <i data-lucide="file-up"></i> Nhập Excel
               </button>
-              <button class="btn btn-primary btn-sm" id="btn-open-add-customer-modal">
+                            <button class="btn btn-secondary btn-sm" id="btn-open-customer-history-export-modal">
+                <i data-lucide="download"></i> Xu&#7845;t l&#7883;ch s&#7917; &#273;&#417;n h&#224;ng
+              </button><button class="btn btn-primary btn-sm" id="btn-open-add-customer-modal">
                 <i data-lucide="user-plus"></i> Thêm khách hàng
               </button>
             </div>
@@ -1461,7 +1478,8 @@
           <div class="table-responsive">
             <table class="table customers-table" style="table-layout: fixed; min-width: 1550px;">
               <colgroup>
-                <col style="width: 100px;">  <!-- Mã KH -->
+                                <col style="width: 45px;">   <!-- Chon -->
+<col style="width: 100px;">  <!-- Mã KH -->
                 <col style="width: 165px;">  <!-- Tên khách hàng -->
                 <col style="width: 105px;">  <!-- SĐT -->
                 <col style="width: auto;">   <!-- Địa chỉ -->
@@ -1475,7 +1493,8 @@
               </colgroup>
               <thead>
                 <tr>
-                  <th>Mã KH</th>
+                                    <th style="text-align: center;"><input type="checkbox" id="customer-select-all-export" title="Chon tat ca khach hang tren trang"></th>
+<th>Mã KH</th>
                   <th>Tên khách hàng</th>
                   <th>SĐT</th>
                   <th>Địa chỉ</th>
@@ -1528,12 +1547,12 @@
             <table class="table">
               <thead>
                 <tr>
-                  <th style="width: 12%;">Mã NCC</th>
-                  <th style="width: 25%;">Tên nhà cung cấp</th>
-                  <th style="width: 15%;">Số điện thoại</th>
-                  <th style="width: 25%;">Địa chỉ</th>
-                  <th style="width: 15%;">Ghi chú</th>
-                  <th style="width: 8%; text-align: center;">Thao tác</th>
+                  <th style="width: 14%;">Mã nhà cung cấp</th>
+                  <th style="width: 28%;">Tên nhà cung cấp</th>
+                  <th style="width: 16%;">Số điện thoại</th>
+                  <th style="width: 16%; text-align: right;">Nợ cần trả</th>
+                  <th style="width: 16%; text-align: right;">Tổng mua</th>
+                  <th style="width: 10%; text-align: center;">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="suppliers-table-body">
@@ -2374,11 +2393,89 @@
 
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-indigo" id="btn-open-customer-order-export" style="min-width: 120px;">
+          <i data-lucide="download" style="width: 16px; height: 16px;"></i> Xu?t Excel
+        </button>
         <button type="button" class="btn btn-secondary" id="btn-close-detail-modal-footer" style="min-width: 100px;">Đóng</button>
       </div>
     </div>
   </div>
 
+      <div class="modal-overlay" id="customer-order-export-modal">
+    <div class="modal-content" style="max-width: 760px; width: 95%;">
+      <div class="modal-header">
+        <h3 class="modal-title">Xu&#7845;t Excel l&#7883;ch s&#7917; &#273;&#417;n h&#224;ng</h3>
+        <button class="modal-close" id="btn-close-customer-order-export-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 72vh; overflow-y: auto; padding-right: 5px;">
+        <div style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(255,255,255,0.02);">
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.25rem;">Ph&#7841;m vi kh&#225;ch h&#224;ng</div>
+          <div id="customer-order-export-scope-text" style="font-weight: 600; color: #fff;">Theo b&#7897; l&#7885;c hi&#7879;n t&#7841;i</div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
+          <div>
+            <label class="form-label" for="customer-order-export-range-mode">Kho&#7843;ng th&#7901;i gian</label>
+            <select class="form-control" id="customer-order-export-range-mode" style="width: 100%;">
+              <option value="last_month">Th&#225;ng tr&#432;&#7899;c</option>
+              <option value="this_month">Th&#225;ng n&#224;y</option>
+              <option value="today">H&#244;m nay</option>
+              <option value="custom">T&#249;y ch&#7885;n</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="customer-order-export-status">Tr&#7841;ng th&#225;i &#273;&#417;n</label>
+            <select class="form-control" id="customer-order-export-status" style="width: 100%;">
+              <option value="all">&#272;&#417;n h&#7907;p l&#7879;</option>
+              <option value="settled">settled</option>
+              <option value="completed">completed</option>
+              <option value="partially_returned">partially_returned</option>
+              <option value="returned">returned</option>
+              <option value="draft">draft</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+          </div>
+        </div>
+                        <div>
+          <label class="form-label" for="customer-order-export-customer">Kh&#225;ch h&#224;ng</label>
+          <select class="form-control" id="customer-order-export-customer" style="width: 100%;">
+            <option value="all">T&#7845;t c&#7843;</option>
+          </select>
+        </div><div>
+          <label class="form-label" for="customer-order-export-manager">Kinh doanh qu&#7843;n l&#253;</label>
+          <select class="form-control" id="customer-order-export-manager" style="width: 100%;">
+            <option value="all">T&#7845;t c&#7843;</option>
+          </select>
+        </div><div id="customer-order-export-custom-range" style="display: none; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
+          <div>
+            <label class="form-label" for="customer-order-export-from">T&#7915; ng&#224;y</label>
+            <input type="date" class="form-control" id="customer-order-export-from" style="width: 100%;">
+          </div>
+          <div>
+            <label class="form-label" for="customer-order-export-to">&#272;&#7871;n ng&#224;y</label>
+            <input type="date" class="form-control" id="customer-order-export-to" style="width: 100%;">
+          </div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+            <label class="form-label" style="margin: 0;">C&#7897;t c&#7847;n xu&#7845;t</label>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-customer-order-export-select-all-columns">Ch&#7885;n t&#7845;t c&#7843;</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-customer-order-export-clear-columns">B&#7887; ch&#7885;n t&#7845;t c&#7843;</button>
+            </div>
+          </div>
+          <div id="customer-order-export-columns" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-customer-order-export">H&#7911;y</button>
+        <button type="button" class="btn btn-primary" id="btn-submit-customer-order-export">
+          <i data-lucide="download" style="width: 16px; height: 16px;"></i> Xu&#7845;t Excel
+        </button>
+      </div>
+    </div>
+  </div>
   <!-- Add/Edit Price List Modal -->
   <div class="modal-overlay" id="pricelist-modal">
     <div class="modal-content" style="max-width: 600px;">

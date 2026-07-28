@@ -3,6 +3,100 @@ import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '.
 import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  const normalized = typeof value === 'string' ? value.replace(/[^\d.-]/g, '') : value;
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function getStoredArray(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function isValidDoc(doc) {
+  const status = String(doc?.status || doc?.state || 'completed').toLowerCase();
+  return !['draft', 'nhap', 'cancelled', 'canceled', 'void', 'deleted', 'đã hủy', 'da huy'].includes(status) &&
+    !doc.deletedAt && !doc.deleted_at && !doc.isDeleted;
+}
+
+function getDocSupplierId(doc) {
+  return doc?.supplierId || doc?.supplier_id || doc?.vendorId || doc?.vendor_id || null;
+}
+
+function getDocId(doc) {
+  return doc?.id || doc?.code || doc?.receiptId || doc?.purchaseId || '';
+}
+
+function getDocTotal(doc) {
+  const explicit = doc?.totalPayable ?? doc?.total_payable ?? doc?.grandTotal ?? doc?.grand_total ?? doc?.totalAmount ?? doc?.total_amount ?? doc?.total;
+  if (explicit !== undefined && explicit !== null && explicit !== '') return toNumber(explicit);
+  const items = Array.isArray(doc?.items) ? doc.items : [];
+  const subtotal = items.reduce((sum, item) => {
+    const qty = toNumber(item.quantity ?? item.qty);
+    const price = toNumber(item.price ?? item.unitPrice ?? item.importPrice ?? item.import_price);
+    const discountPercent = toNumber(item.discountPercent ?? item.discount_percent);
+    return sum + Math.max(0, qty * price * (1 - discountPercent / 100));
+  }, 0);
+  const discount = toNumber(doc?.discountAmount ?? doc?.discount_amount);
+  return Math.max(0, subtotal - discount);
+}
+
+function getSupplierPurchaseDocs() {
+  return [
+    ...getStoredArray('billing_system_purchase_orders'),
+    ...getStoredArray('billing_system_purchases'),
+    ...getStoredArray('billing_system_purchase_receipts'),
+    ...getStoredArray('billing_system_goods_receipts'),
+    ...getStoredArray('billing_system_supplier_imports')
+  ].filter(isValidDoc);
+}
+
+function getSupplierReturnDocs() {
+  return [
+    ...getStoredArray('billing_system_supplier_returns'),
+    ...getStoredArray('billing_system_purchase_returns'),
+    ...getStoredArray('billing_system_goods_return_to_suppliers')
+  ].filter(isValidDoc);
+}
+
+function getCashbookDocs() {
+  return getStoredArray('billing_system_cashbook_transactions');
+}
+
+function calculateSupplierMetrics(supplier) {
+  const supplierId = String(supplier.id);
+  const purchases = getSupplierPurchaseDocs().filter(doc => String(getDocSupplierId(doc)) === supplierId);
+  const purchaseIds = new Set(purchases.map(getDocId).filter(Boolean).map(String));
+  const totalPurchaseGross = purchases.reduce((sum, doc) => sum + getDocTotal(doc), 0);
+  const totalReturns = getSupplierReturnDocs()
+    .filter(doc => String(getDocSupplierId(doc)) === supplierId || (doc.purchaseId && purchaseIds.has(String(doc.purchaseId))))
+    .reduce((sum, doc) => sum + getDocTotal(doc), 0);
+  const totalPurchase = Math.max(0, totalPurchaseGross - totalReturns);
+
+  const paid = getCashbookDocs()
+    .filter(tx => {
+      const status = String(tx.status || '').toLowerCase();
+      const isPaid = status.includes('thanh') || status === 'completed' || status === 'paid';
+      if (tx.type !== 'chi' || !isPaid || status.includes('hủy') || status.includes('huy') || status.includes('cancel')) return false;
+      if (String(tx.supplierId || tx.supplier_id || '') === supplierId) return true;
+      if (tx.orderId && purchaseIds.has(String(tx.orderId))) return true;
+      return false;
+    })
+    .reduce((sum, tx) => sum + toNumber(tx.value), 0);
+
+  return {
+    totalPurchase,
+    payableDebt: Math.max(0, totalPurchase - paid)
+  };
+}
+
 export function renderSuppliersTable() {
   const tableBody = document.getElementById('suppliers-table-body');
   if (!tableBody) return;
@@ -82,14 +176,15 @@ export function renderSuppliersTable() {
   
   tableBody.innerHTML = paginatedSuppliers.map((s) => {
     const actualIndex = state.suppliers.findIndex(supp => supp.id === s.id);
+    const metrics = calculateSupplierMetrics(s);
     
     return `
       <tr>
         <td style="font-weight: 600; color: #fff;">${s.code}</td>
         <td style="font-weight: bold; color: #22c55e;">${s.name}</td>
         <td>${s.phone || '<span style="color: var(--text-muted);">N/A</span>'}</td>
-        <td>${s.address || '<span style="color: var(--text-muted);">N/A</span>'}</td>
-        <td style="font-size: 0.85rem; color: var(--text-secondary);">${s.notes || ''}</td>
+        <td style="text-align: right; font-weight: 700; color: ${metrics.payableDebt > 0 ? 'var(--color-danger)' : 'var(--color-success)'};">${formatCurrency(metrics.payableDebt)}</td>
+        <td style="text-align: right; font-weight: 700; color: var(--color-primary);">${formatCurrency(metrics.totalPurchase)}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-supplier-btn" data-index="${actualIndex}" title="Sửa">
@@ -127,7 +222,7 @@ export function populateSupplierDatalist() {
   if (!datalist) return;
 
   datalist.innerHTML = state.suppliers.map(s => {
-    return `<option value="${s.name}">${s.code} - ${s.phone || 'N/A'}</option>`;
+    return `<option value="${s.name} — ${s.code}" data-supplier-id="${s.id}">${s.phone || 'N/A'}</option>`;
   }).join('');
 }
 

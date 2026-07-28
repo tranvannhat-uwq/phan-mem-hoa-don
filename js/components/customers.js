@@ -1,9 +1,13 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt } from '../services/supabase.js?v=20260727-debt-audit2';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260727-advance-payment';
 import { addCashbookTransaction } from './so_quy.js?v=20260727-receipt-id';
+
+const selectedCustomerIdsForExport = new Set();
+let activeExportOrders = null;
+let activeExportOrderIds = null;
 
 export function getCustomerMetrics(c) {
   if (!c) return { grossSales: 0, totalReturns: 0, netSales: 0, returnRate: '0', currentDebt: 0, totalPayments: 0 };
@@ -37,17 +41,13 @@ export function getCustomerMetrics(c) {
   return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
 }
 
-export function renderCustomersTable() {
-
-  const tableBody = document.getElementById('customers-table-body');
-  if (!tableBody) return;
-  
+function getFilteredCustomersForCurrentView() {
   const searchInput = document.getElementById('customer-search-input');
   const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
   const filterSelect = document.getElementById('customer-managed-filter');
   const filterEmployee = filterSelect ? filterSelect.value : '';
-  
-  const filtered = (state.customers || []).filter(c => {
+
+  return (state.customers || []).filter(c => {
     if (!c) return false;
     const cCode = (c.code || c.id || '').toLowerCase();
     const cName = (c.name || '').toLowerCase();
@@ -62,14 +62,19 @@ export function renderCustomersTable() {
         if (c.managedBy && c.managedBy !== '') return false;
       } else if (filterEmployee === 'unassigned_pricelist') {
         if (c.pricelistId && c.pricelistId !== '') return false;
-      } else {
-        if (!isSameUser(c.managedBy, filterEmployee)) return false;
+      } else if (!isSameUser(c.managedBy, filterEmployee)) {
+        return false;
       }
     }
-    return c.code.toLowerCase().includes(searchVal) || 
-           c.name.toLowerCase().includes(searchVal) || 
-           (c.phone && c.phone.includes(searchVal));
+    return true;
   });
+}
+
+export function renderCustomersTable() {
+
+  const tableBody = document.getElementById('customers-table-body');
+  if (!tableBody) return;
+  const filtered = getFilteredCustomersForCurrentView();
   
   // Tính toán tổng nợ và doanh thu đại lý lọc được
   const totalDebt = filtered.reduce((sum, c) => sum + (parseFloat(c.debt) || 0), 0);
@@ -136,7 +141,7 @@ export function renderCustomersTable() {
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không tìm thấy khách hàng nào.
         </td>
       </tr>
@@ -199,6 +204,9 @@ export function renderCustomersTable() {
     
     return `
       <tr>
+        <td style="text-align: center;">
+          <input type="checkbox" class="customer-export-checkbox" data-id="${c.id}" ${selectedCustomerIdsForExport.has(String(c.id)) ? 'checked' : ''} title="Chọn khách hàng để xuất lịch sử">
+        </td>
         <td style="font-weight: 600; color: #fff;">${c.code}</td>
         <td style="font-weight: 500;">
           <span class="view-cust-detail-link" data-index="${actualIndex}" style="cursor: pointer; color: #22c55e; text-decoration: underline; font-weight: 600;" title="Xem chi tiết & Lịch sử công nợ">
@@ -236,6 +244,32 @@ export function renderCustomersTable() {
 
   
   // Gán sự kiện click cho các nút hành động
+  document.querySelectorAll('.customer-export-checkbox').forEach(box => {
+    box.addEventListener('change', () => {
+      const id = String(box.getAttribute('data-id'));
+      if (box.checked) selectedCustomerIdsForExport.add(id);
+      else selectedCustomerIdsForExport.delete(id);
+      const selectAll = document.getElementById('customer-select-all-export');
+      if (selectAll) {
+        const visibleIds = paginatedCustomers.map(c => String(c.id));
+        selectAll.checked = visibleIds.length > 0 && visibleIds.every(id => selectedCustomerIdsForExport.has(id));
+      }
+    });
+  });
+
+  const selectAllExport = document.getElementById('customer-select-all-export');
+  if (selectAllExport) {
+    const visibleIds = paginatedCustomers.map(c => String(c.id));
+    selectAllExport.checked = visibleIds.length > 0 && visibleIds.every(id => selectedCustomerIdsForExport.has(id));
+    selectAllExport.onchange = () => {
+      visibleIds.forEach(id => {
+        if (selectAllExport.checked) selectedCustomerIdsForExport.add(id);
+        else selectedCustomerIdsForExport.delete(id);
+      });
+      renderCustomersTable();
+    };
+  }
+
   document.querySelectorAll('.view-cust-detail-link').forEach(link => {
     link.addEventListener('click', () => {
       const idx = parseInt(link.getAttribute('data-index'));
@@ -779,6 +813,47 @@ export function setupCustomerManagement() {
   if (closeDetailBtn) closeDetailBtn.addEventListener('click', closeCustomerDetailModal);
   if (closeDetailFooterBtn) closeDetailFooterBtn.addEventListener('click', closeCustomerDetailModal);
 
+  const openOrderExportBtn = document.getElementById('btn-open-customer-order-export');
+  const closeOrderExportBtn = document.getElementById('btn-close-customer-order-export-modal');
+  const cancelOrderExportBtn = document.getElementById('btn-cancel-customer-order-export');
+  const submitOrderExportBtn = document.getElementById('btn-submit-customer-order-export');
+  const openBulkOrderExportBtn = document.getElementById('btn-open-customer-history-export-modal');
+  const rangeModeSelect = document.getElementById('customer-order-export-range-mode');
+  const selectAllColumnsBtn = document.getElementById('btn-customer-order-export-select-all-columns');
+  const clearColumnsBtn = document.getElementById('btn-customer-order-export-clear-columns');
+  if (openBulkOrderExportBtn) {
+    openBulkOrderExportBtn.addEventListener('click', () => openCustomerOrderExportModal(null));
+  }
+  if (openOrderExportBtn) {
+    openOrderExportBtn.addEventListener('click', () => {
+      openCustomerOrderExportModal(openOrderExportBtn.getAttribute('data-customer-id'));
+    });
+  }
+  if (closeOrderExportBtn) closeOrderExportBtn.addEventListener('click', closeCustomerOrderExportModal);
+  if (cancelOrderExportBtn) cancelOrderExportBtn.addEventListener('click', closeCustomerOrderExportModal);
+  if (submitOrderExportBtn) submitOrderExportBtn.addEventListener('click', exportCustomerOrderHistoryExcel);
+  if (rangeModeSelect) {
+    rangeModeSelect.addEventListener('change', () => {
+      const customBox = document.getElementById('customer-order-export-custom-range');
+      if (customBox) customBox.style.display = rangeModeSelect.value === 'custom' ? 'grid' : 'none';
+      const range = getCustomerOrderExportDateRange();
+      const fromInput = document.getElementById('customer-order-export-from');
+      const toInput = document.getElementById('customer-order-export-to');
+      if (fromInput && range.fromDate) fromInput.value = range.fromDate;
+      if (toInput && range.toDate) toInput.value = range.toDate;
+    });
+  }
+  if (selectAllColumnsBtn) {
+    selectAllColumnsBtn.addEventListener('click', () => {
+      document.querySelectorAll('.customer-order-export-column').forEach(input => { input.checked = true; });
+    });
+  }
+  if (clearColumnsBtn) {
+    clearColumnsBtn.addEventListener('click', () => {
+      document.querySelectorAll('.customer-order-export-column').forEach(input => { input.checked = false; });
+    });
+  }
+
   // Customer Excel Import Listeners
   const openImportBtn = document.getElementById('btn-open-cust-excel-modal');
   if (openImportBtn) openImportBtn.onclick = openCustExcelModal;
@@ -955,6 +1030,529 @@ export function downloadCustomerExcelTemplate() {
 
 
 // --- Logic hiển thị chi tiết đại lý và lịch sử công nợ ---
+const CUSTOMER_ORDER_EXPORT_COLUMNS = [
+  'Mã hóa đơn', 'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Mã trả hàng',
+  'Mã khách hàng', 'Tên khách hàng', 'Điện thoại', 'Địa chỉ (Khách hàng)',
+  'Khu vực (Khách hàng)', 'Phường/Xã (Khách hàng)', 'Ngày sinh', 'Bảng giá',
+  'Người bán', 'Kênh bán', 'Người tạo', 'Ghi chú', 'Tổng tiền hàng',
+  'Giảm giá hóa đơn', 'Thu khác', 'Khách đã trả', 'Tiền mặt', 'Thẻ', 'Ví',
+  'Chuyển khoản', 'Còn cần thu (COD)', 'Trạng thái', 'Mã hàng', 'Tên hàng',
+  'Thương hiệu', 'ĐVT', 'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá',
+  'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'
+];
+
+const CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS = [
+  { title: 'Thông tin hóa đơn', columns: ['Mã hóa đơn', 'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Mã trả hàng', 'Trạng thái', 'Người bán', 'Người tạo', 'Kênh bán', 'Ghi chú'] },
+  { title: 'Thông tin khách hàng', columns: ['Mã khách hàng', 'Tên khách hàng', 'Điện thoại', 'Địa chỉ', 'Khu vực', 'Phường/Xã', 'Ngày sinh', 'Bảng giá', 'Nhóm khách hàng', 'Kinh doanh quản lý'] },
+  { title: 'Thông tin thanh toán', columns: ['Tổng tiền hàng', 'Giảm giá hóa đơn', 'Thu khác', 'Khách đã trả', 'Tiền mặt', 'Chuyển khoản', 'Thẻ', 'Ví', 'Còn cần thu'] },
+  { title: 'Thông tin sản phẩm', columns: ['Mã hàng', 'Tên hàng', 'Thương hiệu/Nhãn sơn', 'Đơn vị tính', 'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'] }
+];
+
+const DEFAULT_CUSTOMER_ORDER_EXPORT_COLUMNS = CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS.flatMap(g => g.columns);
+const CUSTOMER_ORDER_EXPORT_COLUMNS_STORAGE_KEY = 'billing_system_customer_order_export_columns';
+
+let activeExportCustomerId = null;
+let activeExportScopeMode = 'filtered';
+
+function toExportNumber(value, fallback = 0) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const normalized = typeof value === 'string' ? value.replace(/[^\d.-]/g, '') : value;
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function formatExportDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date).replace(',', '');
+}
+
+function getVnDateInputValue(offsetDays = 0) {
+  const now = new Date();
+  now.setDate(now.getDate() + offsetDays);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function getVnRangeIso(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00+07:00`);
+  const endExclusive = new Date(`${endDate}T00:00:00+07:00`);
+  endExclusive.setDate(endExclusive.getDate() + 1);
+  return { startIso: start.toISOString(), endExclusiveIso: endExclusive.toISOString() };
+}
+
+function sanitizeFilePart(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\/:*?"<>|]+/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 80) || 'KhachHang';
+}
+
+function getDisplayUserName(username) {
+  if (!username) return '';
+  const found = (state.users || []).find(u => isSameUser(u.username, username));
+  return found ? (found.displayName || found.name || found.username) : username;
+}
+
+function getPricelistName(id) {
+  if (!id) return '';
+  if (id === 'retail') return 'Khách lẻ';
+  if (id === 'custom') return 'Chiết khấu riêng';
+  const found = (state.pricelists || []).find(p => String(p.id) === String(id));
+  return found ? found.name : id;
+}
+
+function getOrderReturnCodes(orderId) {
+  return (state.salesReturns || [])
+    .filter(r => String(r.saleId || r.orderId || '') === String(orderId))
+    .filter(r => !['cancelled', 'canceled', 'draft'].includes(String(r.status || 'completed').toLowerCase()))
+    .map(r => r.id)
+    .filter(Boolean)
+    .join(', ');
+}
+
+function getExplicitPaymentByMethod(order, methodKeys) {
+  const sources = [order.paymentBreakdown, order.paymentsByMethod, order.paymentMethods].filter(Boolean);
+  for (const source of sources) {
+    for (const key of methodKeys) {
+      if (source[key] !== undefined && source[key] !== null && source[key] !== '') return toExportNumber(source[key]);
+    }
+  }
+  for (const key of methodKeys) {
+    if (order[key] !== undefined && order[key] !== null && order[key] !== '') return toExportNumber(order[key]);
+  }
+  return '';
+}
+
+function getLineAmount(item) {
+  const qty = toExportNumber(item.quantity);
+  const unitPrice = toExportNumber(item.price ?? item.unitPrice ?? item.listPrice);
+  const discountPercent = toExportNumber(item.discountPercent ?? item.discount);
+  if (item.subtotal !== undefined && item.subtotal !== null && item.subtotal !== '') return toExportNumber(item.subtotal);
+  if (item.total !== undefined && item.total !== null && item.total !== '') return toExportNumber(item.total);
+  if (item.lineTotal !== undefined && item.lineTotal !== null && item.lineTotal !== '') return toExportNumber(item.lineTotal);
+  return Math.round(qty * unitPrice * (1 - discountPercent / 100));
+}
+
+function buildCustomerOrderExportRows(orders, customer) {
+  const provinceName = getProvinceNameByCode(customer.brandDiscounts && customer.brandDiscounts.province);
+  return orders.flatMap(order => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    return items.map(item => {
+      const qty = toExportNumber(item.quantity);
+      const unitPrice = toExportNumber(item.price ?? item.unitPrice ?? item.listPrice);
+      const discountPercent = toExportNumber(item.discountPercent ?? item.discount);
+      const lineAmount = getLineAmount(item);
+      const lineDiscount = toExportNumber(item.discountAmount, Math.max(0, Math.round(qty * unitPrice - lineAmount)));
+      const salePrice = qty > 0 ? Math.round(lineAmount / qty) : unitPrice;
+      return {
+        'Mã hóa đơn': order.id || '',
+        'Thời gian': formatExportDateTime(order.date || order.orderDate || order.createdAt),
+        'Thời gian tạo': formatExportDateTime(order.createdAt || order.date),
+        'Ngày cập nhật': formatExportDateTime(order.updatedAt || order.createdAt || order.date),
+        'Mã trả hàng': getOrderReturnCodes(order.id),
+        'Mã khách hàng': customer.code || customer.id || '',
+        'Tên khách hàng': customer.name || order.customerName || '',
+        'Điện thoại': customer.phone || order.customerPhone || '',
+        'Địa chỉ (Khách hàng)': customer.address || order.customerAddress || '',
+        'Địa chỉ': customer.address || order.customerAddress || '',
+        'Khu vực (Khách hàng)': provinceName || '',
+        'Khu vực': provinceName || '',
+        'Phường/Xã (Khách hàng)': customer.ward || '',
+        'Phường/Xã': customer.ward || '',
+        'Ngày sinh': customer.birthday || '',
+        'Bảng giá': getPricelistName(order.pricelistId || customer.pricelistId),
+        'Nhóm khách hàng': customer.customerGroupName || customer.customerGroup || customer.customer_group_id || '',
+        'Kinh doanh quản lý': getDisplayUserName(customer.managedBy || customer.managed_by),
+        'Người bán': getDisplayUserName(order.salespersonId || order.createdBy),
+        'Kênh bán': order.salesChannel || order.channel || '',
+        'Người tạo': getDisplayUserName(order.createdBy),
+        'Ghi chú': order.notes || '',
+        'Tổng tiền hàng': toExportNumber(order.subtotal || order.totalMarket || order.totalPayable),
+        'Giảm giá hóa đơn': toExportNumber(order.discountAmount || order.totalDiscount),
+        'Thu khác': toExportNumber(order.otherFeeAmount),
+        'Khách đã trả': toExportNumber(order.paidAmount),
+        'Tiền mặt': getExplicitPaymentByMethod(order, ['cash', 'cashAmount', 'tienMat']),
+        'Thẻ': getExplicitPaymentByMethod(order, ['card', 'cardAmount', 'the']),
+        'Ví': getExplicitPaymentByMethod(order, ['wallet', 'walletAmount', 'vi']),
+        'Chuyển khoản': getExplicitPaymentByMethod(order, ['transfer', 'bankTransfer', 'transferAmount', 'chuyenKhoan']),
+        'Còn cần thu (COD)': toExportNumber(order.amountDue, Math.max(0, toExportNumber(order.totalPayable) - toExportNumber(order.paidAmount))),
+        'Trạng thái': order.status || '',
+        'Mã hàng': item.productCode || item.code || item.productId || '',
+        'Tên hàng': item.productName || item.name || item.product?.name || '',
+        'Thương hiệu': item.productBrand || item.brand || '',
+        'Thương hiệu/Nhãn sơn': item.productBrand || item.brand || '',
+        'ĐVT': item.unit || item.packageType || item.package || '',
+        'Đơn vị tính': item.unit || item.packageType || item.package || '',
+        'Ghi chú hàng hóa': item.note || item.notes || '',
+        'Số lượng': qty,
+        'Đơn giá': unitPrice,
+        'Giảm giá %': discountPercent,
+        'Giảm giá': lineDiscount,
+        'Giá bán': salePrice,
+        'Thành tiền': lineAmount
+      };
+    });
+  });
+}
+
+function getSavedCustomerOrderExportColumns() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CUSTOMER_ORDER_EXPORT_COLUMNS_STORAGE_KEY) || '[]');
+    const allowed = new Set(DEFAULT_CUSTOMER_ORDER_EXPORT_COLUMNS);
+    const valid = parsed.filter(col => allowed.has(col));
+    return valid.length > 0 ? valid : DEFAULT_CUSTOMER_ORDER_EXPORT_COLUMNS;
+  } catch (e) {
+    return DEFAULT_CUSTOMER_ORDER_EXPORT_COLUMNS;
+  }
+}
+
+function renderCustomerOrderExportColumnOptions() {
+  const container = document.getElementById('customer-order-export-columns');
+  if (!container) return;
+  const selected = new Set(getSavedCustomerOrderExportColumns());
+  container.innerHTML = CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS.map(group => `
+    <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem;">
+      <div style="font-weight: 600; color: #fff; margin-bottom: 0.5rem;">${group.title}</div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.45rem;">
+        ${group.columns.map(col => `
+          <label style="display: flex; gap: 0.4rem; align-items: center; font-size: 0.82rem; color: var(--text-secondary);">
+            <input type="checkbox" class="customer-order-export-column" value="${col}" ${selected.has(col) ? 'checked' : ''}>
+            <span>${col}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function getSelectedCustomerOrderExportColumns() {
+  return Array.from(document.querySelectorAll('.customer-order-export-column:checked')).map(input => input.value);
+}
+
+function getCustomerOrderExportDateRange() {
+  const mode = document.getElementById('customer-order-export-range-mode')?.value || 'last_month';
+  const today = getVnDateInputValue(0);
+  const todayParts = today.split('-').map(Number);
+  if (mode === 'today') return { fromDate: today, toDate: today, label: 'HomNay' };
+  if (mode === 'this_month') {
+    const fromDate = `${todayParts[0]}-${String(todayParts[1]).padStart(2, '0')}-01`;
+    return { fromDate, toDate: today, label: 'ThangNay' };
+  }
+  if (mode === 'custom') {
+    const fromDate = document.getElementById('customer-order-export-from')?.value;
+    const toDate = document.getElementById('customer-order-export-to')?.value;
+    return { fromDate, toDate, label: `${fromDate}-${toDate}` };
+  }
+  const firstThisMonth = new Date(`${todayParts[0]}-${String(todayParts[1]).padStart(2, '0')}-01T00:00:00+07:00`);
+  const lastPrevMonth = new Date(firstThisMonth);
+  lastPrevMonth.setDate(0);
+  const prevParts = getVnDateInputValueFromDate(lastPrevMonth).split('-').map(Number);
+  return {
+    fromDate: `${prevParts[0]}-${String(prevParts[1]).padStart(2, '0')}-01`,
+    toDate: getVnDateInputValueFromDate(lastPrevMonth),
+    label: 'ThangTruoc'
+  };
+}
+
+function getVnDateInputValueFromDate(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function getExportCustomersByScope() {
+  if (activeExportCustomerId) {
+    return (state.customers || []).filter(c => String(c.id) === String(activeExportCustomerId));
+  }
+  const filtered = getFilteredCustomersForCurrentView();
+  if (selectedCustomerIdsForExport.size > 0) {
+    return filtered.filter(c => selectedCustomerIdsForExport.has(String(c.id)));
+  }
+  return filtered;
+}
+
+function resetSearchableSelect(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select) return null;
+  const wrapper = select.parentNode;
+  if (wrapper && wrapper.classList && wrapper.classList.contains('searchable-select-wrapper')) {
+    const parent = wrapper.parentNode;
+    parent.insertBefore(select, wrapper);
+    wrapper.remove();
+    select.style.display = '';
+  }
+  return select;
+}
+
+function getUserOptionValue(user) {
+  return user.username || user.id || user.email || '';
+}
+
+function getManagedByOptions() {
+  const options = new Map();
+  (state.users || []).forEach(user => {
+    const value = getUserOptionValue(user);
+    if (value) options.set(String(value), user.displayName || user.name || user.username || user.id);
+  });
+  (state.customers || []).forEach(customer => {
+    const value = customer.managedBy || customer.managed_by;
+    if (!value) return;
+    const matched = (state.users || []).find(user =>
+      isSameUser(user.username, value) ||
+      isSameUser(user.id, value) ||
+      isSameUser(user.email, value)
+    );
+    options.set(String(value), matched ? (matched.displayName || matched.name || matched.username || matched.id) : String(value));
+  });
+  return Array.from(options.entries()).sort((a, b) => a[1].localeCompare(b[1], 'vi'));
+}
+
+function populateCustomerOrderExportManagerFilter() {
+  const select = resetSearchableSelect('customer-order-export-manager');
+  if (!select) return;
+  const managerOptions = getManagedByOptions();
+  select.innerHTML = `<option value="all">T&#7845;t c&#7843;</option>${managerOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}`;
+  const currentCustomerFilter = document.getElementById('customer-managed-filter')?.value || '';
+  const hasCurrent = Array.from(select.options).some(opt => opt.value === currentCustomerFilter);
+  select.value = currentCustomerFilter && hasCurrent && !['unassigned', 'unassigned_pricelist'].includes(currentCustomerFilter) ? currentCustomerFilter : 'all';
+  makeSelectSearchable('customer-order-export-manager', 'T&#7845;t c&#7843;');
+}
+
+function getSelectedExportManagerId() {
+  return document.getElementById('customer-order-export-manager')?.value || 'all';
+}
+
+function populateCustomerOrderExportCustomerFilter() {
+  const select = resetSearchableSelect('customer-order-export-customer');
+  if (!select) return;
+  select.innerHTML = `<option value="all">T&#7845;t c&#7843;</option>${(state.customers || []).map(c => `<option value="${c.id}">${c.name || c.code || c.id}</option>`).join('')}`;
+  select.value = activeExportCustomerId || 'all';
+  makeSelectSearchable('customer-order-export-customer', 'T&#7845;t c&#7843;');
+}
+function getSelectedExportCustomerId() {
+  return document.getElementById('customer-order-export-customer')?.value || 'all';
+}
+
+function getOrderStatusLabel(status) {
+  const labels = {
+    all: 'Đơn hợp lệ',
+    settled: 'Đã chốt',
+    completed: 'Hoàn thành',
+    complete: 'Hoàn thành',
+    confirmed: 'Đã xác nhận',
+    partially_returned: 'Trả một phần',
+    returned: 'Đã trả toàn bộ',
+    draft: 'Đơn nháp',
+    cancelled: 'Đã hủy',
+    canceled: 'Đã hủy'
+  };
+  return labels[status] || status;
+}
+
+function updateCustomerOrderExportScopeText() {
+  const el = document.getElementById('customer-order-export-scope-text');
+  if (!el) return;
+  if (activeExportOrders) {
+    el.innerText = activeExportOrderIds && activeExportOrderIds.length > 0
+      ? `${activeExportOrderIds.length} đơn đã tích chọn`
+      : `${activeExportOrders.length} đơn theo bộ lọc hiện tại`;
+    return;
+  }
+  const count = getExportCustomersByScope().length;
+  if (activeExportCustomerId) el.innerText = `1 khách hàng đang xem`;
+  else if (selectedCustomerIdsForExport.size > 0) el.innerText = `${count} khách hàng đã tích chọn`;
+  else el.innerText = `${count} khách hàng theo bộ lọc hiện tại`;
+}
+
+function openCustomerOrderExportModal(customerId = null) {
+  activeExportOrders = null;
+  activeExportOrderIds = null;
+  activeExportCustomerId = customerId;
+  activeExportScopeMode = customerId ? 'single' : (selectedCustomerIdsForExport.size > 0 ? 'selected' : 'filtered');
+  const modal = document.getElementById('customer-order-export-modal');
+  if (!modal) return;
+  const statusSelect = document.getElementById('customer-order-export-status');
+  const statuses = Array.from(new Set((state.savedOrders || [])
+    .filter(o => String(o.customerId || '') === String(customerId))
+    .map(o => o.status || 'settled')
+    .filter(s => s && s !== 'all')));
+  if (statusSelect) {
+    const defaultStatuses = ['settled', 'completed', 'confirmed', 'partially_returned', 'returned', 'draft', 'cancelled'];
+    const allStatuses = Array.from(new Set([...defaultStatuses, ...statuses]));
+    statusSelect.innerHTML = `<option value="all">${getOrderStatusLabel('all')}</option>${allStatuses.map(s => `<option value="${s}">${getOrderStatusLabel(s)}</option>`).join('')}`;
+  }
+  const fromInput = document.getElementById('customer-order-export-from');
+  const toInput = document.getElementById('customer-order-export-to');
+  const rangeMode = document.getElementById('customer-order-export-range-mode');
+  if (rangeMode) rangeMode.value = 'last_month';
+  const lastMonthRange = getCustomerOrderExportDateRange();
+  if (fromInput) fromInput.value = lastMonthRange.fromDate;
+  if (toInput) toInput.value = lastMonthRange.toDate;
+  populateCustomerOrderExportManagerFilter();
+  populateCustomerOrderExportCustomerFilter();
+  renderCustomerOrderExportColumnOptions();
+  updateCustomerOrderExportScopeText();
+  modal.classList.add('active');
+}
+
+export function openHistoryOrderExportModal(orders, selectedOrderIds = []) {
+  if ((!selectedOrderIds || selectedOrderIds.length === 0) && !confirm(`Xuất toàn bộ ${orders.length} đơn theo bộ lọc hiện tại?`)) {
+    return;
+  }
+  activeExportCustomerId = null;
+  activeExportScopeMode = selectedOrderIds.length > 0 ? 'history_selected' : 'history_filtered';
+  activeExportOrders = orders || [];
+  activeExportOrderIds = selectedOrderIds || null;
+  const modal = document.getElementById('customer-order-export-modal');
+  if (!modal) return;
+  const rangeMode = document.getElementById('customer-order-export-range-mode');
+  if (rangeMode) rangeMode.value = 'last_month';
+  const range = getCustomerOrderExportDateRange();
+  const fromInput = document.getElementById('customer-order-export-from');
+  const toInput = document.getElementById('customer-order-export-to');
+  if (fromInput) fromInput.value = range.fromDate;
+  if (toInput) toInput.value = range.toDate;
+  populateCustomerOrderExportManagerFilter();
+  populateCustomerOrderExportCustomerFilter();
+  const statusSelect = document.getElementById('customer-order-export-status');
+  if (statusSelect) {
+    const statuses = Array.from(new Set((orders || []).map(o => o.status || 'settled').filter(s => s && s !== 'all')));
+    statusSelect.innerHTML = `<option value="all">${getOrderStatusLabel('all')}</option>${statuses.map(s => `<option value="${s}">${getOrderStatusLabel(s)}</option>`).join('')}`;
+  }
+  renderCustomerOrderExportColumnOptions();
+  updateCustomerOrderExportScopeText();
+  modal.classList.add('active');
+}
+
+function closeCustomerOrderExportModal() {
+  const modal = document.getElementById('customer-order-export-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function exportCustomerOrderHistoryExcel() {
+  const customers = activeExportOrders ? (state.customers || []) : getExportCustomersByScope();
+  if (customers.length === 0) {
+    showToast('Không có khách hàng phù hợp để xuất.', 'warning');
+    return;
+  }
+  const selectedColumns = getSelectedCustomerOrderExportColumns();
+  if (selectedColumns.length === 0) {
+    showToast('Vui lòng chọn ít nhất một cột để xuất.', 'warning');
+    return;
+  }
+  localStorage.setItem(CUSTOMER_ORDER_EXPORT_COLUMNS_STORAGE_KEY, JSON.stringify(selectedColumns));
+
+  const submitBtn = document.getElementById('btn-submit-customer-order-export');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Đang xuất...';
+  }
+
+  const range = getCustomerOrderExportDateRange();
+  const fromDate = range.fromDate;
+  const toDate = range.toDate;
+  const status = document.getElementById('customer-order-export-status')?.value || 'all';
+  if (!fromDate || !toDate || fromDate > toDate) {
+    showToast('Vui lòng chọn khoảng ngày hợp lệ.', 'warning');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i data-lucide="download" style="width: 16px; height: 16px;"></i> Xuất Excel';
+      safeCreateIcons();
+    }
+    return;
+  }
+  try {
+    const { startIso, endExclusiveIso } = getVnRangeIso(fromDate, toDate);
+    const selectedManagerId = getSelectedExportManagerId();
+    const selectedCustomerId = getSelectedExportCustomerId();
+    let scopedCustomers = customers;
+    if (selectedCustomerId !== 'all') {
+      scopedCustomers = scopedCustomers.filter(c => String(c.id) === String(selectedCustomerId));
+    }
+    if (selectedManagerId !== 'all') {
+      scopedCustomers = scopedCustomers.filter(c => isSameUser(c.managedBy || c.managed_by, selectedManagerId));
+    }
+    const customerById = new Map(scopedCustomers.map(c => [String(c.id), c]));
+    let orders = [];
+    if (activeExportOrders) {
+      const allowedOrderIds = activeExportOrderIds ? new Set(activeExportOrderIds.map(String)) : null;
+      const startTime = new Date(startIso).getTime();
+      const endTime = new Date(endExclusiveIso).getTime();
+      orders = activeExportOrders.filter(order => {
+        if (allowedOrderIds && !allowedOrderIds.has(String(order.id))) return false;
+        const orderTime = new Date(order.date || order.createdAt || order.created_at).getTime();
+        if (!Number.isFinite(orderTime) || orderTime < startTime || orderTime >= endTime) return false;
+        if (status && status !== 'all' && String(order.status || 'settled') !== String(status)) return false;
+        if (selectedManagerId !== 'all') {
+          const cust = customerById.get(String(order.customerId || order.customer_id));
+          if (!cust || !isSameUser(cust.managedBy || cust.managed_by, selectedManagerId)) return false;
+        }
+        return true;
+      });
+    } else {
+      orders = await dbFetchCustomersOrderHistory(scopedCustomers.map(c => c.id), startIso, endExclusiveIso, status);
+    }
+    const exportRows = orders.flatMap(order => {
+      const customer = customerById.get(String(order.customerId));
+      return customer ? buildCustomerOrderExportRows([order], customer) : [];
+    });
+    if (exportRows.length === 0) {
+      showToast('Không có đơn hàng phù hợp để xuất Excel.', 'warning');
+      return;
+    }
+
+    const sheetData = [
+      selectedColumns,
+      ...exportRows.map(row => selectedColumns.map(col => row[col] ?? ''))
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+    worksheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sheetData.length - 1, c: selectedColumns.length - 1 } }) };
+    worksheet['!freeze'] = { xSplit: 0, ySplit: 1 };
+    worksheet['!cols'] = selectedColumns.map(col => ({ wch: Math.min(38, Math.max(12, col.length + 4)) }));
+    selectedColumns.forEach((_, idx) => {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: idx });
+      if (worksheet[cellRef]) worksheet[cellRef].s = { font: { bold: true } };
+    });
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Lịch sử đơn hàng');
+    const fileRange = range.label || `${fromDate}-${toDate}`;
+    const fileName = `LichSuDonHang_${sanitizeFilePart(fileRange)}_${customers.length}Khach.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    closeCustomerOrderExportModal();
+    showToast(`Đã xuất ${exportRows.length} dòng lịch sử đơn hàng.`, 'success');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i data-lucide="download" style="width: 16px; height: 16px;"></i> Xuất Excel';
+      safeCreateIcons();
+    }
+  }
+}
+
 export function openCustomerDetailModal(index) {
   const modal = document.getElementById('customer-detail-modal');
   const cust = state.customers[index];
@@ -967,6 +1565,9 @@ export function openCustomerDetailModal(index) {
   if (modalTitle) {
     modalTitle.innerText = `Thông tin & Lịch sử công nợ của đại lý mã ${cust.code}`;
   }
+
+  const exportBtn = document.getElementById('btn-open-customer-order-export');
+  if (exportBtn) exportBtn.setAttribute('data-customer-id', cust.id);
 
   document.getElementById('detail-cust-code').innerText = cust.code;
   document.getElementById('detail-cust-name').innerText = cust.name;

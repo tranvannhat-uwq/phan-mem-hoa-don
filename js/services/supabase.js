@@ -137,12 +137,13 @@ export function loadLocalStorageBackup() {
     state.brands = JSON.parse(storedBrands);
   } else {
     state.brands = [
-      { name: 'Nano10*', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
-      { name: 'Hatacco nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'hatacco.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
-      { name: 'Festiva nano', companyName: 'CÔNG TY CỔ PHẦN EMP HOA KỲ', logoFilename: 'festiva.png', hotline: '0325.855.222 - 0985.769.689', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: null },
-      { name: 'mutsutec', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
-      { name: 'tdkaw', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' },
-      { name: 'cova', companyName: 'CÔNG TY CỔ PHẦN ABS JAPAN', logoFilename: 'absjapan.png', hotline: '088.603.7878 - 0961.030.923', cskh: '0868.055.866', email: 'nhamaysonnano@gmail.com', addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội', addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên', addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh' }
+      { name: 'COVA NANO', companyName: 'Công ty Cổ phần ABS JAPAN (Miền Bắc)', companyId: 'ABS_NORTH', logoFilename: 'absjapan.png' },
+      { name: 'FESTIVA NANO', companyName: 'Công ty Cổ phần EMP Hoa Kỳ', companyId: 'EMP_USA', logoFilename: 'festiva.png' },
+      { name: 'HATACCO NANO', companyName: 'Công ty Cổ phần EMP Hoa Kỳ', companyId: 'EMP_USA', logoFilename: 'hatacco.png' },
+      { name: 'MUTSUTEC NANO', companyName: 'Công ty Cổ phần ABS JAPAN (Miền Bắc)', companyId: 'ABS_NORTH', logoFilename: 'absjapan.png' },
+      { name: 'NANO10 MB', companyName: 'Công ty Cổ phần ABS JAPAN (Miền Bắc)', companyId: 'ABS_NORTH', logoFilename: 'absjapan.png' },
+      { name: 'NANO10 MN', companyName: 'Công ty Cổ phần ABS JAPAN - Chi nhánh Miền Nam', companyId: 'ABS_SOUTH', logoFilename: 'absjapan.png' },
+      { name: 'TDKAW NANO', companyName: 'Công ty Cổ phần ABS JAPAN (Miền Bắc)', companyId: 'ABS_NORTH', logoFilename: 'absjapan.png' }
     ];
     localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
   }
@@ -680,20 +681,30 @@ export async function fetchCloudData() {
         if (txErr) throw txErr;
 
         if (txData && txData.length > 0) {
-          const cloudTxs = txData.map(t => ({
-            id: t.id,
-            date: t.date,
-            type: t.type,
-            category: t.category,
-            partner: t.partner,
-            value: parseFloat(t.value || 0),
-            method: t.method,
-            accounting: t.accounting,
-            status: t.status,
-            creator: t.creator,
-            note: t.note,
-            starred: t.starred
-          })).filter(t => !(t.note && t.note.startsWith('Thu tiền hàng cho hóa đơn')));
+          const cloudTxs = txData.map(t => {
+            const rawNote = t.note || '';
+            const supplierMeta = rawNote.match(/__supplierId=([^\s]+)/);
+            const cleanNote = rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim();
+            return {
+              id: t.id,
+              date: t.date || t.transaction_date,
+              type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
+              category: t.category || t.transaction_type,
+              partner: t.partner,
+              value: parseFloat(t.value || 0),
+              method: t.method || t.payment_method || 'cash',
+              accounting: t.accounting,
+              status: t.status,
+              creator: t.creator || t.created_by,
+              note: cleanNote,
+              starred: t.starred,
+              customerId: t.customer_id || null,
+              supplierId: t.supplier_id || (supplierMeta ? supplierMeta[1] : null),
+              orderId: t.order_id || null,
+              salesReturnId: t.sales_return_id || null,
+              employeeId: t.employee_id || null
+            };
+          }).filter(t => !(t.note && t.note.startsWith('Thu tiá»n hÃ ng cho hÃ³a Ä‘Æ¡n')));
           localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
         }
       } catch (txErr) {
@@ -1916,9 +1927,30 @@ export async function dbSaveCashbookTransaction(tx) {
         starred: tx.starred || false
       };
       
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from(tableCashbookTransactionsName)
         .upsert(dbRow, { onConflict: 'id' });
+
+      if (error && /column|schema|cache|supplier_id|customer_id|transaction_date|payment_method|direction|transaction_type|created_by/i.test(error.message || '')) {
+        const legacyRow = {
+          id: dbRow.id,
+          date: dbRow.date,
+          type: dbRow.type,
+          category: dbRow.category,
+          partner: dbRow.partner,
+          value: dbRow.value,
+          method: dbRow.method,
+          accounting: dbRow.accounting,
+          status: dbRow.status,
+          creator: dbRow.creator,
+          note: tx.supplierId ? `${dbRow.note || ''} __supplierId=${tx.supplierId}`.trim() : dbRow.note,
+          starred: dbRow.starred
+        };
+        const retry = await supabaseClient
+          .from(tableCashbookTransactionsName)
+          .upsert(legacyRow, { onConflict: 'id' });
+        error = retry.error;
+      }
         
       if (error) {
         console.warn('Lưu sổ quỹ lên Supabase cảnh báo (RLS):', error.message);
@@ -2595,4 +2627,84 @@ export async function dbFetchOrdersPaginated(search = '', status = null, custome
     }
   }
   return { total: (state.savedOrders || []).length, data: (state.savedOrders || []).slice(offset, offset + limit) };
+}
+
+export async function dbFetchCustomerOrderHistory(customerId, startIso, endExclusiveIso, status = 'all') {
+  return dbFetchCustomersOrderHistory([customerId], startIso, endExclusiveIso, status);
+}
+
+export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExclusiveIso, status = 'all') {
+  const idSet = new Set((customerIds || []).map(id => String(id)).filter(Boolean));
+  const mapOrderRow = (order) => ({
+    id: order.id,
+    customerId: order.customer_id || order.customerId || null,
+    customerName: order.customer_name || order.customerName || '',
+    customerPhone: order.customer_phone || order.customerPhone || '',
+    customerAddress: order.customer_address || order.customerAddress || '',
+    notes: order.notes || '',
+    items: typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || []),
+    date: order.order_date || order.created_at || order.date || order.createdAt,
+    createdAt: order.created_at || order.createdAt || order.date,
+    updatedAt: order.updated_at || order.updatedAt || order.created_at || order.date,
+    totalMarket: parseFloat(order.total_market ?? order.totalMarket ?? 0),
+    totalDiscount: parseFloat(order.total_discount ?? order.totalDiscount ?? 0),
+    subtotal: parseFloat(order.subtotal ?? order.total_payable ?? order.totalPayable ?? 0),
+    discountValue: parseFloat(order.discount_value ?? order.discountValue ?? 0),
+    discountType: order.discount_type || order.discountType || 'amount',
+    discountAmount: parseFloat(order.discount_amount ?? order.discountAmount ?? 0),
+    otherFeeAmount: parseFloat(order.other_fee_amount ?? order.otherFeeAmount ?? 0),
+    totalPayable: parseFloat(order.total_payable ?? order.totalPayable ?? 0),
+    paidAmount: parseFloat(order.paid_amount ?? order.paidAmount ?? order.other_fee_amount ?? order.otherFeeAmount ?? 0),
+    amountDue: parseFloat(order.debt_amount ?? order.amountDue ?? Math.max(0, parseFloat(order.total_payable ?? order.totalPayable ?? 0) - parseFloat(order.paid_amount ?? order.paidAmount ?? 0))),
+    pricelistId: order.pricelist_id || order.pricelistId || 'retail',
+    createdBy: order.created_by || order.createdBy || '',
+    salespersonId: order.salesperson_id || order.salespersonId || order.created_by || order.createdBy || '',
+    status: order.status || 'settled',
+    companyId: order.company_id || order.companyId || 'ABS_NORTH'
+  });
+
+  if (idSet.size === 0) return [];
+
+  if (isCloudActive && supabaseClient) {
+    try {
+      const pageSize = 1000;
+      let from = 0;
+      const allRows = [];
+      while (true) {
+        let query = supabaseClient
+          .from(tableOrdersName)
+          .select('*')
+          .in('customer_id', Array.from(idSet))
+          .gte('created_at', startIso)
+          .lt('created_at', endExclusiveIso)
+          .order('created_at', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (status && status !== 'all') query = query.eq('status', status);
+        else query = query.in('status', ['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
+        const { data, error } = await query;
+        if (error) throw error;
+        allRows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+      return allRows.map(mapOrderRow);
+    } catch (err) {
+      console.warn('Loi tai lich su don hang khach hang tu Supabase, dung du lieu local:', err.message || err);
+    }
+  }
+
+  const startTime = new Date(startIso).getTime();
+  const endTime = new Date(endExclusiveIso).getTime();
+  return (state.savedOrders || [])
+    .filter(o => idSet.has(String(o.customerId || o.customer_id || '')))
+    .filter(o => !status || status === 'all' || String(o.status || 'settled') === String(status))
+    .filter(o => {
+      const deleted = o.deletedAt || o.deleted_at || o.isDeleted;
+      const st = String(o.status || 'settled').toLowerCase();
+      if ((!status || status === 'all') && (deleted || st === 'draft' || st === 'cancelled' || st === 'canceled')) return false;
+      const time = new Date(o.date || o.createdAt || o.created_at).getTime();
+      return Number.isFinite(time) && time >= startTime && time < endTime;
+    })
+    .sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt))
+    .map(mapOrderRow);
 }

@@ -3,7 +3,9 @@ import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTim
 import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 import { openPrintTypeModal } from './invoice.js?v=20260727-advance-payment';
+import { openHistoryOrderExportModal } from './customers.js?v=20260727-debt-audit2';
 
+const selectedHistoryOrderIdsForExport = new Set();
 
 export function setupHistoryPanel() {
   const searchInput = document.getElementById('history-search-input');
@@ -94,9 +96,36 @@ export function setupHistoryPanel() {
     });
   }
 
+  const exportBtn = document.getElementById('btn-open-history-export-modal');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const filteredIds = state.historyFilteredOrderIds || [];
+      const selectedIds = Array.from(selectedHistoryOrderIdsForExport).filter(id => filteredIds.includes(id));
+      const orders = (state.savedOrders || []).filter(o => filteredIds.includes(String(o.id)));
+      openHistoryOrderExportModal(orders, selectedIds);
+    });
+  }
+
   const returnForm = document.getElementById('sales-return-form');
   if (returnForm) {
     returnForm.addEventListener('submit', processSalesReturnSubmit);
+  }
+
+  const btnCard = document.getElementById('btn-history-view-card');
+  const btnDetails = document.getElementById('btn-history-view-details');
+  if (btnCard) {
+    btnCard.addEventListener('click', () => {
+      state.historyViewMode = 'card';
+      localStorage.setItem('historyViewMode', 'card');
+      renderHistoryOrders();
+    });
+  }
+  if (btnDetails) {
+    btnDetails.addEventListener('click', () => {
+      state.historyViewMode = 'details';
+      localStorage.setItem('historyViewMode', 'details');
+      renderHistoryOrders();
+    });
   }
 }
 
@@ -169,6 +198,21 @@ export function renderHistoryOrders() {
   if (!container) return;
   
   populateHistoryFilters();
+
+  // Đồng bộ trạng thái active cho nút chuyển đổi giao diện
+  const btnCard = document.getElementById('btn-history-view-card');
+  const btnDetails = document.getElementById('btn-history-view-details');
+  if (btnCard && btnDetails) {
+    if (state.historyViewMode === 'details') {
+      btnCard.classList.remove('active');
+      btnDetails.classList.add('active');
+      container.classList.add('details-mode');
+    } else {
+      btnCard.classList.add('active');
+      btnDetails.classList.remove('active');
+      container.classList.remove('details-mode');
+    }
+  }
   
   const searchVal = document.getElementById('history-search-input').value.toLowerCase().trim();
   
@@ -265,8 +309,6 @@ export function renderHistoryOrders() {
     return true;
   });
 
-
-
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
@@ -280,6 +322,7 @@ export function renderHistoryOrders() {
   }
 
   const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+  state.historyFilteredOrderIds = sorted.map(o => String(o.id));
 
   const ITEMS_PER_PAGE = 20;
   const totalItems = sorted.length;
@@ -291,112 +334,258 @@ export function renderHistoryOrders() {
   const startIndex = (state.historyPage - 1) * ITEMS_PER_PAGE;
   const paginatedItems = sorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  const cardsHtml = paginatedItems.map(order => {
-    const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
-    let statusBadge = '';
-    if (order.status === 'draft') {
-      statusBadge = `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>`;
-    } else if (order.status === 'partially_returned') {
-      statusBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Trả 1 phần</span>`;
-    } else if (order.status === 'returned') {
-      statusBadge = `<span style="background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã trả toàn bộ</span>`;
-    } else {
-      statusBadge = `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
-    }
-      
-    const creator = state.users.find(u => isSameUser(u.username, order.createdBy));
-    const creatorName = creator ? creator.displayName : (order.createdBy && order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy);
+  let ordersContentHtml = '';
 
-    let showDeleteBtn = true;
-    if ((order.status === 'settled' || order.status === 'partially_returned' || order.status === 'returned') && state.currentUser && state.currentUser.role !== 'admin') {
-      showDeleteBtn = false;
-    }
+  if (state.historyViewMode === 'details') {
+    // ---------------------- DẠNG CHI TIẾT (DETAILS TABLE VIEW) ----------------------
+    const tableRows = paginatedItems.map((order, idx) => {
+      const indexNumber = startIndex + idx + 1;
+      const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
 
-    const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
-    
-    let managerName = 'Chưa phân công';
-    let plName = 'Nhập tay';
-    let debtText = '0 ₫';
-    
-    if (cust) {
-      managerName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa phân công';
-      
-      const pl = state.pricelists.find(p => p.id === cust.pricelistId);
-      plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
-      
-      debtText = formatCurrency(cust.debt || 0);
-    } else {
-      const orderPlId = order.pricelistId || 'retail';
-      const pl = state.pricelists.find(p => p.id === orderPlId);
-      plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
-    }
+      let statusBadge = '';
+      if (order.status === 'draft') {
+        statusBadge = `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>`;
+      } else if (order.status === 'partially_returned') {
+        statusBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Trả 1 phần</span>`;
+      } else if (order.status === 'returned') {
+        statusBadge = `<span style="background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã trả toàn bộ</span>`;
+      } else {
+        statusBadge = `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
+      }
 
-    return `
-      <div class="glass-panel order-card flex flex-col justify-between" style="padding: 1.25rem; gap: 1rem; position: relative;">
-        ${showDeleteBtn ? `
-          <button class="history-delete-btn" data-id="${order.id}" title="Xóa đơn hàng" style="position: absolute; top: 0.85rem; right: 0.85rem; width: 26px; height: 26px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; padding: 0;">
-            <i data-lucide="x" style="width: 15px; height: 15px; stroke-width: 2.5;"></i>
-          </button>
-        ` : ''}
-        <div>
-          <div class="flex justify-between items-center" style="margin-bottom: 0.75rem; padding-right: ${showDeleteBtn ? '2rem' : '0'};">
-            <span class="order-id" style="font-weight: 700; color: #fff; font-size: 1.05rem;">${order.id}</span>
-            <div style="display: flex; gap: 0.35rem; align-items: center;">
-              ${statusBadge}
+      const creator = state.users.find(u => isSameUser(u.username, order.createdBy));
+      const creatorName = creator ? creator.displayName : (order.createdBy && order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy);
+
+      let showDeleteBtn = true;
+      if ((order.status === 'settled' || order.status === 'partially_returned' || order.status === 'returned') && state.currentUser && state.currentUser.role !== 'admin') {
+        showDeleteBtn = false;
+      }
+
+      const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
+      let managerName = 'Chưa phân công';
+      let plName = 'Nhập tay';
+      let debtText = '0 ₫';
+      
+      if (cust) {
+        managerName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa phân công';
+        const pl = state.pricelists.find(p => p.id === cust.pricelistId);
+        plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
+        debtText = formatCurrency(cust.debt || 0);
+      } else {
+        const orderPlId = order.pricelistId || 'retail';
+        const pl = state.pricelists.find(p => p.id === orderPlId);
+        plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
+      }
+
+      const itemsPreviewHtml = `
+        <div class="history-details-items-preview">
+          <div style="font-weight: 600; color: var(--text-primary); font-size: 0.72rem; margin-bottom: 2px;">
+            Mặt hàng (${totalItemsCount}):
+          </div>
+          <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px;">
+            ${order.items.map(item => `
+              <li style="display: flex; justify-content: space-between; gap: 8px; color: var(--text-secondary);">
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;" title="${item.productName || item.product.name} (${item.package})">
+                  • ${item.productName || item.product.name} (${item.package})
+                </span>
+                <span style="font-weight: 500; white-space: nowrap;">${item.quantity} x ${formatCurrency(item.price)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      `;
+
+      return `
+        <tr>
+          <td style="text-align: center;"><input type="checkbox" class="history-export-checkbox" data-id="${order.id}" ${selectedHistoryOrderIdsForExport.has(String(order.id)) ? 'checked' : ''}></td>
+          <td style="text-align: center; font-weight: 600; color: var(--text-muted);">${indexNumber}</td>
+          <td>
+            <div style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; margin-bottom: 2px;">${order.id}</div>
+            <div>${statusBadge}</div>
+          </td>
+          <td style="white-space: nowrap; color: var(--text-secondary); font-size: 0.8rem;">
+            ${formatDateTime(order.date)}
+          </td>
+          <td>
+            <div style="font-weight: 600; color: var(--text-primary);">${order.customerName}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Nợ hiện tại: <span style="color: var(--color-danger); font-weight: 600;">${debtText}</span></div>
+          </td>
+          <td style="font-size: 0.8rem;">
+            <div>Tạo: <strong>${creatorName}</strong></div>
+            <div style="color: var(--text-muted);">QL: ${managerName}</div>
+          </td>
+          <td>
+            <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${plName}</span>
+          </td>
+          <td style="min-width: 240px;">
+            ${itemsPreviewHtml}
+          </td>
+          <td style="text-align: right;">
+            <div style="font-weight: 700; color: var(--color-primary); font-size: 0.95rem;">${formatCurrency(order.totalPayable)}</div>
+          </td>
+          <td style="text-align: center;">
+            <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+              <button class="btn btn-indigo btn-xs history-print-btn" data-id="${order.id}" title="In đơn" style="padding: 4px 8px;">
+                <i data-lucide="printer" style="width: 13px; height: 13px;"></i> In
+              </button>
+              ${order.status === 'draft' ? `
+                <button class="btn btn-primary btn-xs history-edit-btn" data-id="${order.id}" title="Sửa đơn" style="padding: 4px 8px;">
+                  <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
+                </button>
+              ` : `
+                <button class="btn btn-teal btn-xs history-view-btn" data-id="${order.id}" title="Xem chi tiết" style="padding: 4px 8px;">
+                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Xem
+                </button>
+                <button class="btn btn-warning btn-xs history-return-btn" data-id="${order.id}" title="Trả hàng" style="padding: 4px 8px; background: #f59e0b; border-color: #f59e0b; color: #fff;">
+                  <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
+                </button>
+              `}
+              ${showDeleteBtn ? `
+                <button class="btn btn-danger btn-xs history-delete-btn" data-id="${order.id}" title="Xóa đơn hàng" style="padding: 4px 6px; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35);">
+                  <i data-lucide="x" style="width: 13px; height: 13px;"></i>
+                </button>
+              ` : ''}
             </div>
-          </div>
-          
-          <div class="order-meta" style="font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
-            <div class="flex items-center gap-1"><i data-lucide="user" style="width:13px;height:13px;color: var(--color-primary);"></i> <span>Khách hàng: <strong>${order.customerName}</strong></span></div>
-            <div class="flex items-center gap-1"><i data-lucide="calendar" style="width:13px;height:13px;"></i> <span>Ngày lập: ${formatDateTime(order.date)}</span></div>
-            <div class="flex items-center gap-1"><i data-lucide="user-check" style="width:13px;height:13px;"></i> <span>Người tạo: ${creatorName}</span></div>
-            <div class="flex items-center gap-1"><i data-lucide="users" style="width:13px;height:13px;"></i> <span>Kinh doanh quản lý: ${managerName}</span></div>
-            <div class="flex items-center gap-1"><i data-lucide="tags" style="width:13px;height:13px;"></i> <span>Bảng giá: <strong style="color: var(--color-warning);">${plName}</strong></span></div>
-            <div class="flex items-center gap-1"><i data-lucide="credit-card" style="width:13px;height:13px;"></i> <span>Công nợ hiện tại: <strong style="color: var(--color-danger);">${debtText}</strong></span></div>
-          </div>
-          
-          <div class="order-details-summary" style="font-size: 0.85rem; background: rgba(255,255,255,0.02); border-radius: 6px; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); margin-bottom: 1rem; max-height: 120px; overflow-y: auto;">
-            <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem; font-size: 0.75rem; text-transform: uppercase;">Chi tiết mặt hàng (${totalItemsCount}):</div>
-            <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.25rem;">
-              ${order.items.map(item => `
-                <li style="display: flex; justify-content: space-between; color: var(--text-secondary); font-size: 0.8rem;">
-                  <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${item.productName || item.product.name} (${item.package})">${item.productName || item.product.name} (${item.package})</span>
-                  <span>${item.quantity} x ${formatCurrency(item.price)}</span>
-                </li>
-              `).join('')}
-            </ul>
-          </div>
-        </div>
-        
-        <div>
-          <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
-            <span style="font-size: 0.85rem; color: var(--text-secondary);">Thành tiền:</span>
-            <span class="order-total" style="font-size: 1.15rem; font-weight: 700; color: var(--color-primary);">${formatCurrency(order.totalPayable)}</span>
-          </div>
-          
-          <div class="order-actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: 0.35rem;">
-            <button class="btn btn-indigo btn-sm flex items-center justify-center gap-1 history-print-btn" data-id="${order.id}">
-              <i data-lucide="printer" style="width: 13px; height: 13px;"></i> In
-            </button>
-            
-            ${order.status === 'draft' ? `
-              <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}">
-                <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
-              </button>
-            ` : `
-              <button class="btn btn-teal btn-sm flex items-center justify-center gap-1 history-view-btn" data-id="${order.id}">
-                <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Xem
-              </button>
-              <button class="btn btn-warning btn-sm flex items-center justify-center gap-1 history-return-btn" data-id="${order.id}" onclick="openSalesReturnModal('${order.id}')" style="background: #f59e0b; border-color: #f59e0b; color: #fff;">
-                <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
-              </button>
-            `}
-          </div>
-        </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    ordersContentHtml = `
+      <div class="table-responsive glass-panel" style="padding: 0.5rem; width: 100%; border-radius: 12px; grid-column: 1 / -1;">
+        <table class="table history-details-table" style="min-width: 1050px;">
+          <thead>
+            <tr>
+              <th style="width: 42px; text-align: center;"><input type="checkbox" id="history-select-all-export" title="Chọn tất cả đơn trên trang"></th>
+              <th style="width: 45px; text-align: center;">STT</th>
+              <th style="width: 120px;">Mã đơn</th>
+              <th style="width: 135px;">Ngày lập</th>
+              <th style="width: 170px;">Khách hàng</th>
+              <th style="width: 150px;">Người tạo / NVQL</th>
+              <th style="width: 120px;">Bảng giá</th>
+              <th>Chi tiết mặt hàng</th>
+              <th style="width: 130px; text-align: right;">Tổng tiền</th>
+              <th style="width: 140px; text-align: center;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
       </div>
     `;
 
-  }).join('');
+  } else {
+    // ---------------------- DẠNG THẺ (CARD VIEW) ----------------------
+    ordersContentHtml = paginatedItems.map(order => {
+      const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
+      let statusBadge = '';
+      if (order.status === 'draft') {
+        statusBadge = `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>`;
+      } else if (order.status === 'partially_returned') {
+        statusBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Trả 1 phần</span>`;
+      } else if (order.status === 'returned') {
+        statusBadge = `<span style="background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã trả toàn bộ</span>`;
+      } else {
+        statusBadge = `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
+      }
+        
+      const creator = state.users.find(u => isSameUser(u.username, order.createdBy));
+      const creatorName = creator ? creator.displayName : (order.createdBy && order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy);
+
+      let showDeleteBtn = true;
+      if ((order.status === 'settled' || order.status === 'partially_returned' || order.status === 'returned') && state.currentUser && state.currentUser.role !== 'admin') {
+        showDeleteBtn = false;
+      }
+
+      const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
+      
+      let managerName = 'Chưa phân công';
+      let plName = 'Nhập tay';
+      let debtText = '0 ₫';
+      
+      if (cust) {
+        managerName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa phân công';
+        
+        const pl = state.pricelists.find(p => p.id === cust.pricelistId);
+        plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
+        
+        debtText = formatCurrency(cust.debt || 0);
+      } else {
+        const orderPlId = order.pricelistId || 'retail';
+        const pl = state.pricelists.find(p => p.id === orderPlId);
+        plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
+      }
+
+      return `
+        <div class="glass-panel order-card flex flex-col justify-between" style="padding: 1.25rem; gap: 1rem; position: relative;">
+          <label style="position: absolute; top: 0.9rem; left: 0.9rem; z-index: 2;" title="Chọn đơn để xuất Excel">
+            <input type="checkbox" class="history-export-checkbox" data-id="${order.id}" ${selectedHistoryOrderIdsForExport.has(String(order.id)) ? 'checked' : ''}>
+          </label>
+          ${showDeleteBtn ? `
+            <button class="history-delete-btn" data-id="${order.id}" title="Xóa đơn hàng" style="position: absolute; top: 0.85rem; right: 0.85rem; width: 26px; height: 26px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; padding: 0;">
+              <i data-lucide="x" style="width: 15px; height: 15px; stroke-width: 2.5;"></i>
+            </button>
+          ` : ''}
+          <div>
+            <div class="flex justify-between items-center" style="margin-bottom: 0.75rem; padding-right: ${showDeleteBtn ? '2rem' : '0'}; padding-left: 1.4rem;">
+              <span class="order-id" style="font-weight: 700; color: #fff; font-size: 1.05rem;">${order.id}</span>
+              <div style="display: flex; gap: 0.35rem; align-items: center;">
+                ${statusBadge}
+              </div>
+            </div>
+            
+            <div class="order-meta" style="font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+              <div class="flex items-center gap-1"><i data-lucide="user" style="width:13px;height:13px;color: var(--color-primary);"></i> <span>Khách hàng: <strong>${order.customerName}</strong></span></div>
+              <div class="flex items-center gap-1"><i data-lucide="calendar" style="width:13px;height:13px;"></i> <span>Ngày lập: ${formatDateTime(order.date)}</span></div>
+              <div class="flex items-center gap-1"><i data-lucide="user-check" style="width:13px;height:13px;"></i> <span>Người tạo: ${creatorName}</span></div>
+              <div class="flex items-center gap-1"><i data-lucide="users" style="width:13px;height:13px;"></i> <span>Kinh doanh quản lý: ${managerName}</span></div>
+              <div class="flex items-center gap-1"><i data-lucide="tags" style="width:13px;height:13px;"></i> <span>Bảng giá: <strong style="color: var(--color-warning);">${plName}</strong></span></div>
+              <div class="flex items-center gap-1"><i data-lucide="credit-card" style="width:13px;height:13px;"></i> <span>Công nợ hiện tại: <strong style="color: var(--color-danger);">${debtText}</strong></span></div>
+            </div>
+            
+            <div class="order-details-summary" style="font-size: 0.85rem; background: rgba(255,255,255,0.02); border-radius: 6px; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); margin-bottom: 1rem; max-height: 120px; overflow-y: auto;">
+              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem; font-size: 0.75rem; text-transform: uppercase;">Chi tiết mặt hàng (${totalItemsCount}):</div>
+              <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.25rem;">
+                ${order.items.map(item => `
+                  <li style="display: flex; justify-content: space-between; color: var(--text-secondary); font-size: 0.8rem;">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="${item.productName || item.product.name} (${item.package})">${item.productName || item.product.name} (${item.package})</span>
+                    <span>${item.quantity} x ${formatCurrency(item.price)}</span>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          </div>
+          
+          <div>
+            <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
+              <span style="font-size: 0.85rem; color: var(--text-secondary);">Thành tiền:</span>
+              <span class="order-total" style="font-size: 1.15rem; font-weight: 700; color: var(--color-primary);">${formatCurrency(order.totalPayable)}</span>
+            </div>
+            
+            <div class="order-actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: 0.35rem;">
+              <button class="btn btn-indigo btn-sm flex items-center justify-center gap-1 history-print-btn" data-id="${order.id}">
+                <i data-lucide="printer" style="width: 13px; height: 13px;"></i> In
+              </button>
+              
+              ${order.status === 'draft' ? `
+                <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}">
+                  <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
+                </button>
+              ` : `
+                <button class="btn btn-teal btn-sm flex items-center justify-center gap-1 history-view-btn" data-id="${order.id}">
+                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Xem
+                </button>
+                <button class="btn btn-warning btn-sm flex items-center justify-center gap-1 history-return-btn" data-id="${order.id}" onclick="openSalesReturnModal('${order.id}')" style="background: #f59e0b; border-color: #f59e0b; color: #fff;">
+                  <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
+                </button>
+              `}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
 
   const paginationHtml = `
     <div class="pagination-controls" style="grid-column: 1 / -1; display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); width: 100%;">
@@ -412,7 +601,7 @@ export function renderHistoryOrders() {
     </div>
   `;
 
-  container.innerHTML = cardsHtml + paginationHtml;
+  container.innerHTML = ordersContentHtml + paginationHtml;
 
   const prevPageBtn = document.getElementById('history-prev-page');
   if (prevPageBtn) {
@@ -433,6 +622,32 @@ export function renderHistoryOrders() {
   }
 
   // Gán sự kiện click cho các nút hành động trong lịch sử
+  document.querySelectorAll('.history-export-checkbox').forEach(box => {
+    box.addEventListener('change', () => {
+      const id = String(box.getAttribute('data-id'));
+      if (box.checked) selectedHistoryOrderIdsForExport.add(id);
+      else selectedHistoryOrderIdsForExport.delete(id);
+      const selectAll = document.getElementById('history-select-all-export');
+      if (selectAll) {
+        const visibleIds = paginatedItems.map(o => String(o.id));
+        selectAll.checked = visibleIds.length > 0 && visibleIds.every(id => selectedHistoryOrderIdsForExport.has(id));
+      }
+    });
+  });
+
+  const selectAllHistory = document.getElementById('history-select-all-export');
+  if (selectAllHistory) {
+    const visibleIds = paginatedItems.map(o => String(o.id));
+    selectAllHistory.checked = visibleIds.length > 0 && visibleIds.every(id => selectedHistoryOrderIdsForExport.has(id));
+    selectAllHistory.onchange = () => {
+      visibleIds.forEach(id => {
+        if (selectAllHistory.checked) selectedHistoryOrderIdsForExport.add(id);
+        else selectedHistoryOrderIdsForExport.delete(id);
+      });
+      renderHistoryOrders();
+    };
+  }
+
   document.querySelectorAll('.history-print-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const b = e.currentTarget;
@@ -658,16 +873,28 @@ export function openSalesReturnModal(orderId) {
   const tbody = document.getElementById('sales-return-items-body');
   if (!tbody) return;
 
+  const orderItemsSubtotal = (order.items || []).reduce((sum, item) => {
+    const qty = Number(item.quantity || 0);
+    const price = Number(item.price || 0);
+    const discountPercent = Number(item.discountPercent || 0);
+    return sum + Math.max(0, qty * price * (1 - discountPercent / 100));
+  }, 0);
+  const orderDiscountRatio = orderItemsSubtotal > 0 && Number(order.totalPayable || 0) > 0
+    ? Math.min(1, Number(order.totalPayable || 0) / orderItemsSubtotal)
+    : 1;
+
   tbody.innerHTML = (order.items || []).map((item, idx) => {
     const itemKey = item.id || `${item.productCode || item.code}_${item.package}`;
     const soldQty = Number(item.quantity || 0);
     const prevReturned = returnedMap[itemKey] || 0;
     const maxReturnable = Math.max(0, soldQty - prevReturned);
-    const unitPrice = Number(item.price || 0);
+    const basePrice = Number(item.price || 0);
+    const discountPercent = Number(item.discountPercent || 0);
+    const unitPrice = Math.round(Math.max(0, basePrice * (1 - discountPercent / 100) * orderDiscountRatio));
     const prodName = item.productName || (item.product && item.product.name) || item.name || 'Sản phẩm';
 
     return `
-      <tr class="return-item-row" data-key="${itemKey}" data-sale-item-id="${item.id || ''}" data-product-id="${item.productCode || item.code || ''}" data-product-name="${prodName}" data-package="${item.package}" data-unit-price="${unitPrice}" data-sold-qty="${soldQty}" data-prev-returned="${prevReturned}" data-max-returnable="${maxReturnable}">
+      <tr class="return-item-row" data-key="${itemKey}" data-sale-item-id="${item.id || ''}" data-product-id="${item.productCode || item.code || ''}" data-product-name="${prodName}" data-package="${item.package}" data-unit-price="${unitPrice}" data-sold-qty="${soldQty}" data-prev-returned="${prevReturned}" data-max-returnable="${maxReturnable}" data-product-brand="${item.productBrand || item.brand || ''}" data-agency-brand="${item.agencyBrand || ''}" data-revenue-brand="${item.revenueBrand || ''}" data-revenue-company="${item.revenueCompany || order.companyId || ''}">
         <td>${idx + 1}</td>
         <td style="font-weight: 600; color: #fff;">${prodName}</td>
         <td>${item.package || 'Cái'}</td>
@@ -815,7 +1042,11 @@ export async function processSalesReturnSubmit(e) {
         discountType: discType,
         discountValue: discVal,
         refundPrice: refundPrice,
-        subtotal: subtotal
+        subtotal: subtotal,
+        productBrand: row.getAttribute('data-product-brand') || '',
+        agencyBrand: row.getAttribute('data-agency-brand') || '',
+        revenueBrand: row.getAttribute('data-revenue-brand') || '',
+        revenueCompany: row.getAttribute('data-revenue-company') || ''
       });
     }
   });
@@ -911,7 +1142,7 @@ export async function processSalesReturnSubmit(e) {
   }
 
   // Record Sales Return via Transactional RPC
-  await dbRecordSalesReturn(salesReturnObj, returnItems, order.status);
+  await dbRecordSalesReturn(returnObj, returnItems, order.status);
   await dbSaveOrder(order);
 
   document.getElementById('sales-return-modal').classList.remove('active');

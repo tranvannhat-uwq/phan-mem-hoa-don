@@ -958,11 +958,104 @@ select option {
   align-self: flex-start;
 }
 
-/* History Card */
+/* History View Mode Toggle */
+.history-view-toggle-group {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.history-view-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  height: 30px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.history-view-mode-btn:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.history-view-mode-btn.active {
+  background: var(--color-primary);
+  color: #ffffff !important;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.history-view-mode-btn.active svg {
+  stroke: #ffffff;
+}
+
+/* History Grid / Container */
 .history-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
+}
+
+.history-grid.details-mode {
+  display: block !important;
+  width: 100%;
+}
+
+/* History Details Table */
+.history-details-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.history-details-table th {
+  background: rgba(0, 0, 0, 0.03);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.history-details-table td {
+  padding: 0.85rem;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+
+.history-details-table tr:hover td {
+  background-color: var(--bg-surface-hover);
+}
+
+.history-details-items-preview {
+  max-height: 90px;
+  overflow-y: auto;
+  font-size: 0.78rem;
+  background: rgba(0, 0, 0, 0.02);
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  line-height: 1.35;
+}
+
+.history-details-items-preview::-webkit-scrollbar {
+  width: 4px;
 }
 
 .invoice-card {

@@ -136,16 +136,115 @@ export function getBrandName(brandId, fallback = '', brandsList = state.brands) 
   return brand ? brand.name : (fallback || brandId);
 }
 
+export function normalizeCompanyId(companyIdOrName, brandName = '') {
+  if (!companyIdOrName && !brandName) return 'ABS_NORTH';
+
+  const str = String(companyIdOrName || '').trim().toLowerCase();
+
+  if (str === 'abs_north' || str.includes('miền bắc') || str.includes('north') || str.includes('bắc')) {
+    return 'ABS_NORTH';
+  }
+  if (str === 'abs_south' || str.includes('miền nam') || str.includes('south') || str.includes('nam')) {
+    return 'ABS_SOUTH';
+  }
+  if (str === 'emp_usa' || str.includes('emp')) {
+    return 'EMP_USA';
+  }
+
+  if (brandName) {
+    return getCompanyIdByBrand(brandName);
+  }
+
+  if (str.includes('abs') || str.includes('ctyabs') || str.includes('cova')) {
+    return 'ABS_NORTH';
+  }
+
+  return 'ABS_NORTH';
+}
+
 export function getCompanyById(companyId, companiesList = state.companies) {
   if (!companyId || companyId === 'all') return null;
-  const str = String(companyId).trim();
-  return (companiesList || []).find(c => c.id === str || c.code === str || c.name === str) || null;
+  const normId = normalizeCompanyId(companyId);
+  return (companiesList || []).find(c => {
+    if (!c) return false;
+    const cId = (c.id || '').toLowerCase();
+    const cCode = (c.code || '').toLowerCase();
+    const cName = (c.name || '').toLowerCase();
+    return cId === normId || cCode === normId || cName === normId;
+  }) || null;
 }
 
 export function getCompanyName(companyId, companiesList = state.companies) {
   if (!companyId || companyId === 'all') return 'Tất cả công ty';
-  const comp = getCompanyById(companyId, companiesList);
-  return comp ? comp.name : (companyId === 'ABS_NORTH' ? 'Công ty Cổ phần ABS JAPAN (Miền Bắc)' : (companyId === 'ABS_SOUTH' ? 'Công ty Cổ phần ABS JAPAN - Chi nhánh Miền Nam' : (companyId === 'EMP_USA' ? 'Công ty Cổ phần EMP Hoa Kỳ' : companyId)));
+  const normId = normalizeCompanyId(companyId);
+  const comp = (companiesList || []).find(c => c && c.id === normId);
+  if (comp) return comp.name;
+
+  if (normId === 'ABS_NORTH') return 'Công ty Cổ phần ABS JAPAN (Miền Bắc)';
+  if (normId === 'ABS_SOUTH') return 'Công ty Cổ phần ABS JAPAN - Chi nhánh Miền Nam';
+  if (normId === 'EMP_USA') return 'Công ty Cổ phần EMP Hoa Kỳ';
+  return companyId;
+}
+
+export function getCanonicalBrandName(brandStr, brandsList = state.brands) {
+  if (!brandStr) return 'COVA NANO';
+  const rawStr = brandStr.toString().trim();
+  const cleanName = rawStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const foundB = (brandsList || []).find(b => {
+    if (!b || !b.name) return false;
+    const bRaw = b.name.toString().trim();
+    const bClean = bRaw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return bRaw === rawStr || bClean === cleanName;
+  });
+  if (foundB) return foundB.name;
+
+  if (cleanName.includes('nano10mn') || cleanName.includes('10mn')) return 'NANO10 MN';
+  if (cleanName.includes('nano10mb') || cleanName.includes('10mb') || cleanName.includes('nano10')) return 'NANO10 MB';
+  if (cleanName.includes('cova')) return 'COVA NANO';
+  if (cleanName.includes('mutsutec')) return 'MUTSUTEC NANO';
+  if (cleanName.includes('tdkaw')) return 'TDKAW NANO';
+  if (cleanName.includes('festiva') || cleanName.includes('festival')) return 'FESTIVA NANO';
+  if (cleanName.includes('hatacco')) return 'HATACCO NANO';
+
+  return rawStr;
+}
+
+export function getCompanyIdByBrand(brandName, brandsList = state.brands) {
+  if (!brandName) return 'ABS_NORTH';
+  const rawStr = brandName.toString().trim().toLowerCase();
+  const cleanName = rawStr.replace(/[^a-z0-9]/g, '');
+
+  // 1. Direct search in state.brands
+  const foundB = (brandsList || []).find(b => {
+    if (!b || !b.name) return false;
+    const bRaw = b.name.toString().trim().toLowerCase();
+    const bClean = bRaw.replace(/[^a-z0-9]/g, '');
+    return bRaw === rawStr || bClean === cleanName || cleanName.includes(bClean) || bClean.includes(cleanName);
+  });
+
+  if (foundB) {
+    if (foundB.companyId && foundB.companyId !== 'shared' && foundB.companyId !== 'all') {
+      return foundB.companyId;
+    }
+    if (foundB.companyName) {
+      const cName = foundB.companyName.toLowerCase();
+      if (cName.includes('miền nam') || cName.includes('mn') || cName.includes('south')) return 'ABS_SOUTH';
+      if (cName.includes('emp')) return 'EMP_USA';
+      if (cName.includes('abs')) return 'ABS_NORTH';
+    }
+  }
+
+  // 2. Precise rule-based mapping matching database schema
+  if (cleanName.includes('nano10mn') || cleanName.includes('10mn')) return 'ABS_SOUTH';
+  if (cleanName.includes('nano10mb') || cleanName.includes('10mb') || cleanName.includes('nano10')) return 'ABS_NORTH';
+  if (cleanName.includes('cova')) return 'ABS_NORTH';
+  if (cleanName.includes('mutsutec')) return 'ABS_NORTH';
+  if (cleanName.includes('tdkaw')) return 'ABS_NORTH';
+  if (cleanName.includes('festiva') || cleanName.includes('festival')) return 'EMP_USA';
+  if (cleanName.includes('hatacco')) return 'EMP_USA';
+
+  return 'ABS_NORTH';
 }
 
 export function getCustomerById(customerId, customersList = state.customers) {
@@ -167,9 +266,50 @@ export function getUserById(userIdOrUsername, usersList = state.users) {
 }
 
 export function getUserDisplayName(userIdOrUsername, fallbackName = '', usersList = state.users) {
+  if (Array.isArray(fallbackName)) {
+    usersList = fallbackName;
+    fallbackName = '';
+  }
+  if (!usersList || !Array.isArray(usersList)) {
+    usersList = state.users || [];
+  }
+
   if (!userIdOrUsername || userIdOrUsername === 'all') return fallbackName || 'Nhân viên';
-  const user = getUserById(userIdOrUsername, usersList);
-  return user ? user.displayName : (fallbackName || userIdOrUsername);
+
+  let target = userIdOrUsername;
+  if (typeof target === 'object') {
+    if (Array.isArray(target)) {
+      const names = target.map(u => getUserDisplayName(u, fallbackName, usersList)).filter(Boolean);
+      return names.length > 0 ? names.join(', ') : (fallbackName || 'Nhân viên');
+    }
+    target = target.displayName || target.username || target.name || target.id || '';
+  }
+
+  const str = String(target).trim();
+  if (!str || str === 'null' || str === 'undefined' || str === 'Unknown' || str === 'unassigned' || str.startsWith('[object Object]')) {
+    return fallbackName || 'Chưa phân công / Khác';
+  }
+
+  if (str.startsWith('{') || str.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(str);
+      return getUserDisplayName(parsed, fallbackName, usersList);
+    } catch (e) {}
+  }
+
+  const cleanStr = str.toLowerCase();
+  if (cleanStr === 'ctyabs@lendon.com' || cleanStr.includes('abs_japan') || cleanStr.includes('abs-japan') || cleanStr === 'ctyabs') {
+    return 'ABS JAPAN (Công ty)';
+  }
+  if (cleanStr === 'emp_hoa_ky' || cleanStr.includes('emp-hoa-ky') || cleanStr === 'emp_hoaky') {
+    return 'EMP Hoa Kỳ (Công ty)';
+  }
+
+  const user = getUserById(str, usersList);
+  if (user) return user.displayName;
+
+  if (str.includes('@')) return str.split('@')[0];
+  return fallbackName || str;
 }
 
 export function getPricelistById(pricelistId, pricelistsList = state.pricelists) {
@@ -196,11 +336,12 @@ export function getUserCompanyId(user) {
 }
 
 // Xác định các thuộc tính doanh thu cho một dòng sản phẩm đơn hàng
-export function getRevenueAttributes(itemBrand, customerAgencyBrand, orderCompanyId, brandsList = []) {
+export function getRevenueAttributes(itemBrand, customerAgencyBrand, orderCompanyId, brandsList = state.brands) {
   const productBrand = itemBrand || 'Nano10*';
   const agencyBrand = (customerAgencyBrand && customerAgencyBrand !== 'Tất cả') ? customerAgencyBrand : productBrand;
-  const revenueCompany = orderCompanyId || 'ABS_NORTH';
   const revenueBrand = (isFestivalBrand(productBrand) || isSharedBrand(productBrand, brandsList)) ? agencyBrand : productBrand;
+
+  let revenueCompany = getCompanyIdByBrand(revenueBrand, brandsList) || orderCompanyId || 'ABS_NORTH';
 
   return {
     productBrand,
@@ -308,17 +449,51 @@ export function isSameUser(u1, u2) {
 }
 
 // Lấy tên hiển thị của người quản lý linh hoạt, hỗ trợ fallback cho tài khoản công ty và email
-export function getManagerDisplayName(managedBy, users) {
-  if (!managedBy) return '';
-  const cleanM = managedBy.toLowerCase().trim();
-  if (cleanM === 'ctyabs@lendon.com' || cleanM === 'abs_japan' || cleanM === 'abs-japan') {
+export function getManagerDisplayName(managedBy, fallbackName = '', usersList = state.users) {
+  if (Array.isArray(fallbackName)) {
+    usersList = fallbackName;
+    fallbackName = '';
+  }
+  if (!usersList || !Array.isArray(usersList)) {
+    usersList = state.users || [];
+  }
+
+  if (!managedBy) return fallbackName || 'Chưa bàn giao / Khác';
+
+  let target = managedBy;
+  if (typeof target === 'object') {
+    if (Array.isArray(target)) {
+      const names = target.map(m => getManagerDisplayName(m, fallbackName, usersList)).filter(Boolean);
+      return names.length > 0 ? names.join(', ') : (fallbackName || 'Chưa bàn giao / Khác');
+    }
+    target = target.username || target.id || target.displayName || target.name || '';
+  }
+
+  const strM = String(target).trim();
+  if (!strM || strM === 'null' || strM === 'undefined' || strM === 'Unknown' || strM === 'unassigned' || strM.startsWith('[object Object]')) {
+    return fallbackName || 'Chưa bàn giao / Khác';
+  }
+
+  if (strM.startsWith('{') || strM.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(strM);
+      return getManagerDisplayName(parsed, fallbackName, usersList);
+    } catch (e) {}
+  }
+
+  const cleanM = strM.toLowerCase();
+  if (cleanM === 'ctyabs@lendon.com' || cleanM.includes('abs_japan') || cleanM.includes('abs-japan') || cleanM === 'ctyabs') {
     return 'ABS JAPAN (Công ty)';
   }
-  if (cleanM === 'emp_hoa_ky' || cleanM === 'emp-hoa-ky') {
+  if (cleanM === 'emp_hoa_ky' || cleanM.includes('emp-hoa-ky') || cleanM === 'emp_hoaky') {
     return 'EMP Hoa Kỳ (Công ty)';
   }
-  const u = users.find(usr => isSameUser(usr.username, managedBy));
-  return u ? u.displayName : (managedBy.includes('@') ? managedBy.split('@')[0] : managedBy);
+
+  const u = usersList.find(usr => isSameUser(usr.username, strM) || isSameUser(usr.id, strM));
+  if (u) return u.displayName;
+
+  if (strM.includes('@')) return strM.split('@')[0];
+  return fallbackName || strM;
 }
 
 export const PROVINCES = {

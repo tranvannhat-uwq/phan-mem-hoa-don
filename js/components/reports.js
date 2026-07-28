@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getCustomerName, getProvinceNameByCode } from '../utils.js';
+import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode } from '../utils.js';
 
 export function setupReportsPanel() {
   const tabBtns = document.querySelectorAll('.report-subtab-btn');
@@ -86,7 +86,7 @@ export function renderDebtReport() {
     const debt = parseFloat(c.debt || 0);
     const lastOrderStr = c.lastOrderAt ? formatDateTime(c.lastOrderAt) : 'Chưa có';
     const lastPayStr = c.lastPaymentAt ? formatDateTime(c.lastPaymentAt) : 'Chưa có';
-    const managerName = getUserDisplayName(c.managedBy, state.users);
+    const managerName = getManagerDisplayName(c.managedBy, 'Chưa bàn giao', state.users);
 
     return `
       <tr>

@@ -1,10 +1,236 @@
 import { state } from '../state.js';
-import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName, getProvinceNameByCode } from '../utils.js';
+import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName, getManagerDisplayName, getProvinceNameByCode } from '../utils.js';
 import { switchTab } from '../main.js';
 import { openProductModal } from './products.js';
 import { fetchCloudData } from '../services/supabase.js?v=20260727-debt-audit2';
 
 let revenueChartInstance = null;
+
+const VN_TIMEZONE = 'Asia/Ho_Chi_Minh';
+const VALID_REVENUE_STATUSES = new Set(['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
+
+function toNumber(value, fallback = 0) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const normalized = typeof value === 'string'
+    ? value.replace(/[^\d.-]/g, '')
+    : value;
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function normalizeKey(value, fallback = 'unassigned') {
+  if (!value) return fallback;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed && trimmed !== 'null' && trimmed !== 'undefined' && !trimmed.startsWith('[object Object]') ? trimmed : fallback;
+  }
+  if (Array.isArray(value)) {
+    const first = value.find(Boolean);
+    return normalizeKey(first, fallback);
+  }
+  if (typeof value === 'object') {
+    return normalizeKey(value.username || value.id || value.code || value.name, fallback);
+  }
+  return String(value);
+}
+
+function getVnDateParts(dateInput) {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: VN_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short'
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  const ymd = `${map.year}-${map.month}-${map.day}`;
+  return {
+    ymd,
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    weekday: map.weekday
+  };
+}
+
+function getDashboardDateRange() {
+  const nowParts = getVnDateParts(new Date());
+  if (!nowParts) return null;
+  const timeRange = state.dashboardFilter.timeRange || 'month';
+  if (timeRange === 'custom') {
+    if (!state.dashboardFilter.startDate || !state.dashboardFilter.endDate) return null;
+    return { start: state.dashboardFilter.startDate, end: state.dashboardFilter.endDate };
+  }
+  if (timeRange === 'day') {
+    return { start: nowParts.ymd, end: nowParts.ymd };
+  }
+  if (timeRange === 'week') {
+    const now = new Date(`${nowParts.ymd}T00:00:00+07:00`);
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    const startDate = new Date(now);
+    startDate.setDate(diff);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    return {
+      start: getVnDateParts(startDate).ymd,
+      end: getVnDateParts(endDate).ymd
+    };
+  }
+  if (timeRange === 'year') {
+    return { start: `${nowParts.year}-01-01`, end: `${nowParts.year}-12-31` };
+  }
+  const lastDay = new Date(nowParts.year, nowParts.month, 0).getDate();
+  return {
+    start: `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}-01`,
+    end: `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  };
+}
+
+function isDateInRange(dateInput, range = getDashboardDateRange()) {
+  if (!range) return true;
+  const parts = getVnDateParts(dateInput);
+  if (!parts) return false;
+  return parts.ymd >= range.start && parts.ymd <= range.end;
+}
+
+function isValidDashboardOrder(order) {
+  const status = String(order?.status || 'settled').toLowerCase();
+  return VALID_REVENUE_STATUSES.has(status) && !order.deletedAt && !order.deleted_at && !order.isDeleted;
+}
+
+function getOrderCompanyId(order) {
+  return normalizeCompanyId(order?.companyId || order?.company_id || 'ABS_NORTH');
+}
+
+function getItemRevenueCompanyId(item, orderCompanyId) {
+  const pBrand = getCanonicalBrandName(item.productBrand || item.brand || 'COVA NANO', state.brands);
+  const aBrand = getCanonicalBrandName(item.agencyBrand || pBrand, state.brands);
+  const rBrand = getCanonicalBrandName(item.revenueBrand || (isFestivalBrand(pBrand) ? aBrand : pBrand), state.brands);
+  return normalizeCompanyId(item.revenueCompany || orderCompanyId, rBrand);
+}
+
+function orderMatchesDashboardCompany(order, companyId) {
+  if (!companyId || companyId === 'all') return true;
+  const selectedCompanyId = normalizeCompanyId(companyId);
+  if (getOrderCompanyId(order) === selectedCompanyId) return true;
+  return (order.items || []).some(item => getItemRevenueCompanyId(item, getOrderCompanyId(order)) === selectedCompanyId);
+}
+
+function isValidReturn(ret) {
+  const status = String(ret?.status || 'completed').toLowerCase();
+  return status !== 'cancelled' && status !== 'canceled' && status !== 'draft' && !ret.deletedAt && !ret.deleted_at;
+}
+
+function getItemGross(item) {
+  const qty = toNumber(item.quantity);
+  const price = toNumber(item.price ?? item.unitPrice ?? item.refundPrice);
+  const discountPercent = toNumber(item.discountPercent);
+  if (item.subtotal !== undefined && item.subtotal !== null && item.subtotal !== '') return toNumber(item.subtotal);
+  return Math.max(0, qty * price * (1 - discountPercent / 100));
+}
+
+function getOrderDiscountRatio(order) {
+  const itemsSubtotal = (order.items || []).reduce((sum, item) => sum + getItemGross(item), 0);
+  const payable = toNumber(order.totalPayable ?? order.total_payable ?? order.netRevenue ?? order.totalAmount);
+  if (itemsSubtotal > 0 && payable > 0) return Math.min(1, payable / itemsSubtotal);
+  return 1;
+}
+
+function getOrderRevenueRows(order, sign = 1) {
+  const ratio = sign > 0 ? getOrderDiscountRatio(order) : 1;
+  const orderCompany = getOrderCompanyId(order);
+  const custObj = (state.customers || []).find(c => String(c.id) === String(order.customerId || order.customer_id));
+  const spKey = normalizeKey(order.salespersonId || (custObj ? custObj.managedBy : null) || order.createdBy);
+  const mgrKey = normalizeKey((custObj ? custObj.managedBy : null) || order.customerManagerId || order.managedBy);
+  const custKey = normalizeKey(order.customerId || order.customer_id || (custObj ? custObj.id : ''), 'walkin');
+  const customerName = order.customerName || (custObj ? custObj.name : 'Khách lẻ');
+  const provinceKey = custObj ? (custObj.province || custObj.address || 'Khác') : 'Khác';
+
+  return (order.items || []).map(item => {
+    const qty = toNumber(item.quantity);
+    const gross = sign > 0 ? getItemGross(item) * ratio : toNumber(item.subtotal ?? (toNumber(item.refundPrice) * qty));
+    const rawPBrand = item.productBrand || item.brand || 'COVA NANO';
+    const pBrand = getCanonicalBrandName(rawPBrand, state.brands);
+    const aBrand = getCanonicalBrandName(item.agencyBrand || pBrand, state.brands);
+    const rBrand = getCanonicalBrandName(item.revenueBrand || (isFestivalBrand(pBrand) ? aBrand : pBrand), state.brands);
+    const rCompany = getItemRevenueCompanyId(item, orderCompany);
+
+    return {
+      orderId: order.id || order.saleId || order.orderId,
+      date: order.date || order.returnDate || order.createdAt,
+      amount: Math.round(Math.max(0, gross)) * sign,
+      quantity: sign > 0 ? qty : 0,
+      productKey: item.productId || item.productCode || item.code || item.name || 'Unknown',
+      productName: item.productName || item.name || item.product?.name || item.productId || 'Sản phẩm không tên',
+      pBrand,
+      rBrand,
+      rCompany,
+      spKey,
+      mgrKey,
+      custKey,
+      customerName,
+      provinceKey,
+      isFestival: isFestivalBrand(pBrand)
+    };
+  }).filter(row => row.amount || row.quantity);
+}
+
+function matchesDashboardBrand(row) {
+  const fBrand = state.dashboardFilter.brand || 'all';
+  if (fBrand === 'all') return true;
+  const includeFest = state.dashboardFilter.includeFestivalAllocation !== false;
+  const targetBrand = includeFest ? row.rBrand : row.pBrand;
+  return getCanonicalBrandName(targetBrand, state.brands).toLowerCase() === getCanonicalBrandName(fBrand, state.brands).toLowerCase();
+}
+
+function getFilteredDashboardReturns(filteredOrders) {
+  const range = getDashboardDateRange();
+  const filteredOrderIds = new Set((filteredOrders || []).map(o => String(o.id)));
+  const candidateOrders = (state.savedOrders || []).filter(isValidDashboardOrder);
+  return (state.salesReturns || []).filter(ret => {
+    if (!isValidReturn(ret)) return false;
+    if (!isDateInRange(ret.returnDate || ret.createdAt || ret.date, range)) return false;
+    const sourceOrder = candidateOrders.find(o => String(o.id) === String(ret.saleId || ret.orderId));
+    if (ret.saleId || ret.orderId) {
+      if (!sourceOrder) return false;
+      if (!filteredOrderIds.has(String(ret.saleId || ret.orderId))) return false;
+    }
+    if (state.dashboardFilter.customerId && state.dashboardFilter.customerId !== 'all' && String(ret.customerId) !== String(state.dashboardFilter.customerId)) return false;
+    if (state.dashboardFilter.saleUser && state.dashboardFilter.saleUser !== 'all') {
+      const retSale = ret.salespersonId || ret.createdBy || sourceOrder?.salespersonId || sourceOrder?.createdBy;
+      if (!isSameUser(retSale, state.dashboardFilter.saleUser)) return false;
+    }
+    return true;
+  });
+}
+
+function buildDashboardRevenueRows(filteredOrders) {
+  const rows = filteredOrders.flatMap(order => getOrderRevenueRows(order, 1));
+  if (state.dashboardSalesMode !== 'gross') {
+    const returns = getFilteredDashboardReturns(filteredOrders);
+    returns.forEach(ret => {
+      const sourceOrder = (state.savedOrders || []).find(o => String(o.id) === String(ret.saleId || ret.orderId)) || {};
+      rows.push(...getOrderRevenueRows({
+        ...sourceOrder,
+        ...ret,
+        id: ret.saleId || ret.orderId || ret.id,
+        companyId: ret.companyId || sourceOrder.companyId,
+        customerId: ret.customerId || sourceOrder.customerId,
+        customerName: ret.customerName || sourceOrder.customerName,
+        salespersonId: ret.salespersonId || sourceOrder.salespersonId,
+        createdBy: ret.createdBy || sourceOrder.createdBy,
+        date: ret.returnDate || ret.createdAt || ret.date
+      }, -1));
+    });
+  }
+  const selectedCompanyId = state.dashboardFilter.companyId || 'all';
+  return rows
+    .filter(row => selectedCompanyId === 'all' || row.rCompany === normalizeCompanyId(selectedCompanyId))
+    .filter(matchesDashboardBrand);
+}
 
 export function saveDashboardFilterToStorage() {
   try {
@@ -134,241 +360,97 @@ export function populateDashboardFilters() {
 }
 
 export function getFilteredDashboardOrders() {
-  // Bỏ qua đơn hàng nháp (draft) khi hiển thị báo cáo tổng quan
-  let orders = state.savedOrders.filter(o => o.status !== 'draft');
-
+  let orders = (state.savedOrders || []).filter(isValidDashboardOrder);
   const currUser = state.currentUser;
 
-  // 1. Phân quyền truy cập theo vai trò người dùng và Công ty
   if (currUser) {
     const userCompanyId = getUserCompanyId(currUser);
-
     if (currUser.role === 'sale') {
-      orders = orders.filter(o => isSameUser(o.createdBy, currUser.username) && (o.companyId || 'ABS_NORTH') === userCompanyId);
+      orders = orders.filter(o => isSameUser(o.createdBy, currUser.username) && orderMatchesDashboardCompany(o, userCompanyId));
     } else if (currUser.role === 'accounting' || currUser.role === 'manager') {
-      orders = orders.filter(o => (o.companyId || 'ABS_NORTH') === userCompanyId);
-    } else if (currUser.role === 'admin') {
-      if (state.dashboardFilter.companyId && state.dashboardFilter.companyId !== 'all') {
-        orders = orders.filter(o => (o.companyId || 'ABS_NORTH') === state.dashboardFilter.companyId);
-      }
+      orders = orders.filter(o => orderMatchesDashboardCompany(o, userCompanyId));
+    } else if (currUser.role === 'admin' && state.dashboardFilter.companyId && state.dashboardFilter.companyId !== 'all') {
+      orders = orders.filter(o => orderMatchesDashboardCompany(o, state.dashboardFilter.companyId));
     }
   }
 
-  // 2. Lọc theo nhân viên Sale được chọn (nếu có)
   if (state.dashboardFilter.saleUser && state.dashboardFilter.saleUser !== 'all') {
     orders = orders.filter(o => isSameUser(o.createdBy, state.dashboardFilter.saleUser));
   }
 
-  // 3. Lọc theo khách hàng được chọn
   if (state.dashboardFilter.customerId && state.dashboardFilter.customerId !== 'all') {
-    orders = orders.filter(o => o.customerId === state.dashboardFilter.customerId);
+    orders = orders.filter(o => String(o.customerId) === String(state.dashboardFilter.customerId));
   }
 
-  // 4. Lọc theo khoảng thời gian
-  const timeRange = state.dashboardFilter.timeRange;
-  const now = new Date();
-  
-  orders = orders.filter(order => {
-    if (!order.date) return false;
-    const orderDate = new Date(order.date);
-    
-    switch (timeRange) {
-      case 'day': {
-        return orderDate.toDateString() === now.toDateString();
-      }
-      case 'week': {
-        const startOfWeek = new Date(now);
-        const day = startOfWeek.getDay();
-        const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
-        startOfWeek.setDate(diff);
-        startOfWeek.setHours(0, 0, 0, 0);
-        
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
-        endOfWeek.setHours(23, 59, 59, 999);
-        
-        return orderDate >= startOfWeek && orderDate <= endOfWeek;
-      }
-      case 'month': {
-        return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
-      }
-      case 'year': {
-        return orderDate.getFullYear() === now.getFullYear();
-      }
-      case 'custom': {
-        const startStr = state.dashboardFilter.startDate;
-        const endStr = state.dashboardFilter.endDate;
-        if (!startStr || !endStr) return true;
-        const start = new Date(startStr);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(endStr);
-        end.setHours(23, 59, 59, 999);
-        return orderDate >= start && orderDate <= end;
-      }
-      default:
-        return true;
-    }
-  });
-
-  // 5. Lọc theo Nhãn và tùy chọn Bao gồm FESTIVAL phân bổ
-  const fBrand = state.dashboardFilter.brand || 'all';
-  const includeFest = state.dashboardFilter.includeFestivalAllocation !== false;
-
-  if (fBrand !== 'all') {
-    orders = orders.filter(o => {
-      return (o.items || []).some(item => {
-        const pBrand = item.productBrand || item.brand || 'Nano10*';
-        const aBrand = item.agencyBrand || 'Nano10*';
-        const rBrand = item.revenueBrand || (isFestivalBrand(pBrand) ? aBrand : pBrand);
-
-        const targetBrand = includeFest ? rBrand : pBrand;
-        return targetBrand.toLowerCase() === fBrand.toLowerCase();
-      });
-    });
-  }
-
-  return orders;
+  return orders.filter(order => isDateInRange(order.date || order.createdAt));
 }
-
 export function renderRevenueChart(orders) {
   const chartCanvas = document.getElementById('revenue-chart');
   if (!chartCanvas) return;
   const ctx = chartCanvas.getContext('2d');
-  
-  if (revenueChartInstance) {
-    revenueChartInstance.destroy();
-  }
+  if (revenueChartInstance) revenueChartInstance.destroy();
 
+  const rows = buildDashboardRevenueRows(orders || []);
   let labels = [];
   let dataPoints = [];
-  const now = new Date();
+  const nowParts = getVnDateParts(new Date());
   const view = state.dashboardChartView;
-  
+
   if (view === 'day') {
-    labels = Array.from({ length: 12 }, (_, i) => `${(i * 2).toString().padStart(2, '0')}:00`);
+    labels = Array.from({ length: 12 }, (_, i) => `${String(i * 2).padStart(2, '0')}:00`);
     dataPoints = Array(12).fill(0);
-    
-    orders.forEach(o => {
-      const d = new Date(o.date);
-      if (d.toDateString() === now.toDateString()) {
-        const hour = d.getHours();
+    rows.forEach(row => {
+      const d = new Date(row.date);
+      const parts = getVnDateParts(d);
+      if (parts && nowParts && parts.ymd === nowParts.ymd) {
+        const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: VN_TIMEZONE, hour: '2-digit', hour12: false }).format(d));
         const bucket = Math.floor(hour / 2);
-        if (bucket >= 0 && bucket < 12) {
-          dataPoints[bucket] += (o.totalPayable || 0);
-        }
+        if (bucket >= 0 && bucket < 12) dataPoints[bucket] += row.amount;
       }
     });
   } else if (view === 'week') {
     labels = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
     dataPoints = Array(7).fill(0);
-    
-    const startOfWeek = new Date(now);
-    const day = startOfWeek.getDay();
-    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
-    startOfWeek.setDate(diff);
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    orders.forEach(o => {
-      const d = new Date(o.date);
-      const dayDiff = Math.floor((d - startOfWeek) / (1000 * 60 * 60 * 24));
-      if (dayDiff >= 0 && dayDiff < 7) {
-        dataPoints[dayDiff] += (o.totalPayable || 0);
-      }
+    const range = getDashboardDateRange();
+    rows.forEach(row => {
+      const parts = getVnDateParts(row.date);
+      if (!parts || !range) return;
+      const dayDiff = Math.floor((new Date(`${parts.ymd}T00:00:00+07:00`) - new Date(`${range.start}T00:00:00+07:00`)) / 86400000);
+      if (dayDiff >= 0 && dayDiff < 7) dataPoints[dayDiff] += row.amount;
     });
   } else if (view === 'month') {
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const numDays = new Date(year, month + 1, 0).getDate();
-    
+    const year = nowParts.year;
+    const month = nowParts.month;
+    const numDays = new Date(year, month, 0).getDate();
     labels = Array.from({ length: numDays }, (_, i) => `${i + 1}`);
     dataPoints = Array(numDays).fill(0);
-    
-    orders.forEach(o => {
-      const d = new Date(o.date);
-      if (d.getMonth() === month && d.getFullYear() === year) {
-        const dateNum = d.getDate();
-        if (dateNum >= 1 && dateNum <= numDays) {
-          dataPoints[dateNum - 1] += (o.totalPayable || 0);
-        }
+    rows.forEach(row => {
+      const parts = getVnDateParts(row.date);
+      if (parts && parts.year === year && parts.month === month && parts.day >= 1 && parts.day <= numDays) {
+        dataPoints[parts.day - 1] += row.amount;
       }
     });
   } else if (view === 'year') {
     labels = ['Th 1', 'Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7', 'Th 8', 'Th 9', 'Th 10', 'Th 11', 'Th 12'];
     dataPoints = Array(12).fill(0);
-    
-    const year = now.getFullYear();
-    orders.forEach(o => {
-      const d = new Date(o.date);
-      if (d.getFullYear() === year) {
-        const monthNum = d.getMonth();
-        if (monthNum >= 0 && monthNum < 12) {
-          dataPoints[monthNum] += (o.totalPayable || 0);
-        }
-      }
+    rows.forEach(row => {
+      const parts = getVnDateParts(row.date);
+      if (parts && parts.year === nowParts.year) dataPoints[parts.month - 1] += row.amount;
     });
   }
 
   const gradient = ctx.createLinearGradient(0, 0, 0, 280);
-  gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)'); 
+  gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
   gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
 
   revenueChartInstance = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Doanh thu',
-        data: dataPoints,
-        borderColor: '#10b981',
-        borderWidth: 3,
-        pointBackgroundColor: '#10b981',
-        pointBorderColor: 'rgba(255,255,255,0.8)',
-        pointBorderWidth: 1,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        tension: 0.35,
-        fill: true,
-        backgroundColor: gradient
-      }]
-    },
+    data: { labels, datasets: [{ label: 'Doanh thu', data: dataPoints, borderColor: '#10b981', borderWidth: 3, pointBackgroundColor: '#10b981', pointBorderColor: 'rgba(255,255,255,0.8)', pointBorderWidth: 1, pointRadius: 4, pointHoverRadius: 6, tension: 0.35, fill: true, backgroundColor: gradient }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#111827',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          borderColor: 'rgba(255,255,255,0.1)',
-          borderWidth: 1,
-          padding: 10,
-          displayColors: false,
-          callbacks: {
-            label: function(context) {
-              return `Doanh thu: ${formatCurrency(context.raw)}`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(0, 0, 0, 0.05)' },
-          ticks: { color: '#64748b', font: { family: "'Inter', sans-serif", size: 11 } }
-        },
-        y: {
-          grid: { color: 'rgba(0, 0, 0, 0.05)' },
-          ticks: {
-            color: '#64748b',
-            font: { family: "'Inter', sans-serif", size: 11 },
-            callback: function(value) {
-              if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M ₫';
-              if (value >= 1e3) return (value / 1e3).toFixed(0) + 'k ₫';
-              return value + ' ₫';
-            }
-          }
-        }
-      }
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', titleColor: '#fff', bodyColor: '#fff', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 10, displayColors: false, callbacks: { label: context => `Doanh thu: ${formatCurrency(context.raw)}` } } },
+      scales: { x: { grid: { color: 'rgba(0, 0, 0, 0.05)' }, ticks: { color: '#64748b', font: { family: "'Inter', sans-serif", size: 11 } } }, y: { grid: { color: 'rgba(0, 0, 0, 0.05)' }, ticks: { color: '#64748b', font: { family: "'Inter', sans-serif", size: 11 }, callback: value => value >= 1e6 ? `${(value / 1e6).toFixed(1)}M ₫` : value >= 1e3 ? `${(value / 1e3).toFixed(0)}k ₫` : `${value} ₫` } } }
     }
   });
 }
@@ -378,57 +460,26 @@ export function renderTopProducts(orders) {
   if (!topProductsList) return;
 
   const salesMap = {};
-  orders.forEach(order => {
-    (order.items || []).forEach(item => {
-      const key = (item.product && item.product.code) || item.productCode || item.code || item.name || 'Unknown';
-      const name = (item.product && item.product.name) || item.productName || item.name || 'Sản phẩm không tên';
-      const qty = Number(item.quantity || 0);
-      const price = Number(item.price || 0);
-      const disc = Number(item.discountPercent || 0);
-      const revenue = qty * price * (1 - disc / 100);
-
-      if (!salesMap[key]) {
-        salesMap[key] = { code: key, name, quantity: 0, revenue: 0 };
-      }
-      salesMap[key].quantity += qty;
-      salesMap[key].revenue += revenue;
-    });
+  buildDashboardRevenueRows(orders || []).filter(row => row.quantity > 0).forEach(row => {
+    if (!salesMap[row.productKey]) salesMap[row.productKey] = { code: row.productKey, name: row.productName, quantity: 0, revenue: 0 };
+    salesMap[row.productKey].quantity += row.quantity;
+    salesMap[row.productKey].revenue += row.amount;
   });
 
   const salesList = Object.values(salesMap);
   if (salesList.length === 0) {
-    topProductsList.innerHTML = `
-      <div style="text-align: center; color: var(--text-muted); padding: 3rem; font-size: 0.9rem;">
-        Chưa có dữ liệu bán hàng trong khoảng thời gian này
-      </div>
-    `;
+    topProductsList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 3rem; font-size: 0.9rem;">Chưa có dữ liệu bán hàng trong khoảng thời gian này</div>`;
     return;
   }
 
   salesList.sort((a, b) => b.quantity - a.quantity);
   const top5 = salesList.slice(0, 5);
   const maxQty = top5[0].quantity || 1;
-
   topProductsList.innerHTML = top5.map(p => {
     const percent = Math.round((p.quantity / maxQty) * 100);
-    return `
-      <div class="top-product-item">
-        <div class="top-product-info">
-          <span class="top-product-name" title="${p.name}">${p.name}</span>
-          <span class="top-product-sales">${p.quantity} đã bán</span>
-        </div>
-        <div class="top-product-progress-bg">
-          <div class="top-product-progress-bar" style="width: ${percent}%;"></div>
-        </div>
-        <div class="top-product-meta">
-          <span>Mã: ${p.code}</span>
-          <span style="font-weight: 500; color: #fff;">${formatCurrency(p.revenue)}</span>
-        </div>
-      </div>
-    `;
+    return `<div class="top-product-item"><div class="top-product-info"><span class="top-product-name" title="${p.name}">${p.name}</span><span class="top-product-sales">${p.quantity} đã bán</span></div><div class="top-product-progress-bg"><div class="top-product-progress-bar" style="width: ${percent}%;"></div></div><div class="top-product-meta"><span>Mã: ${p.code}</span><span style="font-weight: 500; color: #fff;">${formatCurrency(p.revenue)}</span></div></div>`;
   }).join('');
 }
-
 export function updateDashboardStats() {
   populateDashboardFilters();
   const filteredOrders = getFilteredDashboardOrders();
@@ -456,107 +507,40 @@ export function updateDashboardStats() {
   const soldLabel = document.getElementById('stat-sold-products-label');
   if (soldLabel) soldLabel.innerText = `Sản phẩm đã bán ${labelSuffix}`;
 
-  // 1. Tính toán Doanh thu chi tiết theo từng Dòng Sản Phẩm và trừ Hàng Trả
-  let totalNetRevenue = 0;
   let totalSoldProducts = 0;
-  
   const companyRevenueMap = {};
   const brandRevenueMap = {};
   const salespersonRevenueMap = {};
   const managerRevenueMap = {};
   const customerRevenueMap = {};
+  const customerNameMap = {};
   const provinceRevenueMap = {};
   const festivalAllocationMap = {};
   let totalFestivalRevenue = 0;
 
-  const fBrand = state.dashboardFilter.brand || 'all';
-  const includeFest = state.dashboardFilter.includeFestivalAllocation !== false;
-
-  filteredOrders.forEach(order => {
-    const orderCompany = order.companyId || 'ABS_NORTH';
-    const subtotal = order.subtotal || order.totalPayable || 1;
-    const ratio = subtotal > 0 ? (order.totalPayable / subtotal) : 1;
-    const spKey = order.salespersonId || order.createdBy || 'Unknown';
-    const custObj = (state.customers || []).find(c => c.id === order.customerId);
-    const mgrKey = custObj ? (custObj.managedBy || 'Unknown') : 'Unknown';
-    const custKey = order.customerName || (custObj ? custObj.name : 'Khách lẻ');
-    const provKey = custObj ? (custObj.province || custObj.address || 'Khác') : 'Khác';
-
-    (order.items || []).forEach(item => {
-      const qty = Number(item.quantity || 0);
-      const price = Number(item.price || 0);
-      const disc = Number(item.discountPercent || 0);
-      const itemSubtotal = Math.round(qty * price * (1 - disc / 100));
-      const itemNet = Math.round(itemSubtotal * ratio);
-
-      const pBrand = item.productBrand || item.brand || 'Nano10*';
-      const aBrand = item.agencyBrand || 'Nano10*';
-      const rBrand = item.revenueBrand || (isFestivalBrand(pBrand) ? aBrand : pBrand);
-      const rCompany = item.revenueCompany || orderCompany;
-
-      let matchBrand = true;
-      if (fBrand !== 'all') {
-        const targetBrand = includeFest ? rBrand : pBrand;
-        matchBrand = (targetBrand.toLowerCase() === fBrand.toLowerCase());
-      }
-
-      if (matchBrand) {
-        totalNetRevenue += itemNet;
-        totalSoldProducts += qty;
-
-        companyRevenueMap[rCompany] = (companyRevenueMap[rCompany] || 0) + itemNet;
-        brandRevenueMap[rBrand] = (brandRevenueMap[rBrand] || 0) + itemNet;
-        salespersonRevenueMap[spKey] = (salespersonRevenueMap[spKey] || 0) + itemNet;
-        managerRevenueMap[mgrKey] = (managerRevenueMap[mgrKey] || 0) + itemNet;
-        customerRevenueMap[custKey] = (customerRevenueMap[custKey] || 0) + itemNet;
-        provinceRevenueMap[provKey] = (provinceRevenueMap[provKey] || 0) + itemNet;
-
-        if (isFestivalBrand(pBrand)) {
-          totalFestivalRevenue += itemNet;
-          festivalAllocationMap[rBrand] = (festivalAllocationMap[rBrand] || 0) + itemNet;
-        }
-      }
-    });
+  const revenueRows = buildDashboardRevenueRows(filteredOrders);
+  let actualRevenue = 0;
+  revenueRows.forEach(row => {
+    actualRevenue += row.amount;
+    totalSoldProducts += row.quantity;
+    companyRevenueMap[row.rCompany] = (companyRevenueMap[row.rCompany] || 0) + row.amount;
+    brandRevenueMap[row.rBrand] = (brandRevenueMap[row.rBrand] || 0) + row.amount;
+    salespersonRevenueMap[row.spKey] = (salespersonRevenueMap[row.spKey] || 0) + row.amount;
+    managerRevenueMap[row.mgrKey] = (managerRevenueMap[row.mgrKey] || 0) + row.amount;
+    customerRevenueMap[row.custKey] = (customerRevenueMap[row.custKey] || 0) + row.amount;
+    customerNameMap[row.custKey] = row.customerName;
+    provinceRevenueMap[row.provinceKey] = (provinceRevenueMap[row.provinceKey] || 0) + row.amount;
+    if (row.isFestival) {
+      totalFestivalRevenue += row.amount;
+      festivalAllocationMap[row.rBrand] = (festivalAllocationMap[row.rBrand] || 0) + row.amount;
+    }
   });
-
-  // Trừ bớt tiền phiếu trả hàng ròng
-  const isNetMode = state.dashboardSalesMode !== 'gross';
-  if (isNetMode && state.salesReturns && state.salesReturns.length > 0) {
-    const validReturns = state.salesReturns.filter(r => r.status !== 'cancelled');
-    validReturns.forEach(ret => {
-      (ret.items || []).forEach(item => {
-        const refundAmt = Number(item.subtotal || (item.refundPrice * item.quantity) || 0);
-        const pBrand = item.productBrand || item.brand || 'Nano10*';
-        const aBrand = item.agencyBrand || 'Nano10*';
-        const rBrand = item.revenueBrand || (isFestivalBrand(pBrand) ? aBrand : pBrand);
-        const rCompany = item.revenueCompany || ret.companyId || 'ABS_NORTH';
-
-        let matchBrand = true;
-        if (fBrand !== 'all') {
-          const targetBrand = includeFest ? rBrand : pBrand;
-          matchBrand = (targetBrand.toLowerCase() === fBrand.toLowerCase());
-        }
-
-        if (matchBrand) {
-          totalNetRevenue = Math.max(0, totalNetRevenue - refundAmt);
-          if (companyRevenueMap[rCompany]) companyRevenueMap[rCompany] = Math.max(0, companyRevenueMap[rCompany] - refundAmt);
-          if (brandRevenueMap[rBrand]) brandRevenueMap[rBrand] = Math.max(0, brandRevenueMap[rBrand] - refundAmt);
-
-          if (isFestivalBrand(pBrand)) {
-            totalFestivalRevenue = Math.max(0, totalFestivalRevenue - refundAmt);
-            if (festivalAllocationMap[rBrand]) festivalAllocationMap[rBrand] = Math.max(0, festivalAllocationMap[rBrand] - refundAmt);
-          }
-        }
-      });
-    });
-  }
-
   const totalOrdersCount = filteredOrders.length;
   const totalDebt = userCustomers.reduce((sum, c) => sum + (c.debt || 0), 0);
 
   // Hiển thị thẻ chỉ số
   const revEl = document.getElementById('stat-total-revenue');
-  if (revEl) revEl.innerText = formatCurrency(totalNetRevenue);
+  if (revEl) revEl.innerText = formatCurrency(actualRevenue);
   
   const ordEl = document.getElementById('stat-total-orders');
   if (ordEl) ordEl.innerText = totalOrdersCount;
@@ -570,7 +554,7 @@ export function updateDashboardStats() {
   // Render bảng Doanh thu theo Công ty
   const companyBody = document.getElementById('company-revenue-breakdown-body');
   if (companyBody) {
-    const compEntries = Object.entries(companyRevenueMap);
+    const compEntries = Object.entries(companyRevenueMap).sort((a, b) => b[1] - a[1]);
     if (compEntries.length === 0) {
       companyBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu</td></tr>`;
     } else {
@@ -586,7 +570,7 @@ export function updateDashboardStats() {
   // Render bảng Doanh thu theo Nhãn ghi nhận
   const brandBody = document.getElementById('brand-revenue-breakdown-body');
   if (brandBody) {
-    const brandEntries = Object.entries(brandRevenueMap);
+    const brandEntries = Object.entries(brandRevenueMap).sort((a, b) => b[1] - a[1]);
     if (brandEntries.length === 0) {
       brandBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu</td></tr>`;
     } else {
@@ -605,7 +589,7 @@ export function updateDashboardStats() {
   if (festivalBadge) festivalBadge.innerText = formatCurrency(totalFestivalRevenue);
 
   if (festivalBody) {
-    const festEntries = Object.entries(festivalAllocationMap);
+    const festEntries = Object.entries(festivalAllocationMap).sort((a, b) => b[1] - a[1]);
     if (festEntries.length === 0) {
       festivalBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu FESTIVAL xuất bán</td></tr>`;
     } else {
@@ -621,13 +605,13 @@ export function updateDashboardStats() {
   // Render bảng Doanh số theo Nhân viên
   const spBody = document.getElementById('salesperson-breakdown-body');
   if (spBody) {
-    const spEntries = Object.entries(salespersonRevenueMap);
+    const spEntries = Object.entries(salespersonRevenueMap).sort((a, b) => b[1] - a[1]);
     if (spEntries.length === 0) {
       spBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu</td></tr>`;
     } else {
       spBody.innerHTML = spEntries.map(([spId, amount]) => `
         <tr>
-          <td style="font-weight: 500; color: var(--text-primary);">${getUserDisplayName(spId, state.users)}</td>
+          <td style="font-weight: 500; color: var(--text-primary);">${getUserDisplayName(spId, 'Chưa phân công', state.users)}</td>
           <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(amount)}</td>
         </tr>
       `).join('');
@@ -637,13 +621,13 @@ export function updateDashboardStats() {
   // Render bảng Doanh số theo Quản lý
   const mgrBody = document.getElementById('manager-breakdown-body');
   if (mgrBody) {
-    const mgrEntries = Object.entries(managerRevenueMap);
+    const mgrEntries = Object.entries(managerRevenueMap).sort((a, b) => b[1] - a[1]);
     if (mgrEntries.length === 0) {
       mgrBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu</td></tr>`;
     } else {
       mgrBody.innerHTML = mgrEntries.map(([mId, amount]) => `
         <tr>
-          <td style="font-weight: 500; color: var(--text-primary);">${getUserDisplayName(mId, state.users)}</td>
+          <td style="font-weight: 500; color: var(--text-primary);">${getManagerDisplayName(mId, 'Chưa bàn giao / Khác', state.users)}</td>
           <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(amount)}</td>
         </tr>
       `).join('');
@@ -653,13 +637,13 @@ export function updateDashboardStats() {
   // Render bảng Doanh số theo Đại lý / Khách hàng
   const custBody = document.getElementById('customer-breakdown-body');
   if (custBody) {
-    const custEntries = Object.entries(customerRevenueMap);
+    const custEntries = Object.entries(customerRevenueMap).sort((a, b) => b[1] - a[1]);
     if (custEntries.length === 0) {
       custBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu</td></tr>`;
     } else {
-      custBody.innerHTML = custEntries.map(([cName, amount]) => `
+      custBody.innerHTML = custEntries.map(([cId, amount]) => `
         <tr>
-          <td style="font-weight: 500; color: var(--text-primary);">${cName}</td>
+          <td style="font-weight: 500; color: var(--text-primary);">${customerNameMap[cId] || cId}</td>
           <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(amount)}</td>
         </tr>
       `).join('');
@@ -669,7 +653,7 @@ export function updateDashboardStats() {
   // Render bảng Doanh số theo Tỉnh thành
   const provBody = document.getElementById('province-breakdown-body');
   if (provBody) {
-    const provEntries = Object.entries(provinceRevenueMap);
+    const provEntries = Object.entries(provinceRevenueMap).sort((a, b) => b[1] - a[1]);
     if (provEntries.length === 0) {
       provBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu</td></tr>`;
     } else {
@@ -703,7 +687,7 @@ export function updateDashboardStats() {
             <td style="font-weight: 600; color: #fff;">${o.id}<div style="font-size: 0.7rem; color: var(--text-muted);">${compName}</div></td>
             <td style="font-size: 0.8rem; color: var(--text-secondary);">${new Date(o.date).toLocaleDateString('vi-VN')}</td>
             <td style="max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${itemSummary}">${itemSummary}</td>
-            <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(o.totalPayable)}</td>
+            <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(buildDashboardRevenueRows([o]).reduce((sum, row) => sum + row.amount, 0))}</td>
             <td style="text-align: center;">
               <button class="btn btn-secondary btn-sm dash-view-order-btn" data-id="${o.id}">
                 <i data-lucide="eye" style="width: 12px; height: 12px;"></i>

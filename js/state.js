@@ -41,6 +41,8 @@ export const state = {
   productionLogs: [],
   finishedGoodsStock: [],
   salesReturns: [],
-  dashboardSalesMode: 'net' // 'net' (after returns) or 'gross' (original)
+  dashboardSalesMode: 'net', // 'net' (after returns) or 'gross' (original)
+  historyViewMode: localStorage.getItem('historyViewMode') || 'card' // 'card' or 'details'
 };
+
 

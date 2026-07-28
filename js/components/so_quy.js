@@ -10,7 +10,15 @@ const seedTransactions = [];
 export function getCashbookTransactions() {
   const stored = localStorage.getItem('billing_system_cashbook_transactions');
   if (stored) {
-    let txs = JSON.parse(stored);
+    let txs = JSON.parse(stored).map(t => {
+      const rawNote = t.note || '';
+      const supplierMeta = rawNote.match(/__supplierId=([^\s]+)/);
+      return {
+        ...t,
+        supplierId: t.supplierId || (supplierMeta ? supplierMeta[1] : null),
+        note: rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim()
+      };
+    });
     // Filter out old seed transaction IDs and auto-generated order receipts from storage
     const seedIds = ["TTM001686", "TTM001685", "TTM001684", "TTM001683", "TTM001682", "TTM001681", "TTM001680", "TTM001678", "TTM001679", "TTM001600"];
     const filtered = txs.filter(t => {
@@ -30,6 +38,26 @@ export function getCashbookTransactions() {
 
 export function saveCashbookTransactions(txs) {
   localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(txs));
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function findSupplierByInput(input) {
+  const raw = String(input || '').trim();
+  const clean = normalizeText(raw);
+  if (!clean) return null;
+  return (state.suppliers || []).find(s => {
+    const name = normalizeText(s.name);
+    const code = normalizeText(s.code);
+    return clean === name ||
+      clean === code ||
+      clean === `${name} — ${code}` ||
+      clean === `${name} - ${code}` ||
+      clean.includes(code) ||
+      clean.includes(name);
+  }) || null;
 }
 
 // Helper: load/save starting balances
@@ -73,7 +101,7 @@ let activeFilters = {
   creator: 'all',
   searchQuery: '',
   employee: 'all',
-  partnerType: 'customer', // Default selected is 'customer'
+  partnerType: 'all',
   partnerSearch: '',
   partnerPhone: '',
   debtImpactYes: true,
@@ -505,7 +533,7 @@ export function setupSoQuyPanel() {
   if (cancelPaymentBtn) cancelPaymentBtn.addEventListener('click', hidePaymentModal);
 
   if (paymentForm) {
-    paymentForm.addEventListener('submit', (e) => {
+    paymentForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       
       const code = document.getElementById('payment-code').value.trim();
@@ -516,6 +544,7 @@ export function setupSoQuyPanel() {
       const method = document.getElementById('payment-method').value;
       const accounting = document.getElementById('payment-accounting').checked;
       const note = document.getElementById('payment-note').value.trim();
+      const matchedSupplier = findSupplierByInput(recipient);
       
       // Auto-generate code if empty
       let finalCode = code;
@@ -542,7 +571,8 @@ export function setupSoQuyPanel() {
         date: new Date(time).toISOString(),
         type: 'chi',
         category,
-        partner: recipient,
+        partner: matchedSupplier ? matchedSupplier.name : recipient,
+        supplierId: matchedSupplier ? matchedSupplier.id : null,
         value,
         method,
         accounting,
@@ -552,11 +582,14 @@ export function setupSoQuyPanel() {
         starred: false
       };
       
+      const savedToCloud = await dbSaveCashbookTransaction(newTx);
+      if (!savedToCloud) {
+        showToast('Không thể lưu phiếu chi vào Sổ quỹ Cloud. Dữ liệu trên form được giữ nguyên.', 'danger');
+        return;
+      }
+
       txs.unshift(newTx);
       saveCashbookTransactions(txs);
-      
-      // Sync to Supabase in background
-      dbSaveCashbookTransaction(newTx);
       
       showToast(`Đã tạo phiếu chi ${finalCode} thành công!`, 'success');
       hidePaymentModal();
@@ -602,6 +635,7 @@ export function addCashbookTransaction({
   note = '',
   creator = '',
   customerId = null,
+  supplierId = null,
   cloudId = null,
   debtImpact = false,
   syncToCloud = true
@@ -618,6 +652,8 @@ export function addCashbookTransaction({
   });
   
   const finalCode = id || `${prefix}${String(maxSeq + 1).padStart(6, '0')}`;
+  const existing = txs.find(t => String(t.id).toLowerCase() === String(finalCode).toLowerCase());
+  if (existing) return existing;
   
   const newTx = {
     id: finalCode,
@@ -633,6 +669,7 @@ export function addCashbookTransaction({
     note,
     starred: false,
     customerId,
+    supplierId,
     cloudId,
     debtImpact
   };
@@ -757,14 +794,17 @@ function getProcessedData() {
       if (!matchesEmployee) return false;
     }
 
-    // Filter by Partner Type (Loại đối tác: Khách hàng / Nhà cung cấp / Khác)
-    const isCustomer = state.customers.some(c => c.name === t.partner) || 
-                       t.category.toLowerCase().includes('khách hàng') || 
-                       t.category.toLowerCase().includes('tiền hàng') ||
+    // Filter by Partner Type
+    const linkedSupplier = t.supplierId
+      ? state.suppliers.find(s => String(s.id) === String(t.supplierId))
+      : findSupplierByInput(t.partner);
+    const isCustomer = state.customers.some(c => c.name === t.partner) ||
+                       t.category.toLowerCase().includes('khÃ¡ch hÃ ng') ||
+                       t.category.toLowerCase().includes('tiá»n hÃ ng') ||
                        t.id.startsWith('TTM');
-    
-    const isSupplier = t.category.toLowerCase().includes('nhập hàng') || 
-                       t.category.toLowerCase().includes('nhà cung cấp') ||
+    const isSupplier = !!linkedSupplier ||
+                       t.category.toLowerCase().includes('nháº­p hÃ ng') ||
+                       t.category.toLowerCase().includes('nhÃ  cung cáº¥p') ||
                        t.id.startsWith('TCM');
 
     if (activeFilters.partnerType === 'customer') {
@@ -774,7 +814,6 @@ function getProcessedData() {
     } else if (activeFilters.partnerType === 'other') {
       if (isCustomer || isSupplier) return false;
     }
-
     // Filter by Partner Search Query (Tên, mã người nộp/nhận)
     if (activeFilters.partnerSearch) {
       const q = activeFilters.partnerSearch;
@@ -785,6 +824,10 @@ function getProcessedData() {
           matchesPartner = true;
         }
       }
+      if (!matchesPartner && linkedSupplier) {
+        matchesPartner = String(linkedSupplier.code || '').toLowerCase().includes(q) ||
+          String(linkedSupplier.name || '').toLowerCase().includes(q);
+      }
       if (!matchesPartner) return false;
     }
 
@@ -792,7 +835,8 @@ function getProcessedData() {
     if (activeFilters.partnerPhone) {
       const q = activeFilters.partnerPhone;
       const cust = state.customers.find(c => c.name === t.partner);
-      if (!cust || !cust.phone || !cust.phone.includes(q)) {
+      const supplierPhoneMatch = linkedSupplier && linkedSupplier.phone && linkedSupplier.phone.includes(q);
+      if ((!cust || !cust.phone || !cust.phone.includes(q)) && !supplierPhoneMatch) {
         return false;
       }
     }
