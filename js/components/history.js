@@ -2,37 +2,39 @@ import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
 import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
-import { openPrintTypeModal } from './invoice.js?v=20260727-advance-payment';
-import { openHistoryOrderExportModal } from './customers.js?v=20260727-debt-audit2';
+import { openPrintTypeModal } from './invoice.js?v=20260729-remove-order-deposit';
+import { openHistoryOrderExportModal } from './customers.js?v=20260729-order-export-fields';
+import {
+  getOrderFinancialBreakdown,
+  isOrderIncludedInFinancialSummary
+} from '../domain/order-financials.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
-const HISTORY_SETTLED_STATUSES = new Set(['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
 
 function updateHistorySummary(orders) {
-  const totalEl = document.getElementById('history-total-settled-amount');
+  const beforeDiscountEl = document.getElementById('history-total-before-discount');
+  const discountEl = document.getElementById('history-total-discount');
+  const afterDiscountEl = document.getElementById('history-total-after-discount');
   const countEl = document.getElementById('history-total-settled-count');
-  if (!totalEl || !countEl) return;
+  if (!beforeDiscountEl || !discountEl || !afterDiscountEl || !countEl) return;
 
-  const settledOrders = (orders || []).filter(o => HISTORY_SETTLED_STATUSES.has(String(o.status || 'settled').toLowerCase()));
-  const total = settledOrders.reduce((sum, order) => sum + (Number(order.totalPayable ?? order.total_payable ?? order.totalAmount ?? 0) || 0), 0);
+  const settledOrders = (orders || []).filter(isOrderIncludedInFinancialSummary);
+  const totals = settledOrders.reduce((summary, order) => {
+    const breakdown = getHistoryOrderAmountBreakdown(order);
+    summary.totalBeforeDiscount += breakdown.totalBeforeDiscount;
+    summary.totalDiscountAmount += breakdown.totalDiscountAmount;
+    summary.totalAfterDiscount += breakdown.totalAfterDiscount;
+    return summary;
+  }, { totalBeforeDiscount: 0, totalDiscountAmount: 0, totalAfterDiscount: 0 });
 
-  totalEl.innerText = formatCurrency(total);
+  beforeDiscountEl.innerText = formatNumber(totals.totalBeforeDiscount);
+  discountEl.innerText = formatNumber(totals.totalDiscountAmount);
+  afterDiscountEl.innerText = formatNumber(totals.totalAfterDiscount);
   countEl.innerText = `${settledOrders.length} / ${(orders || []).length} đơn hợp lệ`;
 }
 
 function getHistoryOrderAmountBreakdown(order) {
-  const totalAfterDiscount = Number(order.totalPayable ?? order.total_payable ?? order.totalAmount ?? 0) || 0;
-  const productSubtotal = Number(order.subtotal ?? 0) || 0;
-  const productDiscount = Number(order.totalDiscount ?? 0) || 0;
-  const invoiceDiscount = Number(order.discountAmount ?? 0) || 0;
-  const totalBeforeDiscount = Number(order.totalMarket ?? 0) || (productSubtotal + productDiscount) || (totalAfterDiscount + productDiscount + invoiceDiscount);
-  const totalDiscountAmount = productDiscount + invoiceDiscount;
-
-  return {
-    totalBeforeDiscount,
-    totalDiscountAmount,
-    totalAfterDiscount
-  };
+  return getOrderFinancialBreakdown(order, state.salesReturns || []);
 }
 
 function populateHistoryCompanyAndBrandFilters() {
@@ -140,7 +142,7 @@ export function setupHistoryPanel() {
     document.getElementById('history-filter-to').addEventListener('input', onFilterChange);
   }
 
-  ['history-company-filter', 'history-brand-filter'].forEach(id => {
+  ['history-company-filter', 'history-brand-filter', 'history-status-filter'].forEach(id => {
     const select = document.getElementById(id);
     if (select) select.addEventListener('change', onFilterChange);
   });
@@ -335,6 +337,7 @@ export function renderHistoryOrders() {
   const filterToInput = document.getElementById('history-filter-to');
   const companyFilterSelect = document.getElementById('history-company-filter');
   const brandFilterSelect = document.getElementById('history-brand-filter');
+  const statusFilterSelect = document.getElementById('history-status-filter');
   const creatorFilterSelect = document.getElementById('history-creator-filter');
   
   const dateMode = dateModeSelect ? dateModeSelect.value : 'all';
@@ -345,6 +348,7 @@ export function renderHistoryOrders() {
   const filterTo = filterToInput ? filterToInput.value : '';
   const selectedCompany = companyFilterSelect ? companyFilterSelect.value : 'all';
   const selectedBrand = brandFilterSelect ? brandFilterSelect.value : 'all';
+  const selectedStatus = statusFilterSelect ? statusFilterSelect.value : 'all';
   const selectedCreator = creatorFilterSelect ? creatorFilterSelect.value : '';
 
   const filtered = state.savedOrders.filter(o => {
@@ -359,6 +363,14 @@ export function renderHistoryOrders() {
 
     if (!orderMatchesHistoryCompany(o, selectedCompany)) return false;
     if (!orderMatchesHistoryBrand(o, selectedBrand)) return false;
+    if (selectedStatus !== 'all') {
+      const orderStatus = String(o.status || 'settled').toLowerCase();
+      const matchesSettled = selectedStatus === 'settled' &&
+        ['settled', 'completed', 'complete', 'confirmed'].includes(orderStatus);
+      const matchesCancelled = selectedStatus === 'cancelled' &&
+        ['cancelled', 'canceled'].includes(orderStatus);
+      if (!matchesSettled && !matchesCancelled && orderStatus !== selectedStatus) return false;
+    }
     
     // 3. Lọc theo nhân viên quản lý đại lý (Tìm kiếm tương đối)
     if (selectedCreator) {
@@ -473,7 +485,9 @@ export function renderHistoryOrders() {
       const amountBreakdown = getHistoryOrderAmountBreakdown(order);
 
       let statusBadge = '';
-      if (order.status === 'draft') {
+      if (['cancelled', 'canceled'].includes(String(order.status || '').toLowerCase())) {
+        statusBadge = `<span style="background: rgba(107, 114, 128, 0.14); color: #6b7280; border: 1px solid rgba(107, 114, 128, 0.28); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã hủy</span>`;
+      } else if (order.status === 'draft') {
         statusBadge = `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>`;
       } else if (order.status === 'partially_returned') {
         statusBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Trả 1 phần</span>`;
@@ -521,13 +535,13 @@ export function renderHistoryOrders() {
             <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${plName}</span>
           </td>
           <td style="text-align: right;">
-            <div class="history-money-cell">${formatCurrency(amountBreakdown.totalBeforeDiscount)}</div>
+            <div class="history-money-cell">${formatNumber(amountBreakdown.totalBeforeDiscount)}</div>
           </td>
           <td style="text-align: right;">
-            <div class="history-money-cell history-money-discount">${formatCurrency(amountBreakdown.totalDiscountAmount)}</div>
+            <div class="history-money-cell history-money-discount">${formatNumber(amountBreakdown.totalDiscountAmount)}</div>
           </td>
           <td style="text-align: right;">
-            <div class="history-money-cell history-money-total">${formatCurrency(amountBreakdown.totalAfterDiscount)}</div>
+            <div class="history-money-cell history-money-total">${formatNumber(amountBreakdown.totalAfterDiscount)}</div>
           </td>
           <td style="text-align: center;">
             <div class="history-table-actions">
@@ -559,7 +573,7 @@ export function renderHistoryOrders() {
 
     ordersContentHtml = `
       <div class="table-responsive glass-panel" style="padding: 0.5rem; width: 100%; border-radius: 12px; grid-column: 1 / -1;">
-        <table class="table history-details-table" style="min-width: 980px;">
+        <table class="table history-details-table" style="min-width: 1250px;">
           <thead>
             <tr>
               <th style="width: 42px; text-align: center;"><input type="checkbox" id="history-select-all-export" title="Chọn tất cả đơn trên trang"></th>
@@ -585,8 +599,11 @@ export function renderHistoryOrders() {
     // ---------------------- DẠNG THẺ (CARD VIEW) ----------------------
     ordersContentHtml = paginatedItems.map(order => {
       const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
+      const amountBreakdown = getHistoryOrderAmountBreakdown(order);
       let statusBadge = '';
-      if (order.status === 'draft') {
+      if (['cancelled', 'canceled'].includes(String(order.status || '').toLowerCase())) {
+        statusBadge = `<span style="background: rgba(107, 114, 128, 0.14); color: #6b7280; border: 1px solid rgba(107, 114, 128, 0.28); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã hủy</span>`;
+      } else if (order.status === 'draft') {
         statusBadge = `<span style="background: var(--color-danger-light); color: var(--color-danger); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đơn nháp</span>`;
       } else if (order.status === 'partially_returned') {
         statusBadge = `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Trả 1 phần</span>`;
@@ -664,9 +681,10 @@ export function renderHistoryOrders() {
           </div>
           
           <div>
-            <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
-              <span style="font-size: 0.85rem; color: var(--text-secondary);">Thành tiền:</span>
-              <span class="order-total" style="font-size: 1.15rem; font-weight: 700; color: var(--color-primary);">${formatCurrency(order.totalPayable)}</span>
+            <div class="history-card-financials">
+              <div><span>Tổng tiền hàng</span><strong>${formatNumber(amountBreakdown.totalBeforeDiscount)}</strong></div>
+              <div><span>Giảm giá</span><strong class="history-money-discount">${formatNumber(amountBreakdown.totalDiscountAmount)}</strong></div>
+              <div><span>Tổng sau giảm giá</span><strong class="history-money-total">${formatNumber(amountBreakdown.totalAfterDiscount)}</strong></div>
             </div>
             
             <div class="order-actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: 0.35rem;">

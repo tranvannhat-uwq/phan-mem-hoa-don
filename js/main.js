@@ -1,14 +1,14 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260727-debt-audit2';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260729-sku-pricing';
 import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260727-customer-payments';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260727-advance-payment';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260729-order-export-fields';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260729-remove-order-deposit';
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js';
 import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260727-debt-audit3';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260729-history-financials';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260727-receipt-id';
 import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js';
@@ -85,6 +85,10 @@ export function switchTab(panelId) {
       l.classList.toggle('active', panelId === 'suppliers-panel' || panelId === 'goods-panel');
       return;
     }
+    if (l.classList.contains('staff-menu-trigger')) {
+      l.classList.toggle('active', panelId === 'users-panel' || panelId === 'reports-panel' || panelId === 'payroll-panel');
+      return;
+    }
     if (l.getAttribute('data-target') === panelId) {
       l.classList.add('active');
     } else {
@@ -148,6 +152,30 @@ function setupNavigation() {
       closeMobileSidebar();
     }
   });
+
+  const staffMenuTrigger = document.querySelector('.staff-menu-trigger');
+  const staffMenu = document.querySelector('.staff-menu');
+  const positionStaffMenu = () => {
+    if (!staffMenuTrigger || !staffMenu) return;
+    const triggerRect = staffMenuTrigger.getBoundingClientRect();
+    const menuWidth = staffMenu.offsetWidth || 230;
+    const left = Math.min(
+      Math.max(8, triggerRect.left),
+      Math.max(8, window.innerWidth - menuWidth - 8)
+    );
+    staffMenu.style.left = `${left}px`;
+    staffMenu.style.right = 'auto';
+    staffMenu.style.top = `${triggerRect.bottom + 4}px`;
+  };
+  const openAndPositionStaffMenu = () => {
+    positionStaffMenu();
+    requestAnimationFrame(positionStaffMenu);
+  };
+  ['pointerenter', 'focus', 'click'].forEach(eventName => {
+    staffMenuTrigger?.addEventListener(eventName, openAndPositionStaffMenu);
+  });
+  document.querySelector('.nav-menu')?.addEventListener('scroll', positionStaffMenu, { passive: true });
+  window.addEventListener('resize', positionStaffMenu);
 
   // Toggle global settings dropdown
   const settingsMenu = document.getElementById('global-settings-menu');
@@ -219,6 +247,7 @@ function setupSupabaseSettings() {
   const form = document.getElementById('supabase-config-form');
   const disconnectBtn = document.getElementById('btn-disconnect-db');
   const syncBtn = document.getElementById('btn-sync-to-cloud');
+  if (!form) return;
 
   const savedUrl = localStorage.getItem('billing_supabase_url');
   const savedKey = localStorage.getItem('billing_supabase_key');

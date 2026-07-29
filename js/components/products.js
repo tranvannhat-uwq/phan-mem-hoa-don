@@ -1,664 +1,425 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProduct, dbDeleteProduct } from '../services/supabase.js?v=20260727-debt-audit2';
+import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
+import { dbSaveProduct, dbDeleteProduct } from '../services/supabase.js?v=20260729-sku-pricing';
 import { renderAll } from '../main.js';
 
 let excelImportData = [];
 let isSelectingFile = false;
 
+function isSku(product) {
+  return Boolean(product && product.id && product.packageType && !product.isLegacy);
+}
+
+function specificationOf(product) {
+  if (product.displaySpecification) return product.displaySpecification;
+  const weight = product.packageWeight !== null && product.packageWeight !== undefined && product.packageWeight !== ''
+    ? ` ${String(product.packageWeight).replace('.', ',')}`
+    : '';
+  const unit = product.packageWeightUnit ? ` ${product.packageWeightUnit}` : '';
+  return `${product.packageType || ''}${weight}${unit}`.trim();
+}
+
+function createProductId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `sku-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function getFilteredSkuProducts() {
+  const search = (document.getElementById('product-search-input')?.value || '').trim().toLowerCase();
+  const brandFilter = document.getElementById('product-brand-filter')?.value || '';
+  const packageFilter = document.getElementById('product-package-filter')?.value || '';
+  const statusFilter = document.getElementById('product-status-filter')?.value || '';
+
+  return (state.products || [])
+    .filter(isSku)
+    .filter(product => {
+      const brand = getBrandName(product.brandId || product.brand, product.brand || '');
+      const haystack = `${product.code} ${product.name} ${brand} ${specificationOf(product)} ${product.group || ''}`.toLowerCase();
+      if (search && !haystack.includes(search)) return false;
+      if (brandFilter && brand !== brandFilter) return false;
+      if (packageFilter && product.packageType !== packageFilter) return false;
+      if (statusFilter === 'active' && product.isActive === false) return false;
+      if (statusFilter === 'inactive' && product.isActive !== false) return false;
+      return true;
+    })
+    .sort((a, b) => String(a.code).localeCompare(String(b.code), 'vi'));
+}
+
+function populateBrandOptions() {
+  const filter = document.getElementById('product-brand-filter');
+  const modalSelect = document.getElementById('prod-brand');
+  const brands = [...new Set([
+    ...(state.brands || []).map(brand => brand.name),
+    ...(state.products || []).map(product => getBrandName(product.brandId || product.brand, product.brand)).filter(Boolean)
+  ])].sort((a, b) => a.localeCompare(b, 'vi'));
+
+  if (filter) {
+    const current = filter.value;
+    filter.innerHTML = `<option value="">Tất cả hãng sơn</option>${brands.map(brand => `<option value="${brand}">${brand}</option>`).join('')}`;
+    filter.value = brands.includes(current) ? current : '';
+  }
+
+  if (modalSelect) {
+    const current = modalSelect.value;
+    modalSelect.innerHTML = `${brands.map(brand => `<option value="${brand}">${brand}</option>`).join('')}<option value="Khác">Khác</option>`;
+    if (current && [...modalSelect.options].some(option => option.value === current)) modalSelect.value = current;
+  }
+}
+
+function populateBaseProductOptions(selectedId = '') {
+  const select = document.getElementById('prod-base-product-id');
+  if (!select) return;
+  const roots = (state.products || [])
+    .filter(product => product.isLegacy || (!product.packageType && product.id))
+    .sort((a, b) => String(a.code).localeCompare(String(b.code), 'vi'));
+  select.innerHTML = `
+    <option value="">Tạo nhóm sản phẩm mới</option>
+    ${roots.map(product => `<option value="${product.id}">${product.code} - ${product.name}</option>`).join('')}
+  `;
+  if (selectedId && [...select.options].some(option => option.value === selectedId)) select.value = selectedId;
+}
+
 export function renderProductsTable() {
   const tableBody = document.getElementById('products-table-body');
   if (!tableBody) return;
-  
-  const filterSelect = document.getElementById('product-brand-filter');
-  const activeBrandFilter = filterSelect ? filterSelect.value : '';
-  
-  // Cập nhật danh sách Hãng sơn trong ô lọc dropdown nếu chưa đủ options
-  const uniqueBrands = state.brands && state.brands.length > 0
-    ? state.brands.map(b => b.name)
-    : [...new Set(state.products.map(p => p.brand).filter(Boolean))];
+  populateBrandOptions();
 
-  if (filterSelect) {
-    const currentOptions = Array.from(filterSelect.options).map(o => o.value);
-    const needRebuild = uniqueBrands.some(bn => !currentOptions.includes(bn)) || currentOptions.length <= 1;
-    
-    if (needRebuild) {
-      filterSelect.innerHTML = `
-        <option value="">-- Tất cả hãng sơn --</option>
-        ${uniqueBrands.map(b => `<option value="${b}">${b}</option>`).join('')}
-      `;
-      if (activeBrandFilter && Array.from(filterSelect.options).some(o => o.value === activeBrandFilter)) {
-        filterSelect.value = activeBrandFilter;
-      }
-    }
+  const packageSelect = document.getElementById('product-package-filter');
+  if (packageSelect) {
+    const current = packageSelect.value;
+    const packages = [...new Set((state.products || []).filter(isSku).map(product => product.packageType))].sort();
+    packageSelect.innerHTML = `<option value="">Tất cả loại bao bì</option>${packages.map(type => `<option value="${type}">${type}</option>`).join('')}`;
+    packageSelect.value = packages.includes(current) ? current : '';
   }
 
-  const searchVal = document.getElementById('product-search-input').value.toLowerCase().trim();
-  const brandFilter = filterSelect ? filterSelect.value : '';
-  
-  const searchValNormalized = searchVal.replace(/[^a-z0-9]/g, '');
-  const filtered = state.products.filter(p => {
-    const codeNormalized = p.code.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const matchesSearch = (searchValNormalized !== '' && codeNormalized.includes(searchValNormalized)) ||
-                          p.code.toLowerCase().includes(searchVal) || 
-                          p.name.toLowerCase().includes(searchVal);
-                          
-    if (!matchesSearch) return false;
-    if (!brandFilter || brandFilter === '') return true;
+  const filtered = getFilteredSkuProducts();
 
-    const resolvedBrand = getBrandName(p.brandId || p.brand, p.brand);
-    const filterNorm = brandFilter.trim().toLowerCase();
-    
-    if (resolvedBrand.toLowerCase() === filterNorm || (p.brand && p.brand.toLowerCase() === filterNorm)) {
-      return true;
-    }
-    
-    const filterBrandObj = (state.brands || []).find(b => b.name.toLowerCase() === filterNorm || b.id === brandFilter);
-    if (filterBrandObj) {
-      if (resolvedBrand.toLowerCase() === filterBrandObj.name.toLowerCase()) return true;
-      if (p.brandId && p.brandId === filterBrandObj.id) return true;
-    }
-    
-    return false;
-  });
+  const itemsPerPage = 20;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  state.productsPage = Math.min(Math.max(1, state.productsPage), totalPages);
+  const start = (state.productsPage - 1) * itemsPerPage;
+  const pageItems = filtered.slice(start, start + itemsPerPage);
 
-  // Lọc dropdown trong modal sản phẩm (nếu có)
-  const prodBrandSelect = document.getElementById('prod-brand');
-  if (prodBrandSelect) {
-    const currentVal = prodBrandSelect.value;
-    
-    const brandList = state.brands && state.brands.length > 0
-      ? state.brands.map(b => b.name)
-      : ['Nano10*', 'mutsutec', 'tdkaw', 'cova', 'festivanano', 'Hatacco nano'];
-      
-    const allBrands = [...new Set([...brandList, ...uniqueBrands])];
-    allBrands.push('Khác');
-    
-    prodBrandSelect.innerHTML = allBrands.map(b => `<option value="${b}">${b}</option>`).join('');
-    
-    if (currentVal && Array.from(prodBrandSelect.options).some(o => o.value === currentVal)) {
-      prodBrandSelect.value = currentVal;
-    }
-  }
-
-  // Đọc danh sách hãng sơn để gán nhãn suggestion trong dropdown lên đơn
-  populateInvoiceBrandFilter(uniqueBrands);
-
-  if (filtered.length === 0) {
-    tableBody.innerHTML = `
+  tableBody.innerHTML = pageItems.length
+    ? pageItems.map((product, index) => `
       <tr>
-        <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 3rem;">
-          Không tìm thấy sản phẩm nào.
-        </td>
-      </tr>
-    `;
-    return;
-  }
-  
-  // Sắp xếp sản phẩm theo mã
-  filtered.sort((a, b) => a.code.localeCompare(b.code));
-  
-  const ITEMS_PER_PAGE = 20;
-  const totalItems = filtered.length;
-  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
-  
-  if (state.productsPage > totalPages) state.productsPage = totalPages;
-  if (state.productsPage < 1) state.productsPage = 1;
-  
-  const startIndex = (state.productsPage - 1) * ITEMS_PER_PAGE;
-  const paginatedProducts = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  
-  tableBody.innerHTML = paginatedProducts.map((p, index) => {
-    const getWeightStr = () => {
-      const parts = [];
-      if (p.weightThung) parts.push(`Thùng: ${p.weightThung}`);
-      if (p.weightLon) parts.push(`Lon: ${p.weightLon}`);
-      if (p.weightHop) parts.push(`Hộp: ${p.weightHop}`);
-      if (p.weightBao) parts.push(`Bao: ${p.weightBao}`);
-      if (p.weightTui) parts.push(`Túi: ${p.weightTui}`);
-      return parts.length > 0 ? parts.join('\n') : 'N/A';
-    };
-    
-    const rowNum = startIndex + index + 1;
-    
-    return `
-      <tr>
-        <td style="text-align: center; color: var(--text-muted);">${rowNum}</td>
-        <td style="font-weight: 600; color: #fff;">${p.code}</td>
-        <td style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${p.name}">${p.name}</td>
-        <td>
-          <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.12); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.25); display: inline-block;">${getBrandName(p.brandId || p.brand, p.brand || 'Nano10*')}</span>
-        </td>
-        <td style="font-size: 0.75rem; color: var(--text-secondary); white-space: pre-line; line-height: 1.3;" title="${getWeightStr()}">${getWeightStr().replace(/\n/g, ', ')}</td>
-        <td style="text-align: right; font-weight: 600; color: #fff;">${p.priceThung > 0 ? formatCurrency(p.priceThung) : '<span style="color: var(--text-muted); font-weight: normal;">-</span>'}</td>
-        <td style="text-align: right; font-weight: 600; color: #fff;">${p.priceLon > 0 ? formatCurrency(p.priceLon) : '<span style="color: var(--text-muted); font-weight: normal;">-</span>'}</td>
-        <td style="text-align: right; font-weight: 600; color: #fff;">${p.priceHop > 0 ? formatCurrency(p.priceHop) : '<span style="color: var(--text-muted); font-weight: normal;">-</span>'}</td>
-        <td style="text-align: right; font-weight: 600; color: #fff;">${p.priceBao > 0 ? formatCurrency(p.priceBao) : '<span style="color: var(--text-muted); font-weight: normal;">-</span>'}</td>
-        <td style="text-align: right; font-weight: 600; color: #fff;">${p.priceTui > 0 ? formatCurrency(p.priceTui) : '<span style="color: var(--text-muted); font-weight: normal;">-</span>'}</td>
-        <td style="text-align: center;">
-          <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
-            <button class="btn btn-secondary btn-sm btn-circle edit-prod-btn" data-code="${p.code}" data-brand="${p.brand}" title="Sửa">
-              <i data-lucide="edit-2" style="width: 13px; height: 13px;"></i>
+        <td class="text-center">${start + index + 1}</td>
+        <td class="sku-code">${product.code}</td>
+        <td title="${product.name}">${product.name}</td>
+        <td>${getBrandName(product.brandId || product.brand, product.brand || '')}</td>
+        <td>${product.packageType}</td>
+        <td>${product.packageWeight ?? '-'} ${product.packageWeightUnit || ''}</td>
+        <td>${specificationOf(product) || '<span class="missing-price">N/A</span>'}</td>
+        <td><span class="status-badge ${product.isActive === false ? 'inactive' : 'active'}">${product.isActive === false ? 'Ngừng áp dụng' : 'Đang áp dụng'}</span></td>
+        <td class="text-center">
+          <div class="actions-cell">
+            <button class="btn btn-secondary btn-sm btn-circle edit-prod-btn" data-id="${product.id}" title="Sửa SKU">
+              <i data-lucide="edit-2"></i>
             </button>
-            <button class="btn btn-danger btn-sm btn-circle delete-prod-btn" data-code="${p.code}" data-brand="${p.brand}" title="Xóa">
-              <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
+            <button class="btn btn-danger btn-sm btn-circle archive-prod-btn" data-id="${product.id}" title="Ngừng áp dụng SKU">
+              <i data-lucide="archive"></i>
             </button>
           </div>
         </td>
       </tr>
-    `;
-  }).join('');
+    `).join('')
+    : `<tr><td colspan="9" class="empty-table-cell">Không tìm thấy SKU phù hợp.</td></tr>`;
 
-  // Vẽ các nút phân trang
-  const paginationContainer = document.getElementById('products-pagination');
-  if (paginationContainer) {
-    paginationContainer.innerHTML = `
-      <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); width: 100%;">
-        <button class="btn btn-secondary btn-sm" id="products-prev-page" ${state.productsPage === 1 ? 'disabled' : ''}>
-          <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i> Trước
-        </button>
-        <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">
-          Trang <strong>${state.productsPage}</strong> / ${totalPages} (${totalItems} sản phẩm)
-        </span>
-        <button class="btn btn-secondary btn-sm" id="products-next-page" ${state.productsPage === totalPages ? 'disabled' : ''}>
-          Sau <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
-        </button>
+  const pagination = document.getElementById('products-pagination');
+  if (pagination) {
+    pagination.innerHTML = `
+      <div class="pagination-controls">
+        <button class="btn btn-secondary btn-sm" id="products-prev-page" ${state.productsPage === 1 ? 'disabled' : ''}><i data-lucide="chevron-left"></i> Trước</button>
+        <span>Trang <strong>${state.productsPage}</strong> / ${totalPages} (${filtered.length} SKU)</span>
+        <button class="btn btn-secondary btn-sm" id="products-next-page" ${state.productsPage === totalPages ? 'disabled' : ''}>Sau <i data-lucide="chevron-right"></i></button>
       </div>
     `;
-
-    const prevPageBtn = document.getElementById('products-prev-page');
-    if (prevPageBtn) {
-      prevPageBtn.addEventListener('click', () => {
-        state.productsPage--;
-        renderProductsTable();
-        document.getElementById('products-panel').scrollIntoView({ behavior: 'smooth' });
-      });
-    }
-
-    const nextPageBtn = document.getElementById('products-next-page');
-    if (nextPageBtn) {
-      nextPageBtn.addEventListener('click', () => {
-        state.productsPage++;
-        renderProductsTable();
-        document.getElementById('products-panel').scrollIntoView({ behavior: 'smooth' });
-      });
-    }
+    document.getElementById('products-prev-page')?.addEventListener('click', () => {
+      state.productsPage -= 1;
+      renderProductsTable();
+    });
+    document.getElementById('products-next-page')?.addEventListener('click', () => {
+      state.productsPage += 1;
+      renderProductsTable();
+    });
   }
-  
-  // Gán sự kiện cho các nút
-  document.querySelectorAll('.edit-prod-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-code');
-      const brand = btn.getAttribute('data-brand');
-      const idx = state.products.findIndex(p => p.code === code && p.brand === brand);
-      openProductModal(idx);
-    });
-  });
-  
-  document.querySelectorAll('.delete-prod-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-code');
-      const brand = btn.getAttribute('data-brand');
-      deleteProduct(code, brand);
-    });
-  });
-  
-  safeCreateIcons();
-}
 
-function populateInvoiceBrandFilter(brands) {
-  const brandBadge = document.getElementById('selected-customer-brand-lbl');
-  // Hàm này giúp đồng bộ hãng sơn cho dropdown
+  document.querySelectorAll('.edit-prod-btn').forEach(button => {
+    button.addEventListener('click', () => openProductModal(state.products.findIndex(product => product.id === button.dataset.id)));
+  });
+  document.querySelectorAll('.archive-prod-btn').forEach(button => {
+    button.addEventListener('click', () => {
+      const product = state.products.find(item => item.id === button.dataset.id);
+      if (product) deleteProduct(product.code, product.brand);
+    });
+  });
+  safeCreateIcons();
 }
 
 export function openProductModal(index = -1) {
   const modal = document.getElementById('product-modal');
-  const title = document.getElementById('product-modal-title');
   const form = document.getElementById('product-form');
-  const codeInput = document.getElementById('prod-code');
-  const customBrandGroup = document.getElementById('prod-brand-custom-group');
-  
-  if (!modal) return;
-  modal.classList.add('active');
+  if (!modal || !form) return;
   form.reset();
-  if (customBrandGroup) customBrandGroup.style.display = 'none';
-  
-  if (index === -1) {
-    title.innerText = 'Thêm sản phẩm mới';
-    document.getElementById('product-edit-index').value = '-1';
-    codeInput.removeAttribute('disabled');
+  modal.classList.add('active');
+  document.getElementById('product-edit-index').value = String(index);
+  document.getElementById('product-modal-title').innerText = index === -1 ? 'Thêm SKU sản phẩm' : 'Chỉnh sửa SKU sản phẩm';
+  document.getElementById('prod-code').disabled = index !== -1;
+  document.getElementById('prod-active').checked = true;
+  populateBrandOptions();
+  populateBaseProductOptions();
+
+  if (index !== -1) {
+    const product = state.products[index];
+    document.getElementById('prod-id').value = product.id;
+    document.getElementById('prod-code').value = product.code;
+    document.getElementById('prod-name').value = product.name;
+    document.getElementById('prod-brand').value = product.brand || '';
+    document.getElementById('prod-package-type').value = product.packageType || '';
+    document.getElementById('prod-package-weight').value = product.packageWeight ?? '';
+    document.getElementById('prod-package-weight-unit').value = product.packageWeightUnit || 'kg';
+    document.getElementById('prod-display-specification').value = specificationOf(product);
+    document.getElementById('prod-product-group').value = product.group || '';
+    document.getElementById('prod-active').checked = product.isActive !== false;
+    populateBaseProductOptions(product.baseProductId || product.parentProductId || '');
   } else {
-    title.innerText = 'Chỉnh sửa sản phẩm';
-    const prod = state.products[index];
-    document.getElementById('product-edit-index').value = index;
-    
-    codeInput.value = prod.code;
-    codeInput.setAttribute('disabled', 'true'); // Khóa không cho sửa Mã SP trực tiếp
-    
-    document.getElementById('prod-name').value = prod.name;
-    document.getElementById('prod-brand').value = prod.brand || 'Nano10*';
-    
-    document.getElementById('prod-price-thung').value = prod.priceThung || 0;
-    document.getElementById('prod-price-lon').value = prod.priceLon || 0;
-    document.getElementById('prod-price-hop').value = prod.priceHop || 0;
-    document.getElementById('prod-price-bao').value = prod.priceBao || 0;
-    document.getElementById('prod-price-tui').value = prod.priceTui || 0;
-    
-    document.getElementById('prod-weight-thung').value = prod.weightThung || '';
-    document.getElementById('prod-weight-lon').value = prod.weightLon || '';
-    document.getElementById('prod-weight-hop').value = prod.weightHop || '';
-    document.getElementById('prod-weight-bao').value = prod.weightBao || '';
-    document.getElementById('prod-weight-tui').value = prod.weightTui || '';
+    document.getElementById('prod-id').value = '';
   }
 }
 
 export function closeProductModal() {
-  const modal = document.getElementById('product-modal');
-  if (modal) modal.classList.remove('active');
+  document.getElementById('product-modal')?.classList.remove('active');
 }
 
 export async function saveProduct() {
-  const index = parseInt(document.getElementById('product-edit-index').value);
+  const index = Number.parseInt(document.getElementById('product-edit-index').value, 10);
   const code = document.getElementById('prod-code').value.trim().toUpperCase();
   const name = document.getElementById('prod-name').value.trim();
-  
+  const packageType = document.getElementById('prod-package-type').value;
+  const packageWeightRaw = document.getElementById('prod-package-weight').value.trim().replace(',', '.');
+  const packageWeight = packageWeightRaw === '' ? null : Number(packageWeightRaw);
   let brand = document.getElementById('prod-brand').value;
-  if (brand === 'Khác') {
-    brand = document.getElementById('prod-brand-custom').value.trim();
-    if (!brand) {
-      showToast('Vui lòng điền tên hãng sơn khác!', 'warning');
-      return;
-    }
-  }
-  
-  const priceThung = parseFloat(document.getElementById('prod-price-thung').value) || 0;
-  const priceLon = parseFloat(document.getElementById('prod-price-lon').value) || 0;
-  const priceHop = parseFloat(document.getElementById('prod-price-hop').value) || 0;
-  const priceBao = parseFloat(document.getElementById('prod-price-bao').value) || 0;
-  const priceTui = parseFloat(document.getElementById('prod-price-tui').value) || 0;
-  
-  const weightThung = document.getElementById('prod-weight-thung').value.trim();
-  const weightLon = document.getElementById('prod-weight-lon').value.trim();
-  const weightHop = document.getElementById('prod-weight-hop').value.trim();
-  const weightBao = document.getElementById('prod-weight-bao').value.trim();
-  const weightTui = document.getElementById('prod-weight-tui').value.trim();
-  
-  // Validate trùng khoá kép (code, brand)
-  const duplicate = state.products.some((p, idx) => p.code === code && p.brand === brand && idx !== index);
-  if (duplicate) {
-    showToast('Mã sản phẩm với hãng sơn này đã tồn tại!', 'danger');
+  if (brand === 'Khác') brand = document.getElementById('prod-brand-custom').value.trim();
+
+  if (!code || !name || !brand || !packageType || packageWeight === null || !Number.isFinite(packageWeight) || packageWeight < 0) {
+    showToast('Vui lòng nhập đủ mã, tên, hãng, loại bao bì và khối lượng hợp lệ.', 'warning');
     return;
   }
-  
-  const matchedBrand = (state.brands || []).find(b => b.name.toLowerCase() === brand.toLowerCase() || b.id === brand);
-  const brandId = matchedBrand ? matchedBrand.id : ('brand_' + String(brand).toLowerCase().replace(/[^a-z0-9]/g, ''));
-  
+  const duplicate = state.products.some((product, productIndex) =>
+    product.code === code && product.brand === brand && productIndex !== index
+  );
+  if (duplicate) {
+    showToast('Mã SKU này đã tồn tại trong cùng hãng sơn.', 'danger');
+    return;
+  }
+
+  const matchedBrand = (state.brands || []).find(item => item.name.toLowerCase() === brand.toLowerCase());
+  const id = document.getElementById('prod-id').value || createProductId();
+  const selectedBaseId = document.getElementById('prod-base-product-id').value;
+  const baseProductId = selectedBaseId || `family-${id}`;
+  const packageWeightUnit = document.getElementById('prod-package-weight-unit').value || 'kg';
+  const displaySpecification = document.getElementById('prod-display-specification').value.trim() ||
+    `${packageType} ${String(packageWeight).replace('.', ',')} ${packageWeightUnit}`;
+
   const productData = {
+    id,
     code,
     name,
     brand,
-    brandId,
-    priceThung,
-    priceLon,
-    priceHop,
-    priceBao,
-    priceTui,
-    weightThung,
-    weightLon,
-    weightHop,
-    weightBao,
-    weightTui
+    brandId: matchedBrand?.id || null,
+    baseProductId,
+    parentProductId: baseProductId,
+    packageType,
+    packageWeight,
+    packageWeightUnit,
+    displaySpecification,
+    group: document.getElementById('prod-product-group').value.trim(),
+    isActive: document.getElementById('prod-active').checked,
+    isLegacy: false
   };
 
-  const submitBtn = document.getElementById('btn-save-product-submit');
-  const originalText = submitBtn ? submitBtn.innerText : 'Lưu sản phẩm';
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.innerText = 'Đang lưu...';
-  }
-  
-  try {
-    const saved = await dbSaveProduct(productData);
-    if (saved) {
-      if (index === -1) {
-        showToast('Thêm sản phẩm thành công!');
-      } else {
-        showToast('Cập nhật sản phẩm thành công!');
-      }
-      
-      // Cập nhật State local
-      const idx = state.products.findIndex(p => p.code === code && p.brand === brand);
-      if (idx > -1) state.products[idx] = productData;
-      else state.products.push(productData);
-      localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-      
-      closeProductModal();
-      renderAll();
-    }
-  } catch (err) {
-    console.error(err);
-    showToast('Lỗi khi lưu sản phẩm: ' + err.message, 'danger');
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerText = originalText;
-    }
-  }
+  const saved = await dbSaveProduct(productData);
+  if (!saved) return;
+  const existingIndex = state.products.findIndex(product => product.id === id);
+  if (existingIndex >= 0) state.products[existingIndex] = productData;
+  else state.products.push(productData);
+  localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+  closeProductModal();
+  renderAll();
+  showToast(index === -1 ? 'Đã thêm SKU.' : 'Đã cập nhật SKU.');
 }
 
 export async function deleteProduct(code, brand) {
-  if (confirm(`Bạn có chắc chắn muốn xóa sản phẩm "${code}" của hãng "${brand}" không?`)) {
-    const deleted = await dbDeleteProduct(code, brand);
-    if (deleted) {
-      state.products = state.products.filter(p => !(p.code === code && p.brand === brand));
-      localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-      renderAll();
-      showToast('Xóa sản phẩm thành công!', 'warning');
-    }
-  }
+  const product = state.products.find(item => item.code === code && item.brand === brand);
+  if (!product || !confirm(`Ngừng áp dụng SKU "${code}"? SKU vẫn được giữ cho lịch sử đơn hàng.`)) return;
+  const archived = await dbDeleteProduct(code, brand);
+  if (!archived) return;
+  product.isActive = false;
+  localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+  renderProductsTable();
+  showToast('SKU đã được ngừng áp dụng.', 'warning');
 }
 
 export function downloadExcelTemplate() {
-  const headers = [[
-    "Mã sản phẩm *", "Tên sản phẩm *", "Hãng sơn *", 
-    "Giá Thùng (đ)", "Giá Lon (đ)", "Giá Hộp (đ)", "Giá Bao (đ)", "Giá Túi (đ)",
-    "Khối lượng Thùng", "Khối lượng Lon", "Khối lượng Hộp", "Khối lượng Bao", "Khối lượng Túi"
-  ]];
-  
-  const sampleRows = [
-    ['SP001', 'Sơn bóng ngoại thất WeatherShield', 'Nano10*', 1250000, 380000, 120000, 0, 0, '19kg', '5kg', '1kg', '', ''],
-    ['SP006', 'Bột bả tường cao cấp Nano10*', 'Nano10*', 0, 0, 0, 280000, 60000, '', '', '', '40kg', '5kg'],
-    ['SP007', 'Chống thấm chuyên dụng Sika Latex', 'Hatacco nano', 850000, 250000, 0, 0, 75000, '23kg', '7kg', '', '', '0.5kg']
+  const rows = [
+    ['Mã SKU *', 'Tên sản phẩm *', 'Hãng sơn *', 'Mã sản phẩm gốc', 'Loại bao bì *', 'Khối lượng *', 'Đơn vị *', 'Quy cách hiển thị', 'Nhóm sản phẩm', 'Đang áp dụng'],
+    ['BA-46-LON', 'Sơn siêu bóng ngoại thất đặc biệt Nano', 'MUTSUTEC NANO', 'BA-46', 'Lon', 5.3, 'kg', 'Lon 5,3 kg', '', true]
   ];
-
-  const sheetData = headers.concat(sampleRows);
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(sheetData);
-  
-  ws['!cols'] = [
-    { wch: 15 }, { wch: 45 }, { wch: 15 }, 
-    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }
-  ];
-  
-  XLSX.utils.book_append_sheet(wb, ws, "Danh Sach San Pham");
-  XLSX.writeFile(wb, "Mau_Danh_Sach_San_Pham.xlsx");
-  showToast("Đã tải xuống file Excel mẫu thành công!");
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  sheet['!cols'] = [{ wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 20 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Danh Sach SKU');
+  XLSX.writeFile(workbook, 'Mau_Danh_Sach_SKU.xlsx');
 }
 
-export function setupExcelImportAndTemplate() {
-  const downloadTemplateBtn = document.getElementById('btn-download-excel-template');
-  const openImportModalBtn = document.getElementById('btn-open-excel-modal');
-  const closeImportModalBtn = document.getElementById('btn-close-excel-modal');
-  const cancelImportBtn = document.getElementById('btn-cancel-excel');
-  const browseExcelBtn = document.getElementById('btn-browse-excel');
-  const excelFileInput = document.getElementById('excel-file-input');
-  const excelDropzone = document.getElementById('excel-dropzone');
-  const saveImportBtn = document.getElementById('btn-save-excel-submit');
-
-  if (downloadTemplateBtn) {
-    downloadTemplateBtn.onclick = downloadExcelTemplate;
-  }
-
-  const toggleImportModal = (show) => {
-    const modal = document.getElementById('excel-modal');
-    if (!modal) return;
-    if (show) {
-      modal.classList.add('active');
-      excelImportData = [];
-      if (excelFileInput) excelFileInput.value = '';
-      if (saveImportBtn) saveImportBtn.setAttribute('disabled', 'true');
-      document.getElementById('excel-preview-container').style.display = 'none';
-      excelDropzone.className = 'upload-dropzone';
-    } else {
-      modal.classList.remove('active');
-    }
-  };
-
-  if (openImportModalBtn) openImportModalBtn.onclick = () => toggleImportModal(true);
-  if (closeImportModalBtn) closeImportModalBtn.onclick = () => toggleImportModal(false);
-  if (cancelImportBtn) cancelImportBtn.onclick = () => toggleImportModal(false);
-
-  // Kéo thả file Excel
-  if (excelDropzone && excelFileInput) {
-    if (browseExcelBtn) {
-      browseExcelBtn.onclick = (e) => {
-        e.stopPropagation();
-        if (isSelectingFile) return;
-        isSelectingFile = true;
-        excelFileInput.click();
-      };
-    }
-
-    excelDropzone.onclick = (e) => {
-      // Tránh kích hoạt click 2 lần khi nhấp trúng nút browseExcelBtn hoặc bản thân excelFileInput
-      if (browseExcelBtn && (e.target === browseExcelBtn || browseExcelBtn.contains(e.target) || e.target === excelFileInput)) {
-        return;
-      }
-      e.stopPropagation();
-      if (isSelectingFile) return;
-      isSelectingFile = true;
-      excelFileInput.click();
+export function exportProductsExcel() {
+  const products = getFilteredSkuProducts();
+  const rows = products.map(product => {
+    const baseProduct = (state.products || []).find(item => item.id === (product.baseProductId || product.parentProductId));
+    return {
+      'Mã SKU *': product.code,
+      'Tên sản phẩm *': product.name,
+      'Hãng sơn *': getBrandName(product.brandId || product.brand, product.brand || ''),
+      'Mã sản phẩm gốc': baseProduct?.code || String(product.baseProductId || '').replace(/^family-/, ''),
+      'Loại bao bì *': product.packageType,
+      'Khối lượng *': Number(product.packageWeight),
+      'Đơn vị *': product.packageWeightUnit || 'kg',
+      'Quy cách hiển thị': specificationOf(product),
+      'Nhóm sản phẩm': product.group || '',
+      'Đang áp dụng': product.isActive !== false
     };
-
-    excelFileInput.onclick = (e) => {
-      e.stopPropagation();
-    };
-    
-    excelDropzone.ondragover = (e) => {
-      e.preventDefault();
-      excelDropzone.classList.add('dragover');
-    };
-
-    excelDropzone.ondragleave = () => {
-      excelDropzone.classList.remove('dragover');
-    };
-
-    excelDropzone.ondrop = (e) => {
-      e.preventDefault();
-      excelDropzone.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) {
-        excelFileInput.files = e.dataTransfer.files;
-        handleExcelFileSelect(excelFileInput.files[0]);
-      }
-    };
-
-    const resetLock = () => {
-      isSelectingFile = false;
-    };
-
-    excelFileInput.onchange = () => {
-      resetLock();
-      if (excelFileInput.files.length > 0) {
-        handleExcelFileSelect(excelFileInput.files[0]);
-      }
-    };
-    excelFileInput.oncancel = resetLock;
-  }
-
-  if (saveImportBtn) {
-    saveImportBtn.onclick = async () => {
-      await processExcelImport();
-      toggleImportModal(false);
-    };
-  }
-
+  });
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet(rows, {
+    header: ['Mã SKU *', 'Tên sản phẩm *', 'Hãng sơn *', 'Mã sản phẩm gốc', 'Loại bao bì *', 'Khối lượng *', 'Đơn vị *', 'Quy cách hiển thị', 'Nhóm sản phẩm', 'Đang áp dụng']
+  });
+  sheet['!cols'] = [{ wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 20 }, { wch: 16 }, { wch: 13 }, { wch: 11 }, { wch: 24 }, { wch: 20 }, { wch: 15 }];
+  sheet['!autofilter'] = { ref: `A1:J${Math.max(1, products.length + 1)}` };
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Danh Sach SKU');
+  XLSX.writeFile(workbook, `Danh_Sach_SKU_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  showToast(`Đã xuất ${products.length} SKU theo bộ lọc hiện tại.`);
 }
 
 function handleExcelFileSelect(file) {
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = event => {
     try {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-      
-      if (rows.length <= 1) {
-        showToast("Tệp Excel trống hoặc không đúng định dạng mẫu!", "danger");
-        return;
-      }
-
-      excelImportData = [];
-      const previewRows = [];
-
-      for (let i = 1; i < rows.length; i++) {
-        const r = rows[i];
-        if (r.length === 0 || !r[0]) continue; // bỏ dòng trống
-        
-        const prod = {
-          code: String(r[0]).trim().toUpperCase(),
-          name: String(r[1]).trim(),
-          brand: String(r[2]).trim(),
-          priceThung: parseFloat(r[3]) || 0,
-          priceLon: parseFloat(r[4]) || 0,
-          priceHop: parseFloat(r[5]) || 0,
-          priceBao: parseFloat(r[6]) || 0,
-          priceTui: parseFloat(r[7]) || 0,
-          weightThung: r[8] ? String(r[8]).trim() : '',
-          weightLon: r[9] ? String(r[9]).trim() : '',
-          weightHop: r[10] ? String(r[10]).trim() : '',
-          weightBao: r[11] ? String(r[11]).trim() : '',
-          weightTui: r[12] ? String(r[12]).trim() : ''
+      const workbook = XLSX.read(new Uint8Array(event.target.result), { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+      excelImportData = rows.slice(1).filter(row => row[0]).map(row => {
+        const base = state.products.find(product => product.code === String(row[3] || '').trim());
+        const brand = String(row[2] || '').trim();
+        const matchedBrand = (state.brands || []).find(item => item.name.toLowerCase() === brand.toLowerCase());
+        return {
+          id: createProductId(),
+          code: String(row[0]).trim().toUpperCase(),
+          name: String(row[1] || '').trim(),
+          brand,
+          brandId: matchedBrand?.id || null,
+          baseProductId: base?.id || `family-${String(row[3] || row[0]).trim()}`,
+          parentProductId: base?.id || `family-${String(row[3] || row[0]).trim()}`,
+          packageType: String(row[4] || '').trim(),
+          packageWeight: Number(String(row[5] ?? '').replace(',', '.')),
+          packageWeightUnit: String(row[6] || 'kg').trim(),
+          displaySpecification: String(row[7] || '').trim(),
+          group: String(row[8] || '').trim(),
+          isActive: row[9] !== false && String(row[9]).toLowerCase() !== 'false',
+          isLegacy: false
         };
+      }).filter(product => product.code && product.name && product.brand && product.packageType && Number.isFinite(product.packageWeight));
 
-        if (!prod.code || !prod.name || !prod.brand) {
-          showToast(`Dòng ${i + 1} thiếu trường bắt buộc (Mã, Tên, Hãng sơn)!`, "warning");
-          continue;
-        }
-
-        excelImportData.push(prod);
-        if (previewRows.length < 5) {
-          previewRows.push(prod);
-        }
-      }
-
-      if (excelImportData.length === 0) {
-        showToast("Không phân tích được sản phẩm nào hợp lệ!", "warning");
-        return;
-      }
-
-      // Render bảng preview
-      const previewBody = document.getElementById('excel-preview-table-body');
-      previewBody.innerHTML = previewRows.map((p, idx) => `
-        <tr>
-          <td style="text-align: center;">${idx + 1}</td>
-          <td style="font-weight: 600;">${p.code}</td>
-          <td>${p.name}</td>
-          <td>${p.brand}</td>
-          <td>Thùng: ${p.weightThung || '-'}</td>
-          <td style="text-align: right;">${formatCurrency(p.priceThung)}</td>
-          <td style="text-align: right;">${formatCurrency(p.priceLon)}</td>
-          <td style="text-align: right;">${formatCurrency(p.priceHop)}</td>
-          <td style="text-align: right;">${formatCurrency(p.priceBao)}</td>
-          <td style="text-align: right;">${formatCurrency(p.priceTui)}</td>
-        </tr>
+      document.getElementById('excel-preview-table-body').innerHTML = excelImportData.slice(0, 5).map((product, index) => `
+        <tr><td>${index + 1}</td><td>${product.code}</td><td>${product.name}</td><td>${product.brand}</td><td>${specificationOf(product)}</td><td>Quản lý tại màn hình Bảng giá</td></tr>
       `).join('');
-
-      document.getElementById('excel-preview-summary').innerText = `Hiển thị 5 trên tổng số ${excelImportData.length} sản phẩm đọc được.`;
+      document.getElementById('excel-preview-summary').innerText = `Đọc được ${excelImportData.length} SKU hợp lệ.`;
       document.getElementById('excel-preview-container').style.display = 'block';
-      document.getElementById('btn-save-excel-submit').removeAttribute('disabled');
-      
-      const dropzone = document.getElementById('excel-dropzone');
-      dropzone.className = 'upload-dropzone success-uploaded';
-      showToast(`Đọc tệp thành công! Tìm thấy ${excelImportData.length} sản phẩm.`, "success");
-    } catch (err) {
-      console.error(err);
-      showToast("Lỗi đọc tệp Excel: " + err.message, "danger");
+      document.getElementById('btn-save-excel-submit').disabled = excelImportData.length === 0;
+    } catch (error) {
+      showToast('Không thể đọc tệp Excel: ' + error.message, 'danger');
     } finally {
-      const el = document.getElementById('excel-file-input');
-      if (el) el.value = '';
+      document.getElementById('excel-file-input').value = '';
+      isSelectingFile = false;
     }
   };
   reader.readAsArrayBuffer(file);
 }
 
 async function processExcelImport() {
-  if (excelImportData.length === 0) return;
-  
-  const mode = document.querySelector('input[name="import-mode"]:checked').value;
-  
-  try {
-    showToast("Đang nhập dữ liệu sản phẩm vào hệ thống...", "info");
-    
-    if (mode === 'overwrite') {
-      // Xóa toàn bộ sản phẩm cũ trên Cloud và Local
-      if (confirm("Chế độ ghi đè sẽ xóa sạch toàn bộ sản phẩm hiện tại của bạn. Bạn chắc chắn chứ?")) {
-        state.products = [];
-        // Lệnh xóa hết sản phẩm trên Cloud
-        for (const p of state.products) {
-          await dbDeleteProduct(p.code, p.brand);
-        }
-      } else {
-        return;
-      }
+  let successCount = 0;
+  for (const imported of excelImportData) {
+    const existing = state.products.find(product =>
+      String(product.code).toUpperCase() === imported.code &&
+      getBrandName(product.brandId || product.brand, product.brand || '').toLowerCase() === imported.brand.toLowerCase()
+    );
+    const product = existing ? { ...existing, ...imported, id: existing.id } : imported;
+    if (await dbSaveProduct(product)) {
+      const index = state.products.findIndex(item => item.id === product.id);
+      if (index >= 0) state.products[index] = product;
+      else state.products.push(product);
+      successCount += 1;
     }
-
-    let successCount = 0;
-    for (const p of excelImportData) {
-      const saved = await dbSaveProduct(p);
-      if (saved) {
-        const idx = state.products.findIndex(op => op.code === p.code && op.brand === p.brand);
-        if (idx > -1) {
-          state.products[idx] = p;
-        } else {
-          state.products.push(p);
-        }
-        successCount++;
-      }
-    }
-
-    localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-    renderAll();
-    showToast(`Nhập dữ liệu thành công! Đã thêm/cập nhật ${successCount} sản phẩm.`, "success");
-  } catch (err) {
-    console.error(err);
-    showToast("Lỗi lưu sản phẩm import: " + err.message, "danger");
   }
+  localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+  renderAll();
+  showToast(`Đã nhập/cập nhật ${successCount} SKU.`);
+}
+
+export function setupExcelImportAndTemplate() {
+  document.getElementById('btn-download-excel-template')?.addEventListener('click', downloadExcelTemplate);
+  document.getElementById('btn-export-products-excel')?.addEventListener('click', exportProductsExcel);
+  const modal = document.getElementById('excel-modal');
+  const input = document.getElementById('excel-file-input');
+  const open = () => {
+    excelImportData = [];
+    modal?.classList.add('active');
+  };
+  const close = () => modal?.classList.remove('active');
+  document.getElementById('btn-open-excel-modal')?.addEventListener('click', open);
+  document.getElementById('btn-close-excel-modal')?.addEventListener('click', close);
+  document.getElementById('btn-cancel-excel')?.addEventListener('click', close);
+  document.getElementById('btn-browse-excel')?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (!isSelectingFile) {
+      isSelectingFile = true;
+      input?.click();
+    }
+  });
+  document.getElementById('excel-dropzone')?.addEventListener('click', () => {
+    if (!isSelectingFile) {
+      isSelectingFile = true;
+      input?.click();
+    }
+  });
+  input?.addEventListener('change', () => {
+    if (input.files?.[0]) handleExcelFileSelect(input.files[0]);
+    else isSelectingFile = false;
+  });
+  document.getElementById('btn-save-excel-submit')?.addEventListener('click', async () => {
+    await processExcelImport();
+    close();
+  });
 }
 
 export function setupProductManagement() {
-  const onFilterChange = () => {
+  const refresh = () => {
     state.productsPage = 1;
     renderProductsTable();
   };
-
-  // Lắng nghe sự kiện đổi Hãng sơn trên bảng Sản phẩm
-  const brandFilter = document.getElementById('product-brand-filter');
-  if (brandFilter) {
-    brandFilter.addEventListener('change', onFilterChange);
-  }
-
-  const searchInput = document.getElementById('product-search-input');
-  if (searchInput) {
-    searchInput.addEventListener('input', onFilterChange);
-  }
-
-  const addBtn = document.getElementById('btn-open-add-product-modal');
-  if (addBtn) addBtn.addEventListener('click', () => openProductModal(-1));
-  
-  const closeBtn = document.getElementById('btn-close-product-modal');
-  if (closeBtn) closeBtn.addEventListener('click', closeProductModal);
-  
-  const cancelBtn = document.getElementById('btn-cancel-product');
-  if (cancelBtn) cancelBtn.addEventListener('click', closeProductModal);
-  
-  const productForm = document.getElementById('product-form');
-  if (productForm) {
-    productForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      saveProduct();
-    });
-  }
-
-  // Tự hiển thị khung nhập hãng sơn mới nếu chọn "Khác"
-  const prodBrandSelect = document.getElementById('prod-brand');
-  if (prodBrandSelect) {
-    prodBrandSelect.addEventListener('change', () => {
-      const customBrandGroup = document.getElementById('prod-brand-custom-group');
-      if (customBrandGroup) {
-        customBrandGroup.style.display = prodBrandSelect.value === 'Khác' ? 'block' : 'none';
-      }
-    });
-  }
+  ['product-search-input', 'product-brand-filter', 'product-package-filter', 'product-status-filter'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', refresh);
+    document.getElementById(id)?.addEventListener('change', refresh);
+  });
+  document.getElementById('btn-open-add-product-modal')?.addEventListener('click', () => openProductModal(-1));
+  document.getElementById('btn-close-product-modal')?.addEventListener('click', closeProductModal);
+  document.getElementById('btn-cancel-product')?.addEventListener('click', closeProductModal);
+  document.getElementById('product-form')?.addEventListener('submit', event => {
+    event.preventDefault();
+    saveProduct();
+  });
+  document.getElementById('prod-brand')?.addEventListener('change', event => {
+    const custom = document.getElementById('prod-brand-custom-group');
+    if (custom) custom.style.display = event.target.value === 'Khác' ? 'block' : 'none';
+  });
 }

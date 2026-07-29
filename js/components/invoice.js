@@ -3,88 +3,79 @@ import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateI
 import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260727-customer-payments';
+import { generateUniqueCustomerCode } from './customers.js?v=20260729-order-export-fields';
 import { addCashbookTransaction } from './so_quy.js?v=20260727-receipt-id';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js';
 
 let currentOrderToPrint = null;
 let isSavingOrder = false;
 
 export function getActiveInvoiceDiscount(brand) {
-  if (!brand) return 0;
-  const plSelect = document.getElementById('invoice-pricelist-select');
-  if (!plSelect) return 0;
-  const plVal = plSelect.value;
-  
-  if (plVal === 'retail') {
-    return 0; // manual
-  }
-  
-  const normBrand = brand.toLowerCase().replace(/[^a-z0-9]/g, '');
-  
-  const getDiscountFromObject = (discountsObj) => {
-    if (!discountsObj) return 0;
-    // Exact match first
-    if (discountsObj[brand] !== undefined) return discountsObj[brand];
-    // Normalized match next
-    for (const key in discountsObj) {
-      if (key.toLowerCase().replace(/[^a-z0-9]/g, '') === normBrand) {
-        return discountsObj[key];
-      }
-    }
-    return 0;
-  };
-  
-  if (plVal === 'custom') {
-    if (state.activeCustomerId) {
-      const customer = state.customers.find(c => c.id === state.activeCustomerId);
-      if (customer && customer.brandDiscounts) {
-        return getDiscountFromObject(customer.brandDiscounts);
-      }
-    }
-    return 0;
-  }
-  
-  const pl = state.pricelists.find(p => p.id === plVal);
-  if (pl && pl.brandDiscounts) {
-    return getDiscountFromObject(pl.brandDiscounts);
-  }
-  
+  // Bảng giá mới lưu đơn giá SKU trực tiếp. Chiết khấu dòng là nghiệp vụ riêng,
+  // không còn được suy ra từ brand_discounts của bảng giá cũ.
   return 0;
+}
+
+function getProductId(product) {
+  return product.id || product.code;
+}
+
+function resolveProductPrice(product) {
+  const productId = getProductId(product);
+  const selectedId = document.getElementById('invoice-pricelist-select')?.value || '';
+  const customer = state.activeCustomerId ? state.customers.find(c => c.id === state.activeCustomerId) : null;
+  if (selectedId === 'retail') {
+    return { status: 'missing', price: null, priceListId: null, priceListName: '', source: 'manual_override' };
+  }
+  return resolveCustomerProductPrice({
+    productId,
+    customer,
+    requestedPriceListId: selectedId,
+    priceLists: state.pricelists,
+    priceListItems: state.priceListItems
+  });
 }
 
 export function applyActivePriceListToInvoice() {
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (!plSelect) return;
-  const plVal = plSelect.value;
-  
-  if (plVal === 'custom' && !state.activeCustomerId) {
-    showToast('Vui lòng chọn khách hàng để dùng chiết khấu riêng!', 'warning');
-    plSelect.value = '';
-    applyActivePriceListToInvoice();
-    return;
-  }
+  const customer = state.activeCustomerId ? state.customers.find(item => item.id === state.activeCustomerId) : null;
+  const requestedId = plSelect.value && plSelect.value !== 'retail' ? plSelect.value : '';
+  const applicable = getApplicablePriceList(customer, state.pricelists, requestedId);
+  const activePriceList = applicable.priceList;
+  if (customer && activePriceList && plSelect.value !== 'retail') plSelect.value = activePriceList.id;
   
   state.invoiceItems.forEach(item => {
     item.discountPercent = getActiveInvoiceDiscount(item.brand);
+    if (item.priceSource === 'manual_override') return;
+    const resolved = resolveProductPrice(item.product);
+    if (resolved.status !== 'missing' && Number(resolved.price) > 0) {
+      item.price = Number(resolved.price);
+      item.unitPrice = Number(resolved.price);
+      item.listPrice = Number(resolved.price);
+      item.priceListId = resolved.priceListId;
+      item.priceListName = resolved.priceListName;
+      item.priceSource = resolved.source;
+    } else {
+      item.priceSource = 'missing';
+    }
   });
   
   const label = document.getElementById('invoice-pricelist-source-lbl');
   if (label) {
-    if (plVal === '') {
-      label.innerText = 'Chưa chọn';
+    if (!activePriceList) {
+      label.innerText = 'Chưa xác định';
       label.style.background = 'rgba(156, 163, 175, 0.1)';
       label.style.color = '#9ca3af';
-    } else if (plVal === 'retail') {
+    } else if (plSelect.value === 'retail') {
       label.innerText = 'Nhập tay';
       label.style.background = 'rgba(16, 185, 129, 0.1)';
       label.style.color = '#10b981';
-    } else if (plVal === 'custom') {
-      label.innerText = 'CK Đại lý';
-      label.style.background = 'rgba(34, 197, 94, 0.08)';
-      label.style.color = '#22c55e';
     } else {
-      const pl = state.pricelists.find(p => p.id === plVal);
-      label.innerText = pl ? pl.name : 'Bảng giá';
+      const type = normalizePriceListType(activePriceList.type, activePriceList.customerId);
+      label.innerText = type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC
+        ? `Giá riêng đại lý: ${activePriceList.name}`
+        : `Bảng giá đang áp dụng: ${activePriceList.name}`;
       label.style.background = 'rgba(245, 158, 11, 0.1)';
       label.style.color = '#f59e0b';
     }
@@ -123,7 +114,10 @@ export function renderInvoiceTable() {
     const isSpecialWaterproofing = p.name.toLowerCase().includes('chống thấm sàn chuyên dụng') || 
                                    p.code === 'SIKA-01 A+B' || 
                                    p.code === 'EMP-01';
-    if (isSpecialWaterproofing) {
+    if (p.packageType || p.baseProductId || p.parentProductId) {
+      const pkgLabel = `${p.packageType || item.package || 'SKU'} ${p.packageWeight || item.packageWeight || ''}`.trim();
+      activePackages.push({ value: item.package || p.packageType || 'SKU', label: `${pkgLabel} (${formatCurrency(item.unitPrice || item.price || 0)})` });
+    } else if (isSpecialWaterproofing) {
       const boPrice = p.priceLon || p.priceThung || 0;
       activePackages.push({ value: 'Bo', label: `Bộ (gồm Lon + Bao) (${formatCurrency(boPrice)})` });
     } else {
@@ -306,8 +300,10 @@ function recalculateItemPriceWithColorMarkup(index) {
   const p = item.product;
   
   // Lấy đơn giá gốc theo quy cách đóng gói được chọn
-  let basePrice = 0;
-  if (item.package === 'Bo') basePrice = p.priceLon || p.priceThung || p.price || 0;
+  let basePrice = item.unitPrice || item.listPrice || item.price || 0;
+  if (p.packageType || p.baseProductId || p.parentProductId) {
+    basePrice = item.unitPrice || item.listPrice || 0;
+  } else if (item.package === 'Bo') basePrice = p.priceLon || p.priceThung || p.price || 0;
   else if (item.package === 'Thung') basePrice = p.priceThung || p.price || 0;
   else if (item.package === 'Lon') basePrice = p.priceLon || 0;
   else if (item.package === 'Hop') basePrice = p.priceHop || 0;
@@ -403,22 +399,12 @@ export function calculateInvoiceTotals() {
   }
   discountAmount = Math.max(0, discountAmount);
 
-  // 2. Khoản khách đã cọc / đã thu trước
-  const feeData = parseDiscountOrFeeInput('invoice-other-fee-value', 'invoice-other-fee-type');
-  let otherFeeAmount = 0;
-  if (feeData.type === 'percent') {
-    otherFeeAmount = Math.round(subtotal * (feeData.value / 100));
-  } else {
-    otherFeeAmount = feeData.value;
-  }
-  otherFeeAmount = Math.max(0, otherFeeAmount);
   const shippingFeeData = parseDiscountOrFeeInput('invoice-shipping-fee-value', null);
   const shippingFeeAmount = Math.max(0, shippingFeeData.value || 0);
 
-  // Doanh thu đơn giữ nguyên; tiền đã cọc trừ đi, tiền cước khách nhờ thanh toán cộng thêm vào phải thu.
+  // Tiền cước khách nhờ thanh toán được cộng vào số còn phải thu.
   const orderTotal = Math.max(0, subtotal - discountAmount);
-  otherFeeAmount = Math.min(otherFeeAmount, orderTotal + shippingFeeAmount);
-  const amountDue = Math.max(0, orderTotal + shippingFeeAmount - otherFeeAmount);
+  const amountDue = Math.max(0, orderTotal + shippingFeeAmount);
 
   // Cập nhật lên UI với đúng ID trong index.html
   const qtyEl = document.getElementById('summary-total-qty');
@@ -426,7 +412,6 @@ export function calculateInvoiceTotals() {
   const discountEl = document.getElementById('summary-discount-total');
   const subtotalEl = document.getElementById('summary-subtotal');
   const discActualEl = document.getElementById('summary-discount-actual');
-  const feeActualEl = document.getElementById('summary-other-fee-actual');
   const shippingFeeActualEl = document.getElementById('summary-shipping-fee-actual');
   const payableEl = document.getElementById('summary-final-total');
   const savingBadge = document.getElementById('summary-saving-badge');
@@ -437,7 +422,6 @@ export function calculateInvoiceTotals() {
   if (discountEl) discountEl.innerText = `-${formatCurrency(totalDiscount)}`;
   if (subtotalEl) subtotalEl.innerText = formatCurrency(subtotal);
   if (discActualEl) discActualEl.innerText = `-${formatCurrency(discountAmount)}`;
-  if (feeActualEl) feeActualEl.innerText = `-${formatCurrency(otherFeeAmount)}`;
   if (shippingFeeActualEl) shippingFeeActualEl.innerText = `+${formatCurrency(shippingFeeAmount)}`;
   if (payableEl) payableEl.innerText = formatCurrency(amountDue);
 
@@ -476,27 +460,18 @@ export async function addProductToInvoice() {
     showToast(`Không tìm thấy sản phẩm với mã "${codeVal}"!`, 'danger');
     return;
   }
+  if (!product.id || !product.packageType || product.isLegacy || product.isActive === false) {
+    showToast(`"${product.code}" là sản phẩm cũ hoặc đã ngừng áp dụng. Vui lòng chọn một SKU đang hoạt động.`, 'warning');
+    return;
+  }
   
-  // Xác định quy cách đóng gói mặc định (cái đầu tiên có giá > 0)
-  let defaultPackage = 'Thung';
-  const isSpecialWaterproofing = product.name.toLowerCase().includes('chống thấm sàn chuyên dụng') || 
-                                 product.code === 'SIKA-01 A+B' || 
-                                 product.code === 'EMP-01';
-  if (isSpecialWaterproofing) {
-    defaultPackage = 'Bo';
-  } else if (product.priceThung > 0) defaultPackage = 'Thung';
-  else if (product.priceLon > 0) defaultPackage = 'Lon';
-  else if (product.priceHop > 0) defaultPackage = 'Hop';
-  else if (product.priceBao > 0) defaultPackage = 'Bao';
-  else if (product.priceTui > 0) defaultPackage = 'Tui';
-
-  // Lấy đơn giá gốc
-  let price = product.priceThung || product.price || 0;
-  if (defaultPackage === 'Bo') price = product.priceLon || product.priceThung || 0;
-  else if (defaultPackage === 'Lon') price = product.priceLon || 0;
-  else if (defaultPackage === 'Hop') price = product.priceHop || 0;
-  else if (defaultPackage === 'Bao') price = product.priceBao || 0;
-  else if (defaultPackage === 'Tui') price = product.priceTui || 0;
+  const defaultPackage = product.packageType;
+  const resolvedPrice = resolveProductPrice(product);
+  if (resolvedPrice.status === 'missing' || Number(resolvedPrice.price) <= 0) {
+    showToast(`Sản phẩm "${product.code}" chưa có giá trong bảng giá đang áp dụng.`, 'warning');
+    return;
+  }
+  const price = Number(resolvedPrice.price);
 
   // Lấy tỷ lệ chiết khấu hãng sơn theo bảng giá đã chọn
   const discountPercent = getActiveInvoiceDiscount(product.brand);
@@ -510,6 +485,11 @@ export async function addProductToInvoice() {
     quantity: 1,
     discountPercent,
     price,
+    unitPrice: price,
+    listPrice: price,
+    priceListId: resolvedPrice.priceListId,
+    priceListName: resolvedPrice.priceListName,
+    priceSource: resolvedPrice.source,
     notes: ''
   };
 
@@ -528,6 +508,13 @@ export async function addProductToInvoice() {
 export function compileActiveOrder() {
   if (state.invoiceItems.length === 0) {
     showToast('Vui lòng chọn ít nhất một sản phẩm vào hóa đơn!', 'danger');
+    return null;
+  }
+  const missingPriceItem = state.invoiceItems.find(item =>
+    item.priceSource === 'missing' || !Number.isFinite(Number(item.unitPrice || item.price)) || Number(item.unitPrice || item.price) <= 0
+  );
+  if (missingPriceItem) {
+    showToast(`Sản phẩm "${missingPriceItem.product?.code || ''}" chưa có giá hợp lệ. Không thể chốt đơn.`, 'danger');
     return null;
   }
   
@@ -595,21 +582,12 @@ export function compileActiveOrder() {
   }
   discountAmount = Math.max(0, discountAmount);
 
-  const feeData = parseDiscountOrFeeInput('invoice-other-fee-value', 'invoice-other-fee-type');
-  let otherFeeAmount = 0;
-  if (feeData.type === 'percent') {
-    otherFeeAmount = Math.round(subtotal * (feeData.value / 100));
-  } else {
-    otherFeeAmount = feeData.value;
-  }
-  otherFeeAmount = Math.max(0, otherFeeAmount);
   const shippingFeeData = parseDiscountOrFeeInput('invoice-shipping-fee-value', null);
   const shippingFeeAmount = Math.max(0, shippingFeeData.value || 0);
 
   const totalPayable = Math.max(0, subtotal - discountAmount);
-  otherFeeAmount = Math.min(otherFeeAmount, totalPayable + shippingFeeAmount);
-  const paidAmount = otherFeeAmount;
-  const amountDue = Math.max(0, totalPayable + shippingFeeAmount - paidAmount);
+  const paidAmount = 0;
+  const amountDue = Math.max(0, totalPayable + shippingFeeAmount);
 
   const plSelect = document.getElementById('invoice-pricelist-select');
   const pricelistId = plSelect ? plSelect.value : 'retail';
@@ -628,14 +606,25 @@ export function compileActiveOrder() {
 
     return {
       brand: productBrand,
+      productId: getProductId(item.product),
       productCode: item.product.code,
       productName: item.product.name,
       package: item.package,
+      packageWeight: item.packageWeight || item.product.packageWeight || '',
+      packageWeightUnit: item.product.packageWeightUnit || '',
+      specificationSnapshot: item.product.displaySpecification || `${item.product.packageType || item.package} ${item.product.packageWeight ?? ''} ${item.product.packageWeightUnit || ''}`.trim(),
       colorCode: item.colorCode || '',
       colorPercent: item.colorPercent || 0,
       quantity: item.quantity,
       discountPercent: item.discountPercent,
       price: item.price,
+      unitPrice: item.unitPrice || item.price,
+      listPrice: item.listPrice || item.price,
+      priceListId: item.priceListId || pricelistId || '',
+      priceListNameSnapshot: item.priceListName || state.pricelists.find(priceList => priceList.id === item.priceListId)?.name || '',
+      priceSource: item.priceSource || 'manual',
+      finalUnitPrice: Math.round(Number(item.price) * (1 - Number(item.discountPercent || 0) / 100)),
+      priceSelectedBy: state.currentUser?.username || 'admin',
       notes: item.notes || '',
       companyId: companyId,
       productBrand: revAttrs.productBrand,
@@ -659,15 +648,17 @@ export function compileActiveOrder() {
     discountValue: discData.value,
     discountType: discData.type,
     discountAmount: discountAmount,
-    otherFeeValue: feeData.value,
-    otherFeeType: feeData.type,
-    otherFeeAmount: otherFeeAmount,
+    otherFeeValue: 0,
+    otherFeeType: 'amount',
+    otherFeeAmount: 0,
     shippingFeeValue: shippingFeeAmount,
     shippingFeeAmount,
     paidAmount,
     amountDue,
     totalPayable,
     pricelistId,
+    priceListNameSnapshot: state.pricelists.find(priceList => priceList.id === pricelistId)?.name || '',
+    priceSelectedBy: state.currentUser ? state.currentUser.username : 'admin',
     createdBy: state.currentUser ? state.currentUser.username : 'admin'
   };
 
@@ -892,10 +883,6 @@ export function resetInvoiceCustomer() {
   if (discVal) discVal.value = '0';
   const discType = document.getElementById('invoice-discount-type');
   if (discType) discType.value = 'percent';
-  const feeVal = document.getElementById('invoice-other-fee-value');
-  if (feeVal) feeVal.value = '0';
-  const feeType = document.getElementById('invoice-other-fee-type');
-  if (feeType) feeType.value = 'amount';
   const shippingFeeVal = document.getElementById('invoice-shipping-fee-value');
   if (shippingFeeVal) shippingFeeVal.value = '0';
   
@@ -1515,10 +1502,12 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printDiscount)}</td>
         </tr>
         
+        ${printOtherFee > 0 ? `
         <tr>
           <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printOtherFee)}</td>
         </tr>
+        ` : ''}
 
         ${printShippingFee > 0 ? `
         <tr>
@@ -1728,6 +1717,7 @@ export function setupInvoiceCreator() {
 
       const valNormalized = val.replace(/[^a-z0-9]/g, '');
       let matches = state.products.filter(p => {
+        if (!p.id || !p.packageType || p.isLegacy || p.isActive === false) return false;
         const codeNormalized = p.code.toLowerCase().replace(/[^a-z0-9]/g, '');
         return (valNormalized !== '' && codeNormalized.includes(valNormalized)) ||
                p.code.toLowerCase().includes(val) || 
@@ -1763,6 +1753,7 @@ export function setupInvoiceCreator() {
             <div class="suggestion-info" style="text-align: left; align-items: flex-start; display: flex; flex-direction: column;">
               <span class="suggestion-code" style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem;">${p.code}</span>
               <span class="suggestion-name" style="color: var(--text-secondary); font-size: 0.85rem;">${p.name}</span>
+              <span style="color: var(--text-muted); font-size: 0.75rem;">${p.displaySpecification || `${p.packageType} ${p.packageWeight ?? ''} ${p.packageWeightUnit || ''}`}</span>
             </div>
             <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3);">${p.brand || 'Nano10*'}</span>
           </li>
@@ -1848,17 +1839,6 @@ export function setupInvoiceCreator() {
       calculateInvoiceTotals();
     });
     discTypeSelect.addEventListener('change', () => handleDiscountOrFeeInputChange(discValInput, discTypeSelect));
-  }
-
-  const feeValInput = document.getElementById('invoice-other-fee-value');
-  const feeTypeSelect = document.getElementById('invoice-other-fee-type');
-  if (feeValInput && feeTypeSelect) {
-    feeValInput.addEventListener('input', () => handleDiscountOrFeeInputChange(feeValInput, feeTypeSelect));
-    feeValInput.addEventListener('blur', () => {
-      if (feeValInput.value.trim() === '') feeValInput.value = '0';
-      calculateInvoiceTotals();
-    });
-    feeTypeSelect.addEventListener('change', () => handleDiscountOrFeeInputChange(feeValInput, feeTypeSelect));
   }
 
   const shippingFeeValInput = document.getElementById('invoice-shipping-fee-value');
@@ -1995,8 +1975,11 @@ function selectInvoiceCustomer(customer) {
     document.getElementById('selected-customer-address-lbl').innerText = provinceName ? `[${provinceName}] ${detailAddress}` : detailAddress;
     document.getElementById('selected-customer-brand-lbl').innerText = customer.assignedBrand;
     
-    const pl = state.pricelists.find(p => p.id === customer.pricelistId);
-    const plName = pl ? pl.name : (customer.pricelistId === 'custom' ? 'Chiết khấu riêng' : (customer.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
+    const applicable = getApplicablePriceList(customer, state.pricelists);
+    const pl = applicable.priceList;
+    const plName = pl
+      ? (normalizePriceListType(pl.type, pl.customerId) === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC ? `Giá riêng đại lý - ${pl.name}` : pl.name)
+      : 'Chưa xác định';
     const plLbl = document.getElementById('selected-customer-pricelist-lbl');
     if (plLbl) plLbl.innerText = plName;
     
@@ -2011,13 +1994,14 @@ function selectInvoiceCustomer(customer) {
   // Tự động gán bảng giá mặc định của đại lý
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
-    plSelect.value = customer.pricelistId || 'custom';
-    plSelect.disabled = true; // Khóa lại, không cho sale thay đổi bảng giá của đại lý tùy ý
+    const applicable = getApplicablePriceList(customer, state.pricelists);
+    plSelect.value = applicable.priceList?.id || '';
+    plSelect.disabled = state.currentUser?.role === 'sale';
   }
   
   const plGroup = document.getElementById('invoice-pricelist-group');
   if (plGroup) {
-    plGroup.style.display = 'none';
+    plGroup.style.display = state.currentUser?.role === 'sale' ? 'none' : 'block';
   }
   
   applyActivePriceListToInvoice();

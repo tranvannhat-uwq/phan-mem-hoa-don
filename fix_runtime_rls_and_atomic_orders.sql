@@ -7,7 +7,7 @@ DECLARE
 BEGIN
     FOREACH table_name IN ARRAY ARRAY[
         'users', 'products', 'customers', 'pricelists', 'brands',
-        'orders', 'draft_orders', 'order_items'
+        'orders', 'draft_orders', 'order_items', 'price_list_items'
     ]
     LOOP
         IF to_regclass('public.' || table_name) IS NULL THEN
@@ -34,6 +34,14 @@ BEGIN
     END LOOP;
 END $$;
 
+ALTER TABLE IF EXISTS order_items ADD COLUMN IF NOT EXISTS specification_snapshot text;
+ALTER TABLE IF EXISTS order_items ADD COLUMN IF NOT EXISTS price_list_id text;
+ALTER TABLE IF EXISTS order_items ADD COLUMN IF NOT EXISTS price_list_name_snapshot text;
+ALTER TABLE IF EXISTS order_items ADD COLUMN IF NOT EXISTS unit_price numeric;
+ALTER TABLE IF EXISTS order_items ADD COLUMN IF NOT EXISTS price_source text;
+ALTER TABLE IF EXISTS order_items ADD COLUMN IF NOT EXISTS price_selected_by text;
+ALTER TABLE IF EXISTS order_items ADD COLUMN IF NOT EXISTS final_unit_price numeric;
+
 CREATE OR REPLACE FUNCTION public.rpc_confirm_order(p_order jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -52,11 +60,15 @@ DECLARE
     v_balance_after numeric := 0;
     v_item jsonb;
     v_item_index integer := 0;
+    v_product_id text;
     v_product_code text;
     v_brand text;
     v_package text;
     v_quantity numeric;
     v_price numeric;
+    v_final_unit_price numeric;
+    v_price_list_id text;
+    v_price_source text;
     v_discount_percent numeric;
     v_line_total numeric;
     v_cashbook_id text;
@@ -115,38 +127,46 @@ BEGIN
     -- 2. Save every item. Any exception rolls back the order as well.
     FOR v_item IN SELECT value FROM jsonb_array_elements(p_order->'items')
     LOOP
+        v_product_id := NULLIF(v_item->>'productId', '');
         v_product_code := COALESCE(v_item->>'productCode', v_item->>'code', '');
         v_brand := COALESCE(v_item->>'brand', '');
         v_package := COALESCE(v_item->>'package', v_item->>'packageType', '');
         v_quantity := COALESCE((v_item->>'quantity')::numeric, 0);
         v_price := COALESCE((v_item->>'price')::numeric, 0);
+        v_final_unit_price := COALESCE((v_item->>'finalUnitPrice')::numeric, (v_item->>'unitPrice')::numeric, v_price);
+        v_price_list_id := NULLIF(v_item->>'priceListId', '');
+        v_price_source := COALESCE(NULLIF(v_item->>'priceSource', ''), 'missing');
         v_discount_percent := COALESCE((v_item->>'discountPercent')::numeric, 0);
-        v_line_total := round(v_quantity * v_price * (1 - v_discount_percent / 100));
+        v_line_total := round(v_quantity * v_final_unit_price);
 
-        IF v_product_code = '' OR v_quantity <= 0 THEN
+        IF v_product_id IS NULL OR v_product_code = '' OR v_quantity <= 0 THEN
             RAISE EXCEPTION 'Dòng sản phẩm % không hợp lệ', v_item_index + 1;
+        END IF;
+        IF v_price <= 0 OR v_final_unit_price <= 0 OR v_price_source = 'missing' THEN
+            RAISE EXCEPTION 'SKU % chưa có giá hợp lệ', v_product_code;
         END IF;
 
         INSERT INTO public.order_items (
             id, order_id, product_id, brand_id, product_code_snapshot,
-            product_name_snapshot, unit_snapshot, quantity, list_price,
-            sale_price, discount_percent, discount_amount, line_total,
+            product_name_snapshot, specification_snapshot, unit_snapshot,
+            price_list_id, price_list_name_snapshot, price_source, price_selected_by,
+            quantity, list_price, unit_price, sale_price, final_unit_price,
+            discount_percent, discount_amount, line_total,
             returned_quantity, returned_amount, net_amount, created_at
         ) VALUES (
             COALESCE(NULLIF(v_item->>'id', ''), v_order_id || '-item-' || v_item_index),
-            v_order_id, v_product_code, NULLIF(v_brand, ''), v_product_code,
+            v_order_id, v_product_id, NULLIF(v_brand, ''), v_product_code,
             COALESCE(v_item->>'productName', v_item->>'name', ''),
-            v_package, v_quantity, v_price, v_price, v_discount_percent,
+            COALESCE(v_item->>'specificationSnapshot', v_package),
+            COALESCE(v_item->>'packageWeightUnit', ''),
+            v_price_list_id,
+            COALESCE(v_item->>'priceListNameSnapshot', p_order->>'priceListNameSnapshot', ''),
+            v_price_source,
+            COALESCE(v_item->>'priceSelectedBy', p_order->>'priceSelectedBy', v_created_by),
+            v_quantity, v_price, v_price, v_final_unit_price, v_final_unit_price, v_discount_percent,
             round(v_quantity * v_price) - v_line_total, v_line_total,
             0, 0, v_line_total, now()
         );
-
-        -- 3. Stock changes only after order + items succeeded.
-        UPDATE public.finished_goods_stock
-        SET quantity = quantity - v_quantity, updated_at = now()
-        WHERE product_code = v_product_code
-          AND brand = v_brand
-          AND lower(package_type) = lower(v_package);
 
         v_item_index := v_item_index + 1;
     END LOOP;

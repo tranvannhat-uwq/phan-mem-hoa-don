@@ -2,8 +2,9 @@ import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
 import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260727-advance-payment';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260729-remove-order-deposit';
 import { addCashbookTransaction } from './so_quy.js?v=20260727-receipt-id';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js';
 
 const selectedCustomerIdsForExport = new Set();
 let activeExportOrders = null;
@@ -1064,21 +1065,21 @@ export function downloadCustomerExcelTemplate() {
 
 // --- Logic hiển thị chi tiết đại lý và lịch sử công nợ ---
 const CUSTOMER_ORDER_EXPORT_COLUMNS = [
-  'Mã hóa đơn', 'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Mã trả hàng',
+  'Mã hóa đơn', 'Thời gian', 'Ngày cập nhật', 'Mã trả hàng',
   'Mã khách hàng', 'Tên khách hàng', 'Điện thoại', 'Địa chỉ (Khách hàng)',
-  'Khu vực (Khách hàng)', 'Phường/Xã (Khách hàng)', 'Ngày sinh', 'Bảng giá',
-  'Người bán', 'Kênh bán', 'Người tạo', 'Ghi chú', 'Tổng tiền hàng',
-  'Giảm giá hóa đơn', 'Thu khác', 'Khách đã trả', 'Tiền mặt', 'Thẻ', 'Ví',
-  'Chuyển khoản', 'Còn cần thu (COD)', 'Trạng thái', 'Mã hàng', 'Tên hàng',
-  'Thương hiệu', 'ĐVT', 'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá',
+  'Khu vực (Khách hàng)', 'Bảng giá', 'Kinh doanh quản lý',
+  'Người bán', 'Người tạo', 'Ghi chú', 'Tổng tiền hàng', 'Tổng giảm giá',
+  'Tổng sau giảm giá', 'Phí vận chuyển', 'Khách cọc', 'Còn phải thu',
+  'Trạng thái', 'Mã hàng', 'Tên hàng', 'Thương hiệu', 'Quy cách', 'ĐVT',
+  'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá',
   'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'
 ];
 
 const CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS = [
-  { title: 'Thông tin hóa đơn', columns: ['Mã hóa đơn', 'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Mã trả hàng', 'Trạng thái', 'Người bán', 'Người tạo', 'Kênh bán', 'Ghi chú'] },
-  { title: 'Thông tin khách hàng', columns: ['Mã khách hàng', 'Tên khách hàng', 'Điện thoại', 'Địa chỉ', 'Khu vực', 'Phường/Xã', 'Ngày sinh', 'Bảng giá', 'Nhóm khách hàng', 'Kinh doanh quản lý'] },
-  { title: 'Thông tin thanh toán', columns: ['Tổng tiền hàng', 'Giảm giá hóa đơn', 'Thu khác', 'Khách đã trả', 'Tiền mặt', 'Chuyển khoản', 'Thẻ', 'Ví', 'Còn cần thu'] },
-  { title: 'Thông tin sản phẩm', columns: ['Mã hàng', 'Tên hàng', 'Thương hiệu/Nhãn sơn', 'Đơn vị tính', 'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'] }
+  { title: 'Thông tin hóa đơn', columns: ['Mã hóa đơn', 'Thời gian', 'Ngày cập nhật', 'Mã trả hàng', 'Trạng thái', 'Người bán', 'Người tạo', 'Ghi chú'] },
+  { title: 'Thông tin khách hàng', columns: ['Mã khách hàng', 'Tên khách hàng', 'Điện thoại', 'Địa chỉ', 'Khu vực', 'Bảng giá', 'Kinh doanh quản lý'] },
+  { title: 'Thông tin thanh toán', columns: ['Tổng tiền hàng', 'Tổng giảm giá', 'Tổng sau giảm giá', 'Phí vận chuyển', 'Khách cọc', 'Còn phải thu'] },
+  { title: 'Thông tin sản phẩm', columns: ['Mã hàng', 'Tên hàng', 'Thương hiệu/Nhãn sơn', 'Quy cách', 'Đơn vị tính', 'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'] }
 ];
 
 const DEFAULT_CUSTOMER_ORDER_EXPORT_COLUMNS = CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS.flatMap(g => g.columns);
@@ -1161,19 +1162,6 @@ function getOrderReturnCodes(orderId) {
     .join(', ');
 }
 
-function getExplicitPaymentByMethod(order, methodKeys) {
-  const sources = [order.paymentBreakdown, order.paymentsByMethod, order.paymentMethods].filter(Boolean);
-  for (const source of sources) {
-    for (const key of methodKeys) {
-      if (source[key] !== undefined && source[key] !== null && source[key] !== '') return toExportNumber(source[key]);
-    }
-  }
-  for (const key of methodKeys) {
-    if (order[key] !== undefined && order[key] !== null && order[key] !== '') return toExportNumber(order[key]);
-  }
-  return '';
-}
-
 function getLineAmount(item) {
   const qty = toExportNumber(item.quantity);
   const unitPrice = toExportNumber(item.price ?? item.unitPrice ?? item.listPrice);
@@ -1188,6 +1176,7 @@ function buildCustomerOrderExportRows(orders, customer) {
   const provinceName = getProvinceNameByCode(customer.brandDiscounts && customer.brandDiscounts.province);
   return orders.flatMap(order => {
     const items = Array.isArray(order.items) ? order.items : [];
+    const financials = getOrderFinancialBreakdown(order, state.salesReturns || []);
     return items.map(item => {
       const qty = toExportNumber(item.quantity);
       const unitPrice = toExportNumber(item.price ?? item.unitPrice ?? item.listPrice);
@@ -1198,7 +1187,6 @@ function buildCustomerOrderExportRows(orders, customer) {
       return {
         'Mã hóa đơn': order.id || '',
         'Thời gian': formatExportDateTime(order.date || order.orderDate || order.createdAt),
-        'Thời gian tạo': formatExportDateTime(order.createdAt || order.date),
         'Ngày cập nhật': formatExportDateTime(order.updatedAt || order.createdAt || order.date),
         'Mã trả hàng': getOrderReturnCodes(order.id),
         'Mã khách hàng': customer.code || customer.id || '',
@@ -1208,30 +1196,32 @@ function buildCustomerOrderExportRows(orders, customer) {
         'Địa chỉ': customer.address || order.customerAddress || '',
         'Khu vực (Khách hàng)': provinceName || '',
         'Khu vực': provinceName || '',
-        'Phường/Xã (Khách hàng)': customer.ward || '',
-        'Phường/Xã': customer.ward || '',
-        'Ngày sinh': customer.birthday || '',
         'Bảng giá': getPricelistName(order.pricelistId || customer.pricelistId),
-        'Nhóm khách hàng': customer.customerGroupName || customer.customerGroup || customer.customer_group_id || '',
         'Kinh doanh quản lý': getDisplayUserName(customer.managedBy || customer.managed_by),
         'Người bán': getDisplayUserName(order.salespersonId || order.createdBy),
-        'Kênh bán': order.salesChannel || order.channel || '',
         'Người tạo': getDisplayUserName(order.createdBy),
         'Ghi chú': order.notes || '',
-        'Tổng tiền hàng': toExportNumber(order.subtotal || order.totalMarket || order.totalPayable),
-        'Giảm giá hóa đơn': toExportNumber(order.discountAmount || order.totalDiscount),
-        'Thu khác': toExportNumber(order.otherFeeAmount),
-        'Khách đã trả': toExportNumber(order.paidAmount),
-        'Tiền mặt': getExplicitPaymentByMethod(order, ['cash', 'cashAmount', 'tienMat']),
-        'Thẻ': getExplicitPaymentByMethod(order, ['card', 'cardAmount', 'the']),
-        'Ví': getExplicitPaymentByMethod(order, ['wallet', 'walletAmount', 'vi']),
-        'Chuyển khoản': getExplicitPaymentByMethod(order, ['transfer', 'bankTransfer', 'transferAmount', 'chuyenKhoan']),
-        'Còn cần thu (COD)': toExportNumber(order.amountDue, Math.max(0, toExportNumber(order.totalPayable) - toExportNumber(order.paidAmount))),
-        'Trạng thái': order.status || '',
+        'Tổng tiền hàng': financials.totalBeforeDiscount,
+        'Tổng giảm giá': financials.totalDiscountAmount,
+        'Tổng sau giảm giá': financials.totalAfterDiscount,
+        'Phí vận chuyển': toExportNumber(order.shippingFeeAmount ?? order.shipping_fee_amount),
+        'Khách cọc': toExportNumber(order.paidAmount ?? order.paid_amount ?? order.otherFeeAmount ?? order.other_fee_amount),
+        'Còn phải thu': toExportNumber(order.amountDue ?? order.debtAmount ?? order.debt_amount, Math.max(
+          0,
+          financials.totalAfterDiscount +
+          toExportNumber(order.shippingFeeAmount ?? order.shipping_fee_amount) -
+          toExportNumber(order.paidAmount ?? order.paid_amount ?? order.otherFeeAmount ?? order.other_fee_amount)
+        )),
+        'Trạng thái': getOrderStatusLabel(order.status || 'settled'),
         'Mã hàng': item.productCode || item.code || item.productId || '',
         'Tên hàng': item.productName || item.name || item.product?.name || '',
         'Thương hiệu': item.productBrand || item.brand || '',
         'Thương hiệu/Nhãn sơn': item.productBrand || item.brand || '',
+        'Quy cách': item.specificationSnapshot || item.displaySpecification || [
+          item.packageType || item.package,
+          item.packageWeight,
+          item.packageWeightUnit
+        ].filter(value => value !== null && value !== undefined && value !== '').join(' '),
         'ĐVT': item.unit || item.packageType || item.package || '',
         'Đơn vị tính': item.unit || item.packageType || item.package || '',
         'Ghi chú hàng hóa': item.note || item.notes || '',
@@ -1461,9 +1451,9 @@ function getOrderStatusLabel(status) {
   const labels = {
     all: 'Đơn hợp lệ',
     settled: 'Đã chốt',
-    completed: 'Hoàn thành',
-    complete: 'Hoàn thành',
-    confirmed: 'Đã xác nhận',
+    completed: 'Đã chốt',
+    complete: 'Đã chốt',
+    confirmed: 'Đã chốt',
     partially_returned: 'Trả một phần',
     returned: 'Đã trả toàn bộ',
     draft: 'Đơn nháp',
@@ -1471,6 +1461,32 @@ function getOrderStatusLabel(status) {
     canceled: 'Đã hủy'
   };
   return labels[status] || status;
+}
+
+function normalizeExportOrderStatus(status) {
+  const normalized = String(status || 'settled').toLowerCase();
+  if (['settled', 'completed', 'complete', 'confirmed'].includes(normalized)) return 'settled';
+  if (['cancelled', 'canceled'].includes(normalized)) return 'cancelled';
+  return normalized;
+}
+
+function orderMatchesExportStatus(order, selectedStatus) {
+  if (!selectedStatus || selectedStatus === 'all') {
+    return !['draft', 'cancelled'].includes(normalizeExportOrderStatus(order.status));
+  }
+  return normalizeExportOrderStatus(order.status) === selectedStatus;
+}
+
+function populateCustomerOrderExportStatusFilter(orders) {
+  const select = document.getElementById('customer-order-export-status');
+  if (!select) return;
+  const allowedOrderStatuses = ['settled', 'partially_returned', 'returned', 'draft', 'cancelled'];
+  const presentStatuses = new Set((orders || []).map(order => normalizeExportOrderStatus(order.status)));
+  const statuses = allowedOrderStatuses.filter(status => presentStatuses.has(status));
+  select.innerHTML = `
+    <option value="all">${getOrderStatusLabel('all')}</option>
+    ${statuses.map(status => `<option value="${status}">${getOrderStatusLabel(status)}</option>`).join('')}
+  `;
 }
 
 function updateCustomerOrderExportScopeText() {
@@ -1495,16 +1511,10 @@ function openCustomerOrderExportModal(customerId = null) {
   activeExportScopeMode = customerId ? 'single' : (selectedCustomerIdsForExport.size > 0 ? 'selected' : 'filtered');
   const modal = document.getElementById('customer-order-export-modal');
   if (!modal) return;
-  const statusSelect = document.getElementById('customer-order-export-status');
-  const statuses = Array.from(new Set((state.savedOrders || [])
-    .filter(o => String(o.customerId || '') === String(customerId))
-    .map(o => o.status || 'settled')
-    .filter(s => s && s !== 'all')));
-  if (statusSelect) {
-    const defaultStatuses = ['settled', 'completed', 'confirmed', 'partially_returned', 'returned', 'draft', 'cancelled'];
-    const allStatuses = Array.from(new Set([...defaultStatuses, ...statuses]));
-    statusSelect.innerHTML = `<option value="all">${getOrderStatusLabel('all')}</option>${allStatuses.map(s => `<option value="${s}">${getOrderStatusLabel(s)}</option>`).join('')}`;
-  }
+  const relevantOrders = customerId
+    ? (state.savedOrders || []).filter(order => String(order.customerId || '') === String(customerId))
+    : (state.savedOrders || []);
+  populateCustomerOrderExportStatusFilter(relevantOrders);
   const fromInput = document.getElementById('customer-order-export-from');
   const toInput = document.getElementById('customer-order-export-to');
   const rangeMode = document.getElementById('customer-order-export-range-mode');
@@ -1542,11 +1552,7 @@ export function openHistoryOrderExportModal(orders, selectedOrderIds = []) {
   populateCustomerOrderExportBrandFilter();
   populateCustomerOrderExportManagerFilter();
   populateCustomerOrderExportCustomerFilter();
-  const statusSelect = document.getElementById('customer-order-export-status');
-  if (statusSelect) {
-    const statuses = Array.from(new Set((orders || []).map(o => o.status || 'settled').filter(s => s && s !== 'all')));
-    statusSelect.innerHTML = `<option value="all">${getOrderStatusLabel('all')}</option>${statuses.map(s => `<option value="${s}">${getOrderStatusLabel(s)}</option>`).join('')}`;
-  }
+  populateCustomerOrderExportStatusFilter(orders || []);
   renderCustomerOrderExportColumnOptions();
   updateCustomerOrderExportScopeText();
   modal.classList.add('active');
@@ -1618,7 +1624,7 @@ async function exportCustomerOrderHistoryExcel() {
         if (allowedOrderIds && !allowedOrderIds.has(String(order.id))) return false;
         const orderTime = new Date(order.date || order.createdAt || order.created_at).getTime();
         if (!Number.isFinite(orderTime) || orderTime < startTime || orderTime >= endTime) return false;
-        if (status && status !== 'all' && String(order.status || 'settled') !== String(status)) return false;
+        if (!orderMatchesExportStatus(order, status)) return false;
         if (selectedCompanyId !== 'all' && !orderMatchesExportCompany(order, selectedCompanyId)) return false;
         if (selectedBrand !== 'all') {
           const cust = customerById.get(String(order.customerId || order.customer_id));

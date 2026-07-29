@@ -2,6 +2,7 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
+import { normalizePriceListType } from '../domain/pricing.js';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -12,6 +13,7 @@ export let tableOrdersName = 'orders';
 export let tableDraftOrdersName = 'draft_orders';
 export let tableCustomersName = 'customers';
 export let tablePricelistsName = 'pricelists';
+export let tablePriceListItemsName = 'price_list_items';
 export let tableUsersName = 'users';
 export let tableBrandsName = 'brands';
 export let tableCashbookTransactionsName = 'cashbook_transactions';
@@ -205,6 +207,7 @@ export async function connectSupabase(url, key, verbose = true) {
       tableDraftOrdersName = 'draft_orders';
       tableCustomersName = 'customers';
       tablePricelistsName = 'pricelists';
+      tablePriceListItemsName = 'price_list_items';
       tableUsersName = 'users';
       tableBrandsName = 'brands';
       tableCashbookTransactionsName = 'cashbook_transactions';
@@ -225,6 +228,7 @@ export async function connectSupabase(url, key, verbose = true) {
         tableDraftOrdersName = 'wl_draft_orders';
         tableCustomersName = 'wl_customers';
         tablePricelistsName = 'wl_pricelists';
+        tablePriceListItemsName = 'wl_price_list_items';
         tableUsersName = 'wl_users';
         tableBrandsName = 'wl_brands';
         tableCashbookTransactionsName = 'wl_cashbook_transactions';
@@ -243,6 +247,7 @@ export async function connectSupabase(url, key, verbose = true) {
         tableDraftOrdersName = 'draft_orders';
         tableCustomersName = 'customers';
         tablePricelistsName = 'pricelists';
+        tablePriceListItemsName = 'price_list_items';
         tableUsersName = 'users';
         tableBrandsName = 'brands';
         tableCashbookTransactionsName = 'cashbook_transactions';
@@ -370,6 +375,28 @@ async function fetchFullTableData(tableName) {
   return allData;
 }
 
+function normalizeProductRow(row, localProducts = []) {
+  const local = localProducts.find(lp => lp.id === row.id || (lp.code === row.code && lp.brand === row.brand));
+  return {
+    id: row.id || null,
+    code: row.code,
+    baseProductId: row.base_product_id || row.parent_product_id || row.baseProductId || null,
+    parentProductId: row.parent_product_id || row.base_product_id || row.parentProductId || null,
+    name: row.name,
+    brand: row.brand || (local ? local.brand : 'Nano10*'),
+    brandId: row.brand_id || (local ? local.brandId : null),
+    group: row.product_group || row.group || (local ? local.group : ''),
+    packageType: row.package_type || row.packageType || '',
+    packageWeight: row.package_weight || row.packageWeight || '',
+    packageWeightUnit: row.package_weight_unit || row.packageWeightUnit || row.unit || (local ? local.packageWeightUnit : 'kg'),
+    displaySpecification: row.display_specification || row.displaySpecification || '',
+    isActive: row.is_active !== false,
+    isLegacy: row.is_legacy === true,
+    createdAt: row.created_at || '',
+    updatedAt: row.updated_at || ''
+  };
+}
+
 // Tải toàn bộ dữ liệu từ Supabase về State
 export async function fetchCloudData() {
   if (!supabaseClient) return;
@@ -386,30 +413,11 @@ export async function fetchCloudData() {
         
         const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
         if (prodData && prodData.length > 0) {
-          state.products = prodData.map(row => {
-            const local = localProducts.find(lp => lp.code === row.code);
-            const def = defaultProducts.find(dp => dp.code === row.code);
-            return {
-              code: row.code,
-              name: row.name,
-              brand: row.brand || (local ? local.brand : 'Nano10*'),
-              brandId: row.brand_id || (local ? local.brandId : null),
-              priceThung: row.price_thung || (local ? local.priceThung : 0) || (def ? def.priceThung : 0),
-              priceLon: row.price_lon || (local ? local.priceLon : 0) || (def ? def.priceLon : 0),
-              priceHop: row.price_hop || (local ? local.priceHop : 0) || (def ? def.priceHop : 0),
-              priceBao: row.price_bao || (local ? local.priceBao : 0) || (def ? def.priceBao : 0),
-              priceTui: row.price_tui || (local ? local.priceTui : 0) || (def ? def.priceTui : 0),
-              weightThung: row.weight_thung || (local ? local.weightThung : '') || (def ? def.weightThung : ''),
-              weightBao: row.weight_bao || (local ? local.weightBao : '') || (def ? def.weightBao : ''),
-              weightLon: row.weight_lon || (local ? local.weightLon : '') || (def ? def.weightLon : ''),
-              weightHop: row.weight_hop || (local ? local.weightHop : '') || (def ? def.weightHop : ''),
-              weightTui: row.weight_tui || (local ? local.weightTui : '') || (def ? def.weightTui : '')
-            };
-          });
+          state.products = prodData.map(row => normalizeProductRow(row, localProducts));
         } else if (localProducts.length > 0) {
           state.products = localProducts;
         } else {
-          state.products = [...defaultProducts];
+          state.products = defaultProducts.map(row => normalizeProductRow(row, []));
         }
         localStorage.setItem('billing_system_products', JSON.stringify(state.products));
       } catch (prodErr) {
@@ -467,6 +475,8 @@ export async function fetchCloudData() {
             shippingFeeValue: parseFloat(order.shipping_fee_value !== undefined ? order.shipping_fee_value : (order.shippingFeeValue || 0)),
             shippingFeeAmount: parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0)),
             totalPayable: parseFloat(order.total_payable || 0),
+            returnedAmount: parseFloat(order.returned_amount || 0),
+            netRevenue: parseFloat(order.net_revenue || order.total_payable || 0),
             paidAmount: parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)),
             amountDue: Math.max(
               0,
@@ -526,6 +536,8 @@ export async function fetchCloudData() {
             totalTransaction: parseFloat(cust.total_transaction || 0),
             notes: cust.notes || '',
             pricelistId: cust.pricelist_id || '',
+            defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
+            customerGroupId: cust.customer_group_id || '',
             managedBy: cust.managed_by || '',
             debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
           }));
@@ -551,16 +563,50 @@ export async function fetchCloudData() {
         if (plData && plData.length > 0) {
           state.pricelists = plData.map(pl => ({
             id: pl.id,
+            code: pl.code || '',
             name: pl.name,
+            type: normalizePriceListType(pl.type, pl.customer_id),
+            customerId: pl.customer_id || null,
+            customerGroupId: pl.customer_group_id || null,
+            parentPriceListId: pl.parent_price_list_id || null,
+            effectiveFrom: pl.effective_from || '',
+            effectiveTo: pl.effective_to || '',
+            isActive: pl.is_active !== false,
+            displayOrder: Number(pl.display_order || 0),
+            createdAt: pl.created_at || '',
+            updatedAt: pl.updated_at || '',
             brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
           }));
         } else if (localPl.length > 0) {
           state.pricelists = localPl;
         }
         localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
+
+        try {
+          const { data: itemData, error: itemErr } = await supabaseClient
+            .from(tablePriceListItemsName)
+            .select('*');
+          if (itemErr) throw itemErr;
+          state.priceListItems = (itemData || []).map(item => ({
+            id: item.id || `${item.price_list_id}:${item.product_id}`,
+            priceListId: item.price_list_id,
+            productId: item.product_id,
+            price: parseFloat(item.price || 0),
+            isOverride: item.is_override !== false,
+            sourceType: item.source_type || 'manual',
+            createdAt: item.created_at || '',
+            updatedAt: item.updated_at || '',
+            updatedBy: item.updated_by || ''
+          }));
+          localStorage.setItem('billing_system_price_list_items', JSON.stringify(state.priceListItems));
+        } catch (itemErr) {
+          console.warn("Could not load price_list_items, using local fallback:", itemErr.message);
+          state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
+        }
       } catch (plErr) {
         console.warn("Could not load pricelists from Supabase, using local fallback:", plErr.message);
         state.pricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
+        state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
       }
     };
 
@@ -974,21 +1020,29 @@ export async function syncLocalToCloud() {
     
     // 1. Sync Products
     if (localProducts.length > 0) {
-      const dbRows = localProducts.map(p => ({
+      const dbRows = localProducts
+        .filter(p => p.id && p.packageType)
+        .map(p => ({
+        id: p.id,
         code: p.code,
         name: p.name,
         brand: p.brand || '',
-        price: p.priceThung || p.priceBao || p.priceLon || p.priceHop || p.priceTui || 0,
-        price_thung: p.priceThung || 0,
-        price_lon: p.priceLon || 0,
-        price_hop: p.priceHop || 0,
-        price_bao: p.priceBao || 0,
-        price_tui: p.priceTui || 0
+        brand_id: p.brandId || null,
+        base_product_id: p.baseProductId || p.parentProductId || null,
+        parent_product_id: p.parentProductId || p.baseProductId || null,
+        package_type: p.packageType,
+        package_weight: p.packageWeight || null,
+        package_weight_unit: p.packageWeightUnit || 'kg',
+        display_specification: p.displaySpecification || '',
+        product_group: p.group || null,
+        is_active: p.isActive !== false,
+        is_legacy: p.isLegacy === true,
+        updated_at: new Date().toISOString()
       }));
       
-      let { error } = await supabaseClient
-        .from(tableProductsName)
-        .upsert(dbRows, { onConflict: 'code,brand' });
+      const { error } = dbRows.length > 0
+        ? await supabaseClient.from(tableProductsName).upsert(dbRows, { onConflict: 'code,brand' })
+        : { error: null };
         
       if (error) throw error;
     }
@@ -1068,7 +1122,8 @@ export async function syncLocalToCloud() {
         debt: c.debt,
         total_transaction: c.totalTransaction,
         notes: c.notes,
-        pricelist_id: c.pricelistId || 'custom',
+        pricelist_id: c.pricelistId || null,
+        default_price_list_id: c.defaultPriceListId || c.pricelistId || null,
         managed_by: c.managedBy || 'nhat',
         debt_history: c.debtHistory || []
       }));
@@ -1084,8 +1139,17 @@ export async function syncLocalToCloud() {
     if (localPricelists.length > 0) {
       const dbRows = localPricelists.map(pl => ({
         id: pl.id,
+        code: pl.code || null,
         name: pl.name,
-        brand_discounts: pl.brandDiscounts
+        type: normalizePriceListType(pl.type, pl.customerId),
+        customer_id: pl.customerId || null,
+        customer_group_id: pl.customerGroupId || null,
+        parent_price_list_id: pl.parentPriceListId || null,
+        effective_from: pl.effectiveFrom || null,
+        effective_to: pl.effectiveTo || null,
+        is_active: pl.isActive !== false,
+        display_order: Number(pl.displayOrder || 0),
+        brand_discounts: pl.brandDiscounts || {}
       }));
       
       const { error } = await supabaseClient
@@ -1303,21 +1367,21 @@ export async function dbSaveProduct(product) {
   if (isCloudActive && supabaseClient) {
     try {
       const dbRow = {
+        id: product.id,
         code: product.code,
+        base_product_id: product.baseProductId || product.parentProductId || null,
+        parent_product_id: product.parentProductId || product.baseProductId || null,
         name: product.name,
         brand: product.brand || '',
         brand_id: product.brandId || ('brand_' + String(product.brand).toLowerCase().replace(/[^a-z0-9]/g, '')),
-        price: product.priceThung || product.priceBao || product.priceLon || product.priceHop || product.priceTui || 0,
-        price_thung: product.priceThung || 0,
-        price_lon: product.priceLon || 0,
-        price_hop: product.priceHop || 0,
-        price_bao: product.priceBao || 0,
-        price_tui: product.priceTui || 0,
-        weight_thung: product.weightThung || '',
-        weight_bao: product.weightBao || '',
-        weight_lon: product.weightLon || '',
-        weight_hop: product.weightHop || '',
-        weight_tui: product.weightTui || ''
+        package_type: product.packageType || '',
+        package_weight: product.packageWeight === '' ? null : product.packageWeight,
+        package_weight_unit: product.packageWeightUnit || 'kg',
+        display_specification: product.displaySpecification || '',
+        product_group: product.group || null,
+        is_active: product.isActive !== false,
+        is_legacy: product.isLegacy === true,
+        updated_at: new Date().toISOString()
       };
       
       let { error } = await supabaseClient
@@ -1340,7 +1404,7 @@ export async function dbDeleteProduct(code, brand) {
     try {
       const { error } = await supabaseClient
         .from(tableProductsName)
-        .delete()
+        .update({ is_active: false, updated_at: new Date().toISOString() })
         .eq('code', code)
         .eq('brand', brand || '');
         
@@ -1389,6 +1453,7 @@ function mapCustomerToDbRow(customer) {
     last_payment_at: customer.lastPaymentAt || customer.last_payment_at || null,
     notes: customer.notes,
     pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
+    default_price_list_id: customer.defaultPriceListId || customer.pricelistId || null,
     managed_by: customer.managedBy === undefined ? null : customer.managedBy,
     debt_history: customer.debtHistory || [],
     created_at: customer.createdAt || customer.created_at || new Date().toISOString(),
@@ -1472,6 +1537,7 @@ export async function dbFetchCustomers() {
         lastPaymentAt: cust.last_payment_at || null,
         notes: cust.notes || '',
         pricelistId: cust.pricelist_id || '',
+        defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
         managedBy: cust.managed_by || '',
         debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || []),
         createdAt: cust.created_at || null,
@@ -1531,8 +1597,18 @@ export async function dbSavePricelist(pricelist) {
     try {
       const dbRow = {
         id: pricelist.id,
+        code: pricelist.code || null,
         name: pricelist.name,
-        brand_discounts: pricelist.brandDiscounts
+        type: normalizePriceListType(pricelist.type, pricelist.customerId),
+        customer_id: pricelist.customerId || null,
+        customer_group_id: pricelist.customerGroupId || null,
+        parent_price_list_id: pricelist.parentPriceListId || null,
+        effective_from: pricelist.effectiveFrom || null,
+        effective_to: pricelist.effectiveTo || null,
+        is_active: pricelist.isActive !== false,
+        display_order: Number(pricelist.displayOrder || 0),
+        brand_discounts: pricelist.brandDiscounts || {},
+        updated_at: new Date().toISOString()
       };
       
       const { error } = await supabaseClient
@@ -1550,12 +1626,58 @@ export async function dbSavePricelist(pricelist) {
   return true;
 }
 
+export async function dbSavePriceListItems(items) {
+  if (isCloudActive && supabaseClient && items.length > 0) {
+    try {
+      const dbRows = items.map(item => ({
+        id: item.id || `${item.priceListId}:${item.productId}`,
+        price_list_id: item.priceListId,
+        product_id: item.productId,
+        price: Number(item.price),
+        is_override: true,
+        source_type: item.sourceType || 'manual',
+        updated_at: new Date().toISOString(),
+        updated_by: item.updatedBy || (state.currentUser ? state.currentUser.username : 'admin')
+      }));
+      const { error } = await supabaseClient
+        .from(tablePriceListItemsName)
+        .upsert(dbRows, { onConflict: 'price_list_id,product_id' });
+      if (error) throw error;
+      return true;
+    } catch(err) {
+      console.error(err);
+      showToast('KhÃ´ng thá»ƒ lÆ°u chi tiáº¿t giÃ¡ lÃªn Ä‘Ã¡m mÃ¢y: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function dbDeletePriceListItem(priceListId, productId) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from(tablePriceListItemsName)
+        .delete()
+        .eq('price_list_id', priceListId)
+        .eq('product_id', productId);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error(err);
+      showToast('Không thể xóa giá riêng: ' + err.message, 'danger');
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function dbDeletePricelist(id) {
   if (isCloudActive && supabaseClient) {
     try {
       const { error } = await supabaseClient
         .from(tablePricelistsName)
-        .delete()
+        .update({ is_active: false, updated_at: new Date().toISOString() })
         .eq('id', id);
         
       if (error) throw error;
@@ -1627,8 +1749,15 @@ export async function dbSaveOrder(order) {
           brand_id: item.brandId || item.brand || null,
           product_code_snapshot: item.productCode || item.code || '',
           product_name_snapshot: item.productName || item.name || '',
-          unit_snapshot: item.unit || item.package || item.packageType || '',
+          specification_snapshot: item.specificationSnapshot || item.displaySpecification || item.package || item.packageType || '',
+          unit_snapshot: item.packageWeightUnit || item.unit || item.package || item.packageType || '',
+          price_list_name_snapshot: item.priceListNameSnapshot || order.priceListNameSnapshot || '',
           quantity: parseFloat(item.quantity || 0),
+          unit_price: parseFloat(item.unitPrice || item.price || 0),
+          final_unit_price: parseFloat(item.finalUnitPrice || item.salePrice || item.price || 0),
+          price_list_id: item.priceListId || order.pricelistId || null,
+          price_source: item.priceSource || '',
+          price_selected_by: item.priceSelectedBy || order.priceSelectedBy || null,
           list_price: parseFloat(item.price || item.listPrice || 0),
           sale_price: parseFloat(item.salePrice || item.finalPrice || item.price || 0),
           discount_percent: parseFloat(item.discountPercent || item.discount || 0),
@@ -2689,7 +2818,9 @@ export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExc
           .lt('created_at', endExclusiveIso)
           .order('created_at', { ascending: true })
           .range(from, from + pageSize - 1);
-        if (status && status !== 'all') query = query.eq('status', status);
+        if (status === 'settled') query = query.in('status', ['settled', 'completed', 'complete', 'confirmed']);
+        else if (status === 'cancelled') query = query.in('status', ['cancelled', 'canceled']);
+        else if (status && status !== 'all') query = query.eq('status', status);
         else query = query.in('status', ['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
         const { data, error } = await query;
         if (error) throw error;
@@ -2707,7 +2838,13 @@ export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExc
   const endTime = new Date(endExclusiveIso).getTime();
   return (state.savedOrders || [])
     .filter(o => idSet.has(String(o.customerId || o.customer_id || '')))
-    .filter(o => !status || status === 'all' || String(o.status || 'settled') === String(status))
+    .filter(o => {
+      if (!status || status === 'all') return true;
+      const orderStatus = String(o.status || 'settled').toLowerCase();
+      if (status === 'settled') return ['settled', 'completed', 'complete', 'confirmed'].includes(orderStatus);
+      if (status === 'cancelled') return ['cancelled', 'canceled'].includes(orderStatus);
+      return orderStatus === String(status).toLowerCase();
+    })
     .filter(o => {
       const deleted = o.deletedAt || o.deleted_at || o.isDeleted;
       const st = String(o.status || 'settled').toLowerCase();

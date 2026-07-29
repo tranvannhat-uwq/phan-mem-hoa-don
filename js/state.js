@@ -13,6 +13,8 @@ export const state = {
   savedOrders: [],
   customers: [],
   pricelists: [],
+  priceListItems: [],
+  selectedPriceListIds: [],
   users: [],
   currentUser: null,
   activeCustomerId: '',
@@ -44,5 +46,4 @@ export const state = {
   dashboardSalesMode: 'net', // 'net' (after returns) or 'gross' (original)
   historyViewMode: localStorage.getItem('historyViewMode') || 'card' // 'card' or 'details'
 };
-
 

@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
 import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll, switchTab } from '../main.js';
-import { populateManagedByDropdown } from './customers.js?v=20260727-customer-payments';
+import { populateManagedByDropdown } from './customers.js?v=20260729-order-export-fields';
 import { exportBackupToExcel } from '../services/backup.js';
 
 export function renderUsersTable() {
@@ -588,6 +588,10 @@ export function applyUserPermissions(user) {
   if (purchaseNavItem) {
     purchaseNavItem.style.display = role === 'sale' ? 'none' : 'block';
   }
+  const staffNavItem = document.querySelector('.staff-nav-item');
+  if (staffNavItem) {
+    staffNavItem.style.display = role === 'sale' ? 'none' : 'block';
+  }
 
   // Hiding dropdown items based on role
   const dropdownNavLinks = document.querySelectorAll('.dropdown-nav-link');
@@ -663,7 +667,7 @@ export function applyUserPermissions(user) {
       .col-delete-prod { display: none !important; }
       .delete-order-btn { display: none !important; }
       #btn-clear-history { display: none !important; }
-      #btn-open-add-pricelist-modal { display: none !important; }
+      #btn-open-add-pricelist-modal, #btn-import-pricelist-excel, #btn-save-price-matrix { display: none !important; }
       #pricelists-panel th:last-child, #pricelists-panel td:last-child { display: none !important; }
       #btn-open-add-brand-modal, .edit-brand-btn, .delete-brand-btn { display: none !important; }
       #brands-panel th:last-child, #brands-panel td:last-child { display: none !important; }

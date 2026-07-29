@@ -17,7 +17,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=1.1.2">
+  <link rel="stylesheet" href="style.css?v=20260729-history-financials">
 </head>
 <body>
 
@@ -87,16 +87,37 @@
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-target="reports-panel">
-            <i data-lucide="bar-chart-3"></i>
-            Báo cáo & KPI
+          <a class="nav-link" data-target="pricelists-panel">
+            <i data-lucide="tags"></i>
+            Bảng giá
           </a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" data-target="payroll-panel">
-            <i data-lucide="calculator"></i>
-            Tính lương
-          </a>
+        <li class="nav-item staff-nav-item">
+          <button type="button" class="nav-link staff-menu-trigger">
+            <i data-lucide="briefcase-business"></i>
+            Quản lý nhân viên
+            <i data-lucide="chevron-down" class="staff-menu-chevron"></i>
+          </button>
+          <div class="staff-menu">
+            <div class="staff-menu-item">
+              <a class="staff-menu-link nav-link" data-target="users-panel">
+                <i data-lucide="user-cog"></i>
+                Quản lý tài khoản
+              </a>
+            </div>
+            <div class="staff-menu-item">
+              <a class="staff-menu-link nav-link" data-target="reports-panel">
+                <i data-lucide="bar-chart-3"></i>
+                Báo cáo & KPI
+              </a>
+            </div>
+            <div class="staff-menu-item">
+              <a class="staff-menu-link nav-link" data-target="payroll-panel">
+                <i data-lucide="calculator"></i>
+                Tính lương
+              </a>
+            </div>
+          </div>
         </li>
       </nav>
 
@@ -113,14 +134,6 @@
               <span id="header-user-display" style="font-weight: 600; color: var(--text-primary);"></span>
             </div>
             <!-- Dropdown Nav Links -->
-            <button class="dropdown-item dropdown-nav-link" data-target="users-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
-              <i data-lucide="user-cog" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
-              Quản lý tài khoản
-            </button>
-            <button class="dropdown-item dropdown-nav-link" data-target="pricelists-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
-              <i data-lucide="tags" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
-              Quản lý bảng giá
-            </button>
             <button class="dropdown-item dropdown-nav-link" data-target="brands-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
               <i data-lucide="palette" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
               Hãng sơn
@@ -547,6 +560,9 @@
               <button class="btn btn-secondary btn-sm" id="btn-download-excel-template">
                 <i data-lucide="download"></i> Tải file mẫu
               </button>
+              <button class="btn btn-secondary btn-sm" id="btn-export-products-excel">
+                <i data-lucide="file-down"></i> Xuất Excel
+              </button>
               <button class="btn btn-indigo btn-sm" id="btn-open-excel-modal">
                 <i data-lucide="file-up"></i> Nhập Excel
               </button>
@@ -563,38 +579,46 @@
             </div>
             <div class="filter-wrapper" style="width: 200px;">
               <select class="form-control" id="product-brand-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer;">
-                <option value="">-- Tất cả hãng sơn --</option>
+                <option value="">Tất cả hãng sơn</option>
+              </select>
+            </div>
+            <div class="filter-wrapper" style="width: 180px;">
+              <select class="form-control" id="product-package-filter">
+                <option value="">Tất cả loại bao bì</option>
+              </select>
+            </div>
+            <div class="filter-wrapper" style="width: 170px;">
+              <select class="form-control" id="product-status-filter">
+                <option value="">Tất cả trạng thái</option>
+                <option value="active">Đang áp dụng</option>
+                <option value="inactive">Ngừng áp dụng</option>
               </select>
             </div>
           </div>
 
           <div class="table-responsive">
-            <table class="table" style="table-layout: fixed; min-width: 1240px;">
+            <table class="table" style="table-layout: fixed; min-width: 1180px;">
               <colgroup>
-                <col style="width: 45px;">   <!-- STT -->
-                <col style="width: 90px;">   <!-- Mã SP -->
-                <col style="width: 280px;">  <!-- Tên sản phẩm -->
-                <col style="width: 100px;">  <!-- Hãng sơn -->
-                <col style="width: 110px;">  <!-- Khối lượng -->
-                <col style="width: 105px;">  <!-- Giá Thùng -->
-                <col style="width: 105px;">  <!-- Giá Lon -->
-                <col style="width: 105px;">  <!-- Giá Hộp -->
-                <col style="width: 105px;">  <!-- Giá Bao -->
-                <col style="width: 105px;">  <!-- Giá Túi -->
-                <col style="width: 90px;">   <!-- Hành động -->
+                <col style="width: 50px;">
+                <col style="width: 150px;">
+                <col style="width: 260px;">
+                <col style="width: 150px;">
+                <col style="width: 110px;">
+                <col style="width: 120px;">
+                <col style="width: 170px;">
+                <col style="width: 125px;">
+                <col style="width: 95px;">
               </colgroup>
               <thead>
                 <tr>
                   <th style="text-align: center;">STT</th>
-                  <th>Mã SP</th>
+                  <th>Mã sản phẩm</th>
                   <th>Tên sản phẩm</th>
                   <th>Hãng sơn</th>
+                  <th>Loại bao bì</th>
                   <th>Khối lượng</th>
-                  <th style="text-align: right;">Giá Thùng</th>
-                  <th style="text-align: right;">Giá Lon</th>
-                  <th style="text-align: right;">Giá Hộp</th>
-                  <th style="text-align: right;">Giá Bao</th>
-                  <th style="text-align: right;">Giá Túi</th>
+                  <th>Quy cách</th>
+                  <th>Trạng thái</th>
                   <th style="text-align: center;">Hành động</th>
                 </tr>
               </thead>
@@ -1085,22 +1109,6 @@
                   <span class="value" style="color: var(--color-danger); font-weight: 500;" id="summary-discount-actual">-0 ₫</span>
                 </div>
 
-                <!-- 2. Khách cọc -->
-                <div class="summary-row summary-input-row" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.25rem;">
-                  <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Khách cọc:</span>
-                  <div style="display: flex; align-items: center; gap: 0.25rem; width: 65%; max-width: 200px; justify-content: flex-end;">
-                    <input type="text" id="invoice-other-fee-value" class="form-control" value="0" style="text-align: right; padding: 0.3rem 0.5rem; font-size: 0.85rem; width: 100%; min-width: 0;" placeholder="0">
-                    <select id="invoice-other-fee-type" class="form-control" style="width: auto; min-width: 78px; padding: 0.3rem 0.45rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-align: center;">
-                      <option value="amount">VNĐ</option>
-                      <option value="percent">%</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="summary-row" id="summary-other-fee-actual-row" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); padding-left: 0.5rem;">
-                  <span class="label" style="font-size: 0.75rem; color: var(--text-muted);">Số tiền khách cọc:</span>
-                  <span class="value" style="color: var(--color-success); font-weight: 500;" id="summary-other-fee-actual">-0 ₫</span>
-                </div>
-
                 <div class="summary-row summary-input-row" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.25rem;">
                   <span class="label" style="font-weight: 500; font-size: 0.85rem; white-space: nowrap;">Khách nhờ thanh toán cước:</span>
                   <div style="display: flex; align-items: center; gap: 0.25rem; width: 65%; max-width: 200px; justify-content: flex-end;">
@@ -1209,6 +1217,14 @@
               <select class="form-control" id="history-brand-filter" style="width: 170px; height: 42px; border-radius: 8px; cursor: pointer;">
                 <option value="all">Tất cả nhãn sơn</option>
               </select>
+              <select class="form-control" id="history-status-filter" style="width: 170px; height: 42px; border-radius: 8px; cursor: pointer;">
+                <option value="all">Tất cả trạng thái</option>
+                <option value="settled">Đã chốt</option>
+                <option value="partially_returned">Trả một phần</option>
+                <option value="returned">Đã trả toàn bộ</option>
+                <option value="draft">Đơn nháp</option>
+                <option value="cancelled">Đã hủy</option>
+              </select>
             </div>
 
             <!-- Bộ lọc nhân viên lên đơn (Tích hợp tìm kiếm) -->
@@ -1219,12 +1235,19 @@
           </div>
           <div class="history-summary-bar" id="history-summary-bar">
             <div class="history-summary-item">
-              <span class="history-summary-label">Tổng tiền đơn đã chốt trong danh sách</span>
-              <strong id="history-total-settled-amount">0 ₫</strong>
+              <span class="history-summary-label">Tổng tiền hàng</span>
+              <strong id="history-total-before-discount">0</strong>
+            </div>
+            <div class="history-summary-item">
+              <span class="history-summary-label">Giảm giá</span>
+              <strong class="history-summary-discount" id="history-total-discount">0</strong>
+            </div>
+            <div class="history-summary-item">
+              <span class="history-summary-label">Tổng sau giảm giá</span>
+              <strong class="history-summary-after" id="history-total-after-discount">0</strong>
             </div>
             <div class="history-summary-meta" id="history-total-settled-count">0 đơn hợp lệ</div>
           </div>
-          
           <div class="history-grid" id="history-orders-container">
             <!-- Dynamic order cards will go here -->
           </div>
@@ -1596,23 +1619,40 @@
       <section id="pricelists-panel" class="panel">
         <div class="glass-panel">
           <div class="panel-header">
-            <h2 class="panel-title"><i data-lucide="tags"></i> Danh sách Bảng giá & Chiết khấu Đại lý</h2>
+            <h2 class="panel-title"><i data-lucide="tags"></i> Ma trận bảng giá sản phẩm</h2>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" id="btn-export-pricelist-excel">
+                <i data-lucide="file-down"></i> Xuất Excel
+              </button>
+              <button class="btn btn-indigo btn-sm" id="btn-import-pricelist-excel">
+                <i data-lucide="file-up"></i> Nhập Excel
+              </button>
+              <input type="file" id="pricelist-excel-file-input" accept=".xlsx,.xls" hidden>
+              <button class="btn btn-success btn-sm" id="btn-save-price-matrix" disabled>
+                <i data-lucide="save"></i> Luu gia da sua
+              </button>
               <button class="btn btn-primary btn-sm" id="btn-open-add-pricelist-modal">
                 <i data-lucide="plus-circle"></i> Thêm bảng giá mới
               </button>
             </div>
           </div>
 
-          <div class="controls-row">
-            <div class="search-wrapper" style="flex: 1;">
+          <div class="controls-row" style="display: grid; grid-template-columns: minmax(240px, 1.2fr) minmax(220px, 1fr) repeat(3, minmax(150px, 0.7fr)); gap: 0.75rem; align-items: center;">
+            <div class="search-wrapper">
               <i data-lucide="search" class="search-icon"></i>
-              <input type="text" class="form-control-search" id="pricelist-search-input" placeholder="Tìm kiếm bảng giá theo tên...">
+              <input type="text" class="form-control-search" id="price-matrix-product-search" placeholder="Tìm SKU theo mã, tên, hãng, quy cách...">
             </div>
+            <details class="price-list-picker" id="pricelist-visible-picker">
+              <summary id="pricelist-visible-summary">Chon bang gia hien thi</summary>
+              <div class="price-list-picker-menu" id="pricelist-visible-select"></div>
+            </details>
+            <select class="form-control" id="price-matrix-brand-filter"></select>
+            <select class="form-control" id="price-matrix-package-filter"></select>
+            <select class="form-control" id="price-matrix-group-filter"></select>
           </div>
 
-          <div class="table-responsive">
-            <table class="table">
+          <div class="table-responsive price-matrix-wrap">
+            <table class="table price-matrix-table">
               <thead>
                 <tr>
                   <th>Tên bảng giá</th>
@@ -2045,6 +2085,7 @@
       </div>
       <form id="product-form">
         <input type="hidden" id="product-edit-index" value="-1">
+        <input type="hidden" id="prod-id" value="">
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label" for="prod-code">Mã sản phẩm *</label>
@@ -2070,54 +2111,51 @@
             <label class="form-label" for="prod-brand-custom">Nhập tên hãng sơn khác *</label>
             <input type="text" class="form-control" id="prod-brand-custom" placeholder="Ví dụ: Dulux, Jotun..." style="width: 100%;">
           </div>
-          <div class="form-row-3">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-thung">Giá Thùng</label>
-              <input type="number" class="form-control" id="prod-price-thung" min="0" placeholder="Ví dụ: 1250000" style="width: 100%;">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-lon">Giá Lon</label>
-              <input type="number" class="form-control" id="prod-price-lon" min="0" placeholder="Ví dụ: 350000" style="width: 100%;">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-hop">Giá Hộp</label>
-              <input type="number" class="form-control" id="prod-price-hop" min="0" placeholder="Ví dụ: 100000" style="width: 100%;">
-            </div>
-          </div>
           <div class="form-row-2">
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-bao">Giá Bao</label>
-              <input type="number" class="form-control" id="prod-price-bao" min="0" placeholder="Ví dụ: 280000" style="width: 100%;">
+              <label class="form-label" for="prod-base-product-id">Sản phẩm gốc</label>
+              <select class="form-control" id="prod-base-product-id" style="width: 100%;"></select>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-price-tui">Giá Túi</label>
-              <input type="number" class="form-control" id="prod-price-tui" min="0" placeholder="Ví dụ: 50000" style="width: 100%;">
+              <label class="form-label" for="prod-product-group">Nhóm sản phẩm</label>
+              <input type="text" class="form-control" id="prod-product-group" placeholder="Ví dụ: Sơn ngoại thất">
             </div>
           </div>
-          <div class="form-row-3" style="margin-top: 0.75rem;">
+          <div class="form-row-3">
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-weight-thung">KL Thùng</label>
-              <input type="text" class="form-control" id="prod-weight-thung" placeholder="VD: 19kg" style="width: 100%;">
+              <label class="form-label" for="prod-package-type">Loại bao bì *</label>
+              <select class="form-control" id="prod-package-type" required>
+                <option value="">Chọn loại bao bì</option>
+                <option value="Thùng">Thùng</option>
+                <option value="Lon">Lon</option>
+                <option value="Hộp">Hộp</option>
+                <option value="Bao">Bao</option>
+                <option value="Túi">Túi</option>
+              </select>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-weight-lon">KL Lon</label>
-              <input type="text" class="form-control" id="prod-weight-lon" placeholder="VD: 5kg" style="width: 100%;">
+              <label class="form-label" for="prod-package-weight">Khối lượng *</label>
+              <input type="text" inputmode="decimal" class="form-control" id="prod-package-weight" required placeholder="Ví dụ: 5,3">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-weight-hop">KL Hộp</label>
-              <input type="text" class="form-control" id="prod-weight-hop" placeholder="VD: 1kg" style="width: 100%;">
+              <label class="form-label" for="prod-package-weight-unit">Đơn vị *</label>
+              <select class="form-control" id="prod-package-weight-unit">
+                <option value="kg">kg</option>
+                <option value="g">g</option>
+                <option value="l">l</option>
+                <option value="ml">ml</option>
+                <option value="bộ">bộ</option>
+              </select>
             </div>
           </div>
-          <div class="form-row-2" style="margin-top: 0.75rem;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-weight-bao">KL Bao</label>
-              <input type="text" class="form-control" id="prod-weight-bao" placeholder="VD: 25kg" style="width: 100%;">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-weight-tui">KL Túi</label>
-              <input type="text" class="form-control" id="prod-weight-tui" placeholder="VD: 0.5kg" style="width: 100%;">
-            </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="prod-display-specification">Quy cách hiển thị</label>
+            <input type="text" class="form-control" id="prod-display-specification" placeholder="Tự tạo, ví dụ: Lon 5,3 kg">
           </div>
+          <label class="toggle-row">
+            <input type="checkbox" id="prod-active" checked>
+            <span>Đang áp dụng</span>
+          </label>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-product">Hủy bỏ</button>
@@ -2456,12 +2494,6 @@
             <label class="form-label" for="customer-order-export-status">Tr&#7841;ng th&#225;i &#273;&#417;n</label>
             <select class="form-control" id="customer-order-export-status" style="width: 100%;">
               <option value="all">&#272;&#417;n h&#7907;p l&#7879;</option>
-              <option value="settled">settled</option>
-              <option value="completed">completed</option>
-              <option value="partially_returned">partially_returned</option>
-              <option value="returned">returned</option>
-              <option value="draft">draft</option>
-              <option value="cancelled">cancelled</option>
             </select>
           </div>
         </div>
@@ -2535,38 +2567,50 @@
             <label class="form-label" for="pl-name">Tên bảng giá *</label>
             <input type="text" class="form-control" id="pl-name" required placeholder="Ví dụ: Bảng giá 02, Bảng giá Đại lý..." style="width: 100%;">
           </div>
-          
-          <div style="border-top: 1px dashed var(--border-color); margin-top: 0.5rem; padding-top: 0.75rem;">
-            <h4 style="font-size: 0.85rem; font-weight: 600; color: var(--color-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="percent" style="width: 16px;"></i> Thiết lập tỷ lệ chiết khấu (%) theo nhãn sơn
-            </h4>
-            <div id="pricelist-brand-discounts-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-              <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Chiết khấu Nano10* (%)</label>
-                <input type="number" class="form-control pl-brand-disc" data-brand="Nano10*" value="0" min="0" max="100" step="any">
-              </div>
-              <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Chiết khấu Hatacco nano (%)</label>
-                <input type="number" class="form-control pl-brand-disc" data-brand="Hatacco nano" value="0" min="0" max="100" step="any">
-              </div>
-              <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Chiết khấu mutsutec (%)</label>
-                <input type="number" class="form-control pl-brand-disc" data-brand="mutsutec" value="0" min="0" max="100" step="any">
-              </div>
-              <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Chiết khấu tdkaw (%)</label>
-                <input type="number" class="form-control pl-brand-disc" data-brand="tdkaw" value="0" min="0" max="100" step="any">
-              </div>
-              <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Chiết khấu cova (%)</label>
-                <input type="number" class="form-control pl-brand-disc" data-brand="cova" value="0" min="0" max="100" step="any">
-              </div>
-              <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label">Chiết khấu festivanano (%)</label>
-                <input type="number" class="form-control pl-brand-disc" data-brand="festivanano" value="0" min="0" max="100" step="any">
-              </div>
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="pl-code">Mã bảng giá</label>
+              <input type="text" class="form-control" id="pl-code" placeholder="Ví dụ: BG03">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="pl-type">Loại bảng giá *</label>
+              <select class="form-control" id="pl-type">
+                <option value="standard">Giá chung</option>
+                <option value="customer_group">Giá theo nhóm đại lý</option>
+                <option value="customer_specific">Giá riêng từng đại lý</option>
+              </select>
             </div>
           </div>
+          <div class="form-group" id="pl-customer-field" style="margin-bottom: 0; display: none;">
+            <label class="form-label" for="pl-customer-id">Khách hàng/đại lý *</label>
+            <select class="form-control" id="pl-customer-id"></select>
+          </div>
+          <div class="form-group" id="pl-customer-group-field" style="margin-bottom: 0; display: none;">
+            <label class="form-label" for="pl-customer-group-id">Mã nhóm khách hàng *</label>
+            <input type="text" class="form-control" id="pl-customer-group-id" placeholder="Ví dụ: DAI_LY_CAP_1">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="pl-parent-price-list-id">Bảng giá cha</label>
+            <select class="form-control" id="pl-parent-price-list-id"></select>
+          </div>
+          <div class="form-row-3">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="pl-effective-from">Hiệu lực từ</label>
+              <input type="date" class="form-control" id="pl-effective-from">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="pl-effective-to">Hiệu lực đến</label>
+              <input type="date" class="form-control" id="pl-effective-to">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="pl-display-order">Thứ tự</label>
+              <input type="number" class="form-control" id="pl-display-order" min="0" value="0">
+            </div>
+          </div>
+          <label class="toggle-row">
+            <input type="checkbox" id="pl-active" checked>
+            <span>Đang áp dụng</span>
+          </label>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-pricelist">Hủy bỏ</button>
@@ -2931,11 +2975,7 @@
           <span style="font-weight: 600; color: var(--text-secondary);">Chế độ nhập:</span>
           <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
             <input type="radio" name="import-mode" value="merge" checked style="accent-color: var(--color-primary);"> 
-            Gộp thêm (Giữ lại sản phẩm cũ, trùng mã sẽ cập nhật)
-          </label>
-          <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
-            <input type="radio" name="import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
-            Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
+            Gộp thêm an toàn (trùng mã SKU sẽ cập nhật, không xóa dữ liệu cũ)
           </label>
         </div>
         
@@ -2948,15 +2988,11 @@
               <thead>
                 <tr>
                   <th style="width: 50px; text-align: center;">STT</th>
-                  <th>Mã SP</th>
+                  <th>Mã SKU</th>
                   <th>Tên sản phẩm</th>
                   <th>Hãng sơn</th>
-                  <th>Khối lượng</th>
-                  <th style="text-align: right;">Giá Thùng</th>
-                  <th style="text-align: right;">Giá Lon</th>
-                  <th style="text-align: right;">Giá Hộp</th>
-                  <th style="text-align: right;">Giá Bao</th>
-                  <th style="text-align: right;">Giá Túi</th>
+                  <th>Quy cách</th>
+                  <th>Nguồn giá</th>
                 </tr>
               </thead>
               <tbody id="excel-preview-table-body">
@@ -3778,6 +3814,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260727-advance-payment"></script>
+  <script type="module" src="js/main.js?v=20260729-remove-order-deposit"></script>
 </body>
 </html>

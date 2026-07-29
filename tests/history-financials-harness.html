@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>History Financials Harness</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body style="padding:16px">
+  <script>window.__app_initialized = true;</script>
+  <main id="history-panel">
+    <button id="btn-history-view-card" type="button">Thẻ</button>
+    <button id="btn-history-view-details" class="active" type="button">Bảng</button>
+    <input id="history-search-input" value="">
+    <select id="history-date-mode"><option value="all">Tất cả</option></select>
+    <input id="history-filter-date">
+    <input id="history-filter-month">
+    <select id="history-filter-year"><option value="">Năm</option></select>
+    <div id="history-filter-range">
+      <input id="history-filter-from">
+      <input id="history-filter-to">
+    </div>
+    <select id="history-company-filter"><option value="all">Tất cả công ty</option></select>
+    <select id="history-brand-filter"><option value="all">Tất cả hãng</option></select>
+    <select id="history-status-filter">
+      <option value="all">Tất cả trạng thái</option>
+      <option value="settled">Đã chốt</option>
+      <option value="partially_returned">Trả một phần</option>
+      <option value="returned">Đã trả toàn bộ</option>
+      <option value="cancelled">Đã hủy</option>
+    </select>
+    <div class="history-creator-filter-wrap">
+      <input id="history-creator-filter">
+      <ul id="history-creator-suggestions"></ul>
+    </div>
+    <section class="history-summary-bar">
+      <div class="history-summary-item"><span>Tổng tiền hàng</span><strong id="history-total-before-discount">0</strong></div>
+      <div class="history-summary-item"><span>Giảm giá</span><strong id="history-total-discount">0</strong></div>
+      <div class="history-summary-item"><span>Tổng sau giảm giá</span><strong id="history-total-after-discount">0</strong></div>
+      <div id="history-total-settled-count"></div>
+    </section>
+    <div class="history-grid details-mode" id="history-orders-container"></div>
+  </main>
+
+  <script type="module">
+    import { state } from '../js/state.js';
+    import { renderHistoryOrders, setupHistoryPanel } from '../js/components/history.js';
+
+    state.currentUser = { username: 'admin', role: 'admin' };
+    state.historyViewMode = 'details';
+    state.companies = [];
+    state.brands = [];
+    state.customers = [];
+    state.pricelists = [];
+    state.users = [{ username: 'admin', displayName: 'Admin' }];
+    state.salesReturns = [{
+      id: 'TH-1',
+      saleId: 'HD-2',
+      status: 'completed',
+      totalRefund: 80000
+    }];
+    state.savedOrders = [
+      {
+        id: 'HD-1',
+        customerName: 'Khách A',
+        createdBy: 'admin',
+        date: '2026-07-01T08:00:00Z',
+        status: 'settled',
+        items: [{ productName: 'SP A', package: 'Lon', quantity: 2, price: 100000, discountPercent: 10 }],
+        discountType: 'amount',
+        discountValue: 20000
+      },
+      {
+        id: 'HD-2',
+        customerName: 'Khách B',
+        createdBy: 'admin',
+        date: '2026-07-02T08:00:00Z',
+        status: 'partially_returned',
+        items: [{ productName: 'SP B', package: 'Lon', quantity: 2, price: 100000, discountPercent: 10 }],
+        discountAmount: 20000
+      },
+      {
+        id: 'HD-3',
+        customerName: 'Khách C',
+        createdBy: 'admin',
+        date: '2026-07-03T08:00:00Z',
+        status: 'cancelled',
+        items: [{ productName: 'SP C', package: 'Lon', quantity: 1, price: 500000 }]
+      }
+    ];
+
+    setupHistoryPanel();
+    renderHistoryOrders();
+  </script>
+</body>
+</html>

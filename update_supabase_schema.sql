@@ -806,63 +806,9 @@ END $$;
 
 -- 15. THỦ TỤC GIAO DỊCH DATABASE TRANSACTIONS (RPC FUNCTIONS)
 
-CREATE OR REPLACE FUNCTION rpc_confirm_order(p_order jsonb) RETURNS jsonb AS $$
-DECLARE
-    v_order_id text;
-    v_cust_id text;
-    v_total_payable numeric;
-    v_created_by text;
-    v_bal_before numeric := 0;
-    v_bal_after numeric := 0;
-    v_tx_id text;
-BEGIN
-    v_order_id := p_order->>'id';
-    v_cust_id := p_order->>'customerId';
-    v_total_payable := COALESCE((p_order->>'totalPayable')::numeric, 0);
-    v_created_by := COALESCE(p_order->>'createdBy', 'admin');
-
-    INSERT INTO orders (
-        id, customer_id, customer_name, items, total_payable, total_amount, subtotal, discount_amount,
-        status, pricelist_id, created_by, company_id, order_date, created_at, updated_at
-    ) VALUES (
-        v_order_id, v_cust_id, COALESCE(p_order->>'customerName', ''),
-        p_order->'items',
-        v_total_payable, v_total_payable, COALESCE((p_order->>'subtotal')::numeric, v_total_payable),
-        COALESCE((p_order->>'discountAmount')::numeric, 0), COALESCE(p_order->>'status', 'settled'),
-        COALESCE(p_order->>'pricelistId', 'retail'), v_created_by, COALESCE(p_order->>'companyId', 'ABS_NORTH'),
-        COALESCE((p_order->>'date')::timestamptz, now()), now(), now()
-    ) ON CONFLICT (id) DO UPDATE SET
-        items = EXCLUDED.items,
-        total_payable = EXCLUDED.total_payable,
-        total_amount = EXCLUDED.total_amount,
-        status = EXCLUDED.status,
-        updated_at = now();
-
-    IF v_cust_id IS NOT NULL AND v_cust_id <> '' THEN
-        SELECT COALESCE(debt, 0) INTO v_bal_before FROM customers WHERE id = v_cust_id FOR UPDATE;
-        v_bal_after := v_bal_before + v_total_payable;
-
-        v_tx_id := 'dtx-ord-' || v_order_id || '-' || floor(extract(epoch from now()) * 1000)::text;
-        INSERT INTO customer_debt_transactions (
-            id, customer_id, transaction_type, amount, debt_change,
-            balance_before, balance_after, order_id, description, created_by, transaction_date
-        ) VALUES (
-            v_tx_id, v_cust_id, 'order', v_total_payable, v_total_payable,
-            v_bal_before, v_bal_after, v_order_id, 'Mua hàng (Hóa đơn ' || v_order_id || ')', v_created_by, now()
-        );
-
-        UPDATE customers SET
-            total_transaction = COALESCE(total_transaction, 0) + v_total_payable,
-            net_revenue = COALESCE(net_revenue, 0) + v_total_payable,
-            debt = v_bal_after,
-            last_order_at = now(),
-            updated_at = now()
-        WHERE id = v_cust_id;
-    END IF;
-
-    RETURN jsonb_build_object('success', true, 'order_id', v_order_id);
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- rpc_confirm_order is intentionally defined by migration_order_price_snapshots.sql.
+-- Keeping the implementation in one migration prevents the base schema from
+-- overwriting SKU validation and immutable price snapshots.
 
 CREATE OR REPLACE FUNCTION rpc_record_customer_payment(
     p_customer_id text, p_amount numeric, p_notes text, p_created_by text
