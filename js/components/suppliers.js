@@ -26,6 +26,14 @@ function isValidDoc(doc) {
     !doc.deletedAt && !doc.deleted_at && !doc.isDeleted;
 }
 
+function isPaidCashbookTx(tx) {
+  const status = String(tx.status || 'Đã thanh toán').toLowerCase();
+  return (status === 'completed' || status === 'paid' || status.includes('thanh')) &&
+    !status.includes('hủy') &&
+    !status.includes('huy') &&
+    !status.includes('cancel');
+}
+
 function getDocSupplierId(doc) {
   return doc?.supplierId || doc?.supplier_id || doc?.vendorId || doc?.vendor_id || null;
 }
@@ -70,6 +78,14 @@ function getCashbookDocs() {
   return getStoredArray('billing_system_cashbook_transactions');
 }
 
+function cashbookTxMatchesSupplier(tx, supplier, purchaseIds) {
+  const supplierId = String(supplier.id);
+  if (String(tx.supplierId || tx.supplier_id || '') === supplierId) return true;
+  if (tx.purchaseId && purchaseIds.has(String(tx.purchaseId))) return true;
+  if (tx.orderId && purchaseIds.has(String(tx.orderId))) return true;
+  return false;
+}
+
 function calculateSupplierMetrics(supplier) {
   const supplierId = String(supplier.id);
   const purchases = getSupplierPurchaseDocs().filter(doc => String(getDocSupplierId(doc)) === supplierId);
@@ -82,18 +98,14 @@ function calculateSupplierMetrics(supplier) {
 
   const paid = getCashbookDocs()
     .filter(tx => {
-      const status = String(tx.status || '').toLowerCase();
-      const isPaid = status.includes('thanh') || status === 'completed' || status === 'paid';
-      if (tx.type !== 'chi' || !isPaid || status.includes('hủy') || status.includes('huy') || status.includes('cancel')) return false;
-      if (String(tx.supplierId || tx.supplier_id || '') === supplierId) return true;
-      if (tx.orderId && purchaseIds.has(String(tx.orderId))) return true;
-      return false;
+      if (tx.type !== 'chi' || !isPaidCashbookTx(tx)) return false;
+      return cashbookTxMatchesSupplier(tx, supplier, purchaseIds);
     })
     .reduce((sum, tx) => sum + toNumber(tx.value), 0);
 
   return {
     totalPurchase,
-    payableDebt: Math.max(0, totalPurchase - paid)
+    payableDebt: Math.max(0, toNumber(supplier.debt) + totalPurchase - paid)
   };
 }
 

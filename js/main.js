@@ -81,6 +81,10 @@ export function switchTab(panelId) {
   state.currentTab = panelId;
   
   document.querySelectorAll('.nav-link').forEach(l => {
+    if (l.classList.contains('purchase-menu-trigger')) {
+      l.classList.toggle('active', panelId === 'suppliers-panel' || panelId === 'goods-panel');
+      return;
+    }
     if (l.getAttribute('data-target') === panelId) {
       l.classList.add('active');
     } else {
@@ -107,7 +111,7 @@ export function switchTab(panelId) {
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
-  else if (panelId === 'goods-panel') heading.innerText = 'Quản lý Hàng hóa & Sản xuất';
+  else if (panelId === 'goods-panel') heading.innerText = 'Nhập hàng';
   else if (panelId === 'reports-panel') heading.innerText = 'Báo cáo & Thống kê KPI';
   else if (panelId === 'payroll-panel') heading.innerText = 'Quản lý & Tính lương Nhân viên';
   
@@ -123,8 +127,9 @@ function setupNavigation() {
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
-      e.preventDefault();
       const targetPanel = link.getAttribute('data-target');
+      if (!targetPanel) return;
+      e.preventDefault();
       switchTab(targetPanel);
       closeMobileSidebar();
     });

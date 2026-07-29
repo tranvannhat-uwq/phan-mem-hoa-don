@@ -12,7 +12,8 @@ import {
   dbSaveRawMaterialsBulk,
   dbDeleteAllRawMaterials,
   dbSaveSemiFinishedBulk,
-  dbDeleteAllSemiFinished
+  dbDeleteAllSemiFinished,
+  dbSaveCashbookTransaction
 } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 
@@ -22,13 +23,673 @@ export function renderGoodsPanel() {
   const panel = document.getElementById('goods-panel');
   if (!panel || !panel.classList.contains('active')) return;
 
-  renderRawMaterials();
-  renderSemiFinished();
-  renderFinishedGoodsStock();
-  renderRecipes();
-  renderProductionLogs();
-  populateProductionRecipeDropdown();
-  populateBrandFilter();
+  renderPurchasePanel(panel);
+}
+
+function getPurchaseReceipts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('billing_system_goods_receipts') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePurchaseReceipts(receipts) {
+  localStorage.setItem('billing_system_goods_receipts', JSON.stringify(receipts));
+}
+
+function getCashbookTransactionsForPurchase() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCashbookTransactionsForPurchase(txs) {
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(txs));
+}
+
+function isPurchaseTxCancelled(tx) {
+  const status = String(tx.status || '').toLowerCase();
+  return status === 'cancelled' || status === 'canceled' || status.includes('hủy') || status.includes('huy') || status.includes('cancel');
+}
+
+function buildPurchasePaymentTxId(purchaseId) {
+  return `TCM-PN-${purchaseId}`;
+}
+
+async function syncPurchasePaymentTransaction(receipt, supplier) {
+  const paidAmount = Math.max(0, Number(receipt.paidAmount || 0));
+  const txs = getCashbookTransactionsForPurchase();
+  const txId = receipt.paymentTransactionId || buildPurchasePaymentTxId(receipt.id);
+  const existingIdx = txs.findIndex(tx => String(tx.id) === String(txId) || String(tx.purchaseId || '') === String(receipt.id));
+
+  if (paidAmount <= 0) {
+    if (existingIdx >= 0) {
+      txs[existingIdx] = {
+        ...txs[existingIdx],
+        status: 'cancelled',
+        value: 0,
+        note: `${txs[existingIdx].note || ''} | Hủy thanh toán phiếu nhập ${receipt.code || receipt.id}`.trim()
+      };
+      const cloudSaved = await dbSaveCashbookTransaction(txs[existingIdx]);
+      if (!cloudSaved) console.warn('Chưa đồng bộ được phiếu chi hủy lên Supabase, dữ liệu local đã được cập nhật.');
+      saveCashbookTransactionsForPurchase(txs);
+    }
+    return null;
+  }
+
+  const tx = {
+    id: txId,
+    date: receipt.date || new Date().toISOString(),
+    type: 'chi',
+    category: 'Chi tiền nhập hàng',
+    partner: supplier ? supplier.name : (receipt.supplierName || ''),
+    supplierId: receipt.supplierId,
+    purchaseId: receipt.id,
+    orderId: receipt.id,
+    value: paidAmount,
+    method: receipt.paymentMethod || 'cash',
+    accounting: true,
+    status: 'Đã thanh toán',
+    creator: receipt.createdBy || (state.currentUser ? state.currentUser.displayName : 'Administrator'),
+    note: `Thanh toán phiếu nhập ${receipt.code || receipt.id} - ${supplier ? supplier.name : (receipt.supplierName || '')}`,
+    starred: false
+  };
+
+  if (existingIdx >= 0) txs[existingIdx] = { ...txs[existingIdx], ...tx };
+  else txs.unshift(tx);
+
+  saveCashbookTransactionsForPurchase(txs);
+  const saved = await dbSaveCashbookTransaction(tx);
+  if (!saved) console.warn('Chưa đồng bộ được phiếu chi nhập hàng lên Supabase, dữ liệu local đã được cập nhật.');
+  return tx;
+}
+
+function getPurchaseStatusLabel(status) {
+  if (status === 'draft') return 'Phiếu tạm';
+  if (status === 'cancelled') return 'Đã hủy';
+  return 'Đã nhập hàng';
+}
+
+function getPurchaseStatusClass(status) {
+  if (status === 'draft') return 'draft';
+  if (status === 'cancelled') return 'cancelled';
+  return 'completed';
+}
+
+function getPurchaseSupplier(receipt) {
+  return state.suppliers.find(s => String(s.id) === String(receipt.supplierId || receipt.supplier_id)) || null;
+}
+
+function getPurchaseItems(receipt) {
+  return Array.isArray(receipt.items) ? receipt.items : [];
+}
+
+function getPurchaseTotal(receipt) {
+  if (receipt.totalPayable !== undefined) return Number(receipt.totalPayable) || 0;
+  if (receipt.total !== undefined) return Number(receipt.total) || 0;
+  return getPurchaseItems(receipt).reduce((sum, item) => {
+    const qty = Number(item.quantity || item.qty || 0);
+    const price = Number(item.price || item.unitPrice || item.importPrice || 0);
+    const discount = Number(item.discount || item.discountAmount || 0);
+    return sum + Math.max(0, qty * price - discount);
+  }, 0);
+}
+
+function formatPurchaseDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return formatDateTime(d.toISOString());
+}
+
+function normalizePurchaseSearch(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildDefaultPurchaseCode(receipts) {
+  let maxSeq = 0;
+  receipts.forEach(r => {
+    const code = String(r.code || r.id || '');
+    const match = code.match(/PN(\d+)/i);
+    if (match) maxSeq = Math.max(maxSeq, Number(match[1]) || 0);
+  });
+  return `PN${String(maxSeq + 1).padStart(6, '0')}`;
+}
+
+function renderPurchasePanel(panel) {
+  const receipts = getPurchaseReceipts();
+  const activeId = panel.dataset.activePurchaseId || '';
+  const query = panel.dataset.purchaseSearch || '';
+  const draftChecked = panel.dataset.purchaseDraft !== 'false';
+  const completedChecked = panel.dataset.purchaseCompleted !== 'false';
+  const cancelledChecked = panel.dataset.purchaseCancelled === 'true';
+
+  const visibleReceipts = receipts.filter(receipt => {
+    const status = receipt.status || 'completed';
+    const supplier = getPurchaseSupplier(receipt);
+    const supplierName = supplier ? supplier.name : (receipt.supplierName || receipt.supplier_name || '');
+    if (query) {
+      const haystack = `${receipt.id || ''} ${receipt.code || ''} ${supplierName}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    if (status === 'draft' && !draftChecked) return false;
+    if ((status === 'completed' || status === 'done' || !status) && !completedChecked) return false;
+    if (status === 'cancelled' && !cancelledChecked) return false;
+    return true;
+  });
+
+  const activeReceipt = visibleReceipts.find(r => String(r.id) === String(activeId)) || null;
+  panel.dataset.activePurchaseId = activeReceipt ? activeReceipt.id : '';
+  const totalPayable = visibleReceipts.reduce((sum, r) => sum + getPurchaseTotal(r), 0);
+
+  panel.innerHTML = `
+    <div class="purchase-page">
+      <aside class="purchase-filters">
+        <h2>Nhập hàng</h2>
+        <div class="purchase-filter-block">
+          <div class="purchase-filter-title">Trạng thái</div>
+          <label><input type="checkbox" id="purchase-filter-draft" ${draftChecked ? 'checked' : ''}> Phiếu tạm</label>
+          <label><input type="checkbox" id="purchase-filter-completed" ${completedChecked ? 'checked' : ''}> Đã nhập hàng</label>
+          <label><input type="checkbox" id="purchase-filter-cancelled" ${cancelledChecked ? 'checked' : ''}> Đã hủy</label>
+        </div>
+        <div class="purchase-filter-block">
+          <div class="purchase-filter-title">Thời gian</div>
+          <label class="purchase-radio-row"><input type="radio" name="purchase-time-filter" checked> <span>Tháng này</span><i data-lucide="chevron-right"></i></label>
+          <label class="purchase-radio-row"><input type="radio" name="purchase-time-filter"> <span>Tùy chỉnh</span><i data-lucide="calendar"></i></label>
+        </div>
+        <div class="purchase-filter-block">
+          <div class="purchase-filter-title">Người tạo</div>
+          <input type="text" class="purchase-filter-input" placeholder="Chọn người tạo">
+        </div>
+        <div class="purchase-filter-block">
+          <div class="purchase-filter-title">Số hóa đơn đầu vào</div>
+          <input type="text" class="purchase-filter-input" placeholder="Theo số hóa đơn đầu vào">
+        </div>
+        <div class="purchase-filter-block">
+          <div class="purchase-filter-title">Người nhập</div>
+          <input type="text" class="purchase-filter-input" placeholder="Chọn người nhập">
+        </div>
+      </aside>
+
+      <main class="purchase-main">
+        <div class="purchase-toolbar">
+          <div class="purchase-search">
+            <i data-lucide="search"></i>
+            <input type="text" id="purchase-search-input" value="${query}" placeholder="Theo mã phiếu nhập">
+            <button type="button" title="Bộ lọc"><i data-lucide="sliders-horizontal"></i></button>
+          </div>
+          <div class="purchase-actions">
+            <button type="button" class="purchase-primary-btn" id="btn-open-purchase-modal"><i data-lucide="plus"></i> Nhập hàng</button>
+            <button type="button" class="purchase-tool-btn"><i data-lucide="file-output"></i> Xuất file <i data-lucide="chevron-down"></i></button>
+          </div>
+        </div>
+
+        <div class="purchase-table-wrap">
+          <table class="purchase-table">
+            <thead>
+              <tr>
+                <th style="width: 36px;"><input type="checkbox"></th>
+                <th style="width: 36px;"><i data-lucide="star"></i></th>
+                <th>Mã nhập hàng</th>
+                <th>Thời gian</th>
+                <th>Mã NCC</th>
+                <th>Nhà cung cấp</th>
+                <th style="text-align: right;">Cần trả NCC</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="purchase-total-row">
+                <td colspan="6"></td>
+                <td style="text-align: right;">${formatCurrency(totalPayable)}</td>
+                <td></td>
+              </tr>
+              ${visibleReceipts.length === 0 ? `
+                <tr><td colspan="8" class="purchase-empty">Chưa có phiếu nhập hàng nào.</td></tr>
+              ` : visibleReceipts.map(receipt => renderPurchaseRow(receipt, activeReceipt)).join('')}
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+    ${renderPurchaseModal()}
+  `;
+
+  attachPurchasePanelEvents(panel);
+  safeCreateIcons();
+}
+
+function renderPurchaseRow(receipt, activeReceipt) {
+  const supplier = getPurchaseSupplier(receipt);
+  const supplierCode = supplier ? supplier.code : (receipt.supplierCode || receipt.supplier_code || '');
+  const supplierName = supplier ? supplier.name : (receipt.supplierName || receipt.supplier_name || '');
+  const total = getPurchaseTotal(receipt);
+  const status = receipt.status || 'completed';
+  const isActive = activeReceipt && String(activeReceipt.id) === String(receipt.id);
+  return `
+    <tr class="purchase-row ${isActive ? 'active' : ''}" data-id="${receipt.id}">
+      <td><input type="checkbox"></td>
+      <td><i data-lucide="star"></i></td>
+      <td>${receipt.code || receipt.id}</td>
+      <td>${formatPurchaseDate(receipt.date || receipt.createdAt)}</td>
+      <td>${supplierCode}</td>
+      <td>${supplierName}</td>
+      <td style="text-align: right;">${formatCurrency(total)}</td>
+      <td><span class="purchase-status ${getPurchaseStatusClass(status)}">${getPurchaseStatusLabel(status)}</span></td>
+    </tr>
+    ${isActive ? renderPurchaseDetail(receipt, supplierName, total) : ''}
+  `;
+}
+
+function renderPurchaseDetail(receipt, supplierName, total) {
+  const items = getPurchaseItems(receipt);
+  const totalQty = items.reduce((sum, item) => sum + (Number(item.quantity || item.qty || 0)), 0);
+  return `
+    <tr class="purchase-detail-row">
+      <td colspan="8">
+        <div class="purchase-detail">
+          <div class="purchase-detail-tab">Thông tin</div>
+          <div class="purchase-detail-head">
+            <div>
+              <span class="purchase-detail-code">${receipt.code || receipt.id}</span>
+              <span class="purchase-status ${getPurchaseStatusClass(receipt.status || 'completed')}">${getPurchaseStatusLabel(receipt.status || 'completed')}</span>
+            </div>
+            <div>Chi nhánh trung tâm</div>
+          </div>
+          <div class="purchase-detail-meta">
+            <div><span>Người tạo:</span><strong>${receipt.createdBy || state.currentUser?.displayName || '-'}</strong></div>
+            <div><span>Người nhập:</span><select><option>${receipt.importedBy || state.currentUser?.displayName || '-'}</option></select></div>
+            <div><span>Ngày nhập:</span><input type="text" value="${formatPurchaseDate(receipt.date || receipt.createdAt)}" readonly></div>
+            <div><span>Tên NCC:</span><a>${supplierName}</a></div>
+          </div>
+          <table class="purchase-items-table">
+            <thead>
+              <tr>
+                <th>Mã hàng</th>
+                <th>Tên hàng</th>
+                <th style="text-align: right;">Số lượng</th>
+                <th style="text-align: right;">Đơn giá</th>
+                <th style="text-align: right;">Giảm giá</th>
+                <th style="text-align: right;">Giá nhập</th>
+                <th style="text-align: right;">Thành tiền</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="purchase-item-search-row">
+                <td><input placeholder="Tìm mã hàng"></td>
+                <td><input placeholder="Tìm tên hàng"></td>
+                <td colspan="6"><span><i data-lucide="tags"></i> Thiết lập giá</span></td>
+              </tr>
+              ${items.map(item => {
+                const qty = Number(item.quantity || item.qty || 0);
+                const price = Number(item.price || item.unitPrice || item.importPrice || 0);
+                const discount = Number(item.discount || item.discountAmount || 0);
+                const lineTotal = Math.max(0, qty * price - discount);
+                return `
+                  <tr>
+                    <td><a>${item.code || item.rawMaterialCode || ''}</a></td>
+                    <td>${item.name || item.rawMaterialName || ''}</td>
+                    <td style="text-align: right;">${qty.toLocaleString('vi-VN')}</td>
+                    <td style="text-align: right;">${formatCurrency(price)}</td>
+                    <td style="text-align: right;">${formatCurrency(discount)}</td>
+                    <td style="text-align: right;">${formatCurrency(price)}</td>
+                    <td style="text-align: right; font-weight: 700;">${formatCurrency(lineTotal)}</td>
+                    <td><i data-lucide="tags"></i></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          <div class="purchase-detail-bottom">
+            <textarea placeholder="Ghi chú...">${receipt.notes || ''}</textarea>
+            <div class="purchase-summary">
+              <div><span>Số lượng mặt hàng</span><strong>${items.length}</strong></div>
+              <div><span>Tổng tiền hàng (${totalQty.toLocaleString('vi-VN')})</span><strong>${formatCurrency(total)}</strong></div>
+              <div><span>Giảm giá</span><strong>0</strong></div>
+              <div><span>Tổng cộng</span><strong>${formatCurrency(total)}</strong></div>
+              <div>
+                <span>Tiền đã trả NCC</span>
+                <input
+                  type="number"
+                  class="purchase-detail-paid-input"
+                  data-id="${receipt.id}"
+                  min="0"
+                  step="any"
+                  value="${Number(receipt.paidAmount || 0)}"
+                  ${receipt.status === 'cancelled' ? 'disabled' : ''}
+                >
+              </div>
+            </div>
+          </div>
+          <div class="purchase-detail-actions">
+            <button class="purchase-cancel-btn" data-id="${receipt.id}" ${receipt.status === 'cancelled' ? 'disabled' : ''}><i data-lucide="trash-2"></i> Hủy</button>
+            <span></span>
+            <button class="purchase-save-detail-btn" data-id="${receipt.id}" ${receipt.status === 'cancelled' ? 'disabled' : ''}><i data-lucide="save"></i> Lưu</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderPurchaseModal() {
+  return `
+    <div class="modal-overlay" id="purchase-entry-modal">
+      <div class="modal-content purchase-entry-modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">Tạo phiếu nhập hàng</h3>
+          <button class="modal-close" id="btn-close-purchase-entry">&times;</button>
+        </div>
+        <form id="purchase-entry-form">
+          <div class="modal-body purchase-entry-modal-body">
+            <div class="form-group">
+              <label class="form-label">Nhà cung cấp</label>
+              <select class="form-control" id="purchase-supplier-select" required>
+                <option value="">-- Chọn nhà cung cấp --</option>
+                ${state.suppliers.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ngày nhập</label>
+              <input type="datetime-local" class="form-control" id="purchase-date-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Đã thanh toán NCC</label>
+              <input type="number" class="form-control" id="purchase-paid-input" min="0" step="any" value="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Quỹ thanh toán</label>
+              <select class="form-control" id="purchase-payment-method">
+                <option value="cash">Tiền mặt</option>
+                <option value="bank">Ngân hàng</option>
+                <option value="wallet">Ví điện tử</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <label class="form-label" style="margin: 0;">Danh sách hàng nhập</label>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-add-purchase-item-row"><i data-lucide="plus"></i> Thêm dòng</button>
+              </div>
+              <div class="purchase-entry-items-wrap">
+                <table class="purchase-entry-items-table">
+                  <colgroup>
+                    <col style="width: 25%;">
+                    <col style="width: 30%;">
+                    <col style="width: 12%;">
+                    <col style="width: 14%;">
+                    <col style="width: 14%;">
+                    <col style="width: 5%;">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Mã hàng</th>
+                      <th>Tên hàng</th>
+                      <th style="width: 110px; text-align: right;">Số lượng</th>
+                      <th style="width: 140px; text-align: right;">Giá nhập</th>
+                      <th style="width: 150px; text-align: right;">Thành tiền</th>
+                      <th style="width: 44px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="purchase-entry-items-body">
+                    ${renderPurchaseEntryItemRow()}
+                  </tbody>
+                </table>
+              </div>
+              <div class="purchase-entry-total">
+                <span>Tổng cộng</span>
+                <strong id="purchase-entry-total">0</strong>
+              </div>
+              <div class="purchase-entry-total">
+                <span>Còn nợ NCC</span>
+                <strong id="purchase-entry-debt-total">0</strong>
+              </div>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label class="form-label">Ghi chú</label>
+              <textarea class="form-control" id="purchase-note-input" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-purchase-entry">Hủy</button>
+            <button type="submit" class="btn btn-primary">Lưu phiếu nhập</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderPurchaseEntryItemRow(item = {}) {
+  return `
+    <tr class="purchase-entry-item-row">
+      <td><input type="text" class="purchase-entry-code" placeholder="Ví dụ: NL001" value="${item.code || ''}" required></td>
+      <td><input type="text" class="purchase-entry-name" placeholder="Tên hàng nhập" value="${item.name || ''}" required></td>
+      <td><input type="number" class="purchase-entry-qty" min="0.01" step="any" value="${item.quantity || 1}" required></td>
+      <td><input type="number" class="purchase-entry-price" min="0" step="any" value="${item.price || 0}" required></td>
+      <td class="purchase-entry-line-total">0</td>
+      <td><button type="button" class="purchase-entry-remove-row" title="Xóa dòng"><i data-lucide="trash-2"></i></button></td>
+    </tr>
+  `;
+}
+
+function updatePurchaseEntryTotals(panel) {
+  let total = 0;
+  panel.querySelectorAll('.purchase-entry-item-row').forEach(row => {
+    const qty = Number(row.querySelector('.purchase-entry-qty')?.value || 0);
+    const price = Number(row.querySelector('.purchase-entry-price')?.value || 0);
+    const lineTotal = Math.max(0, qty * price);
+    total += lineTotal;
+    const lineTotalEl = row.querySelector('.purchase-entry-line-total');
+    if (lineTotalEl) lineTotalEl.innerText = formatCurrency(lineTotal);
+  });
+  const totalEl = panel.querySelector('#purchase-entry-total');
+  if (totalEl) totalEl.innerText = formatCurrency(total);
+  const paid = Math.max(0, Number(panel.querySelector('#purchase-paid-input')?.value || 0));
+  const debtEl = panel.querySelector('#purchase-entry-debt-total');
+  if (debtEl) debtEl.innerText = formatCurrency(Math.max(0, total - paid));
+}
+
+function attachPurchasePanelEvents(panel) {
+  panel.querySelector('#purchase-search-input')?.addEventListener('input', (event) => {
+    panel.dataset.purchaseSearch = normalizePurchaseSearch(event.target.value);
+    renderPurchasePanel(panel);
+  });
+  [
+    ['#purchase-filter-draft', 'purchaseDraft'],
+    ['#purchase-filter-completed', 'purchaseCompleted'],
+    ['#purchase-filter-cancelled', 'purchaseCancelled']
+  ].forEach(([selector, key]) => {
+    panel.querySelector(selector)?.addEventListener('change', (event) => {
+      panel.dataset[key] = event.target.checked ? 'true' : 'false';
+      renderPurchasePanel(panel);
+    });
+  });
+
+  panel.querySelectorAll('.purchase-row').forEach(row => {
+    row.addEventListener('click', (event) => {
+      if (event.target.closest('input')) return;
+      const rowId = row.getAttribute('data-id') || '';
+      panel.dataset.activePurchaseId = panel.dataset.activePurchaseId === rowId ? '' : rowId;
+      renderPurchasePanel(panel);
+    });
+  });
+
+  const modal = panel.querySelector('#purchase-entry-modal');
+  const openBtn = panel.querySelector('#btn-open-purchase-modal');
+  const closeModal = () => modal?.classList.remove('active');
+  openBtn?.addEventListener('click', () => {
+    const dateInput = panel.querySelector('#purchase-date-input');
+    if (dateInput) {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      dateInput.value = now.toISOString().slice(0, 16);
+    }
+    updatePurchaseEntryTotals(panel);
+    modal?.classList.add('active');
+  });
+  panel.querySelector('#btn-close-purchase-entry')?.addEventListener('click', closeModal);
+  panel.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', (event) => {
+    if (event.target === modal) closeModal();
+  });
+
+  panel.querySelector('#btn-add-purchase-item-row')?.addEventListener('click', () => {
+    const tbody = panel.querySelector('#purchase-entry-items-body');
+    if (!tbody) return;
+    tbody.insertAdjacentHTML('beforeend', renderPurchaseEntryItemRow());
+    updatePurchaseEntryTotals(panel);
+    safeCreateIcons();
+  });
+
+  panel.querySelector('#purchase-entry-items-body')?.addEventListener('input', (event) => {
+    if (event.target.closest('.purchase-entry-item-row')) updatePurchaseEntryTotals(panel);
+  });
+  panel.querySelector('#purchase-paid-input')?.addEventListener('input', () => updatePurchaseEntryTotals(panel));
+
+  panel.querySelector('#purchase-entry-items-body')?.addEventListener('click', (event) => {
+    const removeBtn = event.target.closest('.purchase-entry-remove-row');
+    if (!removeBtn) return;
+    const rows = Array.from(panel.querySelectorAll('.purchase-entry-item-row'));
+    if (rows.length <= 1) {
+      showToast('Phiếu nhập cần ít nhất 1 dòng hàng.', 'warning');
+      return;
+    }
+    removeBtn.closest('.purchase-entry-item-row')?.remove();
+    updatePurchaseEntryTotals(panel);
+  });
+
+  panel.querySelectorAll('.purchase-save-detail-btn').forEach(btn => {
+    btn.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const receiptId = btn.getAttribute('data-id');
+      const receipts = getPurchaseReceipts();
+      const receiptIndex = receipts.findIndex(r => String(r.id) === String(receiptId));
+      if (receiptIndex < 0) return;
+
+      const receipt = receipts[receiptIndex];
+      if (receipt.status === 'cancelled') return;
+      const supplier = state.suppliers.find(s => String(s.id) === String(receipt.supplierId));
+      const paidInput = panel.querySelector(`.purchase-detail-paid-input[data-id="${receiptId}"]`);
+      const paidAmount = Math.max(0, Number(paidInput?.value || 0));
+      const totalPayable = Number(receipt.totalPayable || 0);
+
+      if (paidAmount > totalPayable) {
+        showToast('Số tiền đã thanh toán không được lớn hơn tổng tiền phiếu nhập.', 'warning');
+        return;
+      }
+
+      const updatedReceipt = {
+        ...receipt,
+        paidAmount,
+        paymentMethod: receipt.paymentMethod || 'cash',
+        updatedAt: new Date().toISOString()
+      };
+
+      const paymentTx = await syncPurchasePaymentTransaction(updatedReceipt, supplier);
+      if (paidAmount > 0 && !paymentTx) {
+        showToast('Không thể cập nhật phiếu chi thanh toán. Phiếu nhập chưa được lưu để tránh lệch số liệu.', 'danger');
+        return;
+      }
+      if (paymentTx) updatedReceipt.paymentTransactionId = paymentTx.id;
+
+      receipts[receiptIndex] = updatedReceipt;
+      savePurchaseReceipts(receipts);
+      showToast('Đã lưu phiếu nhập và đồng bộ Sổ quỹ.', 'success');
+      renderAll();
+    });
+  });
+
+  panel.querySelectorAll('.purchase-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const receiptId = btn.getAttribute('data-id');
+      const receipts = getPurchaseReceipts();
+      const receiptIndex = receipts.findIndex(r => String(r.id) === String(receiptId));
+      if (receiptIndex < 0) return;
+
+      const receipt = receipts[receiptIndex];
+      if (receipt.status === 'cancelled') return;
+      if (!confirm(`Bạn có chắc chắn muốn hủy phiếu nhập [${receipt.code || receipt.id}]? Phiếu chi liên quan trong Sổ quỹ sẽ được hủy theo.`)) return;
+
+      const supplier = state.suppliers.find(s => String(s.id) === String(receipt.supplierId));
+      const updatedReceipt = {
+        ...receipt,
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        paidAmount: 0
+      };
+
+      await syncPurchasePaymentTransaction(updatedReceipt, supplier);
+      receipts[receiptIndex] = updatedReceipt;
+      savePurchaseReceipts(receipts);
+      panel.dataset.activePurchaseId = '';
+      showToast('Đã hủy phiếu nhập và phiếu chi liên quan.', 'success');
+      renderAll();
+    });
+  });
+
+  panel.querySelector('#purchase-entry-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const receipts = getPurchaseReceipts();
+    const supplierId = panel.querySelector('#purchase-supplier-select')?.value || '';
+    const supplier = state.suppliers.find(s => String(s.id) === String(supplierId));
+    const code = buildDefaultPurchaseCode(receipts);
+    const date = panel.querySelector('#purchase-date-input')?.value || new Date().toISOString();
+    const items = Array.from(panel.querySelectorAll('.purchase-entry-item-row')).map(row => {
+      const itemCode = row.querySelector('.purchase-entry-code')?.value.trim() || '';
+      const itemName = row.querySelector('.purchase-entry-name')?.value.trim() || '';
+      const qty = Number(row.querySelector('.purchase-entry-qty')?.value || 0);
+      const price = Number(row.querySelector('.purchase-entry-price')?.value || 0);
+      return { code: itemCode, name: itemName, quantity: qty, price };
+    }).filter(item => item.code && item.name && item.quantity > 0);
+
+    if (items.length === 0) {
+      showToast('Vui lòng nhập ít nhất 1 dòng hàng hợp lệ.', 'warning');
+      return;
+    }
+
+    const totalPayable = items.reduce((sum, item) => sum + Math.max(0, item.quantity * item.price), 0);
+    const paidAmount = Math.max(0, Number(panel.querySelector('#purchase-paid-input')?.value || 0));
+    if (paidAmount > totalPayable) {
+      showToast('Số tiền đã thanh toán không được lớn hơn tổng tiền phiếu nhập.', 'warning');
+      return;
+    }
+
+    const receipt = {
+      id: code,
+      code,
+      supplierId,
+      supplierName: supplier ? supplier.name : '',
+      date: new Date(date).toISOString(),
+      status: 'completed',
+      totalPayable,
+      paidAmount,
+      paymentMethod: panel.querySelector('#purchase-payment-method')?.value || 'cash',
+      createdBy: state.currentUser?.displayName || 'Administrator',
+      importedBy: state.currentUser?.displayName || 'Administrator',
+      notes: panel.querySelector('#purchase-note-input')?.value.trim() || '',
+      items
+    };
+
+    const paymentTx = await syncPurchasePaymentTransaction(receipt, supplier);
+    if (paidAmount > 0 && !paymentTx) {
+      showToast('Không thể tạo phiếu chi thanh toán. Phiếu nhập chưa được lưu để tránh lệch số liệu.', 'danger');
+      return;
+    }
+    if (paymentTx) receipt.paymentTransactionId = paymentTx.id;
+
+    receipts.unshift(receipt);
+    savePurchaseReceipts(receipts);
+    panel.dataset.activePurchaseId = receipt.id;
+    showToast('Đã tạo phiếu nhập hàng thành công!', 'success');
+    renderAll();
+  });
 }
 
 // 1. Vẽ bảng Nguyên liệu

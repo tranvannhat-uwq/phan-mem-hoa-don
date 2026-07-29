@@ -44,6 +44,16 @@ function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function isPaidStatus(status) {
+  const clean = normalizeText(status || 'Đã thanh toán');
+  return clean === 'completed' || clean === 'paid' || clean.includes('thanh');
+}
+
+function isCancelledStatus(status) {
+  const clean = normalizeText(status);
+  return clean === 'cancelled' || clean === 'canceled' || clean.includes('hủy') || clean.includes('huy') || clean.includes('cancel');
+}
+
 function findSupplierByInput(input) {
   const raw = String(input || '').trim();
   const clean = normalizeText(raw);
@@ -58,6 +68,14 @@ function findSupplierByInput(input) {
       clean.includes(code) ||
       clean.includes(name);
   }) || null;
+}
+
+function populatePaymentRecipientDatalist() {
+  const datalist = document.getElementById('payment-recipient-list');
+  if (!datalist) return;
+  datalist.innerHTML = (state.suppliers || []).map(s => {
+    return `<option value="${s.name} — ${s.code}" data-supplier-id="${s.id}">${s.phone || 'N/A'}</option>`;
+  }).join('');
 }
 
 // Helper: load/save starting balances
@@ -506,6 +524,7 @@ export function setupSoQuyPanel() {
   
   if (addChiBtn && paymentModal) {
     addChiBtn.addEventListener('click', () => {
+      populatePaymentRecipientDatalist();
       // Set time default to now
       const now = new Date();
       now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -732,7 +751,7 @@ function getProcessedData() {
   if (rangeStart) {
     txs.forEach(t => {
       // Must be settled, match account type, and occur BEFORE the rangeStart
-      if (t.status !== 'Đã thanh toán') return;
+      if (!isPaidStatus(t.status)) return;
       
       if (activeFilters.accountType !== 'all' && t.method !== activeFilters.accountType) return;
       
@@ -766,8 +785,8 @@ function getProcessedData() {
     if (activeFilters.category !== 'all' && t.category !== activeFilters.category) return false;
     
     // Status (Trạng thái)
-    if (t.status === 'Đã thanh toán' && !activeFilters.statusPaid) return false;
-    if (t.status === 'Đã hủy' && !activeFilters.statusCancelled) return false;
+    if (isPaidStatus(t.status) && !activeFilters.statusPaid) return false;
+    if (isCancelledStatus(t.status) && !activeFilters.statusCancelled) return false;
     
     // Business Accounting (Hạch toán KQKD)
     if (activeFilters.accounting === 'yes' && !t.accounting) return false;
@@ -874,7 +893,7 @@ function getProcessedData() {
   
   filtered.forEach(t => {
     // Only count active (paid) transactions for statistics
-    if (t.status !== 'Đã thanh toán') return;
+    if (!isPaidStatus(t.status)) return;
     
     if (t.type === 'thu') totalIncome += t.value;
     else if (t.type === 'chi') totalExpense += t.value;
@@ -1022,7 +1041,7 @@ export function renderSoQuyTable() {
   }
 
   tableBody.innerHTML = filteredTransactions.map(t => {
-    const isCancelled = t.status === 'Đã hủy';
+    const isCancelled = isCancelledStatus(t.status);
     const valText = t.type === 'thu' ? formatCurrency(t.value) : `-${formatCurrency(t.value)}`;
     const valStyle = isCancelled 
       ? 'color: var(--text-muted); text-decoration: line-through;' 
@@ -1118,13 +1137,13 @@ function showTransactionDetails(txId) {
   
   const statusEl = document.getElementById('so-quy-detail-status');
   if (statusEl) {
-    statusEl.innerHTML = `<span class="badge-status ${t.status === 'Đã thanh toán' ? 'badge-status-paid' : 'badge-status-cancelled'}">${t.status}</span>`;
+    statusEl.innerHTML = `<span class="badge-status ${isPaidStatus(t.status) ? 'badge-status-paid' : 'badge-status-cancelled'}">${t.status}</span>`;
   }
 
   const valEl = document.getElementById('so-quy-detail-value');
   if (valEl) {
     valEl.innerText = (t.type === 'thu' ? '+' : '-') + ' ' + formatCurrency(t.value);
-    valEl.style.color = t.status === 'Đã hủy' 
+    valEl.style.color = isCancelledStatus(t.status) 
       ? 'var(--text-muted)' 
       : (t.type === 'thu' ? '#0070d2' : 'var(--color-danger)');
   }
@@ -1132,7 +1151,7 @@ function showTransactionDetails(txId) {
   // Handle Hủy phiếu (Cancel transaction) button
   const cancelBtn = document.getElementById('btn-cancel-transaction');
   if (cancelBtn) {
-    if (t.status === 'Đã hủy') {
+    if (isCancelledStatus(t.status)) {
       cancelBtn.style.display = 'none';
     } else {
       cancelBtn.style.display = 'inline-flex';

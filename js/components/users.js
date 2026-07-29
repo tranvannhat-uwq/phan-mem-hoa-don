@@ -565,6 +565,7 @@ export function applyUserPermissions(user) {
   navLinks.forEach(link => {
     const target = link.getAttribute('data-target');
     const navItem = link.parentElement;
+    if (!target) return;
     
     if (role === 'sale') {
       if (target === 'dashboard-panel' || target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'pricelists-panel' || target === 'brands-panel') {
@@ -582,6 +583,11 @@ export function applyUserPermissions(user) {
       navItem.style.display = 'block';
     }
   });
+
+  const purchaseNavItem = document.querySelector('.purchase-nav-item');
+  if (purchaseNavItem) {
+    purchaseNavItem.style.display = role === 'sale' ? 'none' : 'block';
+  }
 
   // Hiding dropdown items based on role
   const dropdownNavLinks = document.querySelectorAll('.dropdown-nav-link');

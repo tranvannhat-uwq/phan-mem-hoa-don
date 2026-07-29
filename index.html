@@ -63,22 +63,27 @@
             Khách hàng
           </a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" data-target="suppliers-panel">
-            <i data-lucide="truck"></i>
-            Nhà cung cấp
-          </a>
+        <li class="nav-item purchase-nav-item">
+          <button type="button" class="nav-link purchase-menu-trigger">
+            <i data-lucide="shopping-cart"></i>
+            Mua hàng
+            <i data-lucide="chevron-down" class="purchase-menu-chevron"></i>
+          </button>
+          <div class="purchase-menu">
+            <div class="purchase-menu-section">
+              <div class="purchase-menu-heading">Nhà cung cấp</div>
+              <a class="purchase-menu-link nav-link" data-target="suppliers-panel">Nhà cung cấp</a>
+            </div>
+            <div class="purchase-menu-section">
+              <div class="purchase-menu-heading">Mua hàng</div>
+              <a class="purchase-menu-link nav-link" data-target="goods-panel">Nhập hàng</a>
+            </div>
+          </div>
         </li>
         <li class="nav-item">
           <a class="nav-link" data-target="products-panel">
             <i data-lucide="package"></i>
             Sản phẩm
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" data-target="goods-panel">
-            <i data-lucide="boxes"></i>
-            Hàng hóa
           </a>
         </li>
         <li class="nav-item">
@@ -1497,7 +1502,7 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table customers-table" style="table-layout: fixed; min-width: 1550px;">
+            <table class="table customers-table" style="table-layout: fixed; min-width: 1680px;">
               <colgroup>
                                 <col style="width: 45px;">   <!-- Chon -->
 <col style="width: 100px;">  <!-- Mã KH -->
@@ -1510,6 +1515,7 @@
                 <col style="width: 115px;">  <!-- Công nợ -->
                 <col style="width: 120px;">  <!-- Tổng doanh số -->
                 <col style="width: 140px;">  <!-- Tổng doanh số trừ trả hàng -->
+                <col style="width: 125px;">  <!-- Ngày giao dịch cuối -->
                 <col style="width: 110px;">  <!-- Thao tác -->
               </colgroup>
               <thead>
@@ -1525,6 +1531,7 @@
                   <th style="text-align: right;">Công nợ</th>
                   <th style="text-align: right;">Tổng doanh số</th>
                   <th style="text-align: right;">Tổng doanh số trừ trả hàng</th>
+                  <th style="text-align: center;">Ngày giao dịch cuối</th>
                   <th style="text-align: center;">Thao tác</th>
                 </tr>
               </thead>

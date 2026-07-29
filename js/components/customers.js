@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
 import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260727-debt-audit2';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260727-advance-payment';
@@ -39,6 +39,36 @@ export function getCustomerMetrics(c) {
   const totalPayments = Math.max(0, collectedPayments - cancelledPayments);
   
   return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
+}
+
+function getCustomerLastTransactionDate(c) {
+  if (!c) return '';
+  const timestamps = [];
+  const addDate = (value) => {
+    if (!value) return;
+    const time = new Date(value).getTime();
+    if (Number.isFinite(time)) timestamps.push(time);
+  };
+
+  addDate(c.lastOrderAt || c.last_order_at || c.lastPaymentAt || c.last_payment_at || c.updatedAt || c.updated_at);
+
+  (state.savedOrders || []).forEach(o => {
+    const belongsToCustomer = o.customerId === c.id || (o.customerName && c.name && o.customerName.toLowerCase() === c.name.toLowerCase());
+    if (!belongsToCustomer) return;
+    addDate(o.createdAt || o.date || o.orderDate || o.updatedAt);
+  });
+
+  (state.salesReturns || []).forEach(r => {
+    const belongsToCustomer = r.customerId === c.id || (r.customerName && c.name && r.customerName.toLowerCase() === c.name.toLowerCase());
+    if (!belongsToCustomer || r.status === 'cancelled') return;
+    addDate(r.createdAt || r.returnDate || r.date || r.updatedAt);
+  });
+
+  const debtHistory = Array.isArray(c.debtHistory) ? c.debtHistory : [];
+  debtHistory.forEach(entry => addDate(entry.date || entry.createdAt || entry.transactionDate));
+
+  if (timestamps.length === 0) return '';
+  return new Date(Math.max(...timestamps)).toISOString();
 }
 
 function getFilteredCustomersForCurrentView() {
@@ -201,6 +231,8 @@ export function renderCustomersTable() {
     
     const metrics = getCustomerMetrics(c);
     c.totalTransaction = metrics.grossSales;
+    const lastTransactionDate = getCustomerLastTransactionDate(c);
+    const lastTransactionLabel = lastTransactionDate ? formatDateOnly(lastTransactionDate) : '<span style="color: var(--text-muted);">Chưa có</span>';
     
     return `
       <tr>
@@ -225,6 +257,7 @@ export function renderCustomersTable() {
         <td class="customer-money-cell" style="color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
         <td class="customer-money-cell" style="color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
         <td class="customer-money-cell" style="color: #10b981;">${formatCurrency(metrics.netSales)}</td>
+        <td style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${lastTransactionLabel}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-cust-btn" data-index="${actualIndex}" title="Sửa">
