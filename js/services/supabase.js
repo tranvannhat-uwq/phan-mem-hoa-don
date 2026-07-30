@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType } from '../domain/pricing.js';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -569,22 +569,24 @@ export async function fetchCloudData() {
 
         if (plErr) throw plErr;
 
-        state.pricelists = (plData || []).map(pl => ({
+        const mappedPricelists = (plData || []).map(pl => ({
             id: pl.id,
             code: pl.code || '',
             name: pl.name,
-            type: normalizePriceListType(pl.type, pl.customer_id),
+            type: normalizePriceListType(pl.price_list_type || pl.type, pl.customer_id),
             customerId: pl.customer_id || null,
             customerGroupId: pl.customer_group_id || null,
             parentPriceListId: pl.parent_price_list_id || null,
             effectiveFrom: pl.effective_from || '',
             effectiveTo: pl.effective_to || '',
             isActive: pl.is_active !== false,
+            isAvailableForSales: pl.is_available_for_sales === true,
             displayOrder: Number(pl.display_order || 0),
             createdAt: pl.created_at || '',
             updatedAt: pl.updated_at || '',
             brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
           }));
+        state.pricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
         localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
 
         try {
@@ -592,7 +594,10 @@ export async function fetchCloudData() {
             .from(tablePriceListItemsName)
             .select('*');
           if (itemErr) throw itemErr;
-          state.priceListItems = (itemData || []).map(item => ({
+          const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
+          state.priceListItems = (itemData || [])
+          .filter(item => visiblePriceListIds.has(item.price_list_id))
+          .map(item => ({
             id: item.id || `${item.price_list_id}:${item.product_id}`,
             priceListId: item.price_list_id,
             productId: item.product_id,
@@ -606,12 +611,16 @@ export async function fetchCloudData() {
           localStorage.setItem('billing_system_price_list_items', JSON.stringify(state.priceListItems));
         } catch (itemErr) {
           console.warn("Could not load price_list_items, using local fallback:", itemErr.message);
-          state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
+          const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
+          state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]')
+            .filter(item => visiblePriceListIds.has(item.priceListId));
         }
       } catch (plErr) {
         console.warn("Could not load pricelists from Supabase, using local fallback:", plErr.message);
-        state.pricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
-        state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
+        state.pricelists = filterPriceListsForUser(JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]'), state.currentUser);
+        const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
+        state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]')
+          .filter(item => visiblePriceListIds.has(item.priceListId));
       }
     };
 
@@ -1742,6 +1751,10 @@ export async function dbDeleteCustomer(id) {
 
 // --- Thao tác CSDL chi tiết (Bảng giá) ---
 export async function dbSavePricelist(pricelist) {
+  if (state.currentUser?.role === 'sale') {
+    showToast('TÃ i khoáº£n kinh doanh khÃ´ng cÃ³ quyá»n lÆ°u báº£ng giÃ¡.', 'danger');
+    return false;
+  }
   if (isCloudActive && supabaseClient) {
     try {
       const dbRow = {
@@ -1749,12 +1762,14 @@ export async function dbSavePricelist(pricelist) {
         code: pricelist.code || null,
         name: pricelist.name,
         type: normalizePriceListType(pricelist.type, pricelist.customerId),
+        price_list_type: normalizePriceListType(pricelist.type, pricelist.customerId),
         customer_id: pricelist.customerId || null,
         customer_group_id: pricelist.customerGroupId || null,
         parent_price_list_id: pricelist.parentPriceListId || null,
         effective_from: pricelist.effectiveFrom || null,
         effective_to: pricelist.effectiveTo || null,
         is_active: pricelist.isActive !== false,
+        is_available_for_sales: pricelist.isAvailableForSales === true,
         display_order: Number(pricelist.displayOrder || 0),
         brand_discounts: pricelist.brandDiscounts || {},
         updated_at: new Date().toISOString()
@@ -1776,6 +1791,10 @@ export async function dbSavePricelist(pricelist) {
 }
 
 export async function dbSavePriceListItems(items) {
+  if (state.currentUser?.role === 'sale') {
+    showToast('TÃ i khoáº£n kinh doanh khÃ´ng cÃ³ quyá»n lÆ°u chi tiáº¿t báº£ng giÃ¡.', 'danger');
+    return false;
+  }
   if (isCloudActive && supabaseClient && items.length > 0) {
     try {
       const dbRows = items.map(item => ({
@@ -1803,6 +1822,10 @@ export async function dbSavePriceListItems(items) {
 }
 
 export async function dbDeletePriceListItem(priceListId, productId) {
+  if (state.currentUser?.role === 'sale') {
+    showToast('TÃ i khoáº£n kinh doanh khÃ´ng cÃ³ quyá»n xÃ³a giÃ¡.', 'danger');
+    return false;
+  }
   if (isCloudActive && supabaseClient) {
     try {
       const { error } = await supabaseClient
@@ -1822,6 +1845,10 @@ export async function dbDeletePriceListItem(priceListId, productId) {
 }
 
 export async function dbDeletePricelist(id) {
+  if (state.currentUser?.role === 'sale') {
+    showToast('TÃ i khoáº£n kinh doanh khÃ´ng cÃ³ quyá»n ngá»«ng báº£ng giÃ¡.', 'danger');
+    return false;
+  }
   if (isCloudActive && supabaseClient) {
     try {
       const { error } = await supabaseClient
@@ -1842,6 +1869,23 @@ export async function dbDeletePricelist(id) {
 
 // --- Thao tác CSDL chi tiết (Hóa đơn / Đơn hàng) ---
 export async function dbSaveOrder(order) {
+  if (state.currentUser?.role === 'sale') {
+    const usedPriceListIds = new Set([
+      order.pricelistId,
+      ...(order.items || []).map(item => item.priceListId)
+    ].filter(id => id && id !== 'retail'));
+    const forbiddenId = [...usedPriceListIds].find(id => {
+      const priceList = state.pricelists.find(item => item.id === id);
+      return !priceList || !canUserViewPriceList(state.currentUser, priceList);
+    });
+    if (forbiddenId) {
+      const error = new Error(`403: Price list ${forbiddenId} is not available for sales`);
+      error.status = 403;
+      console.error(error);
+      showToast('403: Báº£ng giÃ¡ khÃ´ng Ä‘Æ°á»£c cáº¥p quyá»n cho kinh doanh.', 'danger');
+      return false;
+    }
+  }
   if (isCloudActive && supabaseClient) {
     try {
       const targetTable = order.status === 'draft' ? tableDraftOrdersName : tableOrdersName;
@@ -2789,6 +2833,23 @@ export function backfillMultiCompanyAndRevenueData() {
 // --- THỦ TỤC TRANSACTIONAL CSDL (DATABASE TRANSACTIONS) ---
 
 export async function dbConfirmOrder(order) {
+  if (state.currentUser?.role === 'sale') {
+    const usedPriceListIds = new Set([
+      order.pricelistId,
+      ...(order.items || []).map(item => item.priceListId)
+    ].filter(id => id && id !== 'retail'));
+    const forbiddenId = [...usedPriceListIds].find(id => {
+      const priceList = state.pricelists.find(item => item.id === id);
+      return !priceList || !canUserViewPriceList(state.currentUser, priceList);
+    });
+    if (forbiddenId) {
+      const error = new Error(`403: Price list ${forbiddenId} is not available for sales`);
+      error.status = 403;
+      console.error(error);
+      showToast('403: Báº£ng giÃ¡ khÃ´ng Ä‘Æ°á»£c cáº¥p quyá»n cho kinh doanh.', 'danger');
+      return false;
+    }
+  }
   if (isCloudActive && supabaseClient) {
     try {
       const { data, error } = await supabaseClient.rpc('rpc_confirm_order', { p_order: order });

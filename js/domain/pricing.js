@@ -1,20 +1,54 @@
 export const PRICE_LIST_TYPES = Object.freeze({
+  GENERAL: 'general',
+  SALES: 'sales',
+  DEALER_PRIVATE: 'dealer_private',
   STANDARD: 'standard',
   CUSTOMER_GROUP: 'customer_group',
   CUSTOMER_SPECIFIC: 'customer_specific'
 });
 
 export function normalizePriceListType(type, customerId = null) {
-  if (type === PRICE_LIST_TYPES.STANDARD || type === 'general') {
-    return PRICE_LIST_TYPES.STANDARD;
+  if (type === PRICE_LIST_TYPES.GENERAL || type === PRICE_LIST_TYPES.STANDARD || type === 'standard') {
+    return PRICE_LIST_TYPES.GENERAL;
+  }
+  if (type === PRICE_LIST_TYPES.SALES || type === 'sale') {
+    return PRICE_LIST_TYPES.SALES;
   }
   if (type === PRICE_LIST_TYPES.CUSTOMER_GROUP || type === 'group') {
     return PRICE_LIST_TYPES.CUSTOMER_GROUP;
   }
-  if (type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC || type === 'customer') {
-    return PRICE_LIST_TYPES.CUSTOMER_SPECIFIC;
+  if (type === PRICE_LIST_TYPES.DEALER_PRIVATE || type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC || type === 'customer') {
+    return PRICE_LIST_TYPES.DEALER_PRIVATE;
   }
-  return customerId ? PRICE_LIST_TYPES.CUSTOMER_SPECIFIC : PRICE_LIST_TYPES.STANDARD;
+  return customerId ? PRICE_LIST_TYPES.DEALER_PRIVATE : PRICE_LIST_TYPES.GENERAL;
+}
+
+export function isPrivilegedPricingRole(user) {
+  return user?.role === 'admin' || user?.role === 'accounting';
+}
+
+export function isDealerPrivatePriceList(priceList) {
+  return normalizePriceListType(priceList?.type, priceList?.customerId) === PRICE_LIST_TYPES.DEALER_PRIVATE;
+}
+
+export function canUserViewPriceList(user, priceList, now = new Date()) {
+  if (!priceList || !isPriceListActive(priceList, now)) return false;
+  if (isPrivilegedPricingRole(user)) return true;
+  if (user?.role === 'sale') {
+    return priceList.isAvailableForSales === true && !isDealerPrivatePriceList(priceList);
+  }
+  return !isDealerPrivatePriceList(priceList);
+}
+
+export function filterPriceListsForUser(priceLists, user, now = new Date()) {
+  return sortPriceLists((priceLists || []).filter(priceList => canUserViewPriceList(user, priceList, now)));
+}
+
+export function assertCanUsePriceList(user, priceList, now = new Date()) {
+  if (canUserViewPriceList(user, priceList, now)) return true;
+  const error = new Error('FORBIDDEN_PRICE_LIST');
+  error.status = 403;
+  throw error;
 }
 
 export function isPriceListActive(priceList, now = new Date()) {
@@ -36,7 +70,7 @@ export function sortPriceLists(priceLists) {
 export function getStandardPriceList(priceLists, now = new Date()) {
   return sortPriceLists(
     (priceLists || []).filter(priceList =>
-      normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.STANDARD &&
+      normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.GENERAL &&
       isPriceListActive(priceList, now)
     )
   )[0] || null;
@@ -47,7 +81,7 @@ export function getApplicablePriceList(customer, priceLists, requestedPriceListI
 
   if (customer) {
     const specific = activeLists.find(priceList =>
-      normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC &&
+      normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.DEALER_PRIVATE &&
       priceList.customerId === customer.id
     );
     if (specific) return { priceList: specific, selectionSource: 'customer_specific' };
@@ -88,7 +122,7 @@ function findOverride(priceListItems, priceListId, productId) {
 
 function directSource(priceList) {
   const type = normalizePriceListType(priceList.type, priceList.customerId);
-  if (type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC) return 'specific';
+  if (type === PRICE_LIST_TYPES.DEALER_PRIVATE) return 'specific';
   if (type === PRICE_LIST_TYPES.CUSTOMER_GROUP) return 'group';
   return 'standard';
 }

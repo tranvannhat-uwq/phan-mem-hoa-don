@@ -2613,9 +2613,10 @@
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="pl-type">Loại bảng giá *</label>
               <select class="form-control" id="pl-type">
-                <option value="standard">Giá chung</option>
+                <option value="general">Giá chung</option>
+                <option value="sales">Bảng giá cho kinh doanh</option>
                 <option value="customer_group">Giá theo nhóm đại lý</option>
-                <option value="customer_specific">Giá riêng từng đại lý</option>
+                <option value="dealer_private">Giá riêng từng đại lý</option>
               </select>
             </div>
           </div>
@@ -2648,6 +2649,10 @@
           <label class="toggle-row">
             <input type="checkbox" id="pl-active" checked>
             <span>Đang áp dụng</span>
+          </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="pl-available-for-sales">
+            <span>Cho phép nhân viên kinh doanh xem và sử dụng</span>
           </label>
         </div>
         <div class="modal-footer">

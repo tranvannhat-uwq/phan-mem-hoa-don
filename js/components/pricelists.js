@@ -11,6 +11,8 @@ import { applyActivePriceListToInvoice } from './invoice.js?v=20260730-cashbook-
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
+  filterPriceListsForUser,
+  isDealerPrivatePriceList,
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
@@ -38,20 +40,22 @@ function formatVndInput(price) {
 
 function priceListBadge(priceList) {
   const type = normalizePriceListType(priceList.type, priceList.customerId);
-  if (type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC) return '<span class="price-type-badge specific">Giá riêng đại lý</span>';
+  if (type === PRICE_LIST_TYPES.DEALER_PRIVATE) return '<span class="price-type-badge specific">Bảng giá riêng - Bảo mật</span>';
+  if (type === PRICE_LIST_TYPES.SALES) return '<span class="price-type-badge sales">Sale được dùng</span>';
   if (type === PRICE_LIST_TYPES.CUSTOMER_GROUP) return '<span class="price-type-badge group">Giá nhóm</span>';
   return '<span class="price-type-badge standard">Giá chung</span>';
 }
 
 function priceListDisplayName(priceList) {
+  if (state.currentUser?.role === 'sale' && isDealerPrivatePriceList(priceList)) return 'Bảng giá riêng';
   const type = normalizePriceListType(priceList.type, priceList.customerId);
-  if (type !== PRICE_LIST_TYPES.CUSTOMER_SPECIFIC) return priceList.name;
+  if (type !== PRICE_LIST_TYPES.DEALER_PRIVATE) return priceList.name;
   const customer = state.customers.find(item => item.id === priceList.customerId);
   return customer ? `Giá riêng - ${customer.name}` : priceList.name;
 }
 
 function visiblePriceLists() {
-  return sortPriceLists((state.pricelists || []).filter(priceList => priceList.isActive !== false));
+  return filterPriceListsForUser(state.pricelists, state.currentUser);
 }
 
 function getFilteredMatrixProducts() {
@@ -110,7 +114,7 @@ function buildPriceListSelector() {
           </label>
           <div class="picker-actions">
             <button type="button" class="icon-btn edit-price-list" data-id="${priceList.id}" title="Sửa bảng giá"><i data-lucide="pencil"></i></button>
-            ${normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.STANDARD
+            ${normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.GENERAL
               ? `<button type="button" class="icon-btn delete-price-list" data-id="${priceList.id}" title="Ngừng áp dụng bảng giá"><i data-lucide="archive"></i></button>`
               : ''}
           </div>
@@ -177,7 +181,7 @@ function renderCell(product, priceList, effectivePriceItems) {
           placeholder="Chưa có giá"
           aria-label="${priceList.name} - ${product.code}"
         >
-        ${directItem && !pendingDelete && normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.STANDARD ? `
+        ${directItem && !pendingDelete && normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.GENERAL ? `
           <button class="icon-btn delete-price-override" data-price-list-id="${priceList.id}" data-product-id="${product.id}" title="Xóa giá riêng">
             <i data-lucide="rotate-ccw"></i>
           </button>
@@ -282,8 +286,9 @@ export function openPricelistModal(index = -1) {
   modal.classList.add('active');
   document.getElementById('pricelist-edit-index').value = String(index);
   document.getElementById('pricelist-edit-id').value = '';
-  document.getElementById('pl-type').value = PRICE_LIST_TYPES.STANDARD;
+  document.getElementById('pl-type').value = PRICE_LIST_TYPES.GENERAL;
   document.getElementById('pl-active').checked = true;
+  document.getElementById('pl-available-for-sales').checked = false;
   document.getElementById('pl-display-order').value = '0';
   document.getElementById('pricelist-modal-title').innerText = index === -1 ? 'Thêm bảng giá mới' : 'Chỉnh sửa bảng giá';
 
@@ -305,6 +310,7 @@ export function openPricelistModal(index = -1) {
     document.getElementById('pl-effective-to').value = priceList.effectiveTo || '';
     document.getElementById('pl-display-order').value = String(priceList.displayOrder || 0);
     document.getElementById('pl-active').checked = priceList.isActive !== false;
+    document.getElementById('pl-available-for-sales').checked = priceList.isAvailableForSales === true;
   }
   updatePricelistTypeFields();
 }
@@ -313,8 +319,13 @@ function updatePricelistTypeFields() {
   const type = document.getElementById('pl-type')?.value;
   const customerGroup = document.getElementById('pl-customer-field');
   const groupField = document.getElementById('pl-customer-group-field');
-  if (customerGroup) customerGroup.style.display = type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC ? 'block' : 'none';
+  if (customerGroup) customerGroup.style.display = type === PRICE_LIST_TYPES.DEALER_PRIVATE ? 'block' : 'none';
   if (groupField) groupField.style.display = type === PRICE_LIST_TYPES.CUSTOMER_GROUP ? 'block' : 'none';
+  const salesToggle = document.getElementById('pl-available-for-sales');
+  if (salesToggle) {
+    salesToggle.disabled = type === PRICE_LIST_TYPES.DEALER_PRIVATE;
+    if (type === PRICE_LIST_TYPES.DEALER_PRIVATE) salesToggle.checked = false;
+  }
 }
 
 export function closePricelistModal() {
@@ -326,7 +337,7 @@ export async function savePricelist() {
   const type = document.getElementById('pl-type').value;
   const customerId = document.getElementById('pl-customer-id').value || null;
   const customerGroupId = document.getElementById('pl-customer-group-id').value.trim() || null;
-  if (type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC && !customerId) {
+  if (type === PRICE_LIST_TYPES.DEALER_PRIVATE && !customerId) {
     showToast('Bảng giá riêng phải gắn với một khách hàng/đại lý.', 'warning');
     return;
   }
@@ -341,12 +352,13 @@ export async function savePricelist() {
     code: document.getElementById('pl-code').value.trim().toUpperCase(),
     name: document.getElementById('pl-name').value.trim(),
     type,
-    customerId: type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC ? customerId : null,
+    customerId: type === PRICE_LIST_TYPES.DEALER_PRIVATE ? customerId : null,
     customerGroupId: type === PRICE_LIST_TYPES.CUSTOMER_GROUP ? customerGroupId : null,
     parentPriceListId: document.getElementById('pl-parent-price-list-id').value || null,
     effectiveFrom: document.getElementById('pl-effective-from').value || '',
     effectiveTo: document.getElementById('pl-effective-to').value || '',
     isActive: document.getElementById('pl-active').checked,
+    isAvailableForSales: type === PRICE_LIST_TYPES.DEALER_PRIVATE ? false : document.getElementById('pl-available-for-sales').checked,
     displayOrder: Number(document.getElementById('pl-display-order').value || 0),
     brandDiscounts: {}
   };
@@ -411,7 +423,7 @@ export async function savePriceMatrix() {
 
 export async function deletePricelist(index) {
   const priceList = state.pricelists[index];
-  if (priceList && normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.STANDARD) {
+  if (priceList && normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.GENERAL) {
     showToast('Không thể xóa bảng Giá chung. Có thể ngừng áp dụng bảng giá khác.', 'warning');
     return;
   }
@@ -439,7 +451,7 @@ export function populatePricelistsDropdowns() {
   const customerSelect = document.getElementById('cust-pricelist');
   if (customerSelect) {
     const current = customerSelect.value;
-    customerSelect.innerHTML = `<option value="">Dùng Giá chung</option>${lists.filter(priceList => normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.CUSTOMER_SPECIFIC).map(priceList => `<option value="${priceList.id}">${priceList.name}</option>`).join('')}`;
+    customerSelect.innerHTML = `<option value="">Dùng Giá chung</option>${lists.filter(priceList => normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.DEALER_PRIVATE).map(priceList => `<option value="${priceList.id}">${priceList.name}</option>`).join('')}`;
     if ([...customerSelect.options].some(option => option.value === current)) customerSelect.value = current;
   }
 }
@@ -719,3 +731,4 @@ export function setupPricelistManagement() {
     }
   });
 }
+

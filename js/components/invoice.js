@@ -5,7 +5,7 @@ import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js?v=20260730-cashbook-reset';
 import { addCashbookTransaction } from './so_quy.js?v=20260730-cashbook-reset';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
 
 let currentOrderToPrint = null;
 let isSavingOrder = false;
@@ -29,9 +29,9 @@ function resolveProductPrice(product) {
   }
   return resolveCustomerProductPrice({
     productId,
-    customer,
+    customer: state.currentUser?.role === 'sale' ? null : customer,
     requestedPriceListId: selectedId,
-    priceLists: state.pricelists,
+    priceLists: filterPriceListsForUser(state.pricelists, state.currentUser),
     priceListItems: state.priceListItems
   });
 }
@@ -41,7 +41,8 @@ export function applyActivePriceListToInvoice() {
   if (!plSelect) return;
   const customer = state.activeCustomerId ? state.customers.find(item => item.id === state.activeCustomerId) : null;
   const requestedId = plSelect.value && plSelect.value !== 'retail' ? plSelect.value : '';
-  const applicable = getApplicablePriceList(customer, state.pricelists, requestedId);
+  const visibleLists = filterPriceListsForUser(state.pricelists, state.currentUser);
+  const applicable = getApplicablePriceList(state.currentUser?.role === 'sale' ? null : customer, visibleLists, requestedId);
   const activePriceList = applicable.priceList;
   if (customer && activePriceList && plSelect.value !== 'retail') plSelect.value = activePriceList.id;
   
@@ -73,8 +74,8 @@ export function applyActivePriceListToInvoice() {
       label.style.color = '#10b981';
     } else {
       const type = normalizePriceListType(activePriceList.type, activePriceList.customerId);
-      label.innerText = type === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC
-        ? `Giá riêng đại lý: ${activePriceList.name}`
+      label.innerText = type === PRICE_LIST_TYPES.DEALER_PRIVATE
+        ? (state.currentUser?.role === 'sale' ? 'Bảng giá đang áp dụng' : `Giá riêng đại lý: ${activePriceList.name}`)
         : `Bảng giá đang áp dụng: ${activePriceList.name}`;
       label.style.background = 'rgba(245, 158, 11, 0.1)';
       label.style.color = '#f59e0b';
@@ -591,6 +592,18 @@ export function compileActiveOrder() {
 
   const plSelect = document.getElementById('invoice-pricelist-select');
   const pricelistId = plSelect ? plSelect.value : 'retail';
+  if (state.currentUser?.role === 'sale') {
+    const selectedPriceListIds = new Set(state.invoiceItems.map(item => item.priceListId).filter(Boolean));
+    if (pricelistId && pricelistId !== 'retail') selectedPriceListIds.add(pricelistId);
+    const forbiddenId = [...selectedPriceListIds].find(id => {
+      const priceList = state.pricelists.find(item => item.id === id);
+      return !priceList || !canUserViewPriceList(state.currentUser, priceList);
+    });
+    if (forbiddenId) {
+      showToast('403: Bảng giá không được cấp quyền cho kinh doanh.', 'danger');
+      return null;
+    }
+  }
 
   // Lấy ID đơn hàng đang chỉnh sửa (nếu là sửa đơn nháp)
   const saveBtn = document.getElementById('btn-save-order');
@@ -1975,10 +1988,13 @@ function selectInvoiceCustomer(customer) {
     document.getElementById('selected-customer-address-lbl').innerText = provinceName ? `[${provinceName}] ${detailAddress}` : detailAddress;
     document.getElementById('selected-customer-brand-lbl').innerText = customer.assignedBrand;
     
-    const applicable = getApplicablePriceList(customer, state.pricelists);
+    const applicable = getApplicablePriceList(
+      state.currentUser?.role === 'sale' ? null : customer,
+      filterPriceListsForUser(state.pricelists, state.currentUser)
+    );
     const pl = applicable.priceList;
     const plName = pl
-      ? (normalizePriceListType(pl.type, pl.customerId) === PRICE_LIST_TYPES.CUSTOMER_SPECIFIC ? `Giá riêng đại lý - ${pl.name}` : pl.name)
+      ? (isDealerPrivatePriceList(pl) ? (state.currentUser?.role === 'sale' ? 'Theo danh sách được cấp' : `Giá riêng đại lý - ${pl.name}`) : pl.name)
       : 'Chưa xác định';
     const plLbl = document.getElementById('selected-customer-pricelist-lbl');
     if (plLbl) plLbl.innerText = plName;
@@ -1994,7 +2010,10 @@ function selectInvoiceCustomer(customer) {
   // Tự động gán bảng giá mặc định của đại lý
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
-    const applicable = getApplicablePriceList(customer, state.pricelists);
+    const applicable = getApplicablePriceList(
+      state.currentUser?.role === 'sale' ? null : customer,
+      filterPriceListsForUser(state.pricelists, state.currentUser)
+    );
     plSelect.value = applicable.priceList?.id || '';
     plSelect.disabled = state.currentUser?.role === 'sale';
   }

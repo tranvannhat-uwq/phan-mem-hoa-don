@@ -4,13 +4,16 @@ import {
   getApplicablePriceList,
   resolvePriceForList,
   resolveCustomerProductPrice,
+  filterPriceListsForUser,
+  canUserViewPriceList,
   parseVndInteger
 } from '../js/domain/pricing.js';
 
 const priceLists = [
-  { id: 'standard', name: 'Giá chung', type: PRICE_LIST_TYPES.STANDARD, isActive: true, displayOrder: 0 },
-  { id: 'bg03', name: 'BG03', type: PRICE_LIST_TYPES.CUSTOMER_GROUP, parentPriceListId: 'standard', isActive: true, displayOrder: 10 },
-  { id: 'tung-private', name: 'Giá Tùng Quảng Ninh', type: PRICE_LIST_TYPES.CUSTOMER_SPECIFIC, customerId: 'tung', parentPriceListId: 'bg03', isActive: true, displayOrder: 20 }
+  { id: 'standard', name: 'Giá chung', type: PRICE_LIST_TYPES.GENERAL, isActive: true, isAvailableForSales: false, displayOrder: 0 },
+  { id: 'sales-a', name: 'Bảng sale A', type: PRICE_LIST_TYPES.SALES, parentPriceListId: 'standard', isActive: true, isAvailableForSales: true, displayOrder: 5 },
+  { id: 'bg03', name: 'BG03', type: PRICE_LIST_TYPES.CUSTOMER_GROUP, parentPriceListId: 'standard', isActive: true, isAvailableForSales: false, displayOrder: 10 },
+  { id: 'tung-private', name: 'Giá Tùng Quảng Ninh', type: PRICE_LIST_TYPES.DEALER_PRIVATE, customerId: 'tung', parentPriceListId: 'bg03', isActive: true, isAvailableForSales: false, displayOrder: 20 }
 ];
 
 const standardOnly = [
@@ -83,6 +86,12 @@ const privatePrice = resolveCustomerProductPrice({
 assert.equal(privatePrice.price, 1900000);
 assert.equal(privatePrice.source, 'specific');
 assert.equal(privatePrice.priceListId, 'tung-private');
+
+const saleUser = { username: 'sale1', role: 'sale' };
+const saleVisible = filterPriceListsForUser(priceLists, saleUser).map(priceList => priceList.id);
+assert.deepEqual(saleVisible, ['sales-a']);
+assert.equal(canUserViewPriceList(saleUser, priceLists.find(priceList => priceList.id === 'tung-private')), false);
+assert.equal(canUserViewPriceList({ username: 'admin', role: 'admin' }, priceLists.find(priceList => priceList.id === 'tung-private')), true);
 
 const missing = resolvePriceForList({
   productId: 'new-sku',
