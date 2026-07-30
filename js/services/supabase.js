@@ -7,6 +7,22 @@ import { normalizePriceListType } from '../domain/pricing.js';
 export let supabaseClient = null;
 export let isCloudActive = false;
 
+function removeStorageKeysByPrefix(storage, prefixes) {
+  if (!storage) return;
+  for (let i = storage.length - 1; i >= 0; i -= 1) {
+    const key = storage.key(i);
+    if (key && prefixes.some(prefix => key.startsWith(prefix))) {
+      storage.removeItem(key);
+    }
+  }
+}
+
+export function clearSupabaseAuthStorage() {
+  const authKeyPrefixes = ['sb-', 'supabase.auth.token'];
+  removeStorageKeysByPrefix(localStorage, authKeyPrefixes);
+  removeStorageKeysByPrefix(sessionStorage, authKeyPrefixes);
+}
+
 // Tên các bảng trên cơ sở dữ liệu (tự động điều chỉnh dựa trên sự tồn tại của tiền tố wl_)
 export let tableProductsName = 'products';
 export let tableOrdersName = 'orders';
@@ -311,6 +327,7 @@ export async function connectSupabase(url, key, verbose = true) {
 export function disconnectSupabase() {
   localStorage.removeItem('billing_supabase_url');
   localStorage.removeItem('billing_supabase_key');
+  clearSupabaseAuthStorage();
   
   supabaseClient = null;
   isCloudActive = false;
@@ -534,6 +551,12 @@ export async function fetchCloudData() {
             shippingSupport: cust.shipping_support || false,
             debt: parseFloat(cust.debt || 0),
             totalTransaction: parseFloat(cust.total_transaction || 0),
+            totalReturn: parseFloat(cust.total_return || 0),
+            netRevenue: parseFloat(cust.net_revenue || 0),
+            lastOrderAt: cust.last_order_at || null,
+            lastPaymentAt: cust.last_payment_at || null,
+            createdAt: cust.created_at || null,
+            updatedAt: cust.updated_at || null,
             notes: cust.notes || '',
             pricelistId: cust.pricelist_id || '',
             defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
@@ -1486,12 +1509,16 @@ export async function dbSaveCustomersBulk(customers) {
   if (isCloudActive && supabaseClient) {
     try {
       const dbRows = customers.map(customer => mapCustomerToDbRow(customer));
-      
-      const { error } = await supabaseClient
-        .from(tableCustomersName)
-        .upsert(dbRows, { onConflict: 'id' });
-        
-      if (error) throw error;
+      const chunkSize = 200;
+
+      for (let offset = 0; offset < dbRows.length; offset += chunkSize) {
+        const chunk = dbRows.slice(offset, offset + chunkSize);
+        const { error } = await supabaseClient
+          .from(tableCustomersName)
+          .upsert(chunk, { onConflict: 'id' });
+
+        if (error) throw error;
+      }
       return true;
     } catch(err) {
       console.error(err);

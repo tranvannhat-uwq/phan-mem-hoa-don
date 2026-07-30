@@ -1,16 +1,16 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260729-sku-pricing';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260730-customer-created-debt-days';
 import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260729-order-export-fields';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260729-remove-order-deposit';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260730-customer-template-v2';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260730-customer-template-v2';
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260727-debt-audit3';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260729-history-financials';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260730-customer-template-v2';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260730-customer-template-v2';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260727-receipt-id';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260730-customer-template-v2';
 import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js';
 import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js';
 import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderKpiReport } from './components/reports.js';
@@ -27,6 +27,7 @@ export function renderAll() {
       renderProductsTable();
       break;
     case 'customers-panel':
+      populateCustomerEmployeeFilter();
       renderCustomersTable();
       break;
     case 'suppliers-panel':

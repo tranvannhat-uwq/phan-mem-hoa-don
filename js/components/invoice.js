@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260727-debt-audit2';
+import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260730-customer-created-debt-days';
 import { renderAll, switchTab } from '../main.js';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260729-order-export-fields';
-import { addCashbookTransaction } from './so_quy.js?v=20260727-receipt-id';
+import { generateUniqueCustomerCode } from './customers.js?v=20260730-customer-template-v2';
+import { addCashbookTransaction } from './so_quy.js?v=20260730-customer-template-v2';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js';
 
 let currentOrderToPrint = null;
@@ -1511,7 +1511,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
 
         ${printShippingFee > 0 ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách nhờ thanh toán cước</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu Khác</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">+${formatNumber(printShippingFee)}</td>
         </tr>
         ` : ''}

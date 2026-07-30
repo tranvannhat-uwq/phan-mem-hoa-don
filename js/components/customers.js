@@ -1,29 +1,191 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260727-debt-audit2';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260730-customer-created-debt-days';
 import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260729-remove-order-deposit';
-import { addCashbookTransaction } from './so_quy.js?v=20260727-receipt-id';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260730-customer-template-v2';
+import { addCashbookTransaction } from './so_quy.js?v=20260730-customer-template-v2';
 import { getOrderFinancialBreakdown } from '../domain/order-financials.js';
 
 const selectedCustomerIdsForExport = new Set();
 let activeExportOrders = null;
 let activeExportOrderIds = null;
 
+function parseImportedNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (value === null || value === undefined) return 0;
+  let normalized = String(value)
+    .replace(/\s/g, '')
+    .replace(/[^\d,.-]/g, '');
+  const hasComma = normalized.includes(',');
+  const hasDot = normalized.includes('.');
+  if (hasComma && hasDot) {
+    const decimalSeparator = normalized.lastIndexOf(',') > normalized.lastIndexOf('.') ? ',' : '.';
+    const thousandsSeparator = decimalSeparator === ',' ? '.' : ',';
+    normalized = normalized
+      .replace(new RegExp(`\\${thousandsSeparator}`, 'g'), '')
+      .replace(decimalSeparator, '.');
+  } else if (hasComma) {
+    const commaParts = normalized.split(',');
+    normalized = commaParts.length > 2 || commaParts.at(-1).length === 3
+      ? commaParts.join('')
+      : commaParts.join('.');
+  } else if (hasDot) {
+    const dotParts = normalized.split('.');
+    normalized = dotParts.length > 2 || dotParts.at(-1).length === 3
+      ? dotParts.join('')
+      : normalized;
+  }
+  const parsed = parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getTimestamp(value) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function parseImportedDate(value) {
+  if (!value) return '';
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : '';
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value) && globalThis.XLSX?.SSF?.parse_date_code) {
+    const parts = globalThis.XLSX.SSF.parse_date_code(value);
+    if (parts) {
+      return new Date(Date.UTC(
+        parts.y,
+        parts.m - 1,
+        parts.d,
+        parts.H || 0,
+        parts.M || 0,
+        Math.floor(parts.S || 0)
+      )).toISOString();
+    }
+  }
+
+  const text = String(value).trim();
+  const dayFirstMatch = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (dayFirstMatch) {
+    const [, day, month, year, hour = '0', minute = '0', second = '0'] = dayFirstMatch;
+    const parsed = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    );
+    if (
+      parsed.getFullYear() === Number(year) &&
+      parsed.getMonth() === Number(month) - 1 &&
+      parsed.getDate() === Number(day)
+    ) {
+      return parsed.toISOString();
+    }
+    return '';
+  }
+
+  const parsed = new Date(text);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : '';
+}
+
+function calculateCustomerTotals(customers) {
+  return (customers || []).reduce((totals, customer) => {
+    totals.count += 1;
+    totals.debt += parseImportedNumber(customer.debt);
+    totals.grossSales += parseImportedNumber(customer.totalTransaction ?? customer.total_transaction);
+    totals.totalReturns += parseImportedNumber(customer.totalReturn ?? customer.total_return);
+    totals.netSales += parseImportedNumber(customer.netRevenue ?? customer.net_revenue);
+    return totals;
+  }, { count: 0, debt: 0, grossSales: 0, totalReturns: 0, netSales: 0 });
+}
+
+function customerTotalsMatch(expected, actual) {
+  return ['debt', 'grossSales', 'totalReturns', 'netSales']
+    .every(key => Math.abs(expected[key] - actual[key]) < 1);
+}
+
+function makeImportCustomerCodesUnique(customers) {
+  const normalizeCode = code => String(code || '').trim().toUpperCase().normalize('NFC');
+  const reservedCodes = new Set(customers.map(customer => normalizeCode(customer.code)));
+  const usedCodes = new Set();
+  const occurrences = new Map();
+  let adjustedCount = 0;
+
+  customers.forEach(customer => {
+    const baseCode = String(customer.code || '').trim();
+    const normalizedBase = normalizeCode(baseCode);
+    const occurrence = (occurrences.get(normalizedBase) || 0) + 1;
+    occurrences.set(normalizedBase, occurrence);
+
+    if (!usedCodes.has(normalizedBase)) {
+      usedCodes.add(normalizedBase);
+      return;
+    }
+
+    let suffix = occurrence;
+    let candidate = `${baseCode}-DUP${suffix}`;
+    while (reservedCodes.has(normalizeCode(candidate)) || usedCodes.has(normalizeCode(candidate))) {
+      suffix += 1;
+      candidate = `${baseCode}-DUP${suffix}`;
+    }
+
+    customer.code = candidate;
+    usedCodes.add(normalizeCode(candidate));
+    adjustedCount += 1;
+  });
+
+  return adjustedCount;
+}
+
 export function getCustomerMetrics(c) {
   if (!c) return { grossSales: 0, totalReturns: 0, netSales: 0, returnRate: '0', currentDebt: 0, totalPayments: 0 };
+  const storedGrossSales = parseImportedNumber(c.totalTransaction ?? c.total_transaction ?? 0);
+  const storedReturns = parseImportedNumber(c.totalReturn ?? c.total_return ?? 0);
+  const storedNetSalesRaw = parseImportedNumber(c.netRevenue ?? c.net_revenue ?? 0);
+  const storedNetSales = storedNetSalesRaw || Math.max(0, storedGrossSales - storedReturns);
+  const baselineImportedAt = getTimestamp(
+    c.salesBaselineImportedAt ||
+    c.sales_baseline_imported_at ||
+    c.brandDiscounts?.salesBaselineImportedAt ||
+    c.brand_discounts?.salesBaselineImportedAt
+  );
+  if (baselineImportedAt || storedGrossSales || storedReturns || storedNetSalesRaw) {
+    const grossSales = storedGrossSales;
+    const totalReturns = storedReturns;
+    const netSales = storedNetSales;
+    const returnRate = grossSales > 0 ? ((totalReturns / grossSales) * 100).toFixed(1) : '0';
+    const currentDebt = parseImportedNumber(c.debt || 0);
+    const debtHistory = Array.isArray(c.debtHistory) ? c.debtHistory : [];
+    const collectedPayments = debtHistory
+      .filter(entry => entry.type === 'payment')
+      .reduce((sum, entry) => sum + Math.abs(parseImportedNumber(entry.amount)), 0);
+    const cancelledPayments = debtHistory
+      .filter(entry =>
+        entry.type === 'adjust' &&
+        String(entry.notes || entry.note || '').toLowerCase().includes('hủy phiếu thu')
+      )
+      .reduce((sum, entry) => sum + Math.abs(parseImportedNumber(entry.amount)), 0);
+    const totalPayments = Math.max(0, collectedPayments - cancelledPayments);
+    return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
+  }
+
   const customerOrders = state.savedOrders.filter(o => 
     (o.customerId === c.id || (o.customerName && o.customerName.toLowerCase() === c.name.toLowerCase())) &&
     (o.status === 'settled' || o.status === 'partially_returned' || o.status === 'returned')
   );
-  const grossSales = customerOrders.reduce((sum, o) => sum + (parseFloat(o.totalPayable) || 0), 0);
+  const orderGrossSales = customerOrders.reduce((sum, o) => sum + parseImportedNumber(o.totalPayable), 0);
   
   const customerReturns = (state.salesReturns || []).filter(r => 
     (r.customerId === c.id || (r.customerName && r.customerName.toLowerCase() === c.name.toLowerCase())) &&
     r.status !== 'cancelled'
   );
-  const totalReturns = customerReturns.reduce((sum, r) => sum + (parseFloat(r.totalRefund) || 0), 0);
+  const liveReturns = customerReturns.reduce((sum, r) => sum + parseImportedNumber(r.totalRefund), 0);
   
+  const grossSales = orderGrossSales;
+  const totalReturns = liveReturns;
   const netSales = Math.max(0, grossSales - totalReturns);
   const returnRate = grossSales > 0 ? ((totalReturns / grossSales) * 100).toFixed(1) : '0';
   const currentDebt = parseFloat(c.debt || 0);
@@ -51,7 +213,8 @@ function getCustomerLastTransactionDate(c) {
     if (Number.isFinite(time)) timestamps.push(time);
   };
 
-  addDate(c.lastOrderAt || c.last_order_at || c.lastPaymentAt || c.last_payment_at || c.updatedAt || c.updated_at);
+  addDate(c.lastOrderAt || c.last_order_at);
+  addDate(c.lastPaymentAt || c.last_payment_at);
 
   (state.savedOrders || []).forEach(o => {
     const belongsToCustomer = o.customerId === c.id || (o.customerName && c.name && o.customerName.toLowerCase() === c.name.toLowerCase());
@@ -66,7 +229,9 @@ function getCustomerLastTransactionDate(c) {
   });
 
   const debtHistory = Array.isArray(c.debtHistory) ? c.debtHistory : [];
-  debtHistory.forEach(entry => addDate(entry.date || entry.createdAt || entry.transactionDate));
+  debtHistory
+    .filter(entry => entry.type !== 'adjust' || !String(entry.notes || entry.note || '').toLowerCase().includes('kiotviet'))
+    .forEach(entry => addDate(entry.date || entry.createdAt || entry.transactionDate));
 
   if (timestamps.length === 0) return '';
   return new Date(Math.max(...timestamps)).toISOString();
@@ -109,16 +274,19 @@ export function renderCustomersTable() {
   
   // Tính toán tổng nợ và doanh thu đại lý lọc được
   const totalDebt = filtered.reduce((sum, c) => sum + (parseFloat(c.debt) || 0), 0);
+  let totalNetSales = 0;
   const totalSales = filtered.reduce((sum, c) => {
     const metrics = getCustomerMetrics(c);
-    c.totalTransaction = metrics.grossSales;
+    totalNetSales += metrics.netSales;
     return sum + metrics.grossSales;
   }, 0);
   
   const debtEl = document.getElementById('cust-summary-total-debt');
   const salesEl = document.getElementById('cust-summary-total-sales');
+  const netSalesEl = document.getElementById('cust-summary-net-sales');
   if (debtEl) debtEl.innerText = formatCurrency(totalDebt);
   if (salesEl) salesEl.innerText = formatCurrency(totalSales);
+  if (netSalesEl) netSalesEl.innerText = formatCurrency(totalNetSales);
   
   // Sắp xếp theo bảng chữ cái tên đại lý
   filtered.sort((a, b) => a.name.localeCompare(b.name));
@@ -172,7 +340,7 @@ export function renderCustomersTable() {
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="15" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không tìm thấy khách hàng nào.
         </td>
       </tr>
@@ -193,7 +361,7 @@ export function renderCustomersTable() {
       const discSummary = [];
       if (c.brandDiscounts) {
         for (const [brand, pct] of Object.entries(c.brandDiscounts)) {
-          if (brand !== 'province' && pct > 0) {
+          if (!['province', 'salesBaselineImportedAt', 'debtDays'].includes(brand) && pct > 0) {
             discSummary.push(`${brand}: ${pct}%`);
           }
         }
@@ -231,9 +399,11 @@ export function renderCustomersTable() {
     const addrTitle = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '');
     
     const metrics = getCustomerMetrics(c);
-    c.totalTransaction = metrics.grossSales;
     const lastTransactionDate = getCustomerLastTransactionDate(c);
     const lastTransactionLabel = lastTransactionDate ? formatDateOnly(lastTransactionDate) : '<span style="color: var(--text-muted);">Chưa có</span>';
+    const createdAt = c.createdAt || c.created_at;
+    const createdAtLabel = createdAt ? formatDateOnly(createdAt) : '<span style="color: var(--text-muted);">Chưa có</span>';
+    const debtDays = Math.max(0, Math.trunc(parseImportedNumber(c.debtDays ?? c.brandDiscounts?.debtDays ?? 0)));
     
     return `
       <tr>
@@ -258,6 +428,8 @@ export function renderCustomersTable() {
         <td class="customer-money-cell" style="color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
         <td class="customer-money-cell" style="color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
         <td class="customer-money-cell" style="color: #10b981;">${formatCurrency(metrics.netSales)}</td>
+        <td style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${createdAtLabel}</td>
+        <td style="text-align: center; font-size: 0.8rem; color: ${debtDays > 0 ? 'var(--color-warning)' : 'var(--text-muted)'}; white-space: nowrap;">${debtDays}</td>
         <td style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${lastTransactionLabel}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
@@ -583,6 +755,12 @@ export async function saveCustomer() {
   if (provinceSelect) {
     brandDiscounts.province = provinceSelect.value;
   }
+  if (index !== -1 && state.customers[index].brandDiscounts?.salesBaselineImportedAt) {
+    brandDiscounts.salesBaselineImportedAt = state.customers[index].brandDiscounts.salesBaselineImportedAt;
+  }
+  if (index !== -1 && state.customers[index].brandDiscounts?.debtDays !== undefined) {
+    brandDiscounts.debtDays = state.customers[index].brandDiscounts.debtDays;
+  }
   
   const customerId = index === -1 ? `cust-${Date.now()}` : editId;
   
@@ -618,6 +796,13 @@ export async function saveCustomer() {
     brandDiscounts,
     debt,
     totalTransaction: index === -1 ? 0 : state.customers[index].totalTransaction || 0,
+    totalReturn: index === -1 ? 0 : state.customers[index].totalReturn || 0,
+    netRevenue: index === -1 ? 0 : state.customers[index].netRevenue || 0,
+    debtDays: index === -1 ? 0 : state.customers[index].debtDays ?? state.customers[index].brandDiscounts?.debtDays ?? 0,
+    lastOrderAt: index === -1 ? null : state.customers[index].lastOrderAt || state.customers[index].last_order_at || null,
+    lastPaymentAt: index === -1 ? null : state.customers[index].lastPaymentAt || state.customers[index].last_payment_at || null,
+    createdAt: index === -1 ? new Date().toISOString() : state.customers[index].createdAt || state.customers[index].created_at || new Date().toISOString(),
+    salesBaselineImportedAt: index === -1 ? '' : state.customers[index].salesBaselineImportedAt || '',
     notes,
     pricelistId,
     managedBy,
@@ -984,7 +1169,10 @@ export function downloadCustomerExcelTemplate() {
       "Tổng doanh số": 85000000,
       "Tổng giá trị trả hàng": 5000000,
       "Doanh số sau trả": 80000000,
-      "Công nợ hiện tại": 15000000
+      "Công nợ hiện tại": 15000000,
+      "Ngày giao dịch cuối": new Date(2026, 6, 25),
+      "Ngày tạo": new Date(2024, 2, 15),
+      "Số ngày nợ": 5
     },
     {
       "Mã khách hàng": "BG02-HP-002",
@@ -997,7 +1185,10 @@ export function downloadCustomerExcelTemplate() {
       "Tổng doanh số": 42000000,
       "Tổng giá trị trả hàng": 0,
       "Doanh số sau trả": 42000000,
-      "Công nợ hiện tại": 0
+      "Công nợ hiện tại": 0,
+      "Ngày giao dịch cuối": new Date(2026, 6, 20),
+      "Ngày tạo": new Date(2024, 4, 10),
+      "Số ngày nợ": 0
     },
     {
       "Mã khách hàng": "BG03-DN-003",
@@ -1010,7 +1201,10 @@ export function downloadCustomerExcelTemplate() {
       "Tổng doanh số": 120000000,
       "Tổng giá trị trả hàng": 10000000,
       "Doanh số sau trả": 110000000,
-      "Công nợ hiện tại": 5500000
+      "Công nợ hiện tại": 5500000,
+      "Ngày giao dịch cuối": new Date(2026, 6, 12),
+      "Ngày tạo": new Date(2023, 10, 2),
+      "Số ngày nợ": 18
     },
     {
       "Mã khách hàng": "BG04-TH-004",
@@ -1023,7 +1217,10 @@ export function downloadCustomerExcelTemplate() {
       "Tổng doanh số": 65000000,
       "Tổng giá trị trả hàng": 2000000,
       "Doanh số sau trả": 63000000,
-      "Công nợ hiện tại": 2550000
+      "Công nợ hiện tại": 2550000,
+      "Ngày giao dịch cuối": new Date(2026, 6, 8),
+      "Ngày tạo": new Date(2024, 7, 21),
+      "Số ngày nợ": 22
     },
     {
       "Mã khách hàng": "BG05-BD-005",
@@ -1036,7 +1233,10 @@ export function downloadCustomerExcelTemplate() {
       "Tổng doanh số": 195000000,
       "Tổng giá trị trả hàng": 0,
       "Doanh số sau trả": 195000000,
-      "Công nợ hiện tại": 0
+      "Công nợ hiện tại": 0,
+      "Ngày giao dịch cuối": new Date(2026, 6, 1),
+      "Ngày tạo": new Date(2025, 0, 8),
+      "Số ngày nợ": 0
     }
   ];
 
@@ -1052,8 +1252,17 @@ export function downloadCustomerExcelTemplate() {
     { wch: 18 }, // Tổng doanh số
     { wch: 22 }, // Tổng giá trị trả hàng
     { wch: 20 }, // Doanh số sau trả
-    { wch: 20 }  // Công nợ hiện tại
+    { wch: 20 }, // Công nợ hiện tại
+    { wch: 20 }, // Ngày giao dịch cuối
+    { wch: 16 }, // Ngày tạo
+    { wch: 14 }  // Số ngày nợ
   ];
+
+  for (let row = 2; row <= sampleData.length + 1; row++) {
+    if (worksheet[`L${row}`]) worksheet[`L${row}`].z = 'yyyy-mm-dd';
+    if (worksheet[`M${row}`]) worksheet[`M${row}`].z = 'yyyy-mm-dd';
+    if (worksheet[`N${row}`]) worksheet[`N${row}`].z = '0';
+  }
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "DanhSachKhachHang");
@@ -1838,6 +2047,7 @@ export function populateManagedByDropdown() {
 }
 
 let custExcelImportData = [];
+let custExcelDuplicateCodeCount = 0;
 let isSelectingFile = false;
 
 export function openCustExcelModal() {
@@ -1849,6 +2059,7 @@ export function openCustExcelModal() {
 
     // Reset UI
     custExcelImportData = [];
+    custExcelDuplicateCodeCount = 0;
     document.getElementById('cust-excel-file-input').value = '';
     document.getElementById('cust-excel-preview-container').style.display = 'none';
     const submitBtn = document.getElementById('btn-save-cust-excel-submit');
@@ -1873,7 +2084,7 @@ function handleCustExcelFile(file) {
   reader.onload = function(e) {
     try {
       const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -1898,6 +2109,14 @@ function handleCustExcelFile(file) {
         netSales: headers.indexOf('Doanh số sau trả'),
         excelPricelist: headers.indexOf('Bảng giá'),
         excelManager: headers.indexOf('Nhóm khách hàng') !== -1 ? headers.indexOf('Nhóm khách hàng') : (headers.indexOf('Người quản lý') !== -1 ? headers.indexOf('Người quản lý') : headers.indexOf('Người tạo')),
+        notes: headers.indexOf('Ghi chú') !== -1 ? headers.indexOf('Ghi chú') : headers.indexOf('Ghi chu'),
+        lastTransactionAt: headers.indexOf('Ngày giao dịch cuối') !== -1
+          ? headers.indexOf('Ngày giao dịch cuối')
+          : (headers.indexOf('Ngày giao dịch cuối cùng') !== -1
+            ? headers.indexOf('Ngày giao dịch cuối cùng')
+            : headers.indexOf('Giao dịch cuối')),
+        createdAt: headers.indexOf('Ngày tạo'),
+        debtDays: headers.indexOf('Số ngày nợ'),
       };
       
       if (colMap.name === -1) {
@@ -1946,7 +2165,9 @@ function handleCustExcelFile(file) {
       };
 
       custExcelImportData = [];
+      custExcelDuplicateCodeCount = 0;
       const previewRows = [];
+      const importTimestamp = new Date().toISOString();
       
       const provinces = Object.entries(PROVINCES).map(([code, name]) => ({ code, name }));
       
@@ -1960,8 +2181,18 @@ function handleCustExcelFile(file) {
         let code = colMap.code !== -1 ? (row[colMap.code] || '').toString().trim().toUpperCase().normalize('NFC') : '';
         let phone = colMap.phone !== -1 ? (row[colMap.phone] || '').toString().trim() : '';
         let address = colMap.address !== -1 ? (row[colMap.address] || '').toString().trim() : '';
-        let debt = colMap.debt !== -1 ? parseFloat(row[colMap.debt]) || 0 : 0;
-        let totalTransaction = colMap.totalTransaction !== -1 ? parseFloat(row[colMap.totalTransaction]) || 0 : 0;
+        let debt = colMap.debt !== -1 ? parseImportedNumber(row[colMap.debt]) : 0;
+        let totalTransaction = colMap.totalTransaction !== -1 ? parseImportedNumber(row[colMap.totalTransaction]) : 0;
+        let totalReturn = colMap.totalReturns !== -1 ? parseImportedNumber(row[colMap.totalReturns]) : 0;
+        let netRevenue = colMap.netSales !== -1 ? parseImportedNumber(row[colMap.netSales]) : Math.max(0, totalTransaction - totalReturn);
+        let notes = colMap.notes !== -1 && row[colMap.notes] ? row[colMap.notes].toString().trim() : '';
+        let lastTransactionAt = colMap.lastTransactionAt !== -1
+          ? parseImportedDate(row[colMap.lastTransactionAt])
+          : '';
+        let createdAt = colMap.createdAt !== -1 ? parseImportedDate(row[colMap.createdAt]) : '';
+        let debtDays = colMap.debtDays !== -1
+          ? Math.max(0, Math.trunc(parseImportedNumber(row[colMap.debtDays])))
+          : null;
         
         const nameLower = name.toLowerCase();
         const codeLower = code.toLowerCase();
@@ -2028,11 +2259,21 @@ function handleCustExcelFile(file) {
           phone: phone,
           address: address,
           assignedBrand: assignedBrand,
-          brandDiscounts: { province: provinceCode },
+          brandDiscounts: {
+            province: provinceCode,
+            salesBaselineImportedAt: importTimestamp,
+            ...(debtDays !== null ? { debtDays } : {})
+          },
           shippingSupport: false,
           debt: debt,
           totalTransaction: totalTransaction,
-          notes: 'Imported from KiotViet',
+          totalReturn: totalReturn,
+          netRevenue: netRevenue,
+          debtDays: debtDays ?? 0,
+          lastOrderAt: lastTransactionAt || null,
+          createdAt: createdAt || null,
+          salesBaselineImportedAt: importTimestamp,
+          notes: notes || 'Imported from KiotViet',
           pricelistId: pricelistId,
           managedBy: (() => {
             // 1. Nếu Excel có cột Người quản lý và có giá trị, tìm khớp
@@ -2060,25 +2301,31 @@ function handleCustExcelFile(file) {
         };
         
         custExcelImportData.push(customerObj);
-        
-        if (previewRows.length < 5) {
-          previewRows.push({
-            code: code,
-            name: name,
-            phone: phone,
-            address: address,
-            province: provinceCode,
-            pricelistId: pricelistId,
-            debt: debt,
-            totalTransaction: totalTransaction
-          });
-        }
       }
       
       if (custExcelImportData.length === 0) {
         showToast("Không phân tích được khách hàng nào hợp lệ!", "warning");
         return;
       }
+
+      custExcelDuplicateCodeCount = makeImportCustomerCodesUnique(custExcelImportData);
+      custExcelImportData.slice(0, 5).forEach(customer => {
+        previewRows.push({
+          code: customer.code,
+          name: customer.name,
+          phone: customer.phone,
+          address: customer.address,
+          province: customer.brandDiscounts?.province || 'OTHER',
+          pricelistId: customer.pricelistId,
+          debt: customer.debt,
+          totalTransaction: customer.totalTransaction,
+          totalReturn: customer.totalReturn,
+          netRevenue: customer.netRevenue,
+          lastOrderAt: customer.lastOrderAt,
+          createdAt: customer.createdAt,
+          debtDays: customer.debtDays
+        });
+      });
       
       // Render preview table
       const previewBody = document.getElementById('cust-excel-preview-table-body');
@@ -2095,6 +2342,9 @@ function handleCustExcelFile(file) {
               <td>${c.phone || '-'}</td>
               <td>[${provName}] ${c.address || '-'}</td>
               <td>${plName}</td>
+              <td style="text-align: center; white-space: nowrap;">${c.lastOrderAt ? formatDateOnly(c.lastOrderAt) : '-'}</td>
+              <td style="text-align: center; white-space: nowrap;">${c.createdAt ? formatDateOnly(c.createdAt) : '-'}</td>
+              <td style="text-align: center;">${c.debtDays}</td>
               <td style="text-align: right;">${formatCurrency(c.debt)}</td>
               <td style="text-align: right;">${formatCurrency(c.totalTransaction)}</td>
             </tr>
@@ -2104,7 +2354,17 @@ function handleCustExcelFile(file) {
       
       const summaryText = document.getElementById('cust-excel-preview-summary');
       if (summaryText) {
-        summaryText.innerText = `Hiển thị 5 trên tổng số ${custExcelImportData.length} khách hàng đọc được từ file.`;
+        const totals = calculateCustomerTotals(custExcelImportData);
+        summaryText.innerHTML = `
+          Đã đọc <strong>${totals.count}</strong> khách hàng.
+          Công nợ: <strong>${formatCurrency(totals.debt)}</strong> ·
+          Doanh số: <strong>${formatCurrency(totals.grossSales)}</strong> ·
+          Trả hàng: <strong>${formatCurrency(totals.totalReturns)}</strong> ·
+          Sau trả hàng: <strong>${formatCurrency(totals.netSales)}</strong>
+          ${custExcelDuplicateCodeCount > 0
+            ? ` · Đã đổi mã cho <strong>${custExcelDuplicateCodeCount}</strong> dòng bị trùng để lưu đủ dữ liệu.`
+            : ''}
+        `;
       }
       
       const previewContainer = document.getElementById('cust-excel-preview-container');
@@ -2141,7 +2401,6 @@ async function processCustomerExcelImport() {
     await dbFetchCustomers();
     
     showToast("Đang nhập dữ liệu khách hàng vào hệ thống...", "info");
-    let successCount = 0;
     
     // Import mode overwrite: delete existing customers
     if (mode === 'overwrite') {
@@ -2154,12 +2413,15 @@ async function processCustomerExcelImport() {
       }
     }
     
-    // Process local array mapping first (in-memory)
+    // Mỗi khách hiện có chỉ được ghép một lần để các mã trùng trong Excel
+    // vẫn được giữ thành các dòng khách hàng riêng biệt.
+    const claimedExistingIds = new Set();
     for (const c of custExcelImportData) {
       let idx = -1;
       if (mode === 'merge') {
         const cCodeClean = c.code.trim().toUpperCase().normalize('NFC');
-        idx = state.customers.findIndex(oc => 
+        idx = state.customers.findIndex(oc =>
+          !claimedExistingIds.has(oc.id) &&
           (oc.code || '').toString().trim().toUpperCase().normalize('NFC') === cCodeClean
         );
       }
@@ -2167,15 +2429,24 @@ async function processCustomerExcelImport() {
       if (idx > -1) {
         // Update existing customer
         const oldId = state.customers[idx].id;
+        claimedExistingIds.add(oldId);
         c.id = oldId; // keep original ID
         
         // Merge debt histories
         const oldHistory = state.customers[idx].debtHistory || [];
         c.debtHistory = [...oldHistory, ...c.debtHistory];
+        c.lastOrderAt = c.lastOrderAt || state.customers[idx].lastOrderAt || state.customers[idx].last_order_at || null;
+        c.lastPaymentAt = state.customers[idx].lastPaymentAt || state.customers[idx].last_payment_at || null;
+        c.createdAt = c.createdAt || state.customers[idx].createdAt || state.customers[idx].created_at || new Date().toISOString();
+        if (c.brandDiscounts?.debtDays === undefined && state.customers[idx].brandDiscounts?.debtDays !== undefined) {
+          c.brandDiscounts.debtDays = state.customers[idx].brandDiscounts.debtDays;
+          c.debtDays = state.customers[idx].brandDiscounts.debtDays;
+        }
         
         state.customers[idx] = c;
       } else {
         // Insert new customer
+        c.createdAt = c.createdAt || new Date().toISOString();
         state.customers.push(c);
       }
     }
@@ -2189,10 +2460,30 @@ async function processCustomerExcelImport() {
     
     const saved = await dbSaveCustomersBulk(uniqueImportData);
     if (saved) {
+      const expectedTotals = calculateCustomerTotals(uniqueImportData);
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      const refreshedFromCloud = await dbFetchCustomers();
+      const importedIds = new Set(uniqueImportData.map(customer => customer.id));
+      const persistedImportData = refreshedFromCloud
+        ? state.customers.filter(customer => importedIds.has(customer.id))
+        : uniqueImportData;
+      const persistedTotals = calculateCustomerTotals(persistedImportData);
+
+      if (persistedImportData.length !== uniqueImportData.length || !customerTotalsMatch(expectedTotals, persistedTotals)) {
+        console.error('Customer Excel import verification failed', { expectedTotals, persistedTotals });
+        showToast(
+          `Dữ liệu lưu chưa khớp file. Mong đợi ${formatCurrency(expectedTotals.grossSales)}, máy chủ trả về ${formatCurrency(persistedTotals.grossSales)}.`,
+          "danger"
+        );
+        return;
+      }
+
       renderAll();
       closeCustExcelModal();
-      showToast(`Nhập dữ liệu thành công! Đã thêm/cập nhật ${uniqueImportData.length} khách hàng.`, "success");
+      showToast(
+        `Đã nhập đủ ${uniqueImportData.length} khách hàng · Doanh số ${formatCurrency(persistedTotals.grossSales)} · Sau trả hàng ${formatCurrency(persistedTotals.netSales)}.`,
+        "success"
+      );
     }
   } catch (err) {
     console.error(err);

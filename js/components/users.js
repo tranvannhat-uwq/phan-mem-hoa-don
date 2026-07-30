@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData } from '../services/supabase.js?v=20260727-debt-audit2';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260730-customer-created-debt-days';
 import { renderAll, switchTab } from '../main.js';
-import { populateManagedByDropdown } from './customers.js?v=20260729-order-export-fields';
+import { populateManagedByDropdown } from './customers.js?v=20260730-customer-template-v2';
 import { exportBackupToExcel } from '../services/backup.js';
 
 export function renderUsersTable() {
@@ -542,6 +542,7 @@ export async function handleLogout() {
       console.error('Sign out error:', err);
     }
   }
+  clearSupabaseAuthStorage();
   location.reload();
 }
 

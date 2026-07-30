@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260727-debt-audit2';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260730-customer-created-debt-days';
 import { renderAll } from '../main.js';
-import { openPrintTypeModal } from './invoice.js?v=20260729-remove-order-deposit';
-import { openHistoryOrderExportModal } from './customers.js?v=20260729-order-export-fields';
+import { openPrintTypeModal } from './invoice.js?v=20260730-customer-template-v2';
+import { openHistoryOrderExportModal } from './customers.js?v=20260730-customer-template-v2';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
@@ -1307,6 +1307,8 @@ export async function cancelSalesReturn(returnId) {
       const oldDebt = parseFloat(cust.debt || 0);
       const newDebt = oldDebt + ret.totalRefund;
       cust.debt = newDebt;
+      cust.totalReturn = Math.max(0, (parseFloat(cust.totalReturn || cust.total_return || 0) || 0) - ret.totalRefund);
+      cust.netRevenue = Math.round((parseFloat(cust.netRevenue || cust.net_revenue || 0) || 0) + ret.totalRefund);
 
       if (!cust.debtHistory) cust.debtHistory = [];
       cust.debtHistory.push({
