@@ -8,74 +8,158 @@ import {
   tableOrdersName,
   tableDraftOrdersName,
   tablePricelistsName,
+  tableCashbookTransactionsName,
+  tableStartingBalancesName,
+  tableProductionLogsName,
+  tableFinishedGoodsStockName,
+  tableSalesReturnsName,
+  tableSalesReturnItemsName,
+  tableOrderItemsName,
+  tableCustomerDebtTransactionsName,
+  tableCommissionTransactionsName,
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js';
+} from './supabase.js?v=20260730-cashbook-reset';
 
-export async function clearAllSampleData(onCompleteCallback) {
-  if (!confirm('CẢNH BÁO: Thao tác này sẽ XÓA SẠCH toàn bộ dữ liệu sản phẩm mẫu, đơn hàng mẫu, khách hàng mẫu, nhà cung cấp mẫu, bảng giá mẫu và nguyên vật liệu mẫu!\n\nCác tài khoản đăng nhập của bạn sẽ giữ nguyên.\n\nBạn có chắc chắn muốn xóa sạch dữ liệu mẫu không?')) {
+async function deleteAllRows(tableName, key = 'id') {
+  const { error } = await supabaseClient
+    .from(tableName)
+    .delete()
+    .not(key, 'is', null);
+  if (error) throw error;
+}
+
+async function restoreCustomerBaselines() {
+  const [
+    { data: customers, error: customerError },
+    { data: orders, error: orderError },
+    { data: returns, error: returnError },
+    { data: debtTransactions, error: debtError }
+  ] = await Promise.all([
+    supabaseClient.from(tableCustomersName).select('id,total_transaction,total_return,net_revenue,debt'),
+    supabaseClient.from(tableOrdersName).select('customer_id,total_payable,total_amount'),
+    supabaseClient.from(tableSalesReturnsName).select('customer_id,total_refund,created_at'),
+    supabaseClient
+      .from(tableCustomerDebtTransactionsName)
+      .select('customer_id,balance_before,transaction_date,created_at')
+      .order('transaction_date', { ascending: true })
+      .order('created_at', { ascending: true })
+  ]);
+
+  const loadError = customerError || orderError || returnError || debtError;
+  if (loadError) throw loadError;
+
+  const orderTotals = new Map();
+  (orders || []).forEach(order => {
+    if (!order.customer_id) return;
+    const amount = Number(order.total_payable ?? order.total_amount ?? 0) || 0;
+    orderTotals.set(order.customer_id, (orderTotals.get(order.customer_id) || 0) + amount);
+  });
+
+  const returnTotals = new Map();
+  (returns || []).forEach(item => {
+    if (!item.customer_id) return;
+    const amount = Number(item.total_refund || 0) || 0;
+    returnTotals.set(item.customer_id, (returnTotals.get(item.customer_id) || 0) + amount);
+  });
+
+  const initialDebt = new Map();
+  (debtTransactions || []).forEach(transaction => {
+    if (transaction.customer_id && !initialDebt.has(transaction.customer_id)) {
+      initialDebt.set(transaction.customer_id, Number(transaction.balance_before || 0) || 0);
+    }
+  });
+
+  const affectedCustomerIds = new Set([
+    ...orderTotals.keys(),
+    ...returnTotals.keys(),
+    ...initialDebt.keys()
+  ]);
+
+  for (const customer of customers || []) {
+    if (!affectedCustomerIds.has(customer.id)) continue;
+    const orderTotal = orderTotals.get(customer.id) || 0;
+    const returnTotal = returnTotals.get(customer.id) || 0;
+    const changes = {
+      total_transaction: Math.max(0, (Number(customer.total_transaction || 0) || 0) - orderTotal),
+      total_return: Math.max(0, (Number(customer.total_return || 0) || 0) - returnTotal),
+      net_revenue: Math.max(0, (Number(customer.net_revenue || 0) || 0) - orderTotal + returnTotal),
+      debt: initialDebt.has(customer.id) ? initialDebt.get(customer.id) : (Number(customer.debt || 0) || 0)
+    };
+    const { error } = await supabaseClient
+      .from(tableCustomersName)
+      .update(changes)
+      .eq('id', customer.id);
+    if (error) throw error;
+  }
+}
+
+export async function clearTestData(onCompleteCallback) {
+  const confirmed = confirm(
+    'XÓA DỮ LIỆU THỬ NGHIỆM?\n\n' +
+    'Sẽ xóa: đơn bán, đơn nháp, trả hàng, phiếu nhập hàng, Sổ quỹ, số dư đầu kỳ, tồn kho phát sinh, nhật ký sản xuất, hoa hồng và lịch sử công nợ phát sinh.\n\n' +
+    'Sẽ giữ nguyên: sản phẩm, bảng giá, khách hàng, tài khoản, nhà cung cấp, nhãn sơn và danh mục nguyên vật liệu.\n\n' +
+    'Thao tác này không thể hoàn tác nếu chưa có file sao lưu.'
+  );
+  if (!confirmed) {
     return;
   }
 
-  showToast('Đang tiến hành xóa sạch dữ liệu mẫu...', 'info');
+  const clearButton = document.getElementById('btn-clear-sample-data');
+  if (clearButton) clearButton.disabled = true;
+  showToast('Đang xóa dữ liệu thử nghiệm...', 'info');
 
-  // 1. Xóa toàn bộ dữ liệu trong State (trừ tài khoản người dùng)
-  state.products = [];
+  // Clear local operational data while preserving all master-data collections.
   state.savedOrders = [];
-  state.customers = [];
-  state.suppliers = [];
-  state.pricelists = [];
-  state.rawMaterials = [];
-  state.semiFinished = [];
-  state.recipes = [];
   state.productionLogs = [];
   state.finishedGoodsStock = [];
   state.salesReturns = [];
 
-  // Lọc danh sách hãng sơn: xóa các hãng sơn mẫu cova, mutsutec, tdkaw
-  if (state.brands) {
-    state.brands = state.brands.filter(b => {
-      const bName = (b.name || '').trim().toLowerCase();
-      return bName !== 'cova' && bName !== 'mutsutec' && bName !== 'tdkaw';
-    });
-  }
-
-  // 2. Cập nhật LocalStorage
-  localStorage.setItem('billing_system_products', JSON.stringify([]));
   localStorage.setItem('billing_system_orders', JSON.stringify([]));
-  localStorage.setItem('billing_system_customers', JSON.stringify([]));
-  localStorage.setItem('billing_system_suppliers', JSON.stringify([]));
-  localStorage.setItem('billing_system_pricelists', JSON.stringify([]));
-  localStorage.setItem('billing_system_raw_materials', JSON.stringify([]));
-  localStorage.setItem('billing_system_semi_finished', JSON.stringify([]));
-  localStorage.setItem('billing_system_recipes', JSON.stringify([]));
+  localStorage.setItem('billing_system_sales_returns', JSON.stringify([]));
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify([]));
+  localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify({ cash: 0, bank: 0, wallet: 0 }));
   localStorage.setItem('billing_system_production_logs', JSON.stringify([]));
   localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify([]));
-  localStorage.setItem('billing_system_brands', JSON.stringify(state.brands || []));
+  [
+    'billing_system_goods_receipts',
+    'billing_system_purchase_orders',
+    'billing_system_purchases',
+    'billing_system_purchase_receipts',
+    'billing_system_supplier_returns',
+    'billing_system_purchase_returns',
+    'billing_system_goods_return_to_suppliers'
+  ].forEach(key => localStorage.setItem(key, JSON.stringify([])));
 
-  // 3. Nếu đang kết nối Cloud (Supabase), xóa trên Cloud
-  if (isCloudActive && supabaseClient) {
-    try {
-      await Promise.allSettled([
-        supabaseClient.from(tableProductsName).delete().neq('code', '___NONE___'),
-        supabaseClient.from(tableOrdersName).delete().neq('id', '___NONE___'),
-        supabaseClient.from(tableDraftOrdersName).delete().neq('id', '___NONE___'),
-        supabaseClient.from(tableCustomersName).delete().neq('id', '___NONE___'),
-        supabaseClient.from(tablePricelistsName).delete().neq('id', '___NONE___'),
-        supabaseClient.from(tableBrandsName).delete().in('name', ['cova', 'mutsutec', 'tdkaw'])
-      ]);
-    } catch (err) {
-      console.warn('Xóa dữ liệu cloud một phần:', err);
+  try {
+    if (isCloudActive && supabaseClient) {
+      await restoreCustomerBaselines();
+      await deleteAllRows(tableCommissionTransactionsName);
+      await deleteAllRows(tableCustomerDebtTransactionsName);
+      await deleteAllRows(tableSalesReturnItemsName);
+      await deleteAllRows(tableSalesReturnsName);
+      await deleteAllRows(tableOrderItemsName);
+      await deleteAllRows(tableDraftOrdersName);
+      await deleteAllRows(tableOrdersName);
+      await deleteAllRows(tableCashbookTransactionsName);
+      await deleteAllRows(tableStartingBalancesName);
+      await deleteAllRows(tableProductionLogsName);
+      await deleteAllRows(tableFinishedGoodsStockName, 'product_code');
+      await fetchCloudData();
     }
-  }
 
-  showToast('Đã xóa sạch tất cả dữ liệu mẫu thành công!', 'success');
-
-  if (typeof onCompleteCallback === 'function') {
-    onCompleteCallback();
+    showToast('Đã xóa dữ liệu thử nghiệm; các danh mục chính được giữ nguyên.', 'success');
+    if (typeof onCompleteCallback === 'function') onCompleteCallback();
+  } catch (err) {
+    console.error('Không thể xóa hết dữ liệu thử nghiệm:', err);
+    showToast('Không thể xóa hết dữ liệu thử nghiệm: ' + (err.message || err), 'danger');
+  } finally {
+    if (clearButton) clearButton.disabled = false;
   }
 }
+
+export const clearAllSampleData = clearTestData;
 
 // Xuất file sao lưu Excel (nhiều trang chứa dữ liệu các bảng)
 export async function exportBackupToExcel() {
@@ -293,7 +377,7 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
   const clearSampleBtn = document.getElementById('btn-clear-sample-data');
   if (clearSampleBtn) {
     clearSampleBtn.addEventListener('click', () => {
-      clearAllSampleData(onRestoreComplete);
+      clearTestData(onRestoreComplete);
     });
   }
 

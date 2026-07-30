@@ -1824,13 +1824,14 @@
 
           <div id="clear-sample-data-section" style="border-top: 1px dashed var(--border-color); margin-top: 1rem; padding-top: 1.5rem;">
             <h3 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--color-danger); display: flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="trash-2"></i> Dọn dẹp dữ liệu mẫu
+              <i data-lucide="trash-2"></i> Xóa dữ liệu thử nghiệm
             </h3>
-            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
-              Xóa sạch toàn bộ dữ liệu mẫu (Sản phẩm mẫu, Đơn hàng mẫu, Khách hàng mẫu, Nhà cung cấp mẫu và các Nhãn sơn mẫu như `cova`, `mutsutec`, `tdkaw`). Các tài khoản đăng nhập của ứng dụng được giữ nguyên.
+            <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.55; margin-bottom: 1.25rem;">
+              <strong style="color: var(--color-danger);">Sẽ xóa:</strong> đơn hàng, phiếu nhập hàng, trả hàng, Sổ quỹ, số dư đầu kỳ, doanh số và các phát sinh liên quan.<br>
+              <strong style="color: var(--text-primary);">Giữ nguyên:</strong> sản phẩm, bảng giá, khách hàng, tài khoản, nhà cung cấp, nhãn sơn và danh mục nguyên vật liệu.
             </p>
             <button type="button" class="btn btn-danger" id="btn-clear-sample-data" style="display: inline-flex; align-items: center; gap: 0.5rem;">
-              <i data-lucide="trash-2"></i> Xóa sạch tất cả dữ liệu mẫu
+              <i data-lucide="trash-2"></i> Xóa dữ liệu thử nghiệm
             </button>
           </div>
 
@@ -3855,6 +3856,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260730-cashbook-reset"></script>
+  <script type="module" src="js/main.js?v=20260730-test-data-cleanup"></script>
 </body>
 </html>
