@@ -669,7 +669,6 @@ export function applyUserPermissions(user) {
       .delete-order-btn { display: none !important; }
       #btn-clear-history { display: none !important; }
       #btn-open-add-pricelist-modal, #btn-import-pricelist-excel, #btn-save-price-matrix { display: none !important; }
-      #pricelists-panel th:last-child, #pricelists-panel td:last-child { display: none !important; }
       #btn-open-add-brand-modal, .edit-brand-btn, .delete-brand-btn { display: none !important; }
       #brands-panel th:last-child, #brands-panel td:last-child { display: none !important; }
       #dash-btn-add-product { display: none !important; }

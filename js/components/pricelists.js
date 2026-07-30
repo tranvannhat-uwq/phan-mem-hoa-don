@@ -11,6 +11,7 @@ import { applyActivePriceListToInvoice } from './invoice.js?v=20260730-cashbook-
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
+  isPrivilegedPricingRole,
   filterPriceListsForUser,
   isDealerPrivatePriceList,
   resolvePriceForList,
@@ -21,6 +22,14 @@ import {
 const pendingChanges = new Map();
 const pendingDeletes = new Set();
 const PRICE_MATRIX_FIXED_HEADERS = ['Mã SKU', 'Tên sản phẩm', 'Hãng sơn', 'Quy cách'];
+
+function canManagePriceLists() {
+  return isPrivilegedPricingRole(state.currentUser);
+}
+
+function rejectPriceListMutation() {
+  showToast('Tài khoản kinh doanh chỉ có quyền xem bảng giá.', 'warning');
+}
 
 function getProductId(product) {
   return product.id;
@@ -95,6 +104,8 @@ function buildPriceListSelector() {
   const selector = document.getElementById('pricelist-visible-select');
   if (!selector) return;
   const lists = visiblePriceLists();
+  const visibleIds = new Set(lists.map(priceList => priceList.id));
+  state.selectedPriceListIds = (state.selectedPriceListIds || []).filter(id => visibleIds.has(id));
   if (!state.selectedPriceListIds?.length) {
     state.selectedPriceListIds = lists.slice(0, 5).map(priceList => priceList.id);
   }
@@ -112,12 +123,14 @@ function buildPriceListSelector() {
             <input type="checkbox" class="price-list-visible-check" value="${priceList.id}" ${state.selectedPriceListIds.includes(priceList.id) ? 'checked' : ''}>
             <span><strong>${priceListDisplayName(priceList)}</strong>${priceListBadge(priceList)}</span>
           </label>
-          <div class="picker-actions">
-            <button type="button" class="icon-btn edit-price-list" data-id="${priceList.id}" title="Sửa bảng giá"><i data-lucide="pencil"></i></button>
-            ${normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.GENERAL
-              ? `<button type="button" class="icon-btn delete-price-list" data-id="${priceList.id}" title="Ngừng áp dụng bảng giá"><i data-lucide="archive"></i></button>`
-              : ''}
-          </div>
+          ${canManagePriceLists() ? `
+            <div class="picker-actions">
+              <button type="button" class="icon-btn edit-price-list" data-id="${priceList.id}" title="Sửa bảng giá"><i data-lucide="pencil"></i></button>
+              ${normalizePriceListType(priceList.type, priceList.customerId) !== PRICE_LIST_TYPES.GENERAL
+                ? `<button type="button" class="icon-btn delete-price-list" data-id="${priceList.id}" title="Ngừng áp dụng bảng giá"><i data-lucide="archive"></i></button>`
+                : ''}
+            </div>
+          ` : ''}
         </div>
       `).join('') || '<div class="picker-empty">Không tìm thấy bảng giá.</div>'}
     </div>
@@ -168,6 +181,18 @@ function renderCell(product, priceList, effectivePriceItems) {
   const displayPrice = pending !== undefined ? pending : resolved.price;
   const status = pending !== undefined ? 'direct' : resolved.status;
   const statusText = status === 'inherited' ? 'Kế thừa' : status === 'missing' ? 'Chưa có giá' : 'Giá nhập riêng';
+  if (!canManagePriceLists()) {
+    return `
+      <td class="price-col price-cell ${status}">
+        <div class="price-cell-editor readonly">
+          <span class="price-matrix-value" aria-label="${priceList.name} - ${product.code}">
+            ${displayPrice === null || displayPrice === undefined ? 'Chưa có giá' : formatVndInput(displayPrice)}
+          </span>
+        </div>
+        <span class="price-cell-status ${status}">${statusText}</span>
+      </td>
+    `;
+  }
   return `
     <td class="price-col price-cell ${status} ${pending !== undefined || pendingDelete ? 'dirty' : ''}">
       <div class="price-cell-editor">
@@ -195,10 +220,14 @@ function renderCell(product, priceList, effectivePriceItems) {
 export function renderPricelistsTable() {
   const body = document.getElementById('pricelists-table-body');
   if (!body) return;
+  if (!canManagePriceLists()) {
+    pendingChanges.clear();
+    pendingDeletes.clear();
+  }
   buildPriceListSelector();
   populateMatrixFilters();
 
-  const selectedLists = sortPriceLists((state.pricelists || []).filter(priceList => state.selectedPriceListIds.includes(priceList.id)));
+  const selectedLists = sortPriceLists(visiblePriceLists().filter(priceList => state.selectedPriceListIds.includes(priceList.id)));
   const head = document.querySelector('#pricelists-panel .price-matrix-table thead');
   if (head) {
     head.innerHTML = `
@@ -279,6 +308,10 @@ export function renderPricelistsTable() {
 }
 
 export function openPricelistModal(index = -1) {
+  if (!canManagePriceLists()) {
+    rejectPriceListMutation();
+    return;
+  }
   const modal = document.getElementById('pricelist-modal');
   const form = document.getElementById('pricelist-form');
   if (!modal || !form) return;
@@ -333,6 +366,10 @@ export function closePricelistModal() {
 }
 
 export async function savePricelist() {
+  if (!canManagePriceLists()) {
+    rejectPriceListMutation();
+    return;
+  }
   const index = Number.parseInt(document.getElementById('pricelist-edit-index').value, 10);
   const type = document.getElementById('pl-type').value;
   const customerId = document.getElementById('pl-customer-id').value || null;
@@ -379,6 +416,10 @@ export async function savePricelist() {
 }
 
 export async function savePriceMatrix() {
+  if (!canManagePriceLists()) {
+    rejectPriceListMutation();
+    return;
+  }
   const changes = [...pendingChanges.entries()].map(([key, price]) => {
     const [priceListId, productId] = key.split('::');
     return {
@@ -422,6 +463,10 @@ export async function savePriceMatrix() {
 }
 
 export async function deletePricelist(index) {
+  if (!canManagePriceLists()) {
+    rejectPriceListMutation();
+    return;
+  }
   const priceList = state.pricelists[index];
   if (priceList && normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.GENERAL) {
     showToast('Không thể xóa bảng Giá chung. Có thể ngừng áp dụng bảng giá khác.', 'warning');
@@ -558,8 +603,8 @@ function findProductFromExcelRow(code, brand) {
 }
 
 async function importPriceMatrixExcel(file) {
-  if (state.currentUser?.role === 'sale') {
-    showToast('Tài khoản kinh doanh không có quyền nhập bảng giá.', 'warning');
+  if (!canManagePriceLists()) {
+    rejectPriceListMutation();
     return;
   }
   try {

@@ -6,6 +6,7 @@ import {
   resolveCustomerProductPrice,
   filterPriceListsForUser,
   canUserViewPriceList,
+  isPrivilegedPricingRole,
   parseVndInteger
 } from '../js/domain/pricing.js';
 
@@ -90,6 +91,9 @@ assert.equal(privatePrice.priceListId, 'tung-private');
 const saleUser = { username: 'sale1', role: 'sale' };
 const saleVisible = filterPriceListsForUser(priceLists, saleUser).map(priceList => priceList.id);
 assert.deepEqual(saleVisible, ['sales-a']);
+assert.equal(isPrivilegedPricingRole(saleUser), false);
+assert.equal(isPrivilegedPricingRole({ username: 'admin', role: 'admin' }), true);
+assert.equal(isPrivilegedPricingRole({ username: 'accounting', role: 'accounting' }), true);
 assert.equal(canUserViewPriceList(saleUser, priceLists.find(priceList => priceList.id === 'tung-private')), false);
 assert.equal(canUserViewPriceList({ username: 'admin', role: 'admin' }, priceLists.find(priceList => priceList.id === 'tung-private')), true);
 

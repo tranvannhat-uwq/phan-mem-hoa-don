@@ -115,7 +115,8 @@
     import { renderProductsTable, setupExcelImportAndTemplate } from '../js/components/products.js';
     import { renderPricelistsTable, setupPricelistManagement } from '../js/components/pricelists.js';
 
-    state.currentUser = { username: 'tester', role: 'admin' };
+    const testRole = new URLSearchParams(window.location.search).get('role') || 'admin';
+    state.currentUser = { username: 'tester', role: testRole };
     state.products = [
       { id: 'b-h2-lon', code: 'B-H2-LON', name: 'Keo phủ bóng bề mặt sơn', brand: 'NANO10 MB', baseProductId: 'b-h2', packageType: 'Lon', packageWeight: 4.5, packageWeightUnit: 'kg', displaySpecification: 'Lon 4,5 kg', isActive: true, isLegacy: false },
       { id: 'ba46-thung', code: 'BA-46-THUNG', name: 'Sơn siêu bóng ngoại thất đặc biệt Nano', brand: 'MUTSUTEC NANO', baseProductId: 'ba46', packageType: 'Thùng', packageWeight: 19, packageWeightUnit: 'kg', displaySpecification: 'Thùng 19 kg', group: 'Ngoại thất', isActive: true, isLegacy: false },
@@ -124,9 +125,9 @@
       { id: 'ba46', code: 'BA-46', name: 'Sản phẩm legacy', brand: 'MUTSUTEC NANO', packageType: '', isActive: false, isLegacy: true }
     ];
     state.pricelists = [
-      { id: 'standard', code: 'GIA_CHUNG', name: 'Giá chung', type: 'standard', isActive: true, displayOrder: 0 },
-      { id: 'bg03', code: 'BG03', name: 'BG03', type: 'customer_group', parentPriceListId: 'standard', isActive: true, displayOrder: 10 },
-      { id: 'private', code: 'TUNG_QN', name: 'Giá Tùng Quảng Ninh', type: 'customer_specific', customerId: 'tung', parentPriceListId: 'bg03', isActive: true, displayOrder: 20 }
+      { id: 'standard', code: 'GIA_CHUNG', name: 'Giá chung', type: 'standard', isActive: true, isAvailableForSales: true, displayOrder: 0 },
+      { id: 'bg03', code: 'BG03', name: 'BG03', type: 'customer_group', parentPriceListId: 'standard', isActive: true, isAvailableForSales: true, displayOrder: 10 },
+      { id: 'private', code: 'TUNG_QN', name: 'Giá Tùng Quảng Ninh', type: 'customer_specific', customerId: 'tung', parentPriceListId: 'bg03', isActive: true, isAvailableForSales: false, displayOrder: 20 }
     ];
     state.customers = [{ id: 'tung', code: 'TUNG-QN', name: 'Tùng Quảng Ninh' }];
     state.priceListItems = [

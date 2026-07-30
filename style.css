@@ -16,6 +16,14 @@
   border-spacing: 0;
 }
 
+.price-matrix-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background-color: #f8fafc !important;
+  box-shadow: 0 1px 0 var(--border-color);
+}
+
 .price-matrix-table .sticky-col {
   position: sticky;
   z-index: 2;
@@ -24,7 +32,8 @@
 }
 
 .price-matrix-table thead .sticky-col {
-  z-index: 4;
+  z-index: 5;
+  background-color: #f8fafc !important;
 }
 
 .price-matrix-table .sticky-code { left: 0; min-width: 130px; }
@@ -34,6 +43,21 @@
 .price-matrix-table .price-col { min-width: 176px; text-align: right; }
 .price-matrix-table .sku-code { font-weight: 700; color: var(--text-primary); }
 .price-matrix-input { width: 128px; text-align: right; }
+.price-matrix-value {
+  display: inline-flex;
+  width: 128px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0.75rem;
+  color: var(--text-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.price-cell.missing .price-matrix-value {
+  color: var(--text-muted);
+  font-weight: 500;
+}
 .price-cell.dirty .price-matrix-input {
   border-color: var(--color-warning);
   background: rgba(245, 158, 11, 0.08);
@@ -116,12 +140,16 @@
   justify-content: space-between;
   list-style: none;
   cursor: pointer;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border-color);
+  padding: 0.625rem 0.75rem 0.625rem 0.875rem;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-weight: 600;
+  background: #ffffff;
+  color: #000000;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
 }
 
 .price-list-picker summary::-webkit-details-marker {
@@ -129,14 +157,19 @@
 }
 
 .price-list-picker summary::after {
-  content: "⌄";
-  color: var(--text-muted);
-  font-size: 1rem;
+  content: "";
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 1.1rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23475569'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 1.1rem;
 }
 
 .price-list-picker[open] summary {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-light);
+  box-shadow: 0 0 0 3px var(--border-focus), inset 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .price-list-picker-menu {
