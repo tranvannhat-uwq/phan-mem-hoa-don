@@ -1,6 +1,6 @@
 import { state } from '../state.js';
-import { showToast, safeCreateIcons } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand } from '../services/supabase.js?v=20260730-customer-created-debt-days';
+import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260730-cashbook-reset';
 import { renderAll } from '../main.js';
 
 export function renderBrandsTable() {
@@ -201,9 +201,17 @@ async function saveBrand() {
       if (oldName && oldName !== name) {
         // Cập nhật Sản phẩm
         (state.products || []).forEach(p => {
-          if (p.brand === oldName) p.brand = name;
+          const linkedBrand = getBrandById(p.brandId || p.brand);
+          const matchesBrand = linkedBrand?.id === id ||
+            p.brandId === id ||
+            String(p.brand || '').trim().toLowerCase() === oldName.toLowerCase();
+          if (matchesBrand) {
+            p.brand = name;
+            p.brandId = id;
+          }
         });
         localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+        await dbRenameBrandProducts(id, oldName, name);
 
         // Cập nhật Khách hàng
         (state.customers || []).forEach(c => {

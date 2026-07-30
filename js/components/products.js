@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProduct, dbDeleteProduct } from '../services/supabase.js?v=20260730-customer-created-debt-days';
+import { dbSaveProduct, dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260730-cashbook-reset';
 import { renderAll } from '../main.js';
 
 let excelImportData = [];
@@ -173,10 +173,11 @@ export function openProductModal(index = -1) {
 
   if (index !== -1) {
     const product = state.products[index];
+    const currentBrandName = getBrandName(product.brandId || product.brand, product.brand || '');
     document.getElementById('prod-id').value = product.id;
     document.getElementById('prod-code').value = product.code;
     document.getElementById('prod-name').value = product.name;
-    document.getElementById('prod-brand').value = product.brand || '';
+    document.getElementById('prod-brand').value = currentBrandName;
     document.getElementById('prod-package-type').value = product.packageType || '';
     document.getElementById('prod-package-weight').value = product.packageWeight ?? '';
     document.getElementById('prod-package-weight-unit').value = product.packageWeightUnit || 'kg';
@@ -347,20 +348,27 @@ function handleExcelFileSelect(file) {
 }
 
 async function processExcelImport() {
-  let successCount = 0;
-  for (const imported of excelImportData) {
+  const productsToSave = excelImportData.map(imported => {
     const existing = state.products.find(product =>
       String(product.code).toUpperCase() === imported.code &&
       getBrandName(product.brandId || product.brand, product.brand || '').toLowerCase() === imported.brand.toLowerCase()
     );
-    const product = existing ? { ...existing, ...imported, id: existing.id } : imported;
-    if (await dbSaveProduct(product)) {
-      const index = state.products.findIndex(item => item.id === product.id);
-      if (index >= 0) state.products[index] = product;
-      else state.products.push(product);
-      successCount += 1;
-    }
-  }
+    return existing ? { ...existing, ...imported, id: existing.id } : { ...imported };
+  });
+
+  if (!await dbSaveProductsBulk(productsToSave)) return;
+
+  productsToSave.forEach(product => {
+    const index = state.products.findIndex(item =>
+      item.id === product.id ||
+      (String(item.code).toUpperCase() === product.code &&
+        getBrandName(item.brandId || item.brand, item.brand || '').toLowerCase() === product.brand.toLowerCase())
+    );
+    if (index >= 0) state.products[index] = product;
+    else state.products.push(product);
+  });
+
+  const successCount = productsToSave.length;
   localStorage.setItem('billing_system_products', JSON.stringify(state.products));
   renderAll();
   showToast(`Đã nhập/cập nhật ${successCount} SKU.`);

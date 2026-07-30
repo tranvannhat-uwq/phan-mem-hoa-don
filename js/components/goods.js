@@ -14,7 +14,7 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20260730-customer-created-debt-days';
+} from '../services/supabase.js?v=20260730-cashbook-reset';
 import { renderAll } from '../main.js';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---

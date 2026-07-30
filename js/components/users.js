@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260730-customer-created-debt-days';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260730-cashbook-reset';
 import { renderAll, switchTab } from '../main.js';
-import { populateManagedByDropdown } from './customers.js?v=20260730-customer-template-v2';
+import { populateManagedByDropdown } from './customers.js?v=20260730-cashbook-reset';
 import { exportBackupToExcel } from '../services/backup.js';
 
 export function renderUsersTable() {

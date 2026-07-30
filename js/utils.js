@@ -101,9 +101,27 @@ export function getBrandById(brandId, brandsList = state.brands) {
   if (!brandId || brandId === 'all' || brandId === 'Tất cả') return null;
   const str = String(brandId).trim();
   const list = brandsList || [];
+  const normalizeBrandKey = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   
   let found = list.find(b => (b.id && b.id === str) || (b.name && b.name.toLowerCase() === str.toLowerCase()));
   if (found) return found;
+
+  const normalizedInput = normalizeBrandKey(str).replace(/^brand/, '');
+  found = list.find(b => {
+    const normalizedId = normalizeBrandKey(b?.id).replace(/^brand/, '');
+    const normalizedName = normalizeBrandKey(b?.name);
+    return normalizedInput && (normalizedId === normalizedInput || normalizedName === normalizedInput);
+  });
+  if (found) return found;
+
+  // Old imports used several variants for the same stable brand key. The brand
+  // name may later change, but its ID still lets those products follow the rename.
+  const legacyKeys = ['tdkaw', 'cova', 'festiva', 'hatacco', 'mutsutec', 'nano10'];
+  const legacyKey = legacyKeys.find(key => normalizedInput.includes(key));
+  if (legacyKey) {
+    found = list.find(b => normalizeBrandKey(b?.id).includes(legacyKey));
+    if (found) return found;
+  }
 
   const aliasMap = {
     'cova': 'COVA NANO',
@@ -190,6 +208,8 @@ export function getCanonicalBrandName(brandStr, brandsList = state.brands) {
   if (!brandStr) return 'COVA NANO';
   const rawStr = brandStr.toString().trim();
   const cleanName = rawStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const linkedBrand = getBrandById(rawStr, brandsList);
+  if (linkedBrand) return linkedBrand.name;
 
   const foundB = (brandsList || []).find(b => {
     if (!b || !b.name) return false;

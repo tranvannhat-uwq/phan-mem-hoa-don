@@ -1,0 +1,14 @@
+{
+  "products": 645,
+  "pricelists": 9,
+  "price_list_items": 1856,
+  "orders": 0,
+  "draft_orders": 0,
+  "order_items": 0,
+  "sales_returns": 16,
+  "sales_return_items": 16,
+  "finished_goods_stock": 0,
+  "production_logs": 0,
+  "commission_transactions": 4,
+  "customer_debt_transactions": 0
+}

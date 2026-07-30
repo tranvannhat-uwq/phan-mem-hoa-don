@@ -17,7 +17,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260729-history-financials">
+  <link rel="stylesheet" href="style.css?v=20260730-customer-column-picker">
 </head>
 <body>
 
@@ -1483,6 +1483,32 @@
           <div class="panel-header">
             <h2 class="panel-title"><i data-lucide="users"></i> Danh sách khách hàng & Đại lý</h2>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <div class="customer-column-picker" id="customer-column-picker">
+                <button class="btn btn-secondary btn-sm" id="btn-customer-column-picker" type="button" aria-expanded="false" aria-controls="customer-column-picker-popover">
+                  <i data-lucide="columns-3"></i> Cột hiển thị
+                </button>
+                <div class="customer-column-picker-popover" id="customer-column-picker-popover" hidden>
+                  <div class="customer-column-picker-header">
+                    <div>
+                      <strong>Cột hiển thị</strong>
+                      <span id="customer-column-picker-count">13/13 cột</span>
+                    </div>
+                    <button class="btn btn-secondary btn-sm btn-circle" id="btn-close-customer-column-picker" type="button" title="Đóng">
+                      <i data-lucide="x"></i>
+                    </button>
+                  </div>
+                  <label class="customer-column-picker-all">
+                    <input type="checkbox" id="customer-column-picker-select-all" checked>
+                    <span>Chọn tất cả</span>
+                  </label>
+                  <div class="customer-column-picker-grid" id="customer-column-picker-options"></div>
+                  <div class="customer-column-picker-footer">
+                    <button class="btn btn-secondary btn-sm" id="btn-reset-customer-columns" type="button">
+                      <i data-lucide="rotate-ccw"></i> Mặc định
+                    </button>
+                  </div>
+                </div>
+              </div>
               <button class="btn btn-indigo btn-sm" id="btn-open-cust-excel-modal">
                 <i data-lucide="file-up"></i> Nhập Excel
               </button>
@@ -1534,38 +1560,38 @@
           <div class="table-responsive">
             <table class="table customers-table" style="table-layout: fixed; min-width: 1880px;">
               <colgroup>
-                                <col style="width: 45px;">   <!-- Chon -->
-<col style="width: 100px;">  <!-- Mã KH -->
-                <col style="width: 165px;">  <!-- Tên khách hàng -->
-                <col style="width: 105px;">  <!-- SĐT -->
-                <col style="width: auto;">   <!-- Địa chỉ -->
-                <col style="width: 90px;">   <!-- Nhãn -->
-                <col style="width: 125px;">  <!-- KD quản lý -->
-                <col style="width: 125px;">  <!-- Bảng giá -->
-                <col style="width: 115px;">  <!-- Công nợ -->
-                <col style="width: 120px;">  <!-- Tổng doanh số -->
-                <col style="width: 140px;">  <!-- Tổng doanh số trừ trả hàng -->
-                <col style="width: 110px;">  <!-- Ngày tạo -->
-                <col style="width: 95px;">   <!-- Số ngày nợ -->
-                <col style="width: 125px;">  <!-- Ngày giao dịch cuối -->
+                <col style="width: 45px;">   <!-- Chon -->
+                <col data-customer-column="code" style="width: 100px;">  <!-- Mã KH -->
+                <col data-customer-column="name" style="width: 165px;">  <!-- Tên khách hàng -->
+                <col data-customer-column="phone" style="width: 105px;">  <!-- SĐT -->
+                <col data-customer-column="address" style="width: auto;">   <!-- Địa chỉ -->
+                <col data-customer-column="brand" style="width: 90px;">   <!-- Nhãn -->
+                <col data-customer-column="manager" style="width: 125px;">  <!-- KD quản lý -->
+                <col data-customer-column="pricelist" style="width: 125px;">  <!-- Bảng giá -->
+                <col data-customer-column="debt" style="width: 115px;">  <!-- Công nợ -->
+                <col data-customer-column="grossSales" style="width: 120px;">  <!-- Tổng doanh số -->
+                <col data-customer-column="netSales" style="width: 140px;">  <!-- Tổng doanh số trừ trả hàng -->
+                <col data-customer-column="createdAt" style="width: 110px;">  <!-- Ngày tạo -->
+                <col data-customer-column="debtDays" style="width: 95px;">   <!-- Số ngày nợ -->
+                <col data-customer-column="lastTransaction" style="width: 125px;">  <!-- Ngày giao dịch cuối -->
                 <col style="width: 110px;">  <!-- Thao tác -->
               </colgroup>
               <thead>
                 <tr>
                                     <th style="text-align: center;"><input type="checkbox" id="customer-select-all-export" title="Chon tat ca khach hang tren trang"></th>
-<th>Mã KH</th>
-                  <th>Tên khách hàng</th>
-                  <th>SĐT</th>
-                  <th>Địa chỉ</th>
-                  <th>Nhãn</th>
-                  <th>KD quản lý</th>
-                  <th>Bảng giá</th>
-                  <th style="text-align: right;">Công nợ</th>
-                  <th style="text-align: right;">Tổng doanh số</th>
-                  <th style="text-align: right;">Tổng doanh số trừ trả hàng</th>
-                  <th style="text-align: center;">Ngày tạo</th>
-                  <th style="text-align: center;">Số ngày nợ</th>
-                  <th style="text-align: center;">Ngày giao dịch cuối</th>
+                  <th data-customer-column="code">Mã KH</th>
+                  <th data-customer-column="name">Tên khách hàng</th>
+                  <th data-customer-column="phone">SĐT</th>
+                  <th data-customer-column="address">Địa chỉ</th>
+                  <th data-customer-column="brand">Nhãn</th>
+                  <th data-customer-column="manager">KD quản lý</th>
+                  <th data-customer-column="pricelist">Bảng giá</th>
+                  <th data-customer-column="debt" style="text-align: right;">Công nợ</th>
+                  <th data-customer-column="grossSales" style="text-align: right;">Tổng doanh số</th>
+                  <th data-customer-column="netSales" style="text-align: right;">Tổng doanh số trừ trả hàng</th>
+                  <th data-customer-column="createdAt" style="text-align: center;">Ngày tạo</th>
+                  <th data-customer-column="debtDays" style="text-align: center;">Số ngày nợ</th>
+                  <th data-customer-column="lastTransaction" style="text-align: center;">Ngày giao dịch cuối</th>
                   <th style="text-align: center;">Thao tác</th>
                 </tr>
               </thead>
@@ -3828,6 +3854,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260730-customer-template-v2"></script>
+  <script type="module" src="js/main.js?v=20260730-cashbook-reset"></script>
 </body>
 </html>

@@ -5,9 +5,9 @@ import {
   dbDeletePricelist,
   dbSavePriceListItems,
   dbDeletePriceListItem
-} from '../services/supabase.js?v=20260730-customer-created-debt-days';
+} from '../services/supabase.js?v=20260730-cashbook-reset';
 import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20260730-customer-template-v2';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20260730-cashbook-reset';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,

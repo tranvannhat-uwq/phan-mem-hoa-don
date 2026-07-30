@@ -1,14 +1,137 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260730-customer-created-debt-days';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260730-cashbook-reset';
 import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260730-customer-template-v2';
-import { addCashbookTransaction } from './so_quy.js?v=20260730-customer-template-v2';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260730-cashbook-reset';
+import { addCashbookTransaction } from './so_quy.js?v=20260730-cashbook-reset';
 import { getOrderFinancialBreakdown } from '../domain/order-financials.js';
 
 const selectedCustomerIdsForExport = new Set();
 let activeExportOrders = null;
 let activeExportOrderIds = null;
+
+const CUSTOMER_COLUMN_STORAGE_KEY = 'billing_customer_visible_columns';
+const CUSTOMER_COLUMN_DEFINITIONS = [
+  { key: 'code', label: 'Mã khách hàng', width: 100 },
+  { key: 'name', label: 'Tên khách hàng', width: 165 },
+  { key: 'phone', label: 'Số điện thoại', width: 105 },
+  { key: 'address', label: 'Địa chỉ', width: 280 },
+  { key: 'brand', label: 'Nhãn sơn', width: 90 },
+  { key: 'manager', label: 'KD quản lý', width: 125 },
+  { key: 'pricelist', label: 'Bảng giá', width: 125 },
+  { key: 'debt', label: 'Công nợ', width: 115 },
+  { key: 'grossSales', label: 'Tổng doanh số', width: 120 },
+  { key: 'netSales', label: 'Doanh số sau trả hàng', width: 140 },
+  { key: 'createdAt', label: 'Ngày tạo', width: 110 },
+  { key: 'debtDays', label: 'Số ngày nợ', width: 95 },
+  { key: 'lastTransaction', label: 'Ngày giao dịch cuối', width: 125 }
+];
+
+function getVisibleCustomerColumns() {
+  const allKeys = CUSTOMER_COLUMN_DEFINITIONS.map(column => column.key);
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOMER_COLUMN_STORAGE_KEY) || 'null');
+    if (Array.isArray(saved)) {
+      return new Set(saved.filter(key => allKeys.includes(key)));
+    }
+  } catch (error) {
+    console.warn('Không thể đọc cấu hình cột khách hàng:', error);
+  }
+  return new Set(allKeys);
+}
+
+function saveVisibleCustomerColumns(visibleColumns) {
+  localStorage.setItem(
+    CUSTOMER_COLUMN_STORAGE_KEY,
+    JSON.stringify(CUSTOMER_COLUMN_DEFINITIONS.map(column => column.key).filter(key => visibleColumns.has(key)))
+  );
+}
+
+function applyCustomerColumnVisibility() {
+  const visibleColumns = getVisibleCustomerColumns();
+  document.querySelectorAll('[data-customer-column]').forEach(element => {
+    element.style.display = visibleColumns.has(element.dataset.customerColumn) ? '' : 'none';
+  });
+
+  const table = document.querySelector('.customers-table');
+  if (table) {
+    const dataWidth = CUSTOMER_COLUMN_DEFINITIONS.reduce(
+      (sum, column) => sum + (visibleColumns.has(column.key) ? column.width : 0),
+      0
+    );
+    table.style.minWidth = `${Math.max(420, dataWidth + 155)}px`;
+  }
+
+  document.querySelectorAll('.customer-column-option').forEach(input => {
+    input.checked = visibleColumns.has(input.value);
+  });
+
+  const selectAll = document.getElementById('customer-column-picker-select-all');
+  if (selectAll) {
+    selectAll.checked = visibleColumns.size === CUSTOMER_COLUMN_DEFINITIONS.length;
+    selectAll.indeterminate = visibleColumns.size > 0 && visibleColumns.size < CUSTOMER_COLUMN_DEFINITIONS.length;
+  }
+
+  const count = document.getElementById('customer-column-picker-count');
+  if (count) count.textContent = `${visibleColumns.size}/${CUSTOMER_COLUMN_DEFINITIONS.length} cột`;
+}
+
+function setupCustomerColumnPicker() {
+  const picker = document.getElementById('customer-column-picker');
+  const button = document.getElementById('btn-customer-column-picker');
+  const popover = document.getElementById('customer-column-picker-popover');
+  const closeButton = document.getElementById('btn-close-customer-column-picker');
+  const options = document.getElementById('customer-column-picker-options');
+  const selectAll = document.getElementById('customer-column-picker-select-all');
+  const resetButton = document.getElementById('btn-reset-customer-columns');
+  if (!picker || !button || !popover || !options) return;
+
+  options.innerHTML = CUSTOMER_COLUMN_DEFINITIONS.map(column => `
+    <label class="customer-column-option-label">
+      <input class="customer-column-option" type="checkbox" value="${column.key}">
+      <span>${column.label}</span>
+    </label>
+  `).join('');
+
+  const setOpen = (isOpen) => {
+    popover.hidden = !isOpen;
+    button.setAttribute('aria-expanded', String(isOpen));
+  };
+
+  button.addEventListener('click', event => {
+    event.stopPropagation();
+    setOpen(popover.hidden);
+  });
+  closeButton?.addEventListener('click', () => setOpen(false));
+  picker.addEventListener('click', event => event.stopPropagation());
+  document.addEventListener('click', () => setOpen(false));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') setOpen(false);
+  });
+
+  options.addEventListener('change', () => {
+    const visibleColumns = new Set(
+      Array.from(options.querySelectorAll('.customer-column-option:checked')).map(input => input.value)
+    );
+    saveVisibleCustomerColumns(visibleColumns);
+    applyCustomerColumnVisibility();
+  });
+
+  selectAll?.addEventListener('change', () => {
+    const visibleColumns = selectAll.checked
+      ? new Set(CUSTOMER_COLUMN_DEFINITIONS.map(column => column.key))
+      : new Set();
+    saveVisibleCustomerColumns(visibleColumns);
+    applyCustomerColumnVisibility();
+  });
+
+  resetButton?.addEventListener('click', () => {
+    localStorage.removeItem(CUSTOMER_COLUMN_STORAGE_KEY);
+    applyCustomerColumnVisibility();
+  });
+
+  applyCustomerColumnVisibility();
+}
 
 function parseImportedNumber(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -340,11 +463,12 @@ export function renderCustomersTable() {
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="15" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="${getVisibleCustomerColumns().size + 2}" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không tìm thấy khách hàng nào.
         </td>
       </tr>
     `;
+    applyCustomerColumnVisibility();
     return;
   }
   
@@ -410,27 +534,27 @@ export function renderCustomersTable() {
         <td style="text-align: center;">
           <input type="checkbox" class="customer-export-checkbox" data-id="${c.id}" ${selectedCustomerIdsForExport.has(String(c.id)) ? 'checked' : ''} title="Chọn khách hàng để xuất lịch sử">
         </td>
-        <td style="font-weight: 600; color: #fff;">${c.code}</td>
-        <td style="font-weight: 500;">
+        <td data-customer-column="code" style="font-weight: 600; color: #fff;">${c.code}</td>
+        <td data-customer-column="name" style="font-weight: 500;">
           <span class="view-cust-detail-link" data-index="${actualIndex}" style="cursor: pointer; color: #22c55e; text-decoration: underline; font-weight: 600;" title="Xem chi tiết & Lịch sử công nợ">
             ${c.name}
           </span>
         </td>
-        <td>${c.phone || '<span style="color: var(--text-muted);">N/A</span>'}</td>
-        <td style="font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${addrTitle}">${displayAddr}</td>
-        <td>
+        <td data-customer-column="phone">${c.phone || '<span style="color: var(--text-muted);">N/A</span>'}</td>
+        <td data-customer-column="address" style="font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${addrTitle}">${displayAddr}</td>
+        <td data-customer-column="brand">
           <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: ${c.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(34, 197, 94, 0.15)'}; color: ${c.assignedBrand === 'Tất cả' ? '#10b981' : '#22c55e'}; border: 1px solid ${c.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(34, 197, 94, 0.3)'};">${c.assignedBrand}</span>
         </td>
-        <td style="font-size: 0.85rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        <td data-customer-column="manager" style="font-size: 0.85rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
           ${c.managedBy ? getManagerDisplayName(c.managedBy, state.users) : '<span style="color: #ef4444; font-weight: 500;">Chưa bàn giao</span>'}
         </td>
-        <td style="font-size: 0.75rem; color: var(--text-secondary); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
-        <td class="customer-money-cell" style="color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
-        <td class="customer-money-cell" style="color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
-        <td class="customer-money-cell" style="color: #10b981;">${formatCurrency(metrics.netSales)}</td>
-        <td style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${createdAtLabel}</td>
-        <td style="text-align: center; font-size: 0.8rem; color: ${debtDays > 0 ? 'var(--color-warning)' : 'var(--text-muted)'}; white-space: nowrap;">${debtDays}</td>
-        <td style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${lastTransactionLabel}</td>
+        <td data-customer-column="pricelist" style="font-size: 0.75rem; color: var(--text-secondary); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${tooltipTitle}">${pricelistName}</td>
+        <td data-customer-column="debt" class="customer-money-cell" style="color: ${c.debt > 0 ? 'var(--color-danger)' : (c.debt < 0 ? 'var(--color-success)' : 'var(--text-muted)')};">${formatCurrency(c.debt)}</td>
+        <td data-customer-column="grossSales" class="customer-money-cell" style="color: var(--color-primary);">${formatCurrency(metrics.grossSales)}</td>
+        <td data-customer-column="netSales" class="customer-money-cell" style="color: #10b981;">${formatCurrency(metrics.netSales)}</td>
+        <td data-customer-column="createdAt" style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${createdAtLabel}</td>
+        <td data-customer-column="debtDays" style="text-align: center; font-size: 0.8rem; color: ${debtDays > 0 ? 'var(--color-warning)' : 'var(--text-muted)'}; white-space: nowrap;">${debtDays}</td>
+        <td data-customer-column="lastTransaction" style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${lastTransactionLabel}</td>
         <td style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-cust-btn" data-index="${actualIndex}" title="Sửa">
@@ -448,6 +572,7 @@ export function renderCustomersTable() {
     `;
   }).join('');
 
+  applyCustomerColumnVisibility();
   
   // Gán sự kiện click cho các nút hành động
   document.querySelectorAll('.customer-export-checkbox').forEach(box => {
@@ -959,6 +1084,8 @@ export function setupCustomerManagement() {
 
   const managedFilter = document.getElementById('customer-managed-filter');
   if (managedFilter) managedFilter.addEventListener('change', onFilterChange);
+
+  setupCustomerColumnPicker();
 
   const addBtn = document.getElementById('btn-open-add-customer-modal');
   if (addBtn) addBtn.addEventListener('click', () => openCustomerModal());

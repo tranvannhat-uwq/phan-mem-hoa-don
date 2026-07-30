@@ -429,13 +429,7 @@ export async function fetchCloudData() {
         if (prodErr) throw prodErr;
         
         const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
-        if (prodData && prodData.length > 0) {
-          state.products = prodData.map(row => normalizeProductRow(row, localProducts));
-        } else if (localProducts.length > 0) {
-          state.products = localProducts;
-        } else {
-          state.products = defaultProducts.map(row => normalizeProductRow(row, []));
-        }
+        state.products = (prodData || []).map(row => normalizeProductRow(row, localProducts));
         localStorage.setItem('billing_system_products', JSON.stringify(state.products));
       } catch (prodErr) {
         console.warn("Could not load products from Supabase, fallback to local:", prodErr.message);
@@ -512,14 +506,7 @@ export async function fetchCloudData() {
         const mappedDrafts = rawDrafts.map(o => mapOrderRow(o, true));
 
         const combined = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
-        if (combined.length > 0) {
-          state.savedOrders = combined;
-        } else {
-          const localOrders = JSON.parse(localStorage.getItem('billing_system_orders') || '[]');
-          if (localOrders.length > 0) {
-            state.savedOrders = localOrders;
-          }
-        }
+        state.savedOrders = combined;
         localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
       } catch (ordErr) {
         console.warn("Could not load orders from Supabase, fallback to local:", ordErr.message);
@@ -582,9 +569,7 @@ export async function fetchCloudData() {
 
         if (plErr) throw plErr;
 
-        const localPl = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
-        if (plData && plData.length > 0) {
-          state.pricelists = plData.map(pl => ({
+        state.pricelists = (plData || []).map(pl => ({
             id: pl.id,
             code: pl.code || '',
             name: pl.name,
@@ -600,9 +585,6 @@ export async function fetchCloudData() {
             updatedAt: pl.updated_at || '',
             brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
           }));
-        } else if (localPl.length > 0) {
-          state.pricelists = localPl;
-        }
         localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
 
         try {
@@ -752,8 +734,7 @@ export async function fetchCloudData() {
 
         if (txErr) throw txErr;
 
-        if (txData && txData.length > 0) {
-          const cloudTxs = txData.map(t => {
+        const cloudTxs = (txData || []).map(t => {
             const rawNote = t.note || '';
             const supplierMeta = rawNote.match(/__supplierId=([^\s]+)/);
             const cleanNote = rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim();
@@ -777,8 +758,7 @@ export async function fetchCloudData() {
               employeeId: t.employee_id || null
             };
           }).filter(t => !(t.note && t.note.startsWith('Thu tiá»n hÃ ng cho hÃ³a Ä‘Æ¡n')));
-          localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
-        }
+        localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
       } catch (txErr) {
         console.warn("Could not load cashbook transactions from Supabase:", txErr.message);
       }
@@ -794,14 +774,12 @@ export async function fetchCloudData() {
 
         if (balErr) throw balErr;
 
-        if (balData) {
-          const cloudBal = {
-            cash: parseFloat(balData.cash || 0),
-            bank: parseFloat(balData.bank || 0),
-            wallet: parseFloat(balData.wallet || 0)
-          };
-          localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(cloudBal));
-        }
+        const cloudBal = {
+          cash: parseFloat(balData?.cash || 0),
+          bank: parseFloat(balData?.bank || 0),
+          wallet: parseFloat(balData?.wallet || 0)
+        };
+        localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(cloudBal));
       } catch (balErr) {
         console.warn("Could not load starting balances from Supabase:", balErr.message);
       }
@@ -1043,31 +1021,45 @@ export async function syncLocalToCloud() {
     
     // 1. Sync Products
     if (localProducts.length > 0) {
+      const { data: existingProducts, error: existingProductsError } = await supabaseClient
+        .from(tableProductsName)
+        .select('id,code,brand');
+      if (existingProductsError) throw existingProductsError;
+
+      const productKey = product => `${String(product.code || '').trim().toUpperCase()}\u0000${String(product.brand || '').trim().toLowerCase()}`;
+      const existingById = new Map((existingProducts || []).map(product => [product.id, product]));
+      const existingByKey = new Map((existingProducts || []).map(product => [productKey(product), product]));
+
       const dbRows = localProducts
         .filter(p => p.id && p.packageType)
-        .map(p => ({
-        id: p.id,
-        code: p.code,
-        name: p.name,
-        brand: p.brand || '',
-        brand_id: p.brandId || null,
-        base_product_id: p.baseProductId || p.parentProductId || null,
-        parent_product_id: p.parentProductId || p.baseProductId || null,
-        package_type: p.packageType,
-        package_weight: p.packageWeight || null,
-        package_weight_unit: p.packageWeightUnit || 'kg',
-        display_specification: p.displaySpecification || '',
-        product_group: p.group || null,
-        is_active: p.isActive !== false,
-        is_legacy: p.isLegacy === true,
-        updated_at: new Date().toISOString()
-      }));
+        .map(p => {
+          const existing = existingById.get(p.id) || existingByKey.get(productKey(p));
+          if (existing?.id) p.id = existing.id;
+          return {
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            brand: p.brand || '',
+            brand_id: p.brandId || null,
+            base_product_id: p.baseProductId || p.parentProductId || null,
+            parent_product_id: p.parentProductId || p.baseProductId || null,
+            package_type: p.packageType,
+            package_weight: p.packageWeight || null,
+            package_weight_unit: p.packageWeightUnit || 'kg',
+            display_specification: p.displaySpecification || '',
+            product_group: p.group || null,
+            is_active: p.isActive !== false,
+            is_legacy: p.isLegacy === true,
+            updated_at: new Date().toISOString()
+          };
+        });
       
       const { error } = dbRows.length > 0
-        ? await supabaseClient.from(tableProductsName).upsert(dbRows, { onConflict: 'code,brand' })
+        ? await supabaseClient.from(tableProductsName).upsert(dbRows, { onConflict: 'id' })
         : { error: null };
         
       if (error) throw error;
+      localStorage.setItem('billing_system_products', JSON.stringify(localProducts));
     }
     
     // 2. Sync Orders
@@ -1389,6 +1381,34 @@ export async function syncLocalToCloud() {
 export async function dbSaveProduct(product) {
   if (isCloudActive && supabaseClient) {
     try {
+      let existingRow = null;
+
+      if (product.id) {
+        const { data, error } = await supabaseClient
+          .from(tableProductsName)
+          .select('id')
+          .eq('id', product.id)
+          .maybeSingle();
+        if (error) throw error;
+        existingRow = data;
+      }
+
+      if (!existingRow) {
+        const { data, error } = await supabaseClient
+          .from(tableProductsName)
+          .select('id')
+          .eq('code', product.code)
+          .eq('brand', product.brand || '')
+          .maybeSingle();
+        if (error) throw error;
+        existingRow = data;
+      }
+
+      if (existingRow?.id) {
+        // Keep the primary key because price-list rows and order history reference it.
+        product.id = existingRow.id;
+      }
+
       const dbRow = {
         id: product.id,
         code: product.code,
@@ -1406,11 +1426,20 @@ export async function dbSaveProduct(product) {
         is_legacy: product.isLegacy === true,
         updated_at: new Date().toISOString()
       };
-      
-      let { error } = await supabaseClient
-        .from(tableProductsName)
-        .upsert(dbRow, { onConflict: 'code,brand' });
-        
+
+      let error = null;
+      if (existingRow?.id) {
+        const { id: _preservedId, ...changes } = dbRow;
+        ({ error } = await supabaseClient
+          .from(tableProductsName)
+          .update(changes)
+          .eq('id', existingRow.id));
+      } else {
+        ({ error } = await supabaseClient
+          .from(tableProductsName)
+          .insert(dbRow));
+      }
+
       if (error) throw error;
       return true;
     } catch(err) {
@@ -1420,6 +1449,99 @@ export async function dbSaveProduct(product) {
     }
   }
   return true;
+}
+
+export async function dbSaveProductsBulk(products) {
+  if (!Array.isArray(products) || products.length === 0) return true;
+  if (!isCloudActive || !supabaseClient) return true;
+
+  try {
+    const { data: existingProducts, error: fetchError } = await supabaseClient
+      .from(tableProductsName)
+      .select('id,code,brand');
+    if (fetchError) throw fetchError;
+
+    const productKey = product => `${String(product.code || '').trim().toUpperCase()}\u0000${String(product.brand || '').trim().toLowerCase()}`;
+    const existingById = new Map((existingProducts || []).map(product => [product.id, product]));
+    const existingByKey = new Map((existingProducts || []).map(product => [productKey(product), product]));
+    const rowsByKey = new Map();
+    const resolvedIdByKey = new Map();
+
+    products.forEach(product => {
+      const key = productKey(product);
+      const existing = existingById.get(product.id) || existingByKey.get(key);
+      if (existing?.id) product.id = existing.id;
+      else if (resolvedIdByKey.has(key)) product.id = resolvedIdByKey.get(key);
+      resolvedIdByKey.set(key, product.id);
+
+      rowsByKey.set(key, {
+        id: product.id,
+        code: product.code,
+        base_product_id: product.baseProductId || product.parentProductId || null,
+        parent_product_id: product.parentProductId || product.baseProductId || null,
+        name: product.name,
+        brand: product.brand || '',
+        brand_id: product.brandId || ('brand_' + String(product.brand).toLowerCase().replace(/[^a-z0-9]/g, '')),
+        package_type: product.packageType || '',
+        package_weight: product.packageWeight === '' ? null : product.packageWeight,
+        package_weight_unit: product.packageWeightUnit || 'kg',
+        display_specification: product.displaySpecification || '',
+        product_group: product.group || null,
+        is_active: product.isActive !== false,
+        is_legacy: product.isLegacy === true,
+        updated_at: new Date().toISOString()
+      });
+    });
+
+    const rows = [...rowsByKey.values()];
+    const chunkSize = 200;
+    for (let index = 0; index < rows.length; index += chunkSize) {
+      const { error } = await supabaseClient
+        .from(tableProductsName)
+        .upsert(rows.slice(index, index + chunkSize), { onConflict: 'id' });
+      if (error) throw error;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    showToast('Không thể nhập danh sách sản phẩm lên đám mây: ' + err.message, 'danger');
+    return false;
+  }
+}
+
+export async function dbRenameBrandProducts(brandId, oldName, newName) {
+  if (!isCloudActive || !supabaseClient) return true;
+
+  try {
+    const changes = {
+      brand: newName,
+      brand_id: brandId || null,
+      updated_at: new Date().toISOString()
+    };
+
+    if (brandId) {
+      const { error } = await supabaseClient
+        .from(tableProductsName)
+        .update(changes)
+        .eq('brand_id', brandId);
+      if (error) throw error;
+    }
+
+    if (oldName) {
+      const { error } = await supabaseClient
+        .from(tableProductsName)
+        .update(changes)
+        .ilike('brand', oldName);
+      if (error) throw error;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    showToast('Đã đổi tên hãng nhưng chưa thể cập nhật các sản phẩm trên đám mây: ' + err.message, 'danger');
+    return false;
+  }
 }
 
 export async function dbDeleteProduct(code, brand) {
@@ -2548,6 +2670,7 @@ export function backfillMultiCompanyAndRevenueData() {
   // 2. Clean Sweep & Normalize Product Brands
   if (state.products && state.products.length > 0) {
     let prodChanged = false;
+    const normalizedProducts = [];
     state.products.forEach(p => {
       const canonical = getBrandById(p.brandId || p.brand);
       if (canonical) {
@@ -2555,11 +2678,29 @@ export function backfillMultiCompanyAndRevenueData() {
           p.brand = canonical.name;
           p.brandId = canonical.id;
           prodChanged = true;
+          normalizedProducts.push(p);
         }
       }
     });
     if (prodChanged) {
       localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+      if (isCloudActive && supabaseClient) {
+        Promise.all(normalizedProducts.map(p =>
+          supabaseClient
+            .from(tableProductsName)
+            .update({
+              brand: p.brand,
+              brand_id: p.brandId,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', p.id)
+        )).then(results => {
+          const failed = results.find(result => result.error);
+          if (failed) console.error('Không thể đồng bộ lại hãng sơn cho một số sản phẩm:', failed.error);
+        }).catch(error => {
+          console.error('Không thể đồng bộ lại hãng sơn cho các sản phẩm:', error);
+        });
+      }
     }
   }
 
