@@ -575,7 +575,7 @@
           <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
             <div class="search-wrapper" style="flex: 1; min-width: 250px;">
               <i data-lucide="search" class="search-icon"></i>
-              <input type="text" class="form-control-search" id="product-search-input" placeholder="Tìm kiếm sản phẩm theo tên, mã...">
+              <input type="text" class="form-control-search" id="product-search-input" placeholder="Tìm theo mã gốc, SKU, tên, hãng, quy cách...">
             </div>
             <div class="filter-wrapper" style="width: 200px;">
               <select class="form-control" id="product-brand-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer;">
@@ -612,12 +612,12 @@
               <thead>
                 <tr>
                   <th style="text-align: center;">STT</th>
-                  <th>Mã sản phẩm</th>
+                  <th>Mã gốc</th>
                   <th>Tên sản phẩm</th>
                   <th>Hãng sơn</th>
-                  <th>Loại bao bì</th>
+                  <th>Đóng gói</th>
                   <th>Khối lượng</th>
-                  <th>Quy cách</th>
+                  <th>Các SKU</th>
                   <th>Trạng thái</th>
                   <th style="text-align: center;">Hành động</th>
                 </tr>
@@ -2112,9 +2112,28 @@
     </div>
   </div>
 
+  <!-- Invoice packaging variant picker -->
+  <div class="modal-overlay invoice-variant-overlay" id="invoice-variant-modal">
+    <div class="modal-content invoice-variant-modal-content">
+      <div class="modal-header">
+        <div>
+          <div class="variant-modal-eyebrow" id="invoice-variant-base-code"></div>
+          <h3 class="modal-title" id="invoice-variant-modal-title">Chọn quy cách</h3>
+          <div class="variant-modal-brand" id="invoice-variant-brand"></div>
+        </div>
+        <button type="button" class="modal-close" id="btn-close-invoice-variant-modal" title="Đóng">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="variant-choice-list" id="invoice-variant-options"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Add/Edit Product Modal -->
   <div class="modal-overlay" id="product-modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 1000px;">
       <div class="modal-header">
         <h3 class="modal-title" id="product-modal-title">Thêm sản phẩm mới</h3>
         <button class="modal-close" id="btn-close-product-modal">
@@ -2124,76 +2143,65 @@
       <form id="product-form">
         <input type="hidden" id="product-edit-index" value="-1">
         <input type="hidden" id="prod-id" value="">
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="prod-code">Mã sản phẩm *</label>
-            <input type="text" class="form-control" id="prod-code" required placeholder="Ví dụ: SP001" style="width: 100%;">
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="prod-name">Tên sản phẩm *</label>
-            <input type="text" class="form-control" id="prod-name" required placeholder="Ví dụ: Sơn Dulux EasyClean" style="width: 100%;">
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="prod-brand">Hãng sơn</label>
-            <select class="form-control" id="prod-brand" style="width: 100%;">
-              <option value="Nano10*">Nano10*</option>
-              <option value="mutsutec">mutsutec</option>
-              <option value="tdkaw">tdkaw</option>
-              <option value="cova">cova</option>
-              <option value="festivanano">festivanano</option>
-              <option value="Hatacco nano">Hatacco nano</option>
-              <option value="Khác">Khác</option>
-            </select>
-          </div>
+        <div class="modal-body product-family-editor">
+          <div class="product-editor-section">
+            <h4>Thông tin chung</h4>
+            <div class="form-row-2">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="prod-code">Mã gốc *</label>
+                <input type="text" class="form-control" id="prod-code" required placeholder="Ví dụ: CT-Đ1">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="prod-name">Tên sản phẩm *</label>
+                <input type="text" class="form-control" id="prod-name" required placeholder="Ví dụ: Sơn lót chống kiềm nội thất">
+              </div>
+            </div>
+            <div class="form-row-2">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="prod-brand">Hãng sơn *</label>
+                <select class="form-control" id="prod-brand"></select>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" for="prod-product-group">Nhóm sản phẩm</label>
+                <input type="text" class="form-control" id="prod-product-group" placeholder="Ví dụ: Sơn nội thất">
+              </div>
+            </div>
           <div class="form-group" id="prod-brand-custom-group" style="margin-bottom: 0; display: none;">
             <label class="form-label" for="prod-brand-custom">Nhập tên hãng sơn khác *</label>
             <input type="text" class="form-control" id="prod-brand-custom" placeholder="Ví dụ: Dulux, Jotun..." style="width: 100%;">
           </div>
-          <div class="form-row-2">
             <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-base-product-id">Sản phẩm gốc</label>
-              <select class="form-control" id="prod-base-product-id" style="width: 100%;"></select>
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-product-group">Nhóm sản phẩm</label>
-              <input type="text" class="form-control" id="prod-product-group" placeholder="Ví dụ: Sơn ngoại thất">
+              <label class="form-label" for="prod-description">Mô tả</label>
+              <textarea class="form-control" id="prod-description" rows="2" placeholder="Thông tin dùng chung cho sản phẩm"></textarea>
             </div>
           </div>
-          <div class="form-row-3">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-package-type">Loại bao bì *</label>
-              <select class="form-control" id="prod-package-type" required>
-                <option value="">Chọn loại bao bì</option>
-                <option value="Thùng">Thùng</option>
-                <option value="Lon">Lon</option>
-                <option value="Hộp">Hộp</option>
-                <option value="Bao">Bao</option>
-                <option value="Túi">Túi</option>
-              </select>
+
+          <div class="product-editor-section">
+            <div class="product-editor-section-header">
+              <div>
+                <h4>Danh sách quy cách</h4>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-add-product-variant">
+                <i data-lucide="plus"></i> Thêm quy cách
+              </button>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-package-weight">Khối lượng *</label>
-              <input type="text" inputmode="decimal" class="form-control" id="prod-package-weight" required placeholder="Ví dụ: 5,3">
-            </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label" for="prod-package-weight-unit">Đơn vị *</label>
-              <select class="form-control" id="prod-package-weight-unit">
-                <option value="kg">kg</option>
-                <option value="g">g</option>
-                <option value="l">l</option>
-                <option value="ml">ml</option>
-                <option value="bộ">bộ</option>
-              </select>
+            <div class="table-responsive product-variants-editor-wrap">
+              <table class="table product-variants-editor-table">
+                <thead>
+                  <tr>
+                    <th>Mã SKU *</th>
+                    <th>Quy cách *</th>
+                    <th>Khối lượng/Dung tích *</th>
+                    <th>Đơn vị *</th>
+                    <th>Giá nhập</th>
+                    <th>Trạng thái</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="prod-variants-body"></tbody>
+              </table>
             </div>
           </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="prod-display-specification">Quy cách hiển thị</label>
-            <input type="text" class="form-control" id="prod-display-specification" placeholder="Tự tạo, ví dụ: Lon 5,3 kg">
-          </div>
-          <label class="toggle-row">
-            <input type="checkbox" id="prod-active" checked>
-            <span>Đang áp dụng</span>
-          </label>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-product">Hủy bỏ</button>

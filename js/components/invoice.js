@@ -6,9 +6,11 @@ import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js?v=20260730-cashbook-reset';
 import { addCashbookTransaction } from './so_quy.js?v=20260730-cashbook-reset';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
+import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 
 let currentOrderToPrint = null;
 let isSavingOrder = false;
+let selectedProductFamilyKey = '';
 
 export function getActiveInvoiceDiscount(brand) {
   // Bảng giá mới lưu đơn giá SKU trực tiếp. Chiết khấu dòng là nghiệp vụ riêng,
@@ -18,6 +20,51 @@ export function getActiveInvoiceDiscount(brand) {
 
 function getProductId(product) {
   return product.id || product.code;
+}
+
+function getOrderItemVariantCode(item) {
+  return item.variantCode || item.variantCodeSnapshot || item.productCode || item.code || '';
+}
+
+function getOrderItemSpecification(item) {
+  const immutableSnapshot = item.specificationSnapshot || item.weightOrVolumeSnapshot;
+  if (immutableSnapshot) return immutableSnapshot;
+
+  const directParts = [
+    item.packagingName || item.packagingNameSnapshot || item.package,
+    item.weightOrVolume ?? item.packageWeight,
+    item.unitName || item.packageWeightUnit
+  ].filter(value => value !== null && value !== undefined && value !== '');
+  if (directParts.length > 1) return directParts.join(' ').trim();
+
+  const variant = (state.products || []).find(product =>
+    (item.variantId && product.id === item.variantId) ||
+    product.code === getOrderItemVariantCode(item)
+  );
+  if (variant) {
+    const currentSpecification = variantSpecification(variant);
+    if (currentSpecification) return currentSpecification;
+
+    const legacyPackage = item.package;
+    if (legacyPackage === 'Bo') {
+      return [
+        variant.weightLon ? `Lon: ${variant.weightLon}` : '',
+        variant.weightBao ? `Bao: ${variant.weightBao}` : ''
+      ].filter(Boolean).join(' + ') || 'Bộ';
+    }
+    const legacyWeights = {
+      Thung: variant.weightThung,
+      Lon: variant.weightLon,
+      Hop: variant.weightHop,
+      Bao: variant.weightBao,
+      Tui: variant.weightTui
+    };
+    const legacyLabels = { Thung: 'Thùng', Lon: 'Lon', Hop: 'Hộp', Bao: 'Bao', Tui: 'Túi' };
+    if (legacyPackage && (legacyWeights[legacyPackage] || legacyLabels[legacyPackage])) {
+      return [legacyLabels[legacyPackage] || legacyPackage, legacyWeights[legacyPackage]].filter(Boolean).join(' ');
+    }
+  }
+  return directParts.join(' ').trim() || 'N/A';
 }
 
 function resolveProductPrice(product) {
@@ -34,6 +81,132 @@ function resolveProductPrice(product) {
     priceLists: filterPriceListsForUser(state.pricelists, state.currentUser),
     priceListItems: state.priceListItems
   });
+}
+
+function getInvoiceProductFamilies() {
+  let variants = (state.products || []).filter(product =>
+    product?.id &&
+    product.packageType &&
+    !product.isLegacy &&
+    product.isActive !== false
+  );
+  if (state.activeCustomerBrand && state.activeCustomerBrand !== 'Tất cả') {
+    variants = variants.filter(product => {
+      const brand = String(product.brand || '').toLowerCase().replace(/\s+/g, '');
+      const isFestiva = brand === 'festivanano' || brand === 'festiva';
+      return isFestiva || product.brand === state.activeCustomerBrand;
+    });
+  }
+  return buildProductFamilies(variants);
+}
+
+function getVariantStock(variant) {
+  const stock = (state.finishedGoodsStock || []).find(item =>
+    item.productCode === variant.code &&
+    (!item.brand || !variant.brand || item.brand === variant.brand) &&
+    (!item.packageType || item.packageType === variant.packageType)
+  );
+  return stock ? Number(stock.quantity || 0) : null;
+}
+
+function closeVariantPicker() {
+  document.getElementById('invoice-variant-modal')?.classList.remove('active');
+  document.body.classList.remove('invoice-variant-open');
+}
+
+function addVariantToInvoice(variant) {
+  if (!variant?.id || !variant.packageType || variant.isLegacy || variant.isActive === false) {
+    showToast('Quy cách này đã ngừng áp dụng hoặc không hợp lệ.', 'warning');
+    return false;
+  }
+
+  const resolvedPrice = resolveProductPrice(variant);
+  if (resolvedPrice.status === 'missing' || Number(resolvedPrice.price) <= 0) {
+    showToast(`SKU "${variant.code}" chưa có giá trong bảng giá đang áp dụng.`, 'warning');
+    return false;
+  }
+
+  const price = Number(resolvedPrice.price);
+  const snapshot = buildVariantSnapshot(variant);
+  state.invoiceItems.push({
+    product: variant,
+    ...snapshot,
+    brand: variant.brand || 'Nano10*',
+    package: snapshot.packagingName,
+    packageWeight: snapshot.weightOrVolume,
+    colorCode: '',
+    colorPercent: 0,
+    quantity: 1,
+    discountPercent: getActiveInvoiceDiscount(variant.brand),
+    price,
+    unitPrice: price,
+    listPrice: price,
+    priceListId: resolvedPrice.priceListId,
+    priceListName: resolvedPrice.priceListName,
+    priceSource: resolvedPrice.source,
+    notes: ''
+  });
+
+  showToast(`Đã thêm ${variant.code} - ${variantSpecification(variant)}.`);
+  closeVariantPicker();
+  const searchInput = document.getElementById('invoice-product-search');
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.removeAttribute('data-selected-family-key');
+    searchInput.removeAttribute('data-matched-variant-id');
+  }
+  selectedProductFamilyKey = '';
+  renderInvoiceTable();
+  searchInput?.focus();
+  return true;
+}
+
+function openVariantPicker(family, preferredVariantId = '') {
+  if (!family) return;
+  if (shouldAutoSelectVariant(family)) {
+    addVariantToInvoice(family.variants.find(variant => variant.isActive !== false));
+    return;
+  }
+
+  const modal = document.getElementById('invoice-variant-modal');
+  const options = document.getElementById('invoice-variant-options');
+  if (!modal || !options) return;
+  document.getElementById('invoice-variant-base-code').textContent = family.baseCode;
+  document.getElementById('invoice-variant-modal-title').textContent = family.name;
+  document.getElementById('invoice-variant-brand').textContent = `${family.brand} • Có ${family.variants.length} quy cách`;
+
+  options.innerHTML = family.variants.map(variant => {
+    const price = resolveProductPrice(variant);
+    const hasPrice = price.status !== 'missing' && Number(price.price) > 0;
+    const stock = getVariantStock(variant);
+    return `
+      <button
+        type="button"
+        class="variant-choice ${variant.id === preferredVariantId ? 'highlighted' : ''}"
+        data-variant-id="${variant.id}"
+        ${hasPrice ? '' : 'disabled'}
+      >
+        <span class="variant-choice-main">
+          <span class="variant-choice-spec">${variantSpecification(variant)}</span>
+          <span class="variant-choice-code">Mã SKU: ${variant.code}</span>
+          ${stock === null ? '' : `<span class="variant-choice-stock">Tồn kho: ${formatNumber(stock)}</span>`}
+        </span>
+        <span class="variant-choice-meta">
+          <span class="variant-choice-price">${hasPrice ? formatCurrency(Number(price.price)) : 'Chưa có giá'}</span>
+        </span>
+      </button>
+    `;
+  }).join('');
+
+  options.querySelectorAll('.variant-choice[data-variant-id]').forEach(button => {
+    button.addEventListener('click', () => {
+      const variant = family.variants.find(item => item.id === button.dataset.variantId);
+      if (variant) addVariantToInvoice(variant);
+    });
+  });
+  modal.classList.add('active');
+  document.body.classList.add('invoice-variant-open');
+  safeCreateIcons();
 }
 
 export function applyActivePriceListToInvoice() {
@@ -109,34 +282,6 @@ export function renderInvoiceTable() {
 
   tableBody.innerHTML = state.invoiceItems.map((item, index) => {
     const p = item.product;
-    
-    // Tạo dropdown quy cách đóng gói dựa trên giá tiền cấu hình (> 0)
-    const activePackages = [];
-    const isSpecialWaterproofing = p.name.toLowerCase().includes('chống thấm sàn chuyên dụng') || 
-                                   p.code === 'SIKA-01 A+B' || 
-                                   p.code === 'EMP-01';
-    if (p.packageType || p.baseProductId || p.parentProductId) {
-      const pkgLabel = `${p.packageType || item.package || 'SKU'} ${p.packageWeight || item.packageWeight || ''}`.trim();
-      activePackages.push({ value: item.package || p.packageType || 'SKU', label: `${pkgLabel} (${formatCurrency(item.unitPrice || item.price || 0)})` });
-    } else if (isSpecialWaterproofing) {
-      const boPrice = p.priceLon || p.priceThung || 0;
-      activePackages.push({ value: 'Bo', label: `Bộ (gồm Lon + Bao) (${formatCurrency(boPrice)})` });
-    } else {
-      if (p.priceThung > 0) activePackages.push({ value: 'Thung', label: `Thùng (${formatCurrency(p.priceThung)})` });
-      if (p.priceLon > 0) activePackages.push({ value: 'Lon', label: `Lon (${formatCurrency(p.priceLon)})` });
-      if (p.priceHop > 0) activePackages.push({ value: 'Hop', label: `Hộp (${formatCurrency(p.priceHop)})` });
-      if (p.priceBao > 0) activePackages.push({ value: 'Bao', label: `Bao (${formatCurrency(p.priceBao)})` });
-      if (p.priceTui > 0) activePackages.push({ value: 'Tui', label: `Túi (${formatCurrency(p.priceTui)})` });
-    }
-    
-    // Trường hợp sản phẩm không có quy cách nào thiết lập giá (>0), mặc định dùng Thùng
-    if (activePackages.length === 0) {
-      activePackages.push({ value: 'Thung', label: 'Thùng (0 ₫)' });
-    }
-
-    const packageOptions = activePackages.map(opt => `
-      <option value="${opt.value}" ${item.package === opt.value ? 'selected' : ''}>${opt.label}</option>
-    `).join('');
 
     const subTotal = item.quantity * item.price * (1 - item.discountPercent / 100);
     
@@ -178,9 +323,10 @@ export function renderInvoiceTable() {
           </div>
         </td>
         <td>
-          <select class="form-control-inline item-package-select" style="width: 100%; font-size: 0.8rem;" ${disabledAttr}>
-            ${packageOptions}
-          </select>
+          <span class="invoice-variant-display">
+            ${variantSpecification(p) || item.package}
+            <small>${item.variantCode || p.code}</small>
+          </span>
         </td>
         <td style="text-align: center;">
           <input type="number" class="form-control-inline item-quantity" value="${item.quantity}" min="1" style="width: 55px; text-align: center; font-weight: 600;" ${disabledAttr}>
@@ -229,19 +375,6 @@ export function renderInvoiceTable() {
       if (pctLbl) pctLbl.innerText = colorPct;
       
       // Tính lại đơn giá có bao gồm tiền màu cộng thêm
-      recalculateItemPriceWithColorMarkup(idx);
-      updateRowSubtotal(row, idx);
-      calculateInvoiceTotals();
-    });
-  });
-
-  document.querySelectorAll('.item-package-select').forEach(select => {
-    select.addEventListener('change', (e) => {
-      const row = e.target.closest('tr');
-      const idx = parseInt(row.getAttribute('data-index'));
-      const pkg = e.target.value;
-      state.invoiceItems[idx].package = pkg;
-      
       recalculateItemPriceWithColorMarkup(idx);
       updateRowSubtotal(row, idx);
       calculateInvoiceTotals();
@@ -444,66 +577,30 @@ export function calculateInvoiceTotals() {
 
 export async function addProductToInvoice() {
   const searchInput = document.getElementById('invoice-product-search');
-  const codeVal = searchInput.value.trim().toUpperCase();
-  const brandVal = searchInput.getAttribute('data-selected-brand');
-  
-  if (!codeVal) return;
-  
-  // Tìm kiếm sản phẩm
-  let product = null;
-  if (brandVal) {
-    product = state.products.find(p => p.code === codeVal && p.brand === brandVal);
-  } else {
-    product = state.products.find(p => p.code === codeVal);
+  const query = searchInput?.value.trim() || '';
+  if (!query) return;
+
+  const families = getInvoiceProductFamilies();
+  const selectedKey = searchInput.getAttribute('data-selected-family-key') || selectedProductFamilyKey;
+  let family = selectedKey ? families.find(item => item.key === selectedKey) : null;
+  let matchedVariantId = searchInput.getAttribute('data-matched-variant-id') || '';
+
+  if (!family) {
+    const matches = searchProductFamilies(families, query);
+    if (matches.length === 1) {
+      family = matches[0];
+      matchedVariantId = matches[0].matchedVariantId || '';
+    } else if (matches.length > 1) {
+      showToast('Có nhiều sản phẩm phù hợp. Vui lòng chọn một sản phẩm trong danh sách.', 'warning');
+      return;
+    }
   }
-  
-  if (!product) {
-    showToast(`Không tìm thấy sản phẩm với mã "${codeVal}"!`, 'danger');
+
+  if (!family) {
+    showToast(`Không tìm thấy sản phẩm phù hợp với "${query}".`, 'danger');
     return;
   }
-  if (!product.id || !product.packageType || product.isLegacy || product.isActive === false) {
-    showToast(`"${product.code}" là sản phẩm cũ hoặc đã ngừng áp dụng. Vui lòng chọn một SKU đang hoạt động.`, 'warning');
-    return;
-  }
-  
-  const defaultPackage = product.packageType;
-  const resolvedPrice = resolveProductPrice(product);
-  if (resolvedPrice.status === 'missing' || Number(resolvedPrice.price) <= 0) {
-    showToast(`Sản phẩm "${product.code}" chưa có giá trong bảng giá đang áp dụng.`, 'warning');
-    return;
-  }
-  const price = Number(resolvedPrice.price);
-
-  // Lấy tỷ lệ chiết khấu hãng sơn theo bảng giá đã chọn
-  const discountPercent = getActiveInvoiceDiscount(product.brand);
-
-  const item = {
-    product,
-    brand: product.brand || 'Nano10*',
-    package: defaultPackage,
-    colorCode: '',
-    colorPercent: 0,
-    quantity: 1,
-    discountPercent,
-    price,
-    unitPrice: price,
-    listPrice: price,
-    priceListId: resolvedPrice.priceListId,
-    priceListName: resolvedPrice.priceListName,
-    priceSource: resolvedPrice.source,
-    notes: ''
-  };
-
-  // Luôn thêm sản phẩm thành dòng mới độc lập, không cộng dồn
-  state.invoiceItems.push(item);
-  showToast(`Đã thêm ${product.name} vào hóa đơn.`);
-
-  // Clear ô tìm kiếm
-  searchInput.value = '';
-  searchInput.removeAttribute('data-selected-brand');
-  
-  renderInvoiceTable();
-  searchInput.focus();
+  openVariantPicker(family, matchedVariantId);
 }
 
 export function compileActiveOrder() {
@@ -616,16 +713,38 @@ export function compileActiveOrder() {
   const itemsToSave = state.invoiceItems.map(item => {
     const productBrand = item.brand || (item.product && item.product.brand) || 'Nano10*';
     const revAttrs = getRevenueAttributes(productBrand, agencyBrand, companyId, state.brands);
+    const variantSnapshot = buildVariantSnapshot(item.product);
+    const snapshot = {
+      ...variantSnapshot,
+      productGroupId: item.productGroupId || variantSnapshot.productGroupId,
+      variantId: item.variantId || variantSnapshot.variantId,
+      variantCode: item.variantCode || variantSnapshot.variantCode,
+      baseCode: item.baseCode || variantSnapshot.baseCode,
+      packagingName: item.packagingName || item.package || variantSnapshot.packagingName,
+      weightOrVolume: item.weightOrVolume ?? item.packageWeight ?? variantSnapshot.weightOrVolume,
+      unitName: item.unitName || variantSnapshot.unitName,
+      specificationSnapshot: item.specificationSnapshot || variantSnapshot.specificationSnapshot
+    };
 
     return {
       brand: productBrand,
-      productId: getProductId(item.product),
-      productCode: item.product.code,
+      productId: snapshot.variantId || getProductId(item.product),
+      productGroupId: snapshot.productGroupId,
+      variantId: snapshot.variantId || getProductId(item.product),
+      variantCode: snapshot.variantCode || item.product.code,
+      baseCode: snapshot.baseCode,
+      productCode: snapshot.variantCode || item.product.code,
       productName: item.product.name,
-      package: item.package,
-      packageWeight: item.packageWeight || item.product.packageWeight || '',
-      packageWeightUnit: item.product.packageWeightUnit || '',
-      specificationSnapshot: item.product.displaySpecification || `${item.product.packageType || item.package} ${item.product.packageWeight ?? ''} ${item.product.packageWeightUnit || ''}`.trim(),
+      package: snapshot.packagingName,
+      packagingName: snapshot.packagingName,
+      packageWeight: snapshot.weightOrVolume,
+      packageWeightUnit: snapshot.unitName,
+      unitName: snapshot.unitName,
+      weightOrVolume: snapshot.weightOrVolume,
+      weightOrVolumeSnapshot: [snapshot.weightOrVolume, snapshot.unitName]
+        .filter(value => value !== null && value !== undefined && value !== '')
+        .join(' '),
+      specificationSnapshot: snapshot.specificationSnapshot,
       colorCode: item.colorCode || '',
       colorPercent: item.colorPercent || 0,
       quantity: item.quantity,
@@ -914,7 +1033,14 @@ export function resetInvoiceCustomer() {
 export function resetInvoiceBuilder() {
   state.invoiceItems = [];
   document.getElementById('invoice-notes').value = '';
-  document.getElementById('invoice-product-search').value = '';
+  const productSearch = document.getElementById('invoice-product-search');
+  if (productSearch) {
+    productSearch.value = '';
+    productSearch.removeAttribute('data-selected-family-key');
+    productSearch.removeAttribute('data-matched-variant-id');
+  }
+  selectedProductFamilyKey = '';
+  closeVariantPicker();
   
   // Khôi phục nút và tiêu đề panel về trạng thái Tạo hóa đơn mới
   const saveBtn = document.getElementById('btn-save-order');
@@ -1293,7 +1419,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     const totals = {};
     let totalQty = 0;
     order.items.forEach(item => {
-      let pkg = item.package;
+      let pkg = item.packagingName || item.packagingNameSnapshot || item.package;
       if (pkg === 'Thung') pkg = 'Thùng';
       else if (pkg === 'Lon') pkg = 'Lon';
       else if (pkg === 'Hop') pkg = 'Hộp';
@@ -1326,30 +1452,16 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       </thead>
       <tbody>
         ${order.items.map((item, idx) => {
-          const itemBrand = item.brand || (item.product && item.product.brand);
-          const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
-          
-          let weight = 'N/A';
-          if (p) {
-            if (item.package === 'Bo') {
-              const wLon = p.weightLon ? `Lon: ${p.weightLon}` : '';
-              const wBao = p.weightBao ? `Bao: ${p.weightBao}` : '';
-              weight = [wLon, wBao].filter(Boolean).join(' + ') || 'N/A';
-            }
-            else if (item.package === 'Thung') weight = p.weightThung || 'N/A';
-            else if (item.package === 'Lon') weight = p.weightLon || 'N/A';
-            else if (item.package === 'Hop') weight = p.weightHop || 'N/A';
-            else if (item.package === 'Bao') weight = p.weightBao || 'N/A';
-            else if (item.package === 'Tui') weight = p.weightTui || 'N/A';
-          }
+          const specification = getOrderItemSpecification(item);
+          const variantCode = getOrderItemVariantCode(item);
           
           return `
             <tr>
               <td style="text-align: center;">${idx + 1}</td>
-              <td style="font-weight: bold; font-size: 14pt;">${item.productCode}</td>
+              <td style="font-weight: bold; font-size: 14pt;">${variantCode}</td>
               <td>${item.productName}</td>
               <td style="text-align: center; font-weight: bold; font-size: 14pt;">${item.colorCode || ''}</td>
-              <td style="text-align: center;">${weight}</td>
+              <td style="text-align: center;">${specification}</td>
               <td style="text-align: center; font-weight: bold; font-size: 14pt;">${item.quantity}</td>
               <td style="font-size: 13pt; font-weight: 500;">${item.notes || ''}</td>
             </tr>
@@ -1420,41 +1532,8 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         Math.round(Math.round(item.quantity * item.price) * discountMultiplier);
       sumSubTotal += subTotal;
       
-      const itemBrand = item.brand || (item.product && item.product.brand);
-      const p = state.products.find(prod => prod.code === item.productCode && prod.brand === itemBrand);
-      let weight = '';
-      if (p) {
-        if (item.package === 'Bo') {
-          const wLon = p.weightLon ? `Lon: ${p.weightLon}` : '';
-          const wBao = p.weightBao ? `Bao: ${p.weightBao}` : '';
-          weight = [wLon, wBao].filter(Boolean).join(' + ') || 'N/A';
-        }
-        else if (item.package === 'Thung') weight = p.weightThung;
-        else if (item.package === 'Lon') weight = p.weightLon;
-        else if (item.package === 'Hop') weight = p.weightHop;
-        else if (item.package === 'Bao') weight = p.weightBao;
-        else if (item.package === 'Tui') weight = p.weightTui;
-      }
-      
-      let packageDisplay = item.package;
-      let prefix = '';
-      if (packageDisplay === 'Bo') {
-        prefix = 'Bộ';
-        packageDisplay = `Bộ (${weight})`;
-      } else {
-        if (packageDisplay === 'Thung') prefix = 'Thùng';
-        else if (packageDisplay === 'Lon') prefix = 'Lon';
-        else if (packageDisplay === 'Hop') prefix = 'Hộp';
-        else if (packageDisplay === 'Bao') prefix = 'Bao';
-        else if (packageDisplay === 'Tui') prefix = 'Túi';
-        
-        if (weight && weight !== 'N/A') {
-          let formattedWeight = weight.replace(/\s+/g, '').toUpperCase();
-          packageDisplay = `${prefix} ${formattedWeight}`;
-        } else {
-          packageDisplay = prefix;
-        }
-      }
+      const packageDisplay = getOrderItemSpecification(item);
+      const variantCode = getOrderItemVariantCode(item);
 
       const colorPercentText = item.colorPercent > 0 ? ` (+${item.colorPercent}% màu)` : '';
       const colorCodeDisplay = item.colorCode ? `${item.colorCode}${colorPercentText}` : '';
@@ -1463,7 +1542,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         <tr>
           <td style="text-align: center;">${idx + 1}</td>
           <td>${item.productName}</td>
-          <td style="font-weight: bold; text-align: center;">${item.productCode}</td>
+          <td style="font-weight: bold; text-align: center;">${variantCode}</td>
           <td style="text-align: center; font-weight: bold;">${colorCodeDisplay}</td>
           <td style="text-align: center;">${packageDisplay}</td>
           <td style="text-align: center;">${item.quantity}</td>
@@ -1721,63 +1800,46 @@ export function setupInvoiceCreator() {
 
   if (searchInput) {
     searchInput.addEventListener('input', () => {
-      searchInput.removeAttribute('data-selected-brand');
-      const val = searchInput.value.trim().toLowerCase();
-      if (val === '') {
+      searchInput.removeAttribute('data-selected-family-key');
+      searchInput.removeAttribute('data-matched-variant-id');
+      selectedProductFamilyKey = '';
+      const query = searchInput.value.trim();
+      if (!query) {
         suggestionsList.style.display = 'none';
         return;
       }
 
-      const valNormalized = val.replace(/[^a-z0-9]/g, '');
-      let matches = state.products.filter(p => {
-        if (!p.id || !p.packageType || p.isLegacy || p.isActive === false) return false;
-        const codeNormalized = p.code.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return (valNormalized !== '' && codeNormalized.includes(valNormalized)) ||
-               p.code.toLowerCase().includes(val) || 
-               p.name.toLowerCase().includes(val);
-      });
-
-      if (state.activeCustomerBrand && state.activeCustomerBrand !== 'Tất cả') {
-        matches = matches.filter(p => {
-          const pBrandLower = (p.brand || '').toLowerCase().replace(/\s+/g, '');
-          const isFestiva = pBrandLower === 'festivanano' || pBrandLower === 'festiva';
-          return isFestiva || p.brand === state.activeCustomerBrand;
-        });
-      }
-
-      matches.sort((a, b) => {
-        const brandA = (a.brand || '').toLowerCase();
-        const brandB = (b.brand || '').toLowerCase();
-        if (brandA < brandB) return -1;
-        if (brandA > brandB) return 1;
-        
-        const codeA = (a.code || '').toLowerCase();
-        const codeB = (b.code || '').toLowerCase();
-        if (codeA < codeB) return -1;
-        if (codeA > codeB) return 1;
-        return 0;
-      });
+      const matches = searchProductFamilies(getInvoiceProductFamilies(), query).slice(0, 30);
 
       if (matches.length === 0) {
         suggestionsList.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Không tìm thấy sản phẩm</li>`;
       } else {
-        suggestionsList.innerHTML = matches.map(p => `
-          <li class="suggestion-item" data-code="${p.code}" data-brand="${p.brand || 'Nano10*'}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        suggestionsList.innerHTML = matches.map(family => {
+          const matchedVariant = family.variants.find(variant => variant.id === family.matchedVariantId);
+          return `
+          <li class="suggestion-item" data-family-key="${family.key}" data-matched-variant-id="${family.matchedVariantId || ''}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <div class="suggestion-info" style="text-align: left; align-items: flex-start; display: flex; flex-direction: column;">
-              <span class="suggestion-code" style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem;">${p.code}</span>
-              <span class="suggestion-name" style="color: var(--text-secondary); font-size: 0.85rem;">${p.name}</span>
-              <span style="color: var(--text-muted); font-size: 0.75rem;">${p.displaySpecification || `${p.packageType} ${p.packageWeight ?? ''} ${p.packageWeightUnit || ''}`}</span>
+              <span class="suggestion-code" style="font-weight: 700; color: var(--text-primary); font-size: 0.8rem;">${family.baseCode}</span>
+              <span class="suggestion-name" style="color: var(--text-secondary); font-size: 0.85rem;">${family.name}</span>
+              <span style="color: var(--text-muted); font-size: 0.75rem;">
+                ${matchedVariant ? `Khớp ${matchedVariant.code} • ${variantSpecification(matchedVariant)}` : `Có ${family.variants.length} quy cách`}
+              </span>
             </div>
-            <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3);">${p.brand || 'Nano10*'}</span>
+            <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #047857; border: 1px solid rgba(34, 197, 94, 0.3);">${family.brand}</span>
           </li>
-        `).join('');
+        `;
+        }).join('');
       }
       suggestionsList.style.display = 'block';
 
-      document.querySelectorAll('.suggestion-item[data-code]').forEach(item => {
+      suggestionsList.querySelectorAll('.suggestion-item[data-family-key]').forEach(item => {
         item.addEventListener('click', () => {
-          searchInput.value = item.getAttribute('data-code');
-          searchInput.setAttribute('data-selected-brand', item.getAttribute('data-brand'));
+          const family = matches.find(match => match.key === item.dataset.familyKey);
+          if (!family) return;
+          selectedProductFamilyKey = family.key;
+          searchInput.value = family.baseCode;
+          searchInput.setAttribute('data-selected-family-key', family.key);
+          searchInput.setAttribute('data-matched-variant-id', item.dataset.matchedVariantId || '');
           suggestionsList.style.display = 'none';
           addProductToInvoice();
         });
@@ -1799,6 +1861,15 @@ export function setupInvoiceCreator() {
   });
 
   if (addBtn) addBtn.addEventListener('click', addProductToInvoice);
+  document.getElementById('btn-close-invoice-variant-modal')?.addEventListener('click', closeVariantPicker);
+  document.getElementById('invoice-variant-modal')?.addEventListener('click', event => {
+    if (event.target.id === 'invoice-variant-modal') closeVariantPicker();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && document.getElementById('invoice-variant-modal')?.classList.contains('active')) {
+      closeVariantPicker();
+    }
+  });
 
   if (resetBtn) {
     resetBtn.addEventListener('click', () => {

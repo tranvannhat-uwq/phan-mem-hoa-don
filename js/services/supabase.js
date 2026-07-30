@@ -397,6 +397,9 @@ function normalizeProductRow(row, localProducts = []) {
   return {
     id: row.id || null,
     code: row.code,
+    variantCode: row.variant_code || row.code,
+    productGroupId: row.product_group_id || row.base_product_id || row.parent_product_id || null,
+    baseCode: row.base_code || '',
     baseProductId: row.base_product_id || row.parent_product_id || row.baseProductId || null,
     parentProductId: row.parent_product_id || row.base_product_id || row.parentProductId || null,
     name: row.name,
@@ -404,9 +407,17 @@ function normalizeProductRow(row, localProducts = []) {
     brandId: row.brand_id || (local ? local.brandId : null),
     group: row.product_group || row.group || (local ? local.group : ''),
     packageType: row.package_type || row.packageType || '',
+    packagingName: row.packaging_name || row.package_type || row.packageType || '',
     packageWeight: row.package_weight || row.packageWeight || '',
+    weightOrVolume: row.weight_or_volume ?? row.package_weight ?? row.packageWeight ?? '',
     packageWeightUnit: row.package_weight_unit || row.packageWeightUnit || row.unit || (local ? local.packageWeightUnit : 'kg'),
+    unitName: row.unit_name || row.package_weight_unit || row.packageWeightUnit || row.unit || 'kg',
     displaySpecification: row.display_specification || row.displaySpecification || '',
+    conversionQuantity: Number(row.conversion_quantity || 1),
+    barcode: row.barcode || '',
+    purchasePrice: Number(row.purchase_price || 0),
+    categoryId: row.category_id || null,
+    description: row.description || '',
     isActive: row.is_active !== false,
     isLegacy: row.is_legacy === true,
     createdAt: row.created_at || '',
@@ -600,7 +611,8 @@ export async function fetchCloudData() {
           .map(item => ({
             id: item.id || `${item.price_list_id}:${item.product_id}`,
             priceListId: item.price_list_id,
-            productId: item.product_id,
+            productId: item.variant_id || item.product_id,
+            variantId: item.variant_id || item.product_id,
             price: parseFloat(item.price || 0),
             isOverride: item.is_override !== false,
             sourceType: item.source_type || 'manual',
@@ -941,6 +953,8 @@ export async function fetchCloudData() {
                 returnId: i.return_id,
                 saleItemId: i.sale_item_id,
                 productId: i.product_id,
+                variantId: i.variant_id || null,
+                variantCode: i.variant_code_snapshot || i.product_id,
                 productName: i.product_name,
                 quantity: parseFloat(i.quantity || 0),
                 importPrice: parseFloat(i.import_price || 0),
@@ -948,7 +962,9 @@ export async function fetchCloudData() {
                 discountValue: parseFloat(i.discount_value || 0),
                 refundPrice: parseFloat(i.refund_price || 0),
                 subtotal: parseFloat(i.subtotal || 0),
-                packageType: i.package_type
+                packageType: i.packaging_name_snapshot || i.package_type,
+                packagingName: i.packaging_name_snapshot || i.package_type,
+                specificationSnapshot: i.specification_snapshot || ''
               });
               itemsMap.set(i.return_id, arr);
             });
@@ -1421,20 +1437,51 @@ export async function dbSaveProduct(product) {
       const dbRow = {
         id: product.id,
         code: product.code,
+        variant_code: product.variantCode || product.code,
+        product_group_id: product.productGroupId || product.baseProductId || product.parentProductId || null,
+        base_code: product.baseCode || null,
         base_product_id: product.baseProductId || product.parentProductId || null,
         parent_product_id: product.parentProductId || product.baseProductId || null,
         name: product.name,
         brand: product.brand || '',
         brand_id: product.brandId || ('brand_' + String(product.brand).toLowerCase().replace(/[^a-z0-9]/g, '')),
         package_type: product.packageType || '',
+        packaging_name: product.packagingName || product.packageType || '',
         package_weight: product.packageWeight === '' ? null : product.packageWeight,
+        weight_or_volume: product.weightOrVolume === '' ? (product.packageWeight === '' ? null : product.packageWeight) : product.weightOrVolume,
         package_weight_unit: product.packageWeightUnit || 'kg',
+        unit_name: product.unitName || product.packageWeightUnit || 'kg',
         display_specification: product.displaySpecification || '',
+        conversion_quantity: Number(product.conversionQuantity || 1),
+        barcode: product.barcode || null,
+        purchase_price: Number(product.purchasePrice || 0),
         product_group: product.group || null,
         is_active: product.isActive !== false,
         is_legacy: product.isLegacy === true,
         updated_at: new Date().toISOString()
       };
+
+      if (dbRow.product_group_id && product.baseCode) {
+        const hasOtherActiveVariant = (state.products || []).some(candidate =>
+          candidate.id !== product.id &&
+          (candidate.productGroupId || candidate.baseProductId || candidate.parentProductId) === dbRow.product_group_id &&
+          candidate.isActive !== false
+        );
+        const { error: groupError } = await supabaseClient
+          .from('product_groups')
+          .upsert({
+            id: dbRow.product_group_id,
+            base_code: product.baseCode,
+            product_name: product.name,
+            brand_id: product.brandId || null,
+            brand_name: product.brand || '',
+            category_id: product.categoryId || null,
+            description: product.description || null,
+            is_active: product.isActive !== false || hasOtherActiveVariant,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+        if (groupError) throw groupError;
+      }
 
       let error = null;
       if (existingRow?.id) {
@@ -1486,15 +1533,24 @@ export async function dbSaveProductsBulk(products) {
       rowsByKey.set(key, {
         id: product.id,
         code: product.code,
+        variant_code: product.variantCode || product.code,
+        product_group_id: product.productGroupId || product.baseProductId || product.parentProductId || null,
+        base_code: product.baseCode || null,
         base_product_id: product.baseProductId || product.parentProductId || null,
         parent_product_id: product.parentProductId || product.baseProductId || null,
         name: product.name,
         brand: product.brand || '',
         brand_id: product.brandId || ('brand_' + String(product.brand).toLowerCase().replace(/[^a-z0-9]/g, '')),
         package_type: product.packageType || '',
+        packaging_name: product.packagingName || product.packageType || '',
         package_weight: product.packageWeight === '' ? null : product.packageWeight,
+        weight_or_volume: product.weightOrVolume === '' ? (product.packageWeight === '' ? null : product.packageWeight) : product.weightOrVolume,
         package_weight_unit: product.packageWeightUnit || 'kg',
+        unit_name: product.unitName || product.packageWeightUnit || 'kg',
         display_specification: product.displaySpecification || '',
+        conversion_quantity: Number(product.conversionQuantity || 1),
+        barcode: product.barcode || null,
+        purchase_price: Number(product.purchasePrice || 0),
         product_group: product.group || null,
         is_active: product.isActive !== false,
         is_legacy: product.isLegacy === true,
@@ -1503,6 +1559,38 @@ export async function dbSaveProductsBulk(products) {
     });
 
     const rows = [...rowsByKey.values()];
+    const savedVariantIds = new Set(products.map(product => product.id).filter(Boolean));
+    const groupsById = new Map();
+    products
+      .filter(product => product.productGroupId && product.baseCode)
+      .forEach(product => {
+        const current = groupsById.get(product.productGroupId);
+        groupsById.set(product.productGroupId, {
+          id: product.productGroupId,
+          base_code: product.baseCode,
+          product_name: product.name,
+          brand_id: product.brandId || current?.brand_id || null,
+          brand_name: product.brand || '',
+          category_id: product.categoryId || current?.category_id || null,
+          description: product.description || current?.description || null,
+          is_active: Boolean(current?.is_active) ||
+            product.isActive !== false ||
+            (state.products || []).some(candidate =>
+              !savedVariantIds.has(candidate.id) &&
+              (candidate.productGroupId || candidate.baseProductId || candidate.parentProductId) === product.productGroupId &&
+              candidate.isActive !== false
+            ),
+          updated_at: new Date().toISOString()
+        });
+      });
+    const groupRows = [...groupsById.values()];
+    if (groupRows.length > 0) {
+      const { error: groupError } = await supabaseClient
+        .from('product_groups')
+        .upsert(groupRows, { onConflict: 'id' });
+      if (groupError) throw groupError;
+    }
+
     const chunkSize = 200;
     for (let index = 0; index < rows.length; index += chunkSize) {
       const { error } = await supabaseClient
@@ -1801,6 +1889,7 @@ export async function dbSavePriceListItems(items) {
         id: item.id || `${item.priceListId}:${item.productId}`,
         price_list_id: item.priceListId,
         product_id: item.productId,
+        variant_id: item.variantId || item.productId,
         price: Number(item.price),
         is_override: true,
         source_type: item.sourceType || 'manual',
@@ -1938,10 +2027,15 @@ export async function dbSaveOrder(order) {
         const itemRows = order.items.map((item, idx) => ({
           id: item.id || `${order.id}-item-${idx}`,
           order_id: order.id,
-          product_id: item.productId || item.productCode || item.code || null,
+          product_id: item.variantId || item.productId || item.productCode || item.code || null,
+          product_group_id: item.productGroupId || null,
+          variant_id: item.variantId || item.productId || null,
           brand_id: item.brandId || item.brand || null,
           product_code_snapshot: item.productCode || item.code || '',
+          variant_code_snapshot: item.variantCode || item.productCode || item.code || '',
           product_name_snapshot: item.productName || item.name || '',
+          packaging_name_snapshot: item.packagingName || item.package || item.packageType || '',
+          weight_or_volume_snapshot: item.weightOrVolumeSnapshot || item.specificationSnapshot || item.displaySpecification || '',
           specification_snapshot: item.specificationSnapshot || item.displaySpecification || item.package || item.packageType || '',
           unit_snapshot: item.packageWeightUnit || item.unit || item.package || item.packageType || '',
           price_list_name_snapshot: item.priceListNameSnapshot || order.priceListNameSnapshot || '',
@@ -2673,6 +2767,8 @@ export async function dbSaveSalesReturn(ret) {
           return_id: ret.id,
           sale_item_id: i.saleItemId || null,
           product_id: i.productId || null,
+          variant_id: i.variantId || null,
+          variant_code_snapshot: i.variantCode || i.productId || '',
           product_name: i.productName || '',
           quantity: i.quantity || 0,
           import_price: i.importPrice || 0,
@@ -2680,7 +2776,9 @@ export async function dbSaveSalesReturn(ret) {
           discount_value: i.discountValue || 0,
           refund_price: i.refundPrice || 0,
           subtotal: i.subtotal || 0,
-          package_type: i.packageType || ''
+          package_type: i.packageType || '',
+          packaging_name_snapshot: i.packagingName || i.packageType || '',
+          specification_snapshot: i.specificationSnapshot || ''
         }));
         await supabaseClient.from(tableSalesReturnItemsName).upsert(itemRows, { onConflict: 'id' });
       }

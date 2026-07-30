@@ -222,6 +222,211 @@
   width: 15px;
   color: var(--text-muted);
 }
+
+.invoice-variant-modal-content {
+  width: min(680px, calc(100vw - 2rem));
+  max-width: 680px;
+  max-height: calc(100vh - 2rem);
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.2);
+  animation: none;
+}
+
+.invoice-variant-overlay {
+  z-index: 2500;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: none;
+}
+
+.invoice-variant-overlay .modal-header {
+  background: #ffffff;
+}
+
+.invoice-variant-overlay .modal-title {
+  color: var(--text-primary);
+}
+
+.invoice-variant-overlay .modal-close:hover {
+  background: #eef2f7;
+  color: var(--text-primary);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body.invoice-variant-open {
+  overflow: hidden;
+}
+
+.variant-modal-eyebrow {
+  margin-bottom: 0.2rem;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.variant-modal-brand {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.variant-choice-list {
+  display: grid;
+  gap: 0.65rem;
+  max-height: min(520px, calc(100vh - 190px));
+  overflow-y: auto;
+}
+
+.variant-choice {
+  width: 100%;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.variant-choice:hover,
+.variant-choice.highlighted {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.variant-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.variant-choice-main,
+.variant-choice-meta {
+  min-width: 0;
+}
+
+.variant-choice-spec {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.variant-choice-code,
+.variant-choice-stock {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.variant-choice-price {
+  display: block;
+  color: var(--color-primary);
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.invoice-variant-display {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.invoice-variant-display small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+@media (max-width: 560px) {
+  .variant-choice {
+    grid-template-columns: 1fr;
+  }
+
+  .variant-choice-price {
+    text-align: left;
+  }
+}
+
+.product-family-editor {
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+}
+
+.product-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.product-editor-section + .product-editor-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.product-editor-section h4 {
+  font-size: 0.95rem;
+}
+
+.product-editor-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.product-editor-section-header p {
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.product-variants-editor-wrap {
+  border-radius: 8px;
+}
+
+.product-variants-editor-table {
+  min-width: 860px;
+  table-layout: fixed;
+}
+
+.product-variants-editor-table th,
+.product-variants-editor-table td {
+  padding: 0.55rem;
+}
+
+.product-variants-editor-table th:nth-child(1) { width: 165px; }
+.product-variants-editor-table th:nth-child(2) { width: 130px; }
+.product-variants-editor-table th:nth-child(3) { width: 165px; }
+.product-variants-editor-table th:nth-child(4) { width: 105px; }
+.product-variants-editor-table th:nth-child(5) { width: 140px; }
+.product-variants-editor-table th:nth-child(6) { width: 105px; }
+.product-variants-editor-table th:nth-child(7) { width: 48px; }
+
+.product-variants-editor-table .form-control {
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+}
 .price-list-picker-search-wrap input {
   width: 100%;
   border: 0;

@@ -1549,17 +1549,17 @@ function buildCustomerOrderExportRows(orders, customer) {
           toExportNumber(order.paidAmount ?? order.paid_amount ?? order.otherFeeAmount ?? order.other_fee_amount)
         )),
         'Trạng thái': getOrderStatusLabel(order.status || 'settled'),
-        'Mã hàng': item.productCode || item.code || item.productId || '',
+        'Mã hàng': item.variantCode || item.productCode || item.code || item.variantId || item.productId || '',
         'Tên hàng': item.productName || item.name || item.product?.name || '',
         'Thương hiệu': item.productBrand || item.brand || '',
         'Thương hiệu/Nhãn sơn': item.productBrand || item.brand || '',
-        'Quy cách': item.specificationSnapshot || item.displaySpecification || [
-          item.packageType || item.package,
-          item.packageWeight,
-          item.packageWeightUnit
+        'Quy cách': item.specificationSnapshot || item.weightOrVolumeSnapshot || item.displaySpecification || [
+          item.packagingName || item.packageType || item.package,
+          item.weightOrVolume || item.packageWeight,
+          item.unitName || item.packageWeightUnit
         ].filter(value => value !== null && value !== undefined && value !== '').join(' '),
-        'ĐVT': item.unit || item.packageType || item.package || '',
-        'Đơn vị tính': item.unit || item.packageType || item.package || '',
+        'ĐVT': item.unitName || item.unit || item.packagingName || item.packageType || item.package || '',
+        'Đơn vị tính': item.unitName || item.unit || item.packagingName || item.packageType || item.package || '',
         'Ghi chú hàng hóa': item.note || item.notes || '',
         'Số lượng': qty,
         'Đơn giá': unitPrice,

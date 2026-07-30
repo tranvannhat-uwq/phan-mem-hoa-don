@@ -61,6 +61,23 @@ assert.equal(overridden.status, 'direct');
 assert.equal(overridden.price, 1950000);
 assert.equal(overridden.source, 'group');
 
+const variantPrices = [
+  { priceListId: 'bg03', productId: 'ct-d1-lon', price: 390000 },
+  { priceListId: 'bg03', productId: 'ct-d1-thung', price: 1180000 }
+];
+assert.equal(resolvePriceForList({
+  productId: 'ct-d1-lon',
+  priceListId: 'bg03',
+  priceLists,
+  priceListItems: variantPrices
+}).price, 390000);
+assert.equal(resolvePriceForList({
+  productId: 'ct-d1-thung',
+  priceListId: 'bg03',
+  priceLists,
+  priceListItems: variantPrices
+}).price, 1180000);
+
 const afterDelete = resolvePriceForList({
   productId: 'ba46-lon',
   priceListId: 'bg03',

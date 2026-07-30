@@ -856,23 +856,47 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   
   // Tải các mặt hàng
   state.invoiceItems = order.items.map(item => {
-    let pObj = state.products.find(p => p.code === item.productCode && p.brand === item.brand);
+    let pObj = state.products.find(product =>
+      product.id === (item.variantId || item.productId) ||
+      (product.code === (item.variantCode || item.productCode) && product.brand === item.brand)
+    );
     if (!pObj) {
       pObj = {
-        code: item.productCode || item.code,
+        id: item.variantId || item.productId || null,
+        code: item.variantCode || item.productCode || item.code,
+        variantCode: item.variantCode || item.productCode || item.code,
+        productGroupId: item.productGroupId || null,
+        baseCode: item.baseCode || '',
         name: item.productName || item.name,
-        brand: item.brand
+        brand: item.brand,
+        packagingName: item.packagingName || item.package,
+        packageType: item.packagingName || item.package,
+        packageWeight: item.weightOrVolume || item.packageWeight || '',
+        packageWeightUnit: item.unitName || item.packageWeightUnit || '',
+        displaySpecification: item.specificationSnapshot || ''
       };
     }
     return {
       product: pObj,
+      productGroupId: item.productGroupId || pObj.productGroupId || null,
+      variantId: item.variantId || item.productId || pObj.id || null,
+      variantCode: item.variantCode || item.productCode || pObj.code,
+      baseCode: item.baseCode || pObj.baseCode || '',
       brand: item.brand,
-      package: item.package,
+      package: item.packagingName || item.package,
+      packagingName: item.packagingName || item.package,
+      packageWeight: item.weightOrVolume || item.packageWeight || pObj.packageWeight || '',
+      unitName: item.unitName || item.packageWeightUnit || pObj.packageWeightUnit || '',
       colorCode: item.colorCode || '',
       colorPercent: item.colorPercent || 0,
       quantity: item.quantity,
       discountPercent: item.discountPercent,
       price: item.price,
+      unitPrice: item.unitPrice || item.price,
+      listPrice: item.listPrice || item.price,
+      priceListId: item.priceListId || order.pricelistId || '',
+      priceListName: item.priceListNameSnapshot || '',
+      priceSource: item.priceSource || 'legacy_snapshot',
       notes: item.notes || ''
     };
   });
@@ -993,7 +1017,7 @@ export function openSalesReturnModal(orderId) {
   const returnedMap = {};
   existingReturns.forEach(ret => {
     (ret.items || []).forEach(item => {
-      const key = item.saleItemId || `${item.productId}_${item.packageType}`;
+      const key = item.saleItemId || `${item.variantCode || item.productId || item.variantId}_${item.packagingName || item.packageType}`;
       returnedMap[key] = (returnedMap[key] || 0) + (item.quantity || 0);
     });
   });
@@ -1012,7 +1036,15 @@ export function openSalesReturnModal(orderId) {
     : 1;
 
   tbody.innerHTML = (order.items || []).map((item, idx) => {
-    const itemKey = item.id || `${item.productCode || item.code}_${item.package}`;
+    const variantId = item.variantId || item.productId || '';
+    const variantCode = item.variantCode || item.variantCodeSnapshot || item.productCode || item.code || '';
+    const packagingName = item.packagingName || item.packagingNameSnapshot || item.package || '';
+    const specification = item.specificationSnapshot || item.weightOrVolumeSnapshot || [
+      packagingName,
+      item.weightOrVolume ?? item.packageWeight ?? '',
+      item.unitName || item.packageWeightUnit || ''
+    ].filter(Boolean).join(' ').trim();
+    const itemKey = item.id || `${variantCode || variantId}_${packagingName}`;
     const soldQty = Number(item.quantity || 0);
     const prevReturned = returnedMap[itemKey] || 0;
     const maxReturnable = Math.max(0, soldQty - prevReturned);
@@ -1022,10 +1054,10 @@ export function openSalesReturnModal(orderId) {
     const prodName = item.productName || (item.product && item.product.name) || item.name || 'Sản phẩm';
 
     return `
-      <tr class="return-item-row" data-key="${itemKey}" data-sale-item-id="${item.id || ''}" data-product-id="${item.productCode || item.code || ''}" data-product-name="${prodName}" data-package="${item.package}" data-unit-price="${unitPrice}" data-sold-qty="${soldQty}" data-prev-returned="${prevReturned}" data-max-returnable="${maxReturnable}" data-product-brand="${item.productBrand || item.brand || ''}" data-agency-brand="${item.agencyBrand || ''}" data-revenue-brand="${item.revenueBrand || ''}" data-revenue-company="${item.revenueCompany || order.companyId || ''}">
+      <tr class="return-item-row" data-key="${itemKey}" data-sale-item-id="${item.id || ''}" data-product-id="${variantCode}" data-variant-id="${variantId}" data-variant-code="${variantCode}" data-product-name="${prodName}" data-package="${packagingName}" data-specification="${specification}" data-unit-price="${unitPrice}" data-sold-qty="${soldQty}" data-prev-returned="${prevReturned}" data-max-returnable="${maxReturnable}" data-product-brand="${item.productBrand || item.brand || ''}" data-agency-brand="${item.agencyBrand || ''}" data-revenue-brand="${item.revenueBrand || ''}" data-revenue-company="${item.revenueCompany || order.companyId || ''}">
         <td>${idx + 1}</td>
-        <td style="font-weight: 600; color: #fff;">${prodName}</td>
-        <td>${item.package || 'Cái'}</td>
+        <td style="font-weight: 600; color: #fff;">${prodName}<br><small>${variantCode}</small></td>
+        <td>${specification || packagingName || 'Cái'}</td>
         <td style="text-align: right;">${formatCurrency(unitPrice)}</td>
         <td style="text-align: center; font-weight: 600;">${soldQty}</td>
         <td style="text-align: center; color: var(--color-warning);">${prevReturned}</td>
@@ -1163,8 +1195,12 @@ export async function processSalesReturnSubmit(e) {
         id: `thitem_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         saleItemId: row.getAttribute('data-sale-item-id'),
         productId: row.getAttribute('data-product-id'),
+        variantId: row.getAttribute('data-variant-id') || null,
+        variantCode: row.getAttribute('data-variant-code') || row.getAttribute('data-product-id'),
         productName: prodName,
         packageType: row.getAttribute('data-package'),
+        packagingName: row.getAttribute('data-package'),
+        specificationSnapshot: row.getAttribute('data-specification'),
         quantity: qty,
         importPrice: unitPrice,
         discountType: discType,
@@ -1209,7 +1245,7 @@ export async function processSalesReturnSubmit(e) {
 
   // 2. Restore Finished Goods Stock
   returnItems.forEach(item => {
-    const prodCode = item.productId;
+    const prodCode = item.variantCode || item.productId;
     const pkg = item.packageType;
     let stockItem = state.finishedGoodsStock.find(s => s.productCode === prodCode && s.packageType === pkg);
     if (stockItem) {
