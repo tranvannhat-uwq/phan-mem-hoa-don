@@ -146,6 +146,87 @@ export function closeUserModal() {
   if (modal) modal.classList.remove('active');
 }
 
+function openOwnPasswordModal() {
+  if (state.currentUser?.role !== 'sale') {
+    showToast('Chức năng này dành cho tài khoản kinh doanh.', 'warning');
+    return;
+  }
+  const modal = document.getElementById('change-password-modal');
+  const username = document.getElementById('change-password-username');
+  const form = document.getElementById('change-password-form');
+  if (!modal || !form) return;
+  form.reset();
+  if (username) username.innerText = state.currentUser.username;
+  modal.classList.add('active');
+}
+
+function closeOwnPasswordModal() {
+  document.getElementById('change-password-modal')?.classList.remove('active');
+}
+
+async function changeOwnPassword(event) {
+  event.preventDefault();
+  const currentPassword = document.getElementById('current-password')?.value || '';
+  const newPassword = document.getElementById('new-password')?.value || '';
+  const confirmPassword = document.getElementById('confirm-password')?.value || '';
+  const currentUser = state.currentUser;
+
+  if (!currentUser || currentUser.role !== 'sale') {
+    showToast('Chỉ nhân viên kinh doanh mới có thể đổi mật khẩu tại đây.', 'danger');
+    return;
+  }
+  if (newPassword.length < 6) {
+    showToast('Mật khẩu mới phải có ít nhất 6 ký tự.', 'warning');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast('Mật khẩu mới và phần nhập lại không khớp.', 'warning');
+    return;
+  }
+
+  const submit = document.getElementById('btn-save-change-password');
+  if (submit) submit.disabled = true;
+  try {
+    if (!isCloudActive && currentUser.password !== currentPassword) {
+      throw new Error('Mật khẩu hiện tại không đúng.');
+    }
+    if (isCloudActive && supabaseClient) {
+      const { data: { user: authUser } } = await supabaseClient.auth.getUser();
+      if (!authUser) throw new Error('Phiên đăng nhập Cloud đã hết hạn. Vui lòng đăng nhập lại.');
+
+      // Một số tài khoản cũ có mật khẩu hồ sơ khác email Auth. Nếu mật khẩu
+      // hiện tại khớp hồ sơ đang đăng nhập thì dùng phiên Auth hiện tại để đổi.
+      if (currentUser.password !== currentPassword) {
+        const { error } = await supabaseClient.auth.signInWithPassword({
+          email: authUser.email || (currentUser.username.includes('@') ? currentUser.username : `${currentUser.username}@lendon.com`),
+          password: currentPassword
+        });
+        if (error) throw new Error('Mật khẩu hiện tại không đúng.');
+      }
+    }
+
+    const updatedUser = { ...currentUser, password: newPassword };
+    if (isCloudActive && supabaseClient) {
+      // Mật khẩu Cloud thuộc Supabase Auth. Không upsert bảng users ở đây vì
+      // RLS cố ý không cho tài khoản Sale tự ghi vào bảng hồ sơ người dùng.
+      const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+    } else if (!(await dbSaveUser(updatedUser))) {
+      return;
+    }
+    const index = state.users.findIndex(user => user.id === currentUser.id);
+    if (index !== -1) state.users[index] = updatedUser;
+    state.currentUser = updatedUser;
+    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+    closeOwnPasswordModal();
+    showToast('Đổi mật khẩu thành công.', 'success');
+  } catch (error) {
+    showToast(error.message || 'Không thể đổi mật khẩu.', 'danger');
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+}
+
 export async function saveUser() {
   const editId = document.getElementById('user-edit-id').value;
   const isExternalSelect = document.getElementById('user-is-external');
@@ -348,7 +429,9 @@ export async function handleLogin(e) {
       return (uClean === usernameInput || uCleanNoDomain === cleanUsername) && u.password === passwordInput && u.password !== '';
     });
 
-    if (localUser) {
+    // Khi đã kết nối Cloud, xác thực bắt buộc đi qua Supabase Auth để không
+    // dùng lại mật khẩu cũ còn nằm trong bản sao hồ sơ users.
+    if (!isCloudActive && localUser) {
       state.currentUser = localUser;
       sessionStorage.setItem('billing_system_auth', 'true');
       sessionStorage.setItem('billing_system_username', localUser.username);
@@ -695,10 +778,15 @@ export function setupUserManagement() {
   const isExternalSelect = document.getElementById('user-is-external');
   const passwordInput = document.getElementById('user-password');
   const roleSelect = document.getElementById('user-role');
+  const changePasswordBtn = document.getElementById('btn-change-own-password');
 
   if (addBtn) addBtn.addEventListener('click', () => openUserModal());
   if (closeBtn) closeBtn.addEventListener('click', closeUserModal);
   if (cancelBtn) cancelBtn.addEventListener('click', closeUserModal);
+  if (changePasswordBtn) changePasswordBtn.addEventListener('click', openOwnPasswordModal);
+  document.getElementById('btn-close-change-password')?.addEventListener('click', closeOwnPasswordModal);
+  document.getElementById('btn-cancel-change-password')?.addEventListener('click', closeOwnPasswordModal);
+  document.getElementById('change-password-form')?.addEventListener('submit', changeOwnPassword);
   
   if (isExternalSelect) {
     isExternalSelect.addEventListener('change', () => {

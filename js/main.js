@@ -7,7 +7,7 @@ import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagemen
 import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260730-cashbook-reset';
 import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260731-customer-pricelist-fix';
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260731-price-excel-exact';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260730-cashbook-reset';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260731-self-password-session-fix';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260730-cashbook-reset';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260730-cashbook-reset';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260730-cashbook-reset';

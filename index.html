@@ -165,6 +165,10 @@
               <i data-lucide="settings" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
               Cấu hình Cloud
             </button>
+            <button class="dropdown-item" id="btn-change-own-password" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+              <i data-lucide="key-round" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+              Đổi mật khẩu cá nhân
+            </button>
             <div style="border-top: 1px solid var(--border-color); margin-top: 0.25rem; padding-top: 0.25rem;"></div>
             <button class="dropdown-item" id="btn-logout" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--color-danger); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
               <i data-lucide="log-out" style="width: 16px; height: 16px;"></i>
@@ -2923,6 +2927,38 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="change-password-modal">
+    <div class="modal-content" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Đổi mật khẩu cá nhân</h3>
+        <button class="modal-close" id="btn-close-change-password"><i data-lucide="x"></i></button>
+      </div>
+      <form id="change-password-form">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">
+            Tài khoản: <strong id="change-password-username" style="color: var(--text-primary);"></strong>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="current-password">Mật khẩu hiện tại *</label>
+            <input type="password" class="form-control" id="current-password" required autocomplete="current-password" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="new-password">Mật khẩu mới *</label>
+            <input type="password" class="form-control" id="new-password" required minlength="6" autocomplete="new-password" style="width: 100%;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="confirm-password">Nhập lại mật khẩu mới *</label>
+            <input type="password" class="form-control" id="confirm-password" required minlength="6" autocomplete="new-password" style="width: 100%;">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-change-password">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-change-password">Đổi mật khẩu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Printable Return Slip Template -->
   <div id="print-return-slip-template">
     <div style="text-align: center; margin-bottom: 1rem; border-bottom: 2px solid #000; padding-bottom: 0.5rem;">
@@ -3882,6 +3918,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260731-customer-pricelist-fix"></script>
+  <script type="module" src="js/main.js?v=20260731-self-password-session-fix"></script>
 </body>
 </html>
