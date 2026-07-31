@@ -514,15 +514,19 @@ export function exportPriceMatrixExcel() {
 
   const products = getFilteredMatrixProducts();
   const effectiveItems = buildEffectivePriceItems();
-  const directByKey = new Map(effectiveItems.map(item => [itemKey(item.priceListId, item.productId), item]));
   const headers = [...PRICE_MATRIX_FIXED_HEADERS, ...lists.map(priceListExcelHeader)];
   const directRows = [
     headers,
     ...products.map(product => [
       ...matrixProductCells(product),
       ...lists.map(priceList => {
-        const item = directByKey.get(itemKey(priceList.id, product.id));
-        return item && item.price !== null && item.price !== undefined ? Number(item.price) : '';
+        const resolved = resolvePriceForList({
+          productId: product.id,
+          priceListId: priceList.id,
+          priceLists: state.pricelists,
+          priceListItems: effectiveItems
+        });
+        return resolved.price === null ? '' : Number(resolved.price);
       })
     ])
   ];
@@ -602,6 +606,72 @@ function findProductFromExcelRow(code, brand) {
   ) || null;
 }
 
+function getPriceMatrixRowsFromSheet(workbook, sheetName) {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return null;
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  const firstHeader = String(rows[0]?.[0] || '').trim().toLowerCase();
+  if (rows.length < 2 || !firstHeader.includes('sku')) return null;
+  return { sheetName, rows };
+}
+
+function countPriceMatrixValues(rows) {
+  return rows.slice(1).reduce((count, row) => {
+    for (let columnIndex = PRICE_MATRIX_FIXED_HEADERS.length; columnIndex < (rows[0]?.length || 0); columnIndex += 1) {
+      const rawValue = row?.[columnIndex];
+      if (rawValue !== '' && rawValue !== null && rawValue !== undefined) count += 1;
+    }
+    return count;
+  }, 0);
+}
+
+function selectPriceMatrixImportRows(workbook) {
+  const candidates = ['Nhap Gia', 'Gia Hien Tai', workbook.SheetNames[0]]
+    .map(sheetName => getPriceMatrixRowsFromSheet(workbook, sheetName))
+    .filter(Boolean);
+  const uniqueCandidates = candidates.filter((candidate, index) =>
+    candidates.findIndex(item => item.sheetName === candidate.sheetName) === index
+  );
+  if (!uniqueCandidates.length) return null;
+  return uniqueCandidates
+    .map(candidate => ({ ...candidate, valueCount: countPriceMatrixValues(candidate.rows) }))
+    .sort((a, b) => b.valueCount - a.valueCount)[0];
+}
+
+function mergePriceMatrixRows(primaryRows, fallbackRows) {
+  if (!primaryRows?.length) return fallbackRows || [];
+  if (!fallbackRows?.length) return primaryRows;
+
+  const fallbackByKey = new Map(fallbackRows.slice(1).map(row => [
+    [
+      String(row?.[0] || '').trim().toUpperCase(),
+      String(row?.[2] || '').trim().toLowerCase(),
+      String(row?.[3] || '').trim().toLowerCase()
+    ].join('|'),
+    row
+  ]));
+
+  return [
+    primaryRows[0],
+    ...primaryRows.slice(1).map(row => {
+      const key = [
+        String(row?.[0] || '').trim().toUpperCase(),
+        String(row?.[2] || '').trim().toLowerCase(),
+        String(row?.[3] || '').trim().toLowerCase()
+      ].join('|');
+      const fallbackRow = fallbackByKey.get(key);
+      if (!fallbackRow) return row;
+      const merged = [...row];
+      for (let columnIndex = PRICE_MATRIX_FIXED_HEADERS.length; columnIndex < primaryRows[0].length; columnIndex += 1) {
+        if (merged[columnIndex] === '' || merged[columnIndex] === null || merged[columnIndex] === undefined) {
+          merged[columnIndex] = fallbackRow[columnIndex];
+        }
+      }
+      return merged;
+    })
+  ];
+}
+
 async function importPriceMatrixExcel(file) {
   if (!canManagePriceLists()) {
     rejectPriceListMutation();
@@ -609,9 +679,14 @@ async function importPriceMatrixExcel(file) {
   }
   try {
     const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-    const sheet = workbook.Sheets['Nhap Gia'] || workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
-    if (rows.length < 2 || String(rows[0]?.[0] || '').trim().toLowerCase() !== 'mã sku') {
+    const importRows = getPriceMatrixRowsFromSheet(workbook, 'Nhap Gia');
+    const currentRows = getPriceMatrixRowsFromSheet(workbook, 'Gia Hien Tai');
+    const selectedSheet = selectPriceMatrixImportRows(workbook);
+    const rows = importRows && currentRows
+      ? mergePriceMatrixRows(importRows.rows, currentRows.rows)
+      : (selectedSheet?.rows || []);
+    const firstHeader = String(rows[0]?.[0] || '').trim().toLowerCase();
+    if (rows.length < 2 || !firstHeader.includes('sku')) {
       throw new Error('Không tìm thấy sheet "Nhap Gia" hoặc cột đầu tiên "Mã SKU".');
     }
 

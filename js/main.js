@@ -6,7 +6,7 @@ import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260730-cashbook-reset';
 import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260730-cashbook-reset';
 import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260730-cashbook-reset';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260731-price-excel-exact';
 import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260730-cashbook-reset';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260730-cashbook-reset';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260730-cashbook-reset';
