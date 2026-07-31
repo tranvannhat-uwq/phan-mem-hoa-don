@@ -5,7 +5,7 @@ import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './servi
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260730-cashbook-reset';
 import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260730-cashbook-reset';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260730-cashbook-reset';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260731-customer-pricelist-fix';
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260731-price-excel-exact';
 import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260730-cashbook-reset';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260730-cashbook-reset';
@@ -332,23 +332,21 @@ async function initApp() {
   
   if (savedUrl && savedKey) {
     let connected = false;
-    const retries = 3;
-    const delayMs = 2000;
+    // Không chặn màn hình đăng nhập bởi các lần retry tải dữ liệu Cloud.
+    // connectSupabase đã có fallback LocalStorage khi Cloud không phản hồi.
+    const retries = 1;
     
     for (let i = 1; i <= retries; i++) {
       updateDbStatusUI('connecting', `Kết nối Cloud (Lần ${i}/${retries})...`);
       connected = await connectSupabase(savedUrl, savedKey, false);
       if (connected) break;
       
-      if (i < retries) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
     }
     
     if (!connected) {
       loadLocalStorageBackup();
       updateDbStatusUI('local_failed');
-      showToast('Không thể kết nối Cloud sau 3 lần thử, đã chuyển về chế độ offline.', 'warning');
+      showToast('Không thể kết nối Cloud, đã chuyển về chế độ offline.', 'warning');
     }
   } else {
     loadLocalStorageBackup();
@@ -434,10 +432,10 @@ document.addEventListener('click', async (e) => {
 
 // Bắt và xử lý các lỗi Uncaught Promise Rejection từ extension hoặc script bên ngoài (như onboarding.js)
 window.addEventListener('unhandledrejection', (event) => {
-  if (event.reason && (
-    (typeof event.reason.message === 'string' && event.reason.message.includes('getImageNode')) ||
-    (typeof event.reason.stack === 'string' && event.reason.stack.includes('onboarding.js'))
-  )) {
+  const reason = event.reason || {};
+  const message = typeof reason === 'string' ? reason : reason.message || '';
+  const stack = reason.stack || '';
+  if (String(message).includes('getImageNode') || String(stack).includes('onboarding.js')) {
     console.warn('Đã xử lý an toàn lỗi Uncaught Promise Rejection từ Extension/Script bên ngoài:', event.reason?.message || event.reason);
     event.preventDefault(); // Ngăn chặn lỗi đỏ hiển thị ra Console
   }

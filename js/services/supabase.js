@@ -120,6 +120,7 @@ export function loadLocalStorageBackup() {
   const storedPricelists = localStorage.getItem('billing_system_pricelists');
   if (storedPricelists) {
     state.pricelists = JSON.parse(storedPricelists);
+    state.allPricelists = [...state.pricelists];
   } else {
     state.pricelists = [
       {
@@ -147,6 +148,7 @@ export function loadLocalStorageBackup() {
         }
       }
     ];
+    state.allPricelists = [...state.pricelists];
     localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
   }
 
@@ -664,15 +666,14 @@ export async function fetchCloudData() {
             updatedAt: pl.updated_at || '',
             brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
           }));
+        state.allPricelists = mappedPricelists;
         state.pricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
         localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
 
         try {
           const itemData = await fetchFullTableData(tablePriceListItemsName);
           const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
-          state.priceListItems = (itemData || [])
-          .filter(item => visiblePriceListIds.has(item.price_list_id))
-          .map(item => ({
+          state.allPriceListItems = (itemData || []).map(item => ({
             id: item.id || `${item.price_list_id}:${item.product_id}`,
             priceListId: item.price_list_id,
             productId: item.variant_id || item.product_id,
@@ -684,19 +685,24 @@ export async function fetchCloudData() {
             updatedAt: item.updated_at || '',
             updatedBy: item.updated_by || ''
           }));
+          state.priceListItems = state.allPriceListItems
+          .filter(item => visiblePriceListIds.has(item.priceListId));
           localStorage.setItem('billing_system_price_list_items', JSON.stringify(state.priceListItems));
         } catch (itemErr) {
           console.warn("Could not load price_list_items, using local fallback:", itemErr.message);
           const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
           state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]')
             .filter(item => visiblePriceListIds.has(item.priceListId));
+          state.allPriceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
         }
       } catch (plErr) {
         console.warn("Could not load pricelists from Supabase, using local fallback:", plErr.message);
         state.pricelists = filterPriceListsForUser(JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]'), state.currentUser);
+        state.allPricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
         const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
         state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]')
           .filter(item => visiblePriceListIds.has(item.priceListId));
+        state.allPriceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
       }
     };
 

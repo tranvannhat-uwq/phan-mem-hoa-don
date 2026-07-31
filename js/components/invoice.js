@@ -75,12 +75,19 @@ function resolveProductPrice(product) {
     return { status: 'missing', price: null, priceListId: null, priceListName: '', source: 'manual_override' };
   }
   const customerForPricing = isDraftPriceListOverrideEnabled() && selectedId ? null : customer;
+  // Bảng giá gán cho khách có thể là bảng nội bộ/legacy và không nằm trong
+  // dropdown của Sale, nhưng vẫn phải được dùng để tính giá của khách đó.
+  const priceListsForPricing = customerForPricing
+    ? (state.allPricelists.length ? state.allPricelists : state.pricelists)
+    : filterPriceListsForUser(state.pricelists, state.currentUser);
   return resolveCustomerProductPrice({
     productId,
     customer: customerForPricing,
     requestedPriceListId: selectedId,
-    priceLists: filterPriceListsForUser(state.pricelists, state.currentUser),
-    priceListItems: state.priceListItems
+    priceLists: priceListsForPricing,
+    priceListItems: customerForPricing && state.allPriceListItems.length
+      ? state.allPriceListItems
+      : state.priceListItems
   });
 }
 
@@ -115,7 +122,7 @@ function isUsingCustomerDefaultPriceList(customer) {
   if (!selectedId || selectedId === 'retail') return false;
   const applicable = getApplicablePriceList(
     customer,
-    filterPriceListsForUser(state.pricelists, state.currentUser)
+    state.allPricelists.length ? state.allPricelists : state.pricelists
   );
   return applicable.priceList?.id === selectedId;
 }
@@ -257,8 +264,10 @@ export function applyActivePriceListToInvoice() {
   if (!plSelect) return;
   const customer = state.activeCustomerId ? state.customers.find(item => item.id === state.activeCustomerId) : null;
   const requestedId = plSelect.value && plSelect.value !== 'retail' ? plSelect.value : '';
-  const visibleLists = filterPriceListsForUser(state.pricelists, state.currentUser);
   const customerForPricing = isDraftPriceListOverrideEnabled() && requestedId ? null : customer;
+  const visibleLists = customerForPricing
+    ? (state.allPricelists.length ? state.allPricelists : state.pricelists)
+    : filterPriceListsForUser(state.pricelists, state.currentUser);
   const applicable = getApplicablePriceList(customerForPricing, visibleLists, requestedId);
   const activePriceList = applicable.priceList;
   if (customer && activePriceList && plSelect.value !== 'retail') plSelect.value = activePriceList.id;
@@ -2145,7 +2154,7 @@ function selectInvoiceCustomer(customer) {
     
     const applicable = getApplicablePriceList(
       customer,
-      filterPriceListsForUser(state.pricelists, state.currentUser)
+      state.allPricelists.length ? state.allPricelists : state.pricelists
     );
     const pl = applicable.priceList;
     const plName = pl
@@ -2167,7 +2176,7 @@ function selectInvoiceCustomer(customer) {
   if (plSelect) {
     const applicable = getApplicablePriceList(
       customer,
-      filterPriceListsForUser(state.pricelists, state.currentUser)
+      state.allPricelists.length ? state.allPricelists : state.pricelists
     );
     plSelect.value = applicable.priceList?.id || '';
     plSelect.disabled = state.currentUser?.role === 'sale';

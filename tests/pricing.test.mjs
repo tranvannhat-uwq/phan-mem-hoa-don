@@ -89,8 +89,8 @@ assert.equal(afterDelete.price, 2116000);
 
 const customer = { id: 'tung', pricelistId: 'bg03' };
 const applicable = getApplicablePriceList(customer, priceLists);
-assert.equal(applicable.priceList.id, 'tung-private');
-assert.equal(applicable.selectionSource, 'customer_specific');
+assert.equal(applicable.priceList.id, 'bg03');
+assert.equal(applicable.selectionSource, 'customer_default');
 
 const privatePrice = resolveCustomerProductPrice({
   productId: 'ba46-lon',
@@ -101,9 +101,9 @@ const privatePrice = resolveCustomerProductPrice({
     { priceListId: 'tung-private', productId: 'ba46-lon', price: 1900000 }
   ]
 });
-assert.equal(privatePrice.price, 1900000);
-assert.equal(privatePrice.source, 'specific');
-assert.equal(privatePrice.priceListId, 'tung-private');
+assert.equal(privatePrice.price, 1950000);
+assert.equal(privatePrice.source, 'group');
+assert.equal(privatePrice.priceListId, 'bg03');
 
 const saleUser = { username: 'sale1', role: 'sale' };
 const saleVisible = filterPriceListsForUser(priceLists, saleUser).map(priceList => priceList.id);

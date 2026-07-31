@@ -16,14 +16,14 @@
           console.warn('Ignored external onboarding script error:', event.reason && event.reason.message || event.reason);
           event.preventDefault();
         }
-      });
+      }, true);
 
       window.addEventListener('error', function (event) {
         if (isExternalOnboardingError(event.error) || String(event.filename || '').indexOf('onboarding.js') !== -1) {
           console.warn('Ignored external onboarding script error:', event.message);
           event.preventDefault();
         }
-      });
+      }, true);
     }());
   </script>
   <title>Hệ thống Quản lý Sản phẩm & Lên đơn hàng</title>
@@ -3882,6 +3882,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260730-test-data-cleanup"></script>
+  <script type="module" src="js/main.js?v=20260731-customer-pricelist-fix"></script>
 </body>
 </html>

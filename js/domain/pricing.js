@@ -76,19 +76,33 @@ export function getStandardPriceList(priceLists, now = new Date()) {
   )[0] || null;
 }
 
+// Khách hàng cũ có thể lưu mã BG03 hoặc tên bảng giá thay vì UUID.
+// Luôn quy đổi theo cả ba định danh để không rơi về bảng giá chuẩn đầu tiên.
+function matchesPriceListReference(priceList, reference) {
+  if (!reference) return false;
+  const value = String(reference).trim().toLowerCase();
+  return [priceList.id, priceList.code, priceList.name]
+    .filter(Boolean)
+    .some(candidate => String(candidate).trim().toLowerCase() === value);
+}
+
 export function getApplicablePriceList(customer, priceLists, requestedPriceListId = '', now = new Date()) {
   const activeLists = sortPriceLists((priceLists || []).filter(priceList => isPriceListActive(priceList, now)));
 
   if (customer) {
+    // Bảng giá được gán trực tiếp trên hồ sơ khách hàng là lựa chọn chính thức.
+    // Không để một bảng giá riêng cũ theo customerId ghi đè lên lựa chọn này.
+    const references = [customer.pricelistId, customer.defaultPriceListId].filter(Boolean);
+    const customerDefault = activeLists.find(priceList =>
+      references.some(reference => matchesPriceListReference(priceList, reference))
+    );
+    if (customerDefault) return { priceList: customerDefault, selectionSource: 'customer_default' };
+
     const specific = activeLists.find(priceList =>
       normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.DEALER_PRIVATE &&
       priceList.customerId === customer.id
     );
     if (specific) return { priceList: specific, selectionSource: 'customer_specific' };
-
-    const defaultId = customer.defaultPriceListId || customer.pricelistId;
-    const customerDefault = activeLists.find(priceList => priceList.id === defaultId);
-    if (customerDefault) return { priceList: customerDefault, selectionSource: 'customer_default' };
 
     const groupId = customer.customerGroupId || customer.customer_group_id;
     const groupList = activeLists.find(priceList =>

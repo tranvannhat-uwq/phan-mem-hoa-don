@@ -13,7 +13,11 @@ export const state = {
   savedOrders: [],
   customers: [],
   pricelists: [],
+  // Bản đầy đủ dùng để áp dụng bảng giá đã gán cho khách; pricelists vẫn là
+  // danh sách đã lọc để hiển thị theo quyền người dùng.
+  allPricelists: [],
   priceListItems: [],
+  allPriceListItems: [],
   selectedPriceListIds: [],
   users: [],
   currentUser: null,
@@ -46,4 +50,3 @@ export const state = {
   dashboardSalesMode: 'net', // 'net' (after returns) or 'gross' (original)
   historyViewMode: localStorage.getItem('historyViewMode') || 'card' // 'card' or 'details'
 };
-
