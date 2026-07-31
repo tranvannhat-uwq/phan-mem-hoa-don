@@ -76,7 +76,7 @@ function resolveProductPrice(product) {
   }
   return resolveCustomerProductPrice({
     productId,
-    customer: state.currentUser?.role === 'sale' ? null : customer,
+    customer,
     requestedPriceListId: selectedId,
     priceLists: filterPriceListsForUser(state.pricelists, state.currentUser),
     priceListItems: state.priceListItems
@@ -215,7 +215,7 @@ export function applyActivePriceListToInvoice() {
   const customer = state.activeCustomerId ? state.customers.find(item => item.id === state.activeCustomerId) : null;
   const requestedId = plSelect.value && plSelect.value !== 'retail' ? plSelect.value : '';
   const visibleLists = filterPriceListsForUser(state.pricelists, state.currentUser);
-  const applicable = getApplicablePriceList(state.currentUser?.role === 'sale' ? null : customer, visibleLists, requestedId);
+  const applicable = getApplicablePriceList(customer, visibleLists, requestedId);
   const activePriceList = applicable.priceList;
   if (customer && activePriceList && plSelect.value !== 'retail') plSelect.value = activePriceList.id;
   
@@ -2060,7 +2060,7 @@ function selectInvoiceCustomer(customer) {
     document.getElementById('selected-customer-brand-lbl').innerText = customer.assignedBrand;
     
     const applicable = getApplicablePriceList(
-      state.currentUser?.role === 'sale' ? null : customer,
+      customer,
       filterPriceListsForUser(state.pricelists, state.currentUser)
     );
     const pl = applicable.priceList;
@@ -2082,7 +2082,7 @@ function selectInvoiceCustomer(customer) {
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
     const applicable = getApplicablePriceList(
-      state.currentUser?.role === 'sale' ? null : customer,
+      customer,
       filterPriceListsForUser(state.pricelists, state.currentUser)
     );
     plSelect.value = applicable.priceList?.id || '';
