@@ -263,6 +263,7 @@ export function populateDashboardFilters() {
     loadDashboardFilterFromStorage();
     isFilterLoaded = true;
   }
+  state.dashboardFilter.customerId = 'all';
 
   const companySelect = document.getElementById('dashboard-company-filter');
   const companyGroup = document.getElementById('dashboard-company-filter-group');
@@ -820,7 +821,6 @@ export function setupDashboardFilters() {
       saveDashboardFilterToStorage();
       populateDashboardFilters();
       setupSaleAutocomplete();
-      setupCustomerAutocomplete();
       updateDashboardStats();
       showToast('Đã đặt lại toàn bộ bộ lọc về mặc định!');
     };
@@ -836,7 +836,6 @@ export function setupDashboardFilters() {
   }
 
   setupSaleAutocomplete();
-  setupCustomerAutocomplete();
 
   document.querySelectorAll('.chart-view-btn').forEach(btn => {
     btn.addEventListener('click', () => {
