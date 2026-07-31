@@ -52,6 +52,9 @@ function applyCustomerColumnVisibility() {
   document.querySelectorAll('[data-customer-column]').forEach(element => {
     element.style.display = visibleColumns.has(element.dataset.customerColumn) ? '' : 'none';
   });
+  document.querySelectorAll('[data-customer-actions-column]').forEach(element => {
+    element.style.display = state.currentUser?.role === 'sale' ? 'none' : '';
+  });
 
   const table = document.querySelector('.customers-table');
   if (table) {
@@ -59,7 +62,8 @@ function applyCustomerColumnVisibility() {
       (sum, column) => sum + (visibleColumns.has(column.key) ? column.width : 0),
       0
     );
-    table.style.minWidth = `${Math.max(420, dataWidth + 155)}px`;
+    const actionWidth = state.currentUser?.role === 'sale' ? 45 : 155;
+    table.style.minWidth = `${Math.max(420, dataWidth + actionWidth)}px`;
   }
 
   document.querySelectorAll('.customer-column-option').forEach(input => {
@@ -461,9 +465,10 @@ export function renderCustomersTable() {
   }
 
   if (filtered.length === 0) {
+    const extraColumnCount = state.currentUser?.role === 'sale' ? 1 : 2;
     tableBody.innerHTML = `
       <tr>
-        <td colspan="${getVisibleCustomerColumns().size + 2}" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="${getVisibleCustomerColumns().size + extraColumnCount}" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không tìm thấy khách hàng nào.
         </td>
       </tr>
@@ -555,7 +560,7 @@ export function renderCustomersTable() {
         <td data-customer-column="createdAt" style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${createdAtLabel}</td>
         <td data-customer-column="debtDays" style="text-align: center; font-size: 0.8rem; color: ${debtDays > 0 ? 'var(--color-warning)' : 'var(--text-muted)'}; white-space: nowrap;">${debtDays}</td>
         <td data-customer-column="lastTransaction" style="text-align: center; font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${lastTransactionLabel}</td>
-        <td style="text-align: center;">
+        <td data-customer-actions-column style="text-align: center;">
           <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
             <button class="btn btn-secondary btn-sm btn-circle edit-cust-btn" data-index="${actualIndex}" title="Sửa">
               <i data-lucide="edit-2" style="width: 13px; height: 13px;"></i>
@@ -575,6 +580,10 @@ export function renderCustomersTable() {
   applyCustomerColumnVisibility();
   
   // Gán sự kiện click cho các nút hành động
+  if (state.currentUser?.role === 'sale') {
+    document.querySelectorAll('.edit-cust-btn, .pay-debt-btn, .delete-cust-btn').forEach(button => button.remove());
+  }
+
   document.querySelectorAll('.customer-export-checkbox').forEach(box => {
     box.addEventListener('change', () => {
       const id = String(box.getAttribute('data-id'));
@@ -652,6 +661,12 @@ export function generateUniqueCustomerCode(provinceCode) {
 }
 
 export function openCustomerModal(index = -1) {
+  if (state.currentUser?.role === 'sale' && index !== -1) {
+    openCustomerDetailModal(index);
+    showToast('Kinh doanh chỉ được xem thông tin khách hàng đã tạo.', 'warning');
+    return;
+  }
+
   const modal = document.getElementById('customer-modal');
   const title = document.getElementById('customer-modal-title');
   const form = document.getElementById('customer-form');
@@ -808,6 +823,12 @@ export function closeCustomerModal() {
 export async function saveCustomer() {
   const index = parseInt(document.getElementById('customer-edit-index').value);
   const editId = document.getElementById('customer-edit-id').value;
+
+  if (state.currentUser?.role === 'sale' && index !== -1) {
+    showToast('Kinh doanh không được sửa thông tin khách hàng đã thêm. Vui lòng liên hệ quản trị/kế toán để cập nhật.', 'warning');
+    closeCustomerModal();
+    return;
+  }
   
   const code = document.getElementById('cust-code').value.trim().toUpperCase();
   const name = document.getElementById('cust-name').value.trim();
@@ -974,6 +995,11 @@ export async function saveCustomer() {
 }
 
 export async function deleteCustomer(index) {
+  if (state.currentUser?.role === 'sale') {
+    showToast('Kinh doanh không được xóa khách hàng.', 'warning');
+    return;
+  }
+
   const cust = state.customers[index];
   if (confirm(`Bạn có chắc chắn muốn xóa khách hàng "${cust.name}" (${cust.code})?`)) {
     const deleted = await dbDeleteCustomer(cust.id);
@@ -991,6 +1017,11 @@ export async function deleteCustomer(index) {
 
 // --- Logic Thu Nợ khách hàng ---
 export function openPayDebtModal(customerIndex) {
+  if (state.currentUser?.role === 'sale') {
+    showToast('Kinh doanh chỉ được xem công nợ, không được ghi nhận thu nợ.', 'warning');
+    return;
+  }
+
   const modal = document.getElementById('pay-debt-modal');
   const form = document.getElementById('pay-debt-form');
   const cust = state.customers[customerIndex];
