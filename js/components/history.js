@@ -906,7 +906,6 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
     plSelect.value = order.pricelistId || 'retail';
-    plSelect.dispatchEvent(new Event('change'));
   }
   
   // Thiết lập Giảm giá & Thu khác
@@ -956,6 +955,10 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   }
   
   // Chuyển Tab
+  if (plSelect) plSelect.disabled = isReadOnly;
+  const plGroup = document.getElementById('invoice-pricelist-group');
+  if (plGroup) plGroup.style.display = isReadOnly ? 'none' : 'block';
+
   document.querySelectorAll('.nav-link').forEach(l => {
     if (l.getAttribute('data-target') === 'invoice-panel') {
       l.classList.add('active');

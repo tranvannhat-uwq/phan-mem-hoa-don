@@ -74,13 +74,56 @@ function resolveProductPrice(product) {
   if (selectedId === 'retail') {
     return { status: 'missing', price: null, priceListId: null, priceListName: '', source: 'manual_override' };
   }
+  const customerForPricing = isDraftPriceListOverrideEnabled() && selectedId ? null : customer;
   return resolveCustomerProductPrice({
     productId,
-    customer,
+    customer: customerForPricing,
     requestedPriceListId: selectedId,
     priceLists: filterPriceListsForUser(state.pricelists, state.currentUser),
     priceListItems: state.priceListItems
   });
+}
+
+function isDraftPriceListOverrideEnabled() {
+  const saveBtn = document.getElementById('btn-save-order');
+  return Boolean(saveBtn?.getAttribute('data-edit-order-id'));
+}
+
+function getSelectedInvoicePriceListId() {
+  return document.getElementById('invoice-pricelist-select')?.value || '';
+}
+
+function getSelectedInvoicePriceList() {
+  const selectedId = getSelectedInvoicePriceListId();
+  return selectedId && selectedId !== 'retail'
+    ? (state.pricelists || []).find(priceList => priceList.id === selectedId) || null
+    : null;
+}
+
+function isManualInvoicePriceMode() {
+  return getSelectedInvoicePriceListId() === 'retail';
+}
+
+function isTradeTermsDiscountPriceList(priceList = getSelectedInvoicePriceList()) {
+  const label = `${priceList?.name || ''} ${priceList?.code || ''}`.toLowerCase();
+  return label.includes('tt 20/07/2026') || label.includes('tt 20-07-2026') || label.includes('tt 20.07.2026');
+}
+
+function isUsingCustomerDefaultPriceList(customer) {
+  if (!customer) return true;
+  const selectedId = getSelectedInvoicePriceListId();
+  if (!selectedId || selectedId === 'retail') return false;
+  const applicable = getApplicablePriceList(
+    customer,
+    filterPriceListsForUser(state.pricelists, state.currentUser)
+  );
+  return applicable.priceList?.id === selectedId;
+}
+
+function canPersistCurrentInvoicePricing() {
+  if (!state.activeCustomerId || state.isQuickCustomerMode) return true;
+  const customer = state.customers.find(item => item.id === state.activeCustomerId);
+  return isUsingCustomerDefaultPriceList(customer);
 }
 
 function getInvoiceProductFamilies() {
@@ -215,14 +258,21 @@ export function applyActivePriceListToInvoice() {
   const customer = state.activeCustomerId ? state.customers.find(item => item.id === state.activeCustomerId) : null;
   const requestedId = plSelect.value && plSelect.value !== 'retail' ? plSelect.value : '';
   const visibleLists = filterPriceListsForUser(state.pricelists, state.currentUser);
-  const applicable = getApplicablePriceList(customer, visibleLists, requestedId);
+  const customerForPricing = isDraftPriceListOverrideEnabled() && requestedId ? null : customer;
+  const applicable = getApplicablePriceList(customerForPricing, visibleLists, requestedId);
   const activePriceList = applicable.priceList;
   if (customer && activePriceList && plSelect.value !== 'retail') plSelect.value = activePriceList.id;
   
   state.invoiceItems.forEach(item => {
     item.discountPercent = getActiveInvoiceDiscount(item.brand);
-    if (item.priceSource === 'manual_override') return;
+    if (item.priceSource === 'manual_override' && isManualInvoicePriceMode()) return;
     const resolved = resolveProductPrice(item.product);
+    if (resolved.source === 'manual_override') {
+      item.priceSource = 'manual_override';
+      item.priceListId = null;
+      item.priceListName = '';
+      return;
+    }
     if (resolved.status !== 'missing' && Number(resolved.price) > 0) {
       item.price = Number(resolved.price);
       item.unitPrice = Number(resolved.price);
@@ -263,6 +313,11 @@ export function renderInvoiceTable() {
   if (!tableBody) return;
   
   populateQuickCustomerManagerDropdown();
+
+  const manualPriceMode = isManualInvoicePriceMode();
+  const tradeTermsDiscountMode = isTradeTermsDiscountPriceList();
+  const adjustmentHeader = document.querySelector('.invoice-items-table thead th:nth-child(6)');
+  if (adjustmentHeader) adjustmentHeader.innerText = manualPriceMode ? 'Đơn giá' : '% CK';
   
   if (state.invoiceItems.length === 0) {
     tableBody.innerHTML = `
@@ -289,13 +344,15 @@ export function renderInvoiceTable() {
 
     let isDiscountDisabled = isReadOnly;
     if (!isReadOnly && state.currentUser && state.currentUser.role === 'sale') {
-      const plSelect = document.getElementById('invoice-pricelist-select');
-      const activePlId = plSelect ? plSelect.value : 'retail';
-      if (activePlId !== 'retail') {
+      const activePlId = getSelectedInvoicePriceListId() || 'retail';
+      if (activePlId !== 'retail' && !tradeTermsDiscountMode) {
         isDiscountDisabled = true;
       }
     }
     const discDisabledAttr = isDiscountDisabled ? 'disabled' : '';
+    const adjustmentCellHtml = manualPriceMode
+      ? `<input type="text" class="form-control-inline item-manual-price" value="${formatNumber(item.price || 0)}" style="width: 80px; text-align: right;" ${disabledAttr}>`
+      : `<input type="number" class="form-control-inline item-discount" value="${item.discountPercent}" min="0" max="100" step="any" style="width: 55px; text-align: center;" ${discDisabledAttr}>`;
 
     // Kiểm tra sản phẩm sơn lót hoặc bột bả (loại trừ trường hợp sơn giả đá)
     const nameLower = p.name.toLowerCase();
@@ -332,7 +389,7 @@ export function renderInvoiceTable() {
           <input type="number" class="form-control-inline item-quantity" value="${item.quantity}" min="1" style="width: 55px; text-align: center; font-weight: 600;" ${disabledAttr}>
         </td>
         <td style="text-align: center;">
-          <input type="number" class="form-control-inline item-discount" value="${item.discountPercent}" min="0" max="100" step="any" style="width: 55px; text-align: center;" ${discDisabledAttr}>
+          ${adjustmentCellHtml}
         </td>
         <td>
           <input type="text" class="form-control-inline item-notes" value="${item.notes}" placeholder="VD: Màu pha đậm..." style="width: 100%; font-size: 0.75rem;" ${disabledAttr}>
@@ -405,6 +462,27 @@ export function renderInvoiceTable() {
       e.target.value = disc; // Cập nhật lại giá trị hiển thị trên ô nhập
       state.invoiceItems[idx].discountPercent = disc;
       
+      updateRowSubtotal(row, idx);
+      calculateInvoiceTotals();
+    });
+  });
+
+  document.querySelectorAll('.item-manual-price').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const row = e.target.closest('tr');
+      const idx = parseInt(row.getAttribute('data-index'));
+      const value = parseInt(String(e.target.value || '').replace(/\D/g, ''), 10) || 0;
+      const price = Math.max(0, value);
+      const item = state.invoiceItems[idx];
+      item.price = price;
+      item.unitPrice = price;
+      item.listPrice = price;
+      item.discountPercent = 0;
+      item.priceSource = 'manual_override';
+      item.priceListId = null;
+      item.priceListName = '';
+      e.target.value = formatNumber(price);
+
       updateRowSubtotal(row, idx);
       calculateInvoiceTotals();
     });
@@ -914,6 +992,11 @@ export async function saveActiveOrder(status = 'settled') {
 
     const order = compileActiveOrder();
     if (!order) return null;
+
+    if (!canPersistCurrentInvoicePricing()) {
+      showToast('Bảng giá đang chọn chỉ dùng để in thử, không được lưu/cập nhật vào đơn nháp. Vui lòng in đơn hoặc chọn lại bảng giá mặc định của khách.', 'warning');
+      return null;
+    }
     
     if (status === 'settled' && state.currentUser && state.currentUser.role === 'sale') {
       showToast('Nhân viên kinh doanh không có quyền thực hiện thanh toán!', 'danger');
@@ -1488,17 +1571,16 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       if (cust) {
         hasDebtInfo = true;
         const historyEntry = cust.debtHistory ? cust.debtHistory.find(h => h.id === order.id) : null;
-        if (historyEntry) {
+        const isSettledOrder = order.status === 'settled';
+        if (!isSettledOrder) {
+          oldDebt = cust.debt || 0;
+          newDebt = oldDebt;
+        } else if (historyEntry) {
           newDebt = historyEntry.debtAfter || 0;
           oldDebt = newDebt - order.totalPayable;
         } else {
-          if (order.status === 'draft') {
-            oldDebt = cust.debt || 0;
-            newDebt = oldDebt + order.totalPayable;
-          } else {
-            newDebt = cust.debt || 0;
-            oldDebt = newDebt - order.totalPayable;
-          }
+          newDebt = cust.debt || 0;
+          oldDebt = newDebt - order.totalPayable;
         }
       }
     }
@@ -1507,11 +1589,11 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     if (hasDebtInfo) {
       debtRowsHtml = `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Nợ cũ</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px;">Nợ cũ</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(oldDebt)}</td>
         </tr>
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng nợ hiện tại</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng nợ hiện tại</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(newDebt)}</td>
         </tr>
       `;
@@ -1547,6 +1629,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           <td style="text-align: center;">${packageDisplay}</td>
           <td style="text-align: center;">${item.quantity}</td>
           <td style="text-align: right;">${formatNumber(displayPrice)}</td>
+          <td style="text-align: center;">${Number(item.discountPercent || 0) > 0 ? `${formatNumber(item.discountPercent)}%` : ''}</td>
           <td style="text-align: right; font-weight: bold;">${formatNumber(subTotal)}</td>
         </tr>
       `;
@@ -1567,6 +1650,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           <th style="width: 10%;">ĐVT</th>
           <th style="width: 6%; text-align: center;">SL</th>
           <th style="width: 12%; text-align: right;">${headerPriceText}</th>
+          <th style="width: 6%; text-align: center;">% CK</th>
           <th style="width: 13%; text-align: right;">${headerSubtotalText}</th>
         </tr>
       </thead>
@@ -1574,42 +1658,42 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         ${itemRowsHtml}
         ${isRetail ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng tiền hàng:</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng tiền hàng:</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(sumSubTotal)}</td>
         </tr>
         <tr>
-          <td colspan="6" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán lẻ</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán lẻ</td>
           <td style="text-align: center; font-weight: bold; padding: 4px 8px;">${avgDiscountPercent > 0 ? avgDiscountPercent + '%' : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(order.totalDiscount)}</td>
         </tr>
         ` : ''}
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tạm tính</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tạm tính</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printSubtotal)}</td>
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Giảm giá${order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px;">Giảm giá${order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printDiscount)}</td>
         </tr>
         
         ${printOtherFee > 0 ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printOtherFee)}</td>
         </tr>
         ` : ''}
 
         ${printShippingFee > 0 ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu Khác</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu Khác</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">+${formatNumber(printShippingFee)}</td>
         </tr>
         ` : ''}
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
+          <td colspan="8" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px; font-size: 13pt;">${formatNumber(order.amountDue !== undefined ? order.amountDue : Math.max(0, order.totalPayable - (order.paidAmount || 0)))}</td>
         </tr>
         
