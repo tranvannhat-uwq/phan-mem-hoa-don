@@ -79,6 +79,10 @@ export function renderAll() {
 
 // Chuyển đổi giữa các phân hệ (Tab)
 export function switchTab(panelId) {
+  if (state.currentUser?.role === 'sale' && panelId === 'dashboard-panel') {
+    panelId = 'invoice-panel';
+  }
+
   state.currentTab = panelId;
   
   document.querySelectorAll('.nav-link').forEach(l => {

@@ -569,7 +569,7 @@ export function applyUserPermissions(user) {
     if (!target) return;
     
     if (role === 'sale') {
-      if (target === 'dashboard-panel' || target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'pricelists-panel' || target === 'brands-panel') {
+      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'pricelists-panel' || target === 'brands-panel') {
         navItem.style.display = 'block';
       } else {
         navItem.style.display = 'none';
@@ -610,7 +610,7 @@ export function applyUserPermissions(user) {
   });
 
   if (role === 'sale') {
-    switchTab('dashboard-panel');
+    switchTab('invoice-panel');
   }
 
   // Handle Dashboard Sale Filter dropdown visibility and population
