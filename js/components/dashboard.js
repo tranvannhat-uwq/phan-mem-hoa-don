@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName, getManagerDisplayName, getProvinceNameByCode } from '../utils.js';
 import { switchTab } from '../main.js';
 import { openProductModal } from './products.js';
-import { fetchCloudData } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
+import { fetchCloudData } from '../services/supabase.js?v=20260731-price-items-pagination';
 
 let revenueChartInstance = null;
 

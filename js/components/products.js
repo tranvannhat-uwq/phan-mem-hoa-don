@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
+import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260731-price-items-pagination';
 import { renderAll } from '../main.js';
 import {
   buildProductFamilies,

@@ -1,11 +1,11 @@
 import { state } from '../state.js';
-import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
+import { showToast, safeCreateIcons, getBrandName, makeSelectSearchable } from '../utils.js';
 import {
   dbSavePricelist,
   dbDeletePricelist,
   dbSavePriceListItems,
   dbDeletePriceListItem
-} from '../services/supabase.js?v=20260731-customer-pricelist-fk';
+} from '../services/supabase.js?v=20260731-price-items-pagination';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice } from './invoice.js?v=20260730-cashbook-reset';
 import {
@@ -345,6 +345,7 @@ export function openPricelistModal(index = -1) {
     document.getElementById('pl-active').checked = priceList.isActive !== false;
     document.getElementById('pl-available-for-sales').checked = priceList.isAvailableForSales === true;
   }
+  makeSelectSearchable('pl-customer-id', 'Tìm khách hàng/đại lý');
   updatePricelistTypeFields();
 }
 

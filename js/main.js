@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260731-customer-pricelist-fk';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260731-price-items-pagination';
 import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260730-test-data-cleanup';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260730-cashbook-reset';
@@ -12,7 +12,7 @@ import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260730-cashbook-reset';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260730-cashbook-reset';
 import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260731-searchable-party-selects';
 import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderKpiReport } from './components/reports.js';
 import { setupPayrollPanel, renderPayrollTable } from './components/payroll.js';
 import { showToast, safeCreateIcons, updateDbStatusUI, isSameUser } from './utils.js';

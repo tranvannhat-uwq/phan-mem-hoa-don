@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260731-price-items-pagination';
 import { renderAll, switchTab } from '../main.js';
 import { populateManagedByDropdown } from './customers.js?v=20260730-cashbook-reset';
 import { exportBackupToExcel } from '../services/backup.js';

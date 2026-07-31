@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatDateTime, safeCreateIcons, formatCurrency } from '../utils.js';
+import { showToast, formatDateTime, safeCreateIcons, formatCurrency, makeSelectSearchable } from '../utils.js';
 import {
   dbSaveRawMaterial,
   dbDeleteRawMaterial,
@@ -14,7 +14,7 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20260731-customer-pricelist-fk';
+} from '../services/supabase.js?v=20260731-price-items-pagination';
 import { renderAll } from '../main.js';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---
@@ -522,6 +522,7 @@ function attachPurchasePanelEvents(panel) {
 
   const modal = panel.querySelector('#purchase-entry-modal');
   const openBtn = panel.querySelector('#btn-open-purchase-modal');
+  makeSelectSearchable('purchase-supplier-select', 'Tìm nhà cung cấp');
   const closeModal = () => modal?.classList.remove('active');
   openBtn?.addEventListener('click', () => {
     const dateInput = panel.querySelector('#purchase-date-input');

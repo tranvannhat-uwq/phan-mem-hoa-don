@@ -601,10 +601,7 @@ export async function fetchCloudData() {
         localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
 
         try {
-          const { data: itemData, error: itemErr } = await supabaseClient
-            .from(tablePriceListItemsName)
-            .select('*');
-          if (itemErr) throw itemErr;
+          const itemData = await fetchFullTableData(tablePriceListItemsName);
           const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
           state.priceListItems = (itemData || [])
           .filter(item => visiblePriceListIds.has(item.price_list_id))
@@ -1908,10 +1905,23 @@ export async function dbSavePriceListItems(items) {
         updated_at: new Date().toISOString(),
         updated_by: item.updatedBy || (state.currentUser ? state.currentUser.username : 'admin')
       }));
-      const { error } = await supabaseClient
-        .from(tablePriceListItemsName)
-        .upsert(dbRows, { onConflict: 'price_list_id,product_id' });
-      if (error) throw error;
+      const chunkSize = 200;
+      for (let offset = 0; offset < dbRows.length; offset += chunkSize) {
+        const chunk = dbRows.slice(offset, offset + chunkSize);
+        let { error } = await supabaseClient
+          .from(tablePriceListItemsName)
+          .upsert(chunk, { onConflict: 'price_list_id,product_id' });
+
+        if (error && /variant_id|schema cache|column/i.test(error.message || '')) {
+          const legacyChunk = chunk.map(({ variant_id, ...row }) => row);
+          const retry = await supabaseClient
+            .from(tablePriceListItemsName)
+            .upsert(legacyChunk, { onConflict: 'price_list_id,product_id' });
+          error = retry.error;
+        }
+
+        if (error) throw error;
+      }
       return true;
     } catch(err) {
       console.error(err);
