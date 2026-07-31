@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
 import { renderAll } from '../main.js';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCustomerPayment } from '../services/supabase.js?v=20260730-cashbook-reset';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCustomerPayment } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];

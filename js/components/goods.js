@@ -14,7 +14,7 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20260730-cashbook-reset';
+} from '../services/supabase.js?v=20260731-customer-pricelist-fk';
 import { renderAll } from '../main.js';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---

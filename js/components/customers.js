@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260730-cashbook-reset';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260730-cashbook-reset';
 import { addCashbookTransaction } from './so_quy.js?v=20260730-cashbook-reset';

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260730-cashbook-reset';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
 import { renderAll } from '../main.js';
 
 export function renderBrandsTable() {

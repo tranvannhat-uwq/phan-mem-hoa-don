@@ -1163,7 +1163,7 @@ export async function syncLocalToCloud() {
         total_transaction: c.totalTransaction,
         notes: c.notes,
         pricelist_id: c.pricelistId || null,
-        default_price_list_id: c.defaultPriceListId || c.pricelistId || null,
+        default_price_list_id: resolveCustomerDefaultPriceListId(c),
         managed_by: c.managedBy || 'nhat',
         debt_history: c.debtHistory || []
       }));
@@ -1662,6 +1662,18 @@ export async function dbDeleteProduct(code, brand) {
 }
 
 // --- Thao tác CSDL chi tiết (Khách hàng) ---
+function resolveCustomerDefaultPriceListId(customer) {
+  const candidate = customer.defaultPriceListId || customer.pricelistId || '';
+  if (!candidate || candidate === 'custom' || candidate === 'retail') return null;
+
+  const priceLists = state.pricelists || [];
+  if (priceLists.length && !priceLists.some(priceList => priceList.id === candidate)) {
+    return null;
+  }
+
+  return candidate;
+}
+
 function mapCustomerToDbRow(customer) {
   return {
     id: customer.id,
@@ -1695,7 +1707,7 @@ function mapCustomerToDbRow(customer) {
     last_payment_at: customer.lastPaymentAt || customer.last_payment_at || null,
     notes: customer.notes,
     pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
-    default_price_list_id: customer.defaultPriceListId || customer.pricelistId || null,
+    default_price_list_id: resolveCustomerDefaultPriceListId(customer),
     managed_by: customer.managedBy === undefined ? null : customer.managedBy,
     debt_history: customer.debtHistory || [],
     created_at: customer.createdAt || customer.created_at || new Date().toISOString(),

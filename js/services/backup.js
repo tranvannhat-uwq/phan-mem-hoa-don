@@ -20,7 +20,7 @@ import {
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js?v=20260730-cashbook-reset';
+} from './supabase.js?v=20260731-customer-pricelist-fk';
 
 async function deleteAllRows(tableName, key = 'id') {
   const { error } = await supabaseClient

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260730-cashbook-reset';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
 import { renderAll } from '../main.js';
 import { openPrintTypeModal } from './invoice.js?v=20260730-cashbook-reset';
 import { openHistoryOrderExportModal } from './customers.js?v=20260730-cashbook-reset';

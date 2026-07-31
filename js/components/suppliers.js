@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260730-cashbook-reset';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260731-customer-pricelist-fk';
 import { renderAll } from '../main.js';
 
 function toNumber(value) {

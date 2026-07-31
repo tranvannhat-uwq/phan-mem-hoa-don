@@ -5,7 +5,7 @@ import {
   dbDeletePricelist,
   dbSavePriceListItems,
   dbDeletePriceListItem
-} from '../services/supabase.js?v=20260730-cashbook-reset';
+} from '../services/supabase.js?v=20260731-customer-pricelist-fk';
 import { renderAll } from '../main.js';
 import { applyActivePriceListToInvoice } from './invoice.js?v=20260730-cashbook-reset';
 import {
