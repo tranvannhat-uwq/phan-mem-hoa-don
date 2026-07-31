@@ -392,6 +392,73 @@ async function fetchFullTableData(tableName) {
   return allData;
 }
 
+function isMissingSchemaCacheRelationError(error, relationName) {
+  const message = String(error?.message || '');
+  return error?.code === 'PGRST205' &&
+    message.includes(`'${relationName}'`) &&
+    message.toLowerCase().includes('schema cache');
+}
+
+function handleOptionalProductGroupsError(error) {
+  if (isMissingSchemaCacheRelationError(error, 'public.product_groups') || isMissingSchemaCacheRelationError(error, 'product_groups')) {
+    console.warn('Skipping product_groups sync because the table is not available in Supabase schema cache:', error.message);
+    return true;
+  }
+  if (error?.code === '42501' && String(error?.message || '').includes('row-level security policy') && String(error?.message || '').includes('product_groups')) {
+    console.warn('Skipping product_groups sync because Supabase RLS denied access:', error.message);
+    return true;
+  }
+  return false;
+}
+
+const optionalProductSchemaColumns = new Set([
+  'variant_code',
+  'product_group_id',
+  'base_code',
+  'base_product_id',
+  'parent_product_id',
+  'brand_id',
+  'packaging_name',
+  'weight_or_volume',
+  'unit_name',
+  'conversion_quantity',
+  'barcode',
+  'purchase_price',
+  'product_group',
+  'is_legacy'
+]);
+const unavailableProductSchemaColumns = new Set();
+
+function getMissingSchemaCacheColumnName(error, tableName) {
+  const message = String(error?.message || '');
+  if (error?.code !== 'PGRST204' || !message.toLowerCase().includes('schema cache')) return null;
+  if (tableName && !message.includes(`'${tableName}'`)) return null;
+  const match = message.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] || null;
+}
+
+function stripUnavailableProductColumns(row) {
+  const clone = { ...row };
+  unavailableProductSchemaColumns.forEach(column => delete clone[column]);
+  return clone;
+}
+
+async function runProductWriteWithSchemaFallback(writeFactory) {
+  for (let attempt = 0; attempt < optionalProductSchemaColumns.size + 1; attempt += 1) {
+    const { error } = await writeFactory(stripUnavailableProductColumns);
+    if (!error) return { error: null };
+
+    const missingColumn = getMissingSchemaCacheColumnName(error, tableProductsName);
+    if (!missingColumn || !optionalProductSchemaColumns.has(missingColumn) || unavailableProductSchemaColumns.has(missingColumn)) {
+      return { error };
+    }
+
+    unavailableProductSchemaColumns.add(missingColumn);
+    console.warn(`Retrying product save without unavailable Supabase column "${missingColumn}".`);
+  }
+  return { error: new Error('Supabase products schema is missing too many optional columns.') };
+}
+
 function normalizeProductRow(row, localProducts = []) {
   const local = localProducts.find(lp => lp.id === row.id || (lp.code === row.code && lp.brand === row.brand));
   return {
@@ -1477,20 +1544,24 @@ export async function dbSaveProduct(product) {
             is_active: product.isActive !== false || hasOtherActiveVariant,
             updated_at: new Date().toISOString()
           }, { onConflict: 'id' });
-        if (groupError) throw groupError;
+        if (groupError && !handleOptionalProductGroupsError(groupError)) throw groupError;
       }
 
       let error = null;
       if (existingRow?.id) {
         const { id: _preservedId, ...changes } = dbRow;
-        ({ error } = await supabaseClient
-          .from(tableProductsName)
-          .update(changes)
-          .eq('id', existingRow.id));
+        ({ error } = await runProductWriteWithSchemaFallback(stripUnavailableColumns =>
+          supabaseClient
+            .from(tableProductsName)
+            .update(stripUnavailableColumns(changes))
+            .eq('id', existingRow.id)
+        ));
       } else {
-        ({ error } = await supabaseClient
-          .from(tableProductsName)
-          .insert(dbRow));
+        ({ error } = await runProductWriteWithSchemaFallback(stripUnavailableColumns =>
+          supabaseClient
+            .from(tableProductsName)
+            .insert(stripUnavailableColumns(dbRow))
+        ));
       }
 
       if (error) throw error;
@@ -1585,14 +1656,17 @@ export async function dbSaveProductsBulk(products) {
       const { error: groupError } = await supabaseClient
         .from('product_groups')
         .upsert(groupRows, { onConflict: 'id' });
-      if (groupError) throw groupError;
+      if (groupError && !handleOptionalProductGroupsError(groupError)) throw groupError;
     }
 
     const chunkSize = 200;
     for (let index = 0; index < rows.length; index += chunkSize) {
-      const { error } = await supabaseClient
-        .from(tableProductsName)
-        .upsert(rows.slice(index, index + chunkSize), { onConflict: 'id' });
+      const chunk = rows.slice(index, index + chunkSize);
+      const { error } = await runProductWriteWithSchemaFallback(stripUnavailableColumns =>
+        supabaseClient
+          .from(tableProductsName)
+          .upsert(chunk.map(stripUnavailableColumns), { onConflict: 'id' })
+      );
       if (error) throw error;
     }
 

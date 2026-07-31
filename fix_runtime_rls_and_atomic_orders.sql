@@ -6,7 +6,7 @@ DECLARE
     table_name text;
 BEGIN
     FOREACH table_name IN ARRAY ARRAY[
-        'users', 'products', 'customers', 'pricelists', 'brands',
+        'users', 'products', 'product_groups', 'customers', 'pricelists', 'brands',
         'orders', 'draft_orders', 'order_items', 'price_list_items'
     ]
     LOOP

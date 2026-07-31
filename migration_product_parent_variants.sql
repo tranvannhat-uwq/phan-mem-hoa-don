@@ -104,7 +104,7 @@ SELECT
   min(product.code),
   product.base_code,
   jsonb_build_object(
-    'brand', COALESCE(product.brand, ''),
+    'brand', min(COALESCE(product.brand, '')),
     'names', jsonb_agg(DISTINCT product.name),
     'product_ids', jsonb_agg(DISTINCT product.id)
   )
@@ -489,6 +489,7 @@ FROM public.price_list_items item;
 ALTER TABLE public.product_groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS select_product_groups ON public.product_groups;
 DROP POLICY IF EXISTS manage_product_groups ON public.product_groups;
+DROP POLICY IF EXISTS local_app_anon_access ON public.product_groups;
 CREATE POLICY select_product_groups ON public.product_groups
   FOR SELECT TO authenticated
   USING (true);
@@ -496,5 +497,9 @@ CREATE POLICY manage_product_groups ON public.product_groups
   FOR ALL TO authenticated
   USING (public.is_admin_or_accounting())
   WITH CHECK (public.is_admin_or_accounting());
+CREATE POLICY local_app_anon_access ON public.product_groups
+  FOR ALL TO anon
+  USING (true)
+  WITH CHECK (true);
 
 COMMIT;
