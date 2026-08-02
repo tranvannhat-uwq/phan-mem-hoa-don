@@ -1,5 +1,6 @@
 import { state } from '../state.js';
 import { showToast } from '../utils.js';
+import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260802-backup-cell-fix1';
 import { 
   supabaseClient, 
   isCloudActive,
@@ -20,7 +21,7 @@ import {
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js?v=20260731-price-items-pagination';
+} from './supabase.js?v=20260802-backup-cell-fix1';
 
 async function deleteAllRows(tableName, key = 'id') {
   const { error } = await supabaseClient
@@ -95,7 +96,12 @@ async function restoreCustomerBaselines() {
   }
 }
 
-export async function clearTestData(onCompleteCallback) {
+export async function clearTestData() {
+  showToast('Chức năng xóa hàng loạt đã bị tắt để bảo toàn lịch sử nghiệp vụ. Hãy dùng giao dịch hủy/đảo theo từng chứng từ.', 'warning');
+  return false;
+}
+
+async function legacyClearTestDataDisabled(onCompleteCallback) {
   const confirmed = confirm(
     'XÓA DỮ LIỆU THỬ NGHIỆM?\n\n' +
     'Sẽ xóa: đơn bán, đơn nháp, trả hàng, phiếu nhập hàng, Sổ quỹ, số dư đầu kỳ, tồn kho phát sinh, nhật ký sản xuất, hoa hồng và lịch sử công nợ phát sinh.\n\n' +
@@ -161,8 +167,164 @@ export async function clearTestData(onCompleteCallback) {
 
 export const clearAllSampleData = clearTestData;
 
-// Xuất file sao lưu Excel (nhiều trang chứa dữ liệu các bảng)
+const PHASE6_BACKUP_VERSION = 'phase6-v1';
+const PHASE6_BACKUP_TABLES = [
+  { sheet: 'San_Pham', table: 'products' },
+  { sheet: 'Khach_Hang', table: 'customers' },
+  { sheet: 'Don_Hang', table: 'orders' },
+  { sheet: 'Chi_Tiet_Don', table: 'order_items' },
+  { sheet: 'Don_Hang_Nhap', table: 'draft_orders' },
+  { sheet: 'Bang_Gia', table: 'pricelists' },
+  { sheet: 'Chi_Tiet_Bang_Gia', table: 'price_list_items' },
+  { sheet: 'Hang_Son', table: 'brands' },
+  { sheet: 'Thanh_Toan', table: 'payments' },
+  { sheet: 'So_Quy', table: 'cashbook_transactions' },
+  { sheet: 'So_Du_Dau_Ky', table: 'starting_balances' },
+  { sheet: 'Cong_No_Khach', table: 'customer_debt_transactions' },
+  { sheet: 'Tra_Hang', table: 'sales_returns' },
+  { sheet: 'Chi_Tiet_Tra_Hang', table: 'sales_return_items' },
+  { sheet: 'Nha_Cung_Cap', table: 'suppliers' },
+  { sheet: 'Phieu_Mua', table: 'purchases' },
+  { sheet: 'Chi_Tiet_Phieu_Mua', table: 'purchase_items' },
+  { sheet: 'Thanh_Toan_NCC', table: 'purchase_payments' },
+  { sheet: 'Cong_No_NCC', table: 'supplier_debt_transactions' },
+  { sheet: 'Ho_So_Nhan_Vien', table: 'profiles' },
+  { sheet: 'Nhat_Ky_Audit', table: 'audit_logs' }
+];
+
+async function fetchBackupTableRows(tableName) {
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .select('*')
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(`${tableName}: ${error.message || error}`);
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
 export async function exportBackupToExcel() {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Không thể xuất dữ liệu vì chưa kết nối Supabase.', 'warning');
+    return false;
+  }
+  if (state.currentUser?.role !== 'admin') {
+    showToast('Chỉ Admin được xuất bản sao dữ liệu toàn hệ thống.', 'danger');
+    return false;
+  }
+
+  try {
+    showToast('Đang đọc dữ liệu Cloud theo từng trang...', 'info');
+    const workbook = XLSX.utils.book_new();
+    const manifest = [];
+    for (const spec of PHASE6_BACKUP_TABLES) {
+      const rows = await fetchBackupTableRows(spec.table);
+      manifest.push({ sheet: spec.sheet, table_name: spec.table, row_count: rows.length });
+      const worksheet = rows.length > 0
+        ? XLSX.utils.json_to_sheet(serializeBackupRows(rows))
+        : XLSX.utils.aoa_to_sheet([['__empty_table__']]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, spec.sheet);
+    }
+
+    const metadata = [{
+      schema_version: PHASE6_BACKUP_VERSION,
+      created_at: new Date().toISOString(),
+      created_by_profile: state.currentUser.id || '',
+      source: 'supabase-authoritative-read',
+      scope: 'sales-debt-cashbook-returns-purchases',
+      restore_policy: 'new-staging-only'
+    }];
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(metadata), '_Metadata');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(manifest), '_Manifest');
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    XLSX.writeFile(workbook, `weblendon_phase6_${timestamp}.xlsx`);
+    localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
+    showToast('Đã xuất bản dữ liệu có version và manifest thành công.', 'success');
+    return true;
+  } catch (error) {
+    console.error('Phase 6 backup export failed:', error);
+    showToast(`Không thể xuất bản dữ liệu: ${error.message || error}`, 'danger');
+    return false;
+  }
+}
+
+function findDuplicateBackupKeys(rows) {
+  const seen = new Set();
+  let duplicates = 0;
+  (rows || []).forEach(row => {
+    const key = row.id ?? row.code ?? row.name;
+    if (key == null || key === '') return;
+    const normalized = String(key).trim().toLowerCase();
+    if (seen.has(normalized)) duplicates += 1;
+    else seen.add(normalized);
+  });
+  return duplicates;
+}
+
+export async function importBackupFromExcel(file) {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Không thể kiểm tra file vì chưa kết nối Supabase.', 'warning');
+    return false;
+  }
+  if (state.currentUser?.role !== 'admin') {
+    showToast('Chỉ Admin được kiểm tra và chuẩn bị khôi phục dữ liệu.', 'danger');
+    return false;
+  }
+  if (!file || file.size > 50 * 1024 * 1024) {
+    showToast('File sao lưu không hợp lệ hoặc vượt quá 50 MB.', 'danger');
+    return false;
+  }
+
+  try {
+    const workbook = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+    const metadataSheet = workbook.Sheets._Metadata;
+    const metadata = metadataSheet ? XLSX.utils.sheet_to_json(metadataSheet)[0] : null;
+    if (!metadata || metadata.schema_version !== PHASE6_BACKUP_VERSION) {
+      throw new Error(`Sai hoặc thiếu version ${PHASE6_BACKUP_VERSION}`);
+    }
+
+    const summary = [];
+    let missingSheets = 0;
+    let totalRows = 0;
+    let totalDuplicates = 0;
+    for (const spec of PHASE6_BACKUP_TABLES) {
+      const worksheet = workbook.Sheets[spec.sheet];
+      if (!worksheet) {
+        missingSheets += 1;
+        summary.push(`${spec.sheet}: thiếu sheet`);
+        continue;
+      }
+      const rows = deserializeBackupRows(
+        XLSX.utils.sheet_to_json(worksheet).filter(row => !row.__empty_table__)
+      );
+      const duplicates = findDuplicateBackupKeys(rows);
+      totalRows += rows.length;
+      totalDuplicates += duplicates;
+      summary.push(`${spec.sheet}: ${rows.length} dòng, ${duplicates} trùng khóa`);
+    }
+
+    alert(
+      `DRY-RUN GIAI ĐOẠN 6\n\nVersion: ${metadata.schema_version}\n` +
+      `Tổng dòng: ${totalRows}\nSheet thiếu: ${missingSheets}\nKhóa trùng: ${totalDuplicates}\n\n` +
+      `${summary.join('\n')}\n\nKhông có dữ liệu Cloud nào bị thay đổi. ` +
+      'Khôi phục đầy đủ phải thực hiện vào một database staging mới bằng scripts/restore-phase6-staging.ps1.'
+    );
+    showToast('Dry-run hoàn tất. Không có dữ liệu Cloud nào bị thay đổi.', missingSheets ? 'warning' : 'success');
+    return { totalRows, missingSheets, totalDuplicates, summary };
+  } catch (error) {
+    console.error('Backup dry-run failed:', error);
+    showToast(`File sao lưu không đạt kiểm tra: ${error.message || error}`, 'danger');
+    return false;
+  }
+}
+
+// Xuất file sao lưu Excel (nhiều trang chứa dữ liệu các bảng)
+async function legacyExportBackupToExcelDisabled() {
   if (!isCloudActive || !supabaseClient) {
     showToast('Vui lòng kết nối với Supabase trước!', 'warning');
     return;
@@ -226,7 +388,7 @@ export async function exportBackupToExcel() {
 }
 
 // Khôi phục dữ liệu từ file sao lưu Excel tải lên
-export async function importBackupFromExcel(file, onCompleteCallback) {
+async function legacyImportBackupFromExcelDisabled(file, onCompleteCallback) {
   if (!isCloudActive || !supabaseClient) {
     showToast('Vui lòng kết nối với Supabase trước!', 'warning');
     return;
@@ -339,11 +501,12 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
   const restoreBtn = document.getElementById('btn-restore-backup');
 
   if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-      exportBackupToExcel();
-      localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
-      const reminderBanner = document.getElementById('backup-reminder-banner');
-      if (reminderBanner) reminderBanner.style.display = 'none';
+    exportBtn.addEventListener('click', async () => {
+      const exported = await exportBackupToExcel();
+      if (exported) {
+        const reminderBanner = document.getElementById('backup-reminder-banner');
+        if (reminderBanner) reminderBanner.style.display = 'none';
+      }
     });
   }
 
@@ -388,11 +551,12 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
 
   if (reminderDownloadBtn) {
     reminderDownloadBtn.addEventListener('click', async () => {
-      await exportBackupToExcel();
-      localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
-      if (reminderBanner) reminderBanner.style.display = 'none';
-      const mandatoryModal = document.getElementById('mandatory-backup-modal');
-      if (mandatoryModal) mandatoryModal.style.display = 'none';
+      const exported = await exportBackupToExcel();
+      if (exported) {
+        if (reminderBanner) reminderBanner.style.display = 'none';
+        const mandatoryModal = document.getElementById('mandatory-backup-modal');
+        if (mandatoryModal) mandatoryModal.style.display = 'none';
+      }
     });
   }
 
@@ -416,9 +580,8 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
         mandatoryDownloadBtn.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i> Đang chuẩn bị bản sao lưu...';
         if (typeof lucide !== 'undefined') lucide.createIcons();
         
-        await exportBackupToExcel();
-        
-        localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
+        const exported = await exportBackupToExcel();
+        if (!exported) throw new Error('Không tạo được bản xuất dữ liệu');
         if (mandatoryModal) mandatoryModal.style.display = 'none';
         showToast('Sao lưu thành công! Đã mở khóa ứng dụng.', 'success');
       } catch (err) {
@@ -433,7 +596,7 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
 
   // Sự kiện trước khi đóng trình duyệt (bật cảnh báo nếu sau 16h30 chưa sao lưu)
   window.addEventListener('beforeunload', (e) => {
-    if (state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'accounting')) {
+    if (state.currentUser?.role === 'admin') {
       const now = new Date();
       const hours = now.getHours();
       const minutes = now.getMinutes();
@@ -459,7 +622,7 @@ export function checkAndShowBackupReminder() {
   const mandatoryModal = document.getElementById('mandatory-backup-modal');
 
   // Chỉ hiển thị nhắc nhở cho Admin và Kế toán
-  if (!state.currentUser || (state.currentUser.role !== 'admin' && state.currentUser.role !== 'accounting')) {
+  if (state.currentUser?.role !== 'admin') {
     if (banner) banner.style.display = 'none';
     if (mandatoryModal) mandatoryModal.style.display = 'none';
     return;

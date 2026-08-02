@@ -5,9 +5,9 @@ import {
   dbDeletePricelist,
   dbSavePriceListItems,
   dbDeletePriceListItem
-} from '../services/supabase.js?v=20260731-price-items-pagination';
-import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20260730-cashbook-reset';
+} from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20260802-backup-cell-fix1';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -409,7 +409,6 @@ export async function savePricelist() {
   const currentIndex = state.pricelists.findIndex(item => item.id === id);
   if (currentIndex >= 0) state.pricelists[currentIndex] = priceList;
   else state.pricelists.push(priceList);
-  localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
   closePricelistModal();
   renderAll();
   populatePricelistsDropdowns();
@@ -457,7 +456,6 @@ export async function savePriceMatrix() {
   const count = changes.length + pendingDeletes.size;
   pendingChanges.clear();
   pendingDeletes.clear();
-  localStorage.setItem('billing_system_price_list_items', JSON.stringify(state.priceListItems));
   document.getElementById('btn-save-price-matrix')?.setAttribute('disabled', 'true');
   renderPricelistsTable();
   showToast(`Đã lưu ${count} thay đổi giá.`);
@@ -477,7 +475,6 @@ export async function deletePricelist(index) {
   if (!(await dbDeletePricelist(priceList.id))) return;
   priceList.isActive = false;
   state.selectedPriceListIds = state.selectedPriceListIds.filter(id => id !== priceList.id);
-  localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
   renderAll();
   showToast('Bảng giá đã được ngừng áp dụng.');
 }
@@ -778,7 +775,6 @@ async function importPriceMatrixExcel(file) {
       ...state.selectedPriceListIds,
       ...allOperations.map(item => item.priceListId)
     ])];
-    localStorage.setItem('billing_system_price_list_items', JSON.stringify(state.priceListItems));
     renderPricelistsTable();
     showToast(`Đã nhập ${upserts.length} giá và xóa ${deletes.length} giá riêng.`);
   } catch (error) {

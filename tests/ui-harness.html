@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="vi">
 <head>
+  <script>window.__app_initialized = true;</script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SKU Pricing UI Harness</title>
@@ -112,8 +113,8 @@
 
   <script type="module">
     import { state } from '../js/state.js';
-    import { renderProductsTable, setupExcelImportAndTemplate } from '../js/components/products.js';
-    import { renderPricelistsTable, setupPricelistManagement } from '../js/components/pricelists.js';
+    import { renderProductsTable, setupExcelImportAndTemplate } from '../js/components/products.js?v=20260802-backup-cell-fix1';
+    import { renderPricelistsTable, setupPricelistManagement } from '../js/components/pricelists.js?v=20260802-backup-cell-fix1';
 
     const testRole = new URLSearchParams(window.location.search).get('role') || 'admin';
     state.currentUser = { username: 'tester', role: testRole };

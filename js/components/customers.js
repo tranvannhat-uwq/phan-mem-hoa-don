@@ -1,10 +1,13 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260731-price-items-pagination';
-import { renderAll } from '../main.js';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260730-cashbook-reset';
-import { addCashbookTransaction } from './so_quy.js?v=20260730-cashbook-reset';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbDeleteAllCustomers, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260802-backup-cell-fix1';
+import { addCashbookTransaction } from './so_quy.js?v=20260802-backup-cell-fix1';
 import { getOrderFinancialBreakdown } from '../domain/order-financials.js';
+import { collectCustomerDebt } from '../domain/customer-debt.js';
+
+let pendingCustomerPaymentKey = '';
 
 const selectedCustomerIdsForExport = new Set();
 let activeExportOrders = null;
@@ -290,10 +293,10 @@ export function getCustomerMetrics(c) {
       .filter(entry => entry.type === 'payment')
       .reduce((sum, entry) => sum + Math.abs(parseImportedNumber(entry.amount)), 0);
     const cancelledPayments = debtHistory
-      .filter(entry =>
+      .filter(entry => entry.type === 'payment_cancel' || (
         entry.type === 'adjust' &&
         String(entry.notes || entry.note || '').toLowerCase().includes('hủy phiếu thu')
-      )
+      ))
       .reduce((sum, entry) => sum + Math.abs(parseImportedNumber(entry.amount)), 0);
     const totalPayments = Math.max(0, collectedPayments - cancelledPayments);
     return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
@@ -321,10 +324,10 @@ export function getCustomerMetrics(c) {
     .filter(entry => entry.type === 'payment')
     .reduce((sum, entry) => sum + Math.abs(parseFloat(entry.amount) || 0), 0);
   const cancelledPayments = debtHistory
-    .filter(entry =>
+    .filter(entry => entry.type === 'payment_cancel' || (
       entry.type === 'adjust' &&
       String(entry.notes || entry.note || '').toLowerCase().includes('hủy phiếu thu')
-    )
+    ))
     .reduce((sum, entry) => sum + Math.abs(parseFloat(entry.amount) || 0), 0);
   const totalPayments = Math.max(0, collectedPayments - cancelledPayments);
   
@@ -836,15 +839,8 @@ export async function saveCustomer() {
   const address = document.getElementById('cust-address').value.trim();
   const assignedBrand = document.getElementById('cust-assigned-brand').value;
   
-  // Bảo mật: Nếu không phải Admin thì không được phép thay đổi công nợ trong form
-  let debt = parseFloat(document.getElementById('cust-debt').value) || 0;
-  if (state.currentUser && state.currentUser.role !== 'admin') {
-    if (index === -1) {
-      debt = 0;
-    } else {
-      debt = state.customers[index].debt || 0;
-    }
-  }
+  // Công nợ chỉ hiển thị trong form hồ sơ; không bao giờ lấy làm payload lưu.
+  let debt = index === -1 ? 0 : Number(state.customers[index]?.debt || 0);
   
   const notes = document.getElementById('cust-notes').value.trim();
   const pricelistId = document.getElementById('cust-pricelist').value;
@@ -915,19 +911,6 @@ export async function saveCustomer() {
   const oldDebt = oldCust ? oldCust.debt || 0 : 0;
   const debtHistory = oldCust ? [...(oldCust.debtHistory || [])] : [];
   
-  if (debt !== oldDebt) {
-    debtHistory.push({
-      id: `adjust-${Date.now()}`,
-      date: new Date().toISOString(),
-      type: 'adjust',
-      amount: debt - oldDebt,
-      notes: index === -1 ? 'Khởi tạo công nợ ban đầu' : 'Điều chỉnh số dư công nợ thủ công',
-      debtAfter: debt
-    });
-    const currentUserDisp = state.currentUser ? (state.currentUser.displayName || state.currentUser.username) : 'Administrator';
-    await dbAdjustCustomerDebt(customerId, debt, index === -1 ? 'Khởi tạo công nợ ban đầu' : 'Điều chỉnh số dư công nợ thủ công', currentUserDisp);
-  }
-
   const matchedCustBrand = (state.brands || []).find(b => b.name.toLowerCase() === (assignedBrand || '').toLowerCase() || b.id === assignedBrand);
   const assignedBrandId = matchedCustBrand ? matchedCustBrand.id : (assignedBrand === 'Tất cả' ? 'Tất cả' : ('brand_' + String(assignedBrand).toLowerCase().replace(/[^a-z0-9]/g, '')));
 
@@ -940,7 +923,8 @@ export async function saveCustomer() {
     assignedBrand,
     assignedBrandId,
     brandDiscounts,
-    debt,
+    // Không upsert trực tiếp số dư mới. RPC công nợ sẽ ghi ledger sau khi hồ sơ tồn tại.
+    debt: oldDebt,
     totalTransaction: index === -1 ? 0 : state.customers[index].totalTransaction || 0,
     totalReturn: index === -1 ? 0 : state.customers[index].totalReturn || 0,
     netRevenue: index === -1 ? 0 : state.customers[index].netRevenue || 0,
@@ -957,6 +941,12 @@ export async function saveCustomer() {
   
   const saved = await dbSaveCustomer(customerData);
   if (saved) {
+    await dbFetchCustomers();
+    const refreshedCustomer = state.customers.find(c => String(c.id) === String(customerId));
+    if (refreshedCustomer) {
+      debt = Number(refreshedCustomer.debt || 0);
+      Object.assign(customerData, refreshedCustomer);
+    }
     if (index === -1) showToast('Thêm khách hàng thành công!');
     else showToast('Cập nhật khách hàng thành công!');
     
@@ -985,8 +975,7 @@ export async function saveCustomer() {
     
     // Cập nhật State local
     const idx = state.customers.findIndex(c => c.id === customerId);
-    if (idx !== -1) state.customers[idx] = customerData;
-    else state.customers.push(customerData);
+    if (idx === -1) state.customers.push(customerData);
     localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
     
     closeCustomerModal();
@@ -1029,6 +1018,7 @@ export function openPayDebtModal(customerIndex) {
   
   modal.classList.add('active');
   form.reset();
+  pendingCustomerPaymentKey = globalThis.crypto.randomUUID();
   
   document.getElementById('pay-debt-customer-id').value = cust.id;
   document.getElementById('pay-debt-cust-name').innerText = `${cust.name} (${cust.code})`;
@@ -1038,6 +1028,7 @@ export function openPayDebtModal(customerIndex) {
 export function closePayDebtModal() {
   const modal = document.getElementById('pay-debt-modal');
   if (modal) modal.classList.remove('active');
+  pendingCustomerPaymentKey = '';
 }
 
 export async function handlePayDebtSubmit(e) {
@@ -1055,32 +1046,42 @@ export async function handlePayDebtSubmit(e) {
   if (!cust) return;
 
   const debtBefore = Number(cust.debt) || 0;
-  if (amountPaid > Math.abs(debtBefore)) {
-    if (!confirm(`Số tiền khách trả (${formatCurrency(amountPaid)}) lớn hơn số công nợ hiện tại (${formatCurrency(cust.debt)}). Bạn có muốn tiếp tục?`)) {
-      return;
-    }
+  if (debtBefore <= 0) {
+    showToast('Khách hàng không còn công nợ cần thu.', 'warning');
+    return;
+  }
+  if (amountPaid > debtBefore) {
+    showToast(`Số tiền thu không được vượt quá công nợ hiện tại (${formatCurrency(debtBefore)}).`, 'warning');
+    return;
   }
   
+  if (!pendingCustomerPaymentKey) pendingCustomerPaymentKey = globalThis.crypto.randomUUID();
   const currentUserDisp = state.currentUser ? (state.currentUser.displayName || state.currentUser.username) : 'Administrator';
-  const paymentResult = await dbRecordCustomerPayment(cust.id, amountPaid, notes, currentUserDisp);
+  const paymentResult = await dbRecordCustomerPayment(cust.id, amountPaid, notes, 'cash', pendingCustomerPaymentKey);
   if (!paymentResult) return;
+  if (!paymentResult.cashbook_id) {
+    showToast('Database không trả về mã phiếu thu. Giao diện chưa cập nhật để tránh ghi trùng.', 'danger');
+    return;
+  }
 
   const rpcDebt = Number(paymentResult.new_debt);
   cust.debt = Number.isFinite(rpcDebt)
     ? rpcDebt
-    : (debtBefore < 0 ? debtBefore + amountPaid : debtBefore - amountPaid);
+    : collectCustomerDebt(debtBefore, amountPaid);
   cust.lastPaymentAt = new Date().toISOString();
   
-  // Ghi nhận lịch sử thu nợ
-  if (!cust.debtHistory) cust.debtHistory = [];
-  cust.debtHistory.push({
-    id: `pay-${Date.now()}`,
-    date: new Date().toISOString(),
-    type: 'payment',
-    amount: amountPaid,
-    notes: notes,
-    debtAfter: cust.debt
-  });
+  // Idempotent retry must not duplicate the local display cache.
+  if (!paymentResult.already_recorded) {
+    if (!cust.debtHistory) cust.debtHistory = [];
+    cust.debtHistory.push({
+      id: paymentResult.ledger_id || `pay-${pendingCustomerPaymentKey}`,
+      date: new Date().toISOString(),
+      type: 'payment',
+      amount: amountPaid,
+      notes: notes,
+      debtAfter: cust.debt
+    });
+  }
   
   localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
   addCashbookTransaction({
@@ -1096,7 +1097,7 @@ export async function handlePayDebtSubmit(e) {
       cloudId: paymentResult.cashbook_id || null,
       customerId: cust.id,
       debtImpact: true,
-      syncToCloud: !paymentResult.cashbook_id
+      syncToCloud: false
     });
     closePayDebtModal();
     renderAll();
@@ -1186,7 +1187,7 @@ export function setupCustomerManagement() {
 
   // Sự kiện đóng modal chi tiết công nợ
   const closeDetailBtn = document.getElementById('btn-close-customer-detail-modal');
-  const closeDetailFooterBtn = document.getElementById('btn-close-detail-modal-footer');
+  const closeDetailFooterBtn = document.getElementById('btn-close-customer-detail-modal-footer');
   if (closeDetailBtn) closeDetailBtn.addEventListener('click', closeCustomerDetailModal);
   if (closeDetailFooterBtn) closeDetailFooterBtn.addEventListener('click', closeCustomerDetailModal);
 
@@ -2147,19 +2148,31 @@ export function openCustomerDetailModal(index) {
         let amountText = '';
         let debtBefore = 0;
         
+        const debtChange = Number.isFinite(Number(h.debtChange)) ? Number(h.debtChange) : null;
         if (h.type === 'payment') {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600; white-space: nowrap;">Thu nợ</span>`;
           amountText = `<span style="color: var(--color-primary); font-weight: 600;">-${formatCurrency(h.amount)}</span>`;
-          debtBefore = h.debtAfter + h.amount;
+          debtBefore = h.debtBefore ?? (h.debtAfter + h.amount);
         } else if (h.type === 'charge') {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 600; white-space: nowrap;">Ghi nợ</span>`;
           amountText = `<span style="color: var(--color-danger); font-weight: 600;">+${formatCurrency(h.amount)}</span>`;
-          debtBefore = h.debtAfter - h.amount;
+          debtBefore = h.debtBefore ?? (h.debtAfter - h.amount);
+        } else if (h.type === 'payment_cancel') {
+          typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 600; white-space: nowrap;">Hủy thu nợ</span>`;
+          const restored = debtChange ?? Math.abs(Number(h.amount || 0));
+          amountText = `<span style="color: #d97706; font-weight: 600;">+${formatCurrency(Math.abs(restored))}</span>`;
+          debtBefore = h.debtBefore ?? (h.debtAfter - restored);
+        } else if (h.type === 'order_cancel') {
+          typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.12); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 600; white-space: nowrap;">Hủy đơn</span>`;
+          const reversedDebt = debtChange ?? -Math.abs(Number(h.amount || 0));
+          amountText = `<span style="color: #dc2626; font-weight: 600;">-${formatCurrency(Math.abs(reversedDebt))}</span>`;
+          debtBefore = h.debtBefore ?? (h.debtAfter - reversedDebt);
         } else {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: 600; white-space: nowrap;">Điều chỉnh</span>`;
-          const sign = h.amount >= 0 ? '+' : '';
-          amountText = `<span style="color: #818cf8; font-weight: 600;">${sign}${formatCurrency(h.amount)}</span>`;
-          debtBefore = h.debtAfter - h.amount;
+          const effectiveChange = debtChange ?? Number(h.amount || 0);
+          const sign = effectiveChange >= 0 ? '+' : '';
+          amountText = `<span style="color: #818cf8; font-weight: 600;">${sign}${formatCurrency(effectiveChange)}</span>`;
+          debtBefore = h.debtBefore ?? (h.debtAfter - effectiveChange);
         }
         
         const formattedTime = new Intl.DateTimeFormat('vi-VN', {

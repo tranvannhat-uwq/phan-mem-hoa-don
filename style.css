@@ -3414,9 +3414,9 @@ textarea::placeholder,
 }
 
 .purchase-page {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 10px;
+  display: block;
+  width: 100%;
+  max-width: none;
   min-height: calc(100vh - 105px);
   background: #f3f4f6;
   margin: -0.75rem;
@@ -3491,6 +3491,8 @@ textarea::placeholder,
 }
 
 .purchase-main {
+  width: 100%;
+  max-width: none;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -3502,6 +3504,20 @@ textarea::placeholder,
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+}
+
+.purchase-heading {
+  min-width: 0;
+}
+
+.purchase-heading h2 {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.purchase-heading small {
+  display: block;
+  margin-top: 0.2rem;
 }
 
 .purchase-search {
@@ -3556,6 +3572,8 @@ textarea::placeholder,
 .purchase-primary-btn {
   border-color: #006ffd;
   color: #006ffd;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .purchase-actions {
@@ -3576,6 +3594,8 @@ textarea::placeholder,
   border-radius: 8px;
   overflow: auto;
   min-height: calc(100vh - 155px);
+  width: 100%;
+  max-width: 100%;
 }
 
 .purchase-table,
@@ -3583,6 +3603,31 @@ textarea::placeholder,
   width: 100%;
   border-collapse: collapse;
   color: #111827;
+}
+
+.purchase-table {
+  min-width: 1120px;
+  table-layout: auto;
+}
+
+.purchase-table th,
+.purchase-table td {
+  white-space: nowrap;
+}
+
+.purchase-empty {
+  text-align: center !important;
+  white-space: normal !important;
+  padding: 3rem 1rem !important;
+}
+
+.purchase-row-toggle {
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+  color: #006ffd;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
 }
 
 .purchase-table th {

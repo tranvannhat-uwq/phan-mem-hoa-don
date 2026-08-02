@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260731-price-items-pagination';
-import { renderAll } from '../main.js';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
 
 export function renderBrandsTable() {
   const tableBody = document.getElementById('brands-table-body');
@@ -230,7 +230,6 @@ async function saveBrand() {
             delete pl.brandDiscounts[oldName];
           }
         });
-        localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
 
         // Cập nhật các ô lọc giao diện đang chọn tên cũ
         const prodFilter = document.getElementById('product-brand-filter');

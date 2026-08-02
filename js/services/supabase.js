@@ -30,7 +30,8 @@ export let tableDraftOrdersName = 'draft_orders';
 export let tableCustomersName = 'customers';
 export let tablePricelistsName = 'pricelists';
 export let tablePriceListItemsName = 'price_list_items';
-export let tableUsersName = 'users';
+// Authorization profiles linked to Supabase Auth. Never query legacy users.password.
+export let tableUsersName = 'profiles';
 export let tableBrandsName = 'brands';
 export let tableCashbookTransactionsName = 'cashbook_transactions';
 export let tableStartingBalancesName = 'starting_balances';
@@ -89,40 +90,15 @@ export function loadLocalStorageBackup() {
     localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
   }
 
-  const storedUsers = localStorage.getItem('billing_system_users');
-  if (storedUsers) {
-    const rawList = JSON.parse(storedUsers).filter(u => u.username !== 'sale1' && u.username !== 'sale2');
-    const uniqueUsers = [];
-    rawList.forEach(u => {
-      const isOldAbs = u.username === 'abs_japan' || u.username === 'abs-japan' || u.username === 'absjapan';
-      if (isOldAbs) {
-        const hasNewAbs = rawList.some(ru => ru.username === 'ctyabs@lendon.com');
-        if (hasNewAbs) return;
-      }
-      const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
-      if (!isDup) {
-        uniqueUsers.push(u);
-      }
-    });
-    state.users = uniqueUsers;
-    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
-  } else {
-    state.users = [
-      { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
-      { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
-      { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
-      { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
-      { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
-    ];
-    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
-  }
+  // Identity and role are never restored from browser-controlled storage.
+  localStorage.removeItem('billing_system_users');
+  state.users = [];
 
-  const storedPricelists = localStorage.getItem('billing_system_pricelists');
-  if (storedPricelists) {
-    state.pricelists = JSON.parse(storedPricelists);
-    state.allPricelists = [...state.pricelists];
-  } else {
-    state.pricelists = [
+  // Price-list data is permission-sensitive and must never survive a user
+  // switch in browser storage. Keep only non-secret bootstrap lists in memory.
+  localStorage.removeItem('billing_system_pricelists');
+  localStorage.removeItem('billing_system_price_list_items');
+  state.pricelists = [
       {
         id: 'pl-02',
         name: 'Bảng giá 02',
@@ -147,10 +123,10 @@ export function loadLocalStorageBackup() {
           'festivanano': 0
         }
       }
-    ];
-    state.allPricelists = [...state.pricelists];
-    localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
-  }
+  ];
+  state.allPricelists = [...state.pricelists];
+  state.priceListItems = [];
+  state.allPriceListItems = [];
 
   const storedBrands = localStorage.getItem('billing_system_brands');
   if (storedBrands) {
@@ -216,8 +192,10 @@ export async function connectSupabase(url, key, verbose = true) {
       throw new Error('Thư viện Supabase chưa được tải (vui lòng kiểm tra kết nối mạng).');
     }
     const client = supabase.createClient(url, key);
+    const { data: { session: connectionSession } } = await client.auth.getSession();
     
     // Kiểm tra cấu trúc bảng để gán tiền tố wl_ nếu có (Kiểm tra bảng gốc trước để tránh ném lỗi 404 vào Console trình duyệt)
+    if (connectionSession?.user) {
     let { error: testNormalErr } = await client.from('products').select('code').limit(1);
     if (!testNormalErr) {
       tableProductsName = 'products';
@@ -226,7 +204,7 @@ export async function connectSupabase(url, key, verbose = true) {
       tableCustomersName = 'customers';
       tablePricelistsName = 'pricelists';
       tablePriceListItemsName = 'price_list_items';
-      tableUsersName = 'users';
+      tableUsersName = 'profiles';
       tableBrandsName = 'brands';
       tableCashbookTransactionsName = 'cashbook_transactions';
       tableStartingBalancesName = 'starting_balances';
@@ -247,7 +225,7 @@ export async function connectSupabase(url, key, verbose = true) {
         tableCustomersName = 'wl_customers';
         tablePricelistsName = 'wl_pricelists';
         tablePriceListItemsName = 'wl_price_list_items';
-        tableUsersName = 'wl_users';
+        tableUsersName = 'profiles';
         tableBrandsName = 'wl_brands';
         tableCashbookTransactionsName = 'wl_cashbook_transactions';
         tableStartingBalancesName = 'wl_starting_balances';
@@ -266,7 +244,7 @@ export async function connectSupabase(url, key, verbose = true) {
         tableCustomersName = 'customers';
         tablePricelistsName = 'pricelists';
         tablePriceListItemsName = 'price_list_items';
-        tableUsersName = 'users';
+        tableUsersName = 'profiles';
         tableBrandsName = 'brands';
         tableCashbookTransactionsName = 'cashbook_transactions';
         tableStartingBalancesName = 'starting_balances';
@@ -281,6 +259,7 @@ export async function connectSupabase(url, key, verbose = true) {
       }
     }
     
+    }
     supabaseClient = client;
     isCloudActive = true;
     
@@ -301,11 +280,13 @@ export async function connectSupabase(url, key, verbose = true) {
     
     updateDbStatusUI('cloud');
     
-    try {
-      await fetchCloudData();
-    } catch (cloudErr) {
-      console.warn('Lỗi tải dữ liệu đám mây, chuyển về dùng LocalStorage backup:', cloudErr);
-      loadLocalStorageBackup();
+    if (connectionSession?.user) {
+      try {
+        await fetchCloudData();
+      } catch (cloudErr) {
+        console.warn('Lỗi tải dữ liệu đám mây, chuyển về dùng LocalStorage backup:', cloudErr);
+        loadLocalStorageBackup();
+      }
     }
     
     if (verbose) {
@@ -392,6 +373,103 @@ async function fetchFullTableData(tableName) {
     }
   }
   return allData;
+}
+
+function parseDebtHistory(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function mapCustomerDebtTransaction(row) {
+  const debtChange = Number(row.debt_change || 0);
+  const typeMap = {
+    order: 'charge', payment: 'payment', payment_cancel: 'payment_cancel',
+    order_cancel: 'order_cancel', return: 'return', return_cancel: 'return_cancel', adjust: 'adjust'
+  };
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    type: typeMap[row.transaction_type] || 'adjust',
+    transactionType: row.transaction_type || 'adjust',
+    amount: Number(row.amount ?? Math.abs(debtChange)),
+    debtChange,
+    debtBefore: Number(row.balance_before || 0),
+    debtAfter: Number(row.balance_after || 0),
+    date: row.transaction_date || row.created_at,
+    note: row.description || '',
+    notes: row.description || '',
+    orderId: row.order_id || null,
+    salesReturnId: row.sales_return_id || null,
+    cashbookTransactionId: row.cashbook_transaction_id || null,
+    reversalOfId: row.reversal_of_id || null
+  };
+}
+
+async function hydrateCustomerDebtHistory(customers) {
+  if (!Array.isArray(customers) || customers.length === 0) return customers;
+  const rows = await fetchFullTableData(tableCustomerDebtTransactionsName);
+  const byCustomer = new Map();
+  (rows || []).forEach(row => {
+    const key = String(row.customer_id || '');
+    if (!key) return;
+    if (!byCustomer.has(key)) byCustomer.set(key, []);
+    byCustomer.get(key).push(mapCustomerDebtTransaction(row));
+  });
+  customers.forEach(customer => {
+    const merged = new Map();
+    parseDebtHistory(customer.debtHistory).forEach(item => {
+      const key = String(item?.id || `legacy:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
+      merged.set(key, item);
+    });
+    (byCustomer.get(String(customer.id)) || []).forEach(item => merged.set(String(item.id), item));
+    customer.debtHistory = [...merged.values()];
+  });
+  return customers;
+}
+
+async function fetchCustomerDebtRows(customerId) {
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabaseClient
+      .from(tableCustomerDebtTransactionsName)
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('transaction_date', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
+function mapCashbookTransaction(t) {
+  const rawNote = t.note || '';
+  const supplierMeta = rawNote.match(/__supplierId=([^\s]+)/);
+  return {
+    id: t.id, cloudId: t.id, date: t.date || t.transaction_date,
+    type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
+    direction: t.direction || (t.type === 'chi' ? 'out' : 'in'),
+    transactionType: t.transaction_type || null,
+    category: t.category || t.transaction_type,
+    partner: t.partner, value: parseFloat(t.value || 0),
+    method: t.method || t.payment_method || 'cash', accounting: t.accounting,
+    status: t.status, creator: t.creator || t.created_by,
+    note: rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim(),
+    starred: t.starred, customerId: t.customer_id || null,
+    debtImpact: t.transaction_type === 'customer_payment',
+    supplierId: t.supplier_id || (supplierMeta ? supplierMeta[1] : null),
+    orderId: t.order_id || null, salesReturnId: t.sales_return_id || null,
+    employeeId: t.employee_id || null, reversalOfId: t.reversal_of_id || null,
+    cancelledAt: t.cancelled_at || null, cancellationReason: t.cancellation_reason || ''
+  };
 }
 
 function isMissingSchemaCacheRelationError(error, relationName) {
@@ -629,8 +707,9 @@ export async function fetchCloudData() {
             defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
             customerGroupId: cust.customer_group_id || '',
             managedBy: cust.managed_by || '',
-            debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || [])
+            debtHistory: parseDebtHistory(cust.debt_history)
           }));
+          await hydrateCustomerDebtHistory(state.customers);
         } else if (localCust.length > 0) {
           state.customers = localCust;
         }
@@ -668,7 +747,6 @@ export async function fetchCloudData() {
           }));
         state.allPricelists = mappedPricelists;
         state.pricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
-        localStorage.setItem('billing_system_pricelists', JSON.stringify(state.pricelists));
 
         try {
           const itemData = await fetchFullTableData(tablePriceListItemsName);
@@ -687,22 +765,17 @@ export async function fetchCloudData() {
           }));
           state.priceListItems = state.allPriceListItems
           .filter(item => visiblePriceListIds.has(item.priceListId));
-          localStorage.setItem('billing_system_price_list_items', JSON.stringify(state.priceListItems));
         } catch (itemErr) {
-          console.warn("Could not load price_list_items, using local fallback:", itemErr.message);
-          const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
-          state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]')
-            .filter(item => visiblePriceListIds.has(item.priceListId));
-          state.allPriceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
+          console.warn("Could not load authorized price_list_items:", itemErr.message);
+          state.priceListItems = [];
+          state.allPriceListItems = [];
         }
       } catch (plErr) {
-        console.warn("Could not load pricelists from Supabase, using local fallback:", plErr.message);
-        state.pricelists = filterPriceListsForUser(JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]'), state.currentUser);
-        state.allPricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
-        const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
-        state.priceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]')
-          .filter(item => visiblePriceListIds.has(item.priceListId));
-        state.allPriceListItems = JSON.parse(localStorage.getItem('billing_system_price_list_items') || '[]');
+        console.warn("Could not load authorized pricelists from Supabase:", plErr.message);
+        state.pricelists = [];
+        state.allPricelists = [];
+        state.priceListItems = [];
+        state.allPriceListItems = [];
       }
     };
 
@@ -714,41 +787,20 @@ export async function fetchCloudData() {
 
         if (userErr) throw userErr;
 
-        const defaultUsers = [
-          { id: 'u-admin', username: 'admin', password: '1307', displayName: 'Administrator', role: 'admin' },
-          { id: 'u-nhat', username: 'nhat', password: '1307', displayName: 'Trần Văn Nhật', role: 'admin' },
-          { id: 'u-ketoan', username: 'ketoan', password: 'ketoan123', displayName: 'Kế toán Công ty', role: 'accounting' },
-          { id: 'u-abs-japan', username: 'ctyabs@lendon.com', password: '', displayName: 'ABS JAPAN (Công ty)', role: 'sale', isExternal: true },
-          { id: 'u-emp-hoa-ky', username: 'emp_hoa_ky', password: '', displayName: 'EMP Hoa Kỳ (Công ty)', role: 'sale', isExternal: true }
-        ];
-
         const cloudUsers = (userData || []).map(u => {
-          let pwd = u.password;
-          if (!pwd || pwd === '') {
-            const def = defaultUsers.find(du => isSameUser(du.username, u.username));
-            if (def) pwd = def.password;
-          }
           return {
             id: u.id,
+            authUserId: u.auth_user_id || null,
             username: u.username,
-            password: pwd,
             displayName: u.display_name,
             role: u.role || 'sale',
             companyId: u.company_id || u.companyId || 'ABS_NORTH',
-            isExternal: u.is_external || false
+            isExternal: u.is_external || false,
+            isActive: u.is_active !== false
           };
         });
 
         const merged = [...cloudUsers];
-        if (cloudUsers.length === 0) {
-          defaultUsers.forEach(def => {
-            const defClean = (def.username || '').toLowerCase().trim();
-            const hasUser = merged.some(u => (u.username || '').toLowerCase().trim() === defClean);
-            if (!hasUser) {
-              merged.push(def);
-            }
-          });
-        }
         
         const uniqueUsers = [];
         merged.forEach(u => {
@@ -764,10 +816,9 @@ export async function fetchCloudData() {
         });
 
         state.users = uniqueUsers;
-        localStorage.setItem('billing_system_users', JSON.stringify(state.users));
       } catch (uErr) {
-        console.warn("Could not load users from Supabase, using local fallback:", uErr.message);
-        state.users = JSON.parse(localStorage.getItem('billing_system_users') || '[]');
+        console.warn("Could not load authenticated profiles from Supabase:", uErr.message);
+        state.users = [];
       }
     };
 
@@ -831,8 +882,11 @@ export async function fetchCloudData() {
             const cleanNote = rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim();
             return {
               id: t.id,
+              cloudId: t.id,
               date: t.date || t.transaction_date,
               type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
+              direction: t.direction || (t.type === 'chi' ? 'out' : 'in'),
+              transactionType: t.transaction_type || null,
               category: t.category || t.transaction_type,
               partner: t.partner,
               value: parseFloat(t.value || 0),
@@ -843,10 +897,14 @@ export async function fetchCloudData() {
               note: cleanNote,
               starred: t.starred,
               customerId: t.customer_id || null,
+              debtImpact: t.transaction_type === 'customer_payment',
               supplierId: t.supplier_id || (supplierMeta ? supplierMeta[1] : null),
               orderId: t.order_id || null,
               salesReturnId: t.sales_return_id || null,
-              employeeId: t.employee_id || null
+              employeeId: t.employee_id || null,
+              reversalOfId: t.reversal_of_id || null,
+              cancelledAt: t.cancelled_at || null,
+              cancellationReason: t.cancellation_reason || ''
             };
           }).filter(t => !(t.note && t.note.startsWith('Thu tiá»n hÃ ng cho hÃ³a Ä‘Æ¡n')));
         localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
@@ -892,21 +950,91 @@ export async function fetchCloudData() {
             phone: s.phone,
             address: s.address,
             debt: parseFloat(s.debt || 0),
-            notes: s.notes || ''
-          }));
-          localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
+            openingDebt: parseFloat(s.opening_debt || 0),
+            totalPurchase: parseFloat(s.total_purchase || 0),
+            totalPaid: parseFloat(s.total_paid || 0),
+            notes: s.notes || '',
+            isActive: s.is_active !== false
+          })).filter(s => s.isActive);
         }
         console.log("[SUPPLIERS] STATE:", state.suppliers?.length || 0);
       } catch (err) {
         console.warn("Could not load suppliers from Supabase:", err.message);
-        const stored = localStorage.getItem('billing_system_suppliers');
-        if (stored) {
-          state.suppliers = JSON.parse(stored);
-        } else {
-          state.suppliers = [];
-          localStorage.setItem('billing_system_suppliers', JSON.stringify([]));
-        }
-        console.log("[SUPPLIERS] STATE Fallback:", state.suppliers?.length || 0);
+        state.suppliers = [];
+      }
+    };
+    const fetchPurchases = async () => {
+      try {
+        const [purchaseResult, itemResult, paymentResult] = await Promise.all([
+          supabaseClient.from('purchases').select('*').order('purchase_date', { ascending: false }),
+          supabaseClient.from('purchase_items').select('*').order('line_number', { ascending: true }),
+          supabaseClient.from('purchase_payments').select('*').order('created_at', { ascending: true })
+        ]);
+        if (purchaseResult.error) throw purchaseResult.error;
+        if (itemResult.error) throw itemResult.error;
+        if (paymentResult.error) throw paymentResult.error;
+        const itemsByPurchase = new Map();
+        (itemResult.data || []).forEach(item => {
+          const list = itemsByPurchase.get(item.purchase_id) || [];
+          list.push({
+            id: item.id,
+            lineNumber: item.line_number,
+            code: item.item_code,
+            name: item.item_name,
+            unit: item.unit || '',
+            quantity: Number(item.quantity || 0),
+            unitPrice: Number(item.unit_price || 0),
+            lineTotal: Number(item.line_total || 0)
+          });
+          itemsByPurchase.set(item.purchase_id, list);
+        });
+        const paymentsByPurchase = new Map();
+        (paymentResult.data || []).forEach(payment => {
+          if (!payment.purchase_id) return;
+          const list = paymentsByPurchase.get(payment.purchase_id) || [];
+          list.push({
+            id: payment.id,
+            amount: Number(payment.amount || 0),
+            paymentMethod: payment.payment_method || 'cash',
+            cashbookTransactionId: payment.cashbook_transaction_id || null,
+            status: payment.status,
+            notes: payment.notes || '',
+            createdBy: payment.created_by,
+            createdAt: payment.created_at,
+            cancelledAt: payment.cancelled_at,
+            cancellationReason: payment.cancellation_reason || ''
+          });
+          paymentsByPurchase.set(payment.purchase_id, list);
+        });
+        state.purchases = (purchaseResult.data || []).map(purchase => {
+          const supplier = state.suppliers.find(s => String(s.id) === String(purchase.supplier_id));
+          return {
+            id: purchase.id,
+            code: purchase.code,
+            supplierId: purchase.supplier_id,
+            supplierName: supplier?.name || '',
+            supplierCode: supplier?.code || '',
+            invoiceNumber: purchase.invoice_number || '',
+            purchaseDate: purchase.purchase_date,
+            date: purchase.purchase_date,
+            status: purchase.status,
+            totalAmount: Number(purchase.total_amount || 0),
+            totalPayable: Number(purchase.total_amount || 0),
+            paidAmount: Number(purchase.paid_amount || 0),
+            balanceDue: Number(purchase.balance_due || 0),
+            paymentMethod: purchase.payment_method || 'cash',
+            notes: purchase.notes || '',
+            createdBy: purchase.created_by,
+            cancelledBy: purchase.cancelled_by,
+            cancelledAt: purchase.cancelled_at,
+            cancellationReason: purchase.cancellation_reason || '',
+            items: itemsByPurchase.get(purchase.id) || [],
+            payments: paymentsByPurchase.get(purchase.id) || []
+          };
+        });
+      } catch (err) {
+        console.warn('Could not load authoritative purchases from Supabase:', err.message || err);
+        state.purchases = [];
       }
     };
     const fetchRawMaterials = async () => {
@@ -1043,12 +1171,21 @@ export async function fetchCloudData() {
           state.salesReturns = returnsData.map(r => ({
             id: r.id,
             saleId: r.sale_id,
+            orderId: r.order_id || r.sale_id,
             customerId: r.customer_id,
+            customerName: state.customers.find(customer => customer.id === r.customer_id)?.name || '',
+            salespersonId: r.salesperson_id || null,
             createdBy: r.created_by,
             createdAt: r.created_at,
+            returnDate: r.return_date || r.created_at,
             reason: r.reason,
-            totalRefund: parseFloat(r.total_refund || 0),
+            totalRefund: parseFloat(r.total_refund ?? r.total_return_amount ?? 0),
+            debtReductionAmount: parseFloat(r.debt_reduction_amount || 0),
+            refundAmount: parseFloat(r.refund_amount || 0),
+            refundCashbookId: r.refund_cashbook_transaction_id || null,
             status: r.status,
+            cancelledAt: r.cancelled_at || null,
+            cancellationReason: r.cancellation_reason || '',
             items: itemsMap.get(r.id) || []
           }));
           saveSalesReturns(state.salesReturns);
@@ -1070,13 +1207,35 @@ export async function fetchCloudData() {
       fetchCashbook(),
       fetchStartingBalances(),
       fetchSuppliers(),
-      fetchRawMaterials(),
-      fetchSemiFinished(),
-      fetchRecipes(),
-      fetchProductionLogs(),
-      fetchFinishedGoodsStock(),
+      fetchPurchases(),
       fetchSalesReturns()
     ]);
+
+    state.purchases = (state.purchases || []).map(purchase => {
+      const supplier = state.suppliers.find(item => String(item.id) === String(purchase.supplierId));
+      return {
+        ...purchase,
+        supplierName: purchase.supplierName || supplier?.name || '',
+        supplierCode: purchase.supplierCode || supplier?.code || ''
+      };
+    });
+
+    // Returns load in parallel with customers/orders; enrich display-only names
+    // after every authoritative collection has completed.
+    state.salesReturns = (state.salesReturns || []).map(ret => {
+      const sourceOrder = state.savedOrders.find(order => String(order.id) === String(ret.saleId));
+      const customer = state.customers.find(item => String(item.id) === String(ret.customerId));
+      const creator = state.users.find(user =>
+        String(user.authUserId || user.auth_user_id || user.id) === String(ret.createdBy)
+        || isSameUser(user.username, ret.createdBy)
+      );
+      return {
+        ...ret,
+        customerName: ret.customerName || customer?.name || sourceOrder?.customerName || '',
+        creatorName: ret.creatorName || creator?.displayName || ret.createdBy
+      };
+    });
+    saveSalesReturns(state.salesReturns);
 
   } catch(err) {
     console.error('Error fetching cloud data:', err);
@@ -1084,8 +1243,30 @@ export async function fetchCloudData() {
   }
 }
 
-// Đồng bộ dữ liệu Local lên Cloud
+// Đồng bộ an toàn: Supabase là nguồn dữ liệu duy nhất. Khi chưa có outbox,
+// version và conflict resolution, không được phát lại cache trình duyệt lên DB.
 export async function syncLocalToCloud() {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Không thể tải dữ liệu vì chưa kết nối Supabase.', 'warning');
+    return false;
+  }
+  try {
+    updateDbStatusUI('connecting', 'Đang tải dữ liệu mới nhất từ Cloud...');
+    await fetchCloudData();
+    updateDbStatusUI('cloud');
+    showToast('Đã tải lại dữ liệu mới nhất từ Cloud. Cache trình duyệt không được ghi ngược lên database.', 'success');
+    return true;
+  } catch (error) {
+    console.error('Cloud refresh failed:', error);
+    updateDbStatusUI('local_failed');
+    showToast('Không thể tải lại dữ liệu Cloud. Không có dữ liệu nào bị ghi hoặc thay đổi.', 'danger');
+    return false;
+  }
+}
+
+// Kept temporarily for reference while old installations are upgraded. It is
+// intentionally not exported or called because it predates safe conflict handling.
+async function legacyLocalUploadDisabled() {
   if (!isCloudActive || !supabaseClient) {
     showToast('Vui lòng kết nối với Supabase trước!', 'warning');
     return false;
@@ -1094,19 +1275,20 @@ export async function syncLocalToCloud() {
   const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
   const localOrders = JSON.parse(localStorage.getItem('billing_system_orders') || '[]');
   const localCustomers = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
-  const localPricelists = JSON.parse(localStorage.getItem('billing_system_pricelists') || '[]');
-  const localUsers = JSON.parse(localStorage.getItem('billing_system_users') || '[]');
+  const localPricelists = [];
   const localBrands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
   const localTxs = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
   const localBalances = JSON.parse(localStorage.getItem('billing_system_cashbook_start_balances') || 'null');
   const localSuppliers = JSON.parse(localStorage.getItem('billing_system_suppliers') || '[]');
-  const localRaw = JSON.parse(localStorage.getItem('billing_system_raw_materials') || '[]');
-  const localSemi = JSON.parse(localStorage.getItem('billing_system_semi_finished') || '[]');
-  const localRecipes = JSON.parse(localStorage.getItem('billing_system_recipes') || '[]');
-  const localLogs = JSON.parse(localStorage.getItem('billing_system_production_logs') || '[]');
-  const localFgs = JSON.parse(localStorage.getItem('billing_system_finished_goods_stock') || '[]');
+  // Inventory and production are outside the final project scope. Legacy local
+  // data is preserved, but this sync path must never upload or depend on it.
+  const localRaw = [];
+  const localSemi = [];
+  const localRecipes = [];
+  const localLogs = [];
+  const localFgs = [];
   
-  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localPricelists.length === 0 && localUsers.length === 0 && localBrands.length === 0 && localTxs.length === 0 && !localBalances && localSuppliers.length === 0 && localRaw.length === 0 && localSemi.length === 0 && localRecipes.length === 0 && localLogs.length === 0 && localFgs.length === 0) {
+  if (localProducts.length === 0 && localOrders.length === 0 && localCustomers.length === 0 && localBrands.length === 0 && localTxs.length === 0 && !localBalances && localSuppliers.length === 0 && localRaw.length === 0 && localSemi.length === 0 && localRecipes.length === 0 && localLogs.length === 0 && localFgs.length === 0) {
     showToast('Không tìm thấy dữ liệu LocalStorage nào để đồng bộ!', 'warning');
     return false;
   }
@@ -1159,28 +1341,6 @@ export async function syncLocalToCloud() {
     
     // 2. Sync Orders
     if (localOrders.length > 0) {
-      const settledRows = localOrders.filter(o => o.status !== 'draft').map(o => ({
-        id: o.id,
-        customer_id: o.customerId || null,
-        customer_name: o.customerName,
-        notes: o.notes,
-        items: o.items,
-        total_market: o.totalMarket,
-        total_discount: o.totalDiscount,
-        subtotal: o.subtotal !== undefined ? o.subtotal : o.totalPayable,
-        discount_value: o.discountValue || 0,
-        discount_type: o.discountType || 'amount',
-        discount_amount: o.discountAmount || 0,
-        other_fee_value: o.otherFeeValue || 0,
-        other_fee_type: o.otherFeeType || 'amount',
-        other_fee_amount: o.otherFeeAmount || 0,
-        total_payable: o.totalPayable,
-        created_at: o.date,
-        pricelist_id: o.pricelistId || 'retail',
-        created_by: o.createdBy || 'admin',
-        status: o.status || 'settled'
-      }));
-
       const draftRows = localOrders.filter(o => o.status === 'draft').map(o => ({
         id: o.id,
         customer_id: o.customerId || null,
@@ -1203,13 +1363,6 @@ export async function syncLocalToCloud() {
         status: 'draft'
       }));
       
-      if (settledRows.length > 0) {
-        let { error } = await supabaseClient
-          .from(tableOrdersName)
-          .upsert(settledRows, { onConflict: 'id' });
-        if (error) throw error;
-      }
-
       if (draftRows.length > 0) {
         let { error } = await supabaseClient
           .from(tableDraftOrdersName)
@@ -1229,13 +1382,10 @@ export async function syncLocalToCloud() {
         assigned_brand: c.assignedBrand,
         brand_discounts: c.brandDiscounts,
         shipping_support: c.shippingSupport || false,
-        debt: c.debt,
-        total_transaction: c.totalTransaction,
         notes: c.notes,
         pricelist_id: c.pricelistId || null,
         default_price_list_id: resolveCustomerDefaultPriceListId(c),
-        managed_by: c.managedBy || 'nhat',
-        debt_history: c.debtHistory || []
+        managed_by: c.managedBy || 'nhat'
       }));
       
       const { error } = await supabaseClient
@@ -1245,48 +1395,7 @@ export async function syncLocalToCloud() {
       if (error) throw error;
     }
 
-    // 4. Sync Price Lists
-    if (localPricelists.length > 0) {
-      const dbRows = localPricelists.map(pl => ({
-        id: pl.id,
-        code: pl.code || null,
-        name: pl.name,
-        type: normalizePriceListType(pl.type, pl.customerId),
-        customer_id: pl.customerId || null,
-        customer_group_id: pl.customerGroupId || null,
-        parent_price_list_id: pl.parentPriceListId || null,
-        effective_from: pl.effectiveFrom || null,
-        effective_to: pl.effectiveTo || null,
-        is_active: pl.isActive !== false,
-        display_order: Number(pl.displayOrder || 0),
-        brand_discounts: pl.brandDiscounts || {}
-      }));
-      
-      const { error } = await supabaseClient
-        .from(tablePricelistsName)
-        .upsert(dbRows, { onConflict: 'id' });
-        
-      if (error) throw error;
-    }
-
-    // 5. Sync Users
-    if (localUsers.length > 0) {
-      const dbRows = localUsers.map(u => ({
-        id: u.id,
-        username: u.username,
-        password: u.password || '',
-        display_name: u.displayName || u.username,
-        role: u.role || 'sale',
-        company_id: u.companyId || 'ABS_NORTH',
-        is_external: u.isExternal || false
-      }));
-      
-      const { error } = await supabaseClient
-        .from(tableUsersName)
-        .upsert(dbRows, { onConflict: 'id' });
-        
-      if (error) throw error;
-    }
+    // Price lists, profiles, and roles are never synchronized from localStorage.
 
     // 6. Sync Brands
     if (localBrands.length > 0) {
@@ -1311,45 +1420,8 @@ export async function syncLocalToCloud() {
       if (error) throw error;
     }
 
-    // 7. Sync Cashbook Transactions
-    if (localTxs.length > 0) {
-      const dbRows = localTxs.map(t => ({
-        id: t.id,
-        date: t.date,
-        type: t.type,
-        category: t.category,
-        partner: t.partner,
-        value: t.value,
-        method: t.method,
-        accounting: t.accounting,
-        status: t.status,
-        creator: t.creator,
-        note: t.note,
-        starred: t.starred
-      }));
-      
-      const { error } = await supabaseClient
-        .from(tableCashbookTransactionsName)
-        .upsert(dbRows, { onConflict: 'id' });
-        
-      if (error) throw error;
-    }
-
-    // 8. Sync Starting Balances
-    if (localBalances) {
-      const dbRow = {
-        id: 'current_balances',
-        cash: localBalances.cash || 0,
-        bank: localBalances.bank || 0,
-        wallet: localBalances.wallet || 0,
-        updated_at: new Date().toISOString()
-      };
-      
-      const { error } = await supabaseClient
-        .from(tableStartingBalancesName)
-        .upsert(dbRow, { onConflict: 'id' });
-        
-    }
+    // Finalized orders, customer balances, cashbook entries and opening balances
+    // are authoritative on the database. Never replay browser cache into them.
     
     // 9. Sync Suppliers
     if (localSuppliers.length > 0) {
@@ -1462,7 +1534,12 @@ export async function syncLocalToCloud() {
     
     await fetchCloudData();
     updateDbStatusUI('cloud');
-    showToast('Đồng bộ dữ liệu lên đám mây thành công!');
+    showToast(
+      (localTxs.length > 0 || localBalances || localOrders.some(order => order.status !== 'draft'))
+        ? 'Đã đồng bộ danh mục và đơn nháp. Dữ liệu tài chính local không được ghi đè lên Cloud.'
+        : 'Đồng bộ dữ liệu lên đám mây thành công!',
+      'success'
+    );
     return true;
   } catch(err) {
     console.error('Migration failed:', err);
@@ -1751,6 +1828,8 @@ function resolveCustomerDefaultPriceListId(customer) {
   return candidate;
 }
 
+// Profile-only whitelist. Financial balances are intentionally excluded and
+// can only change through reviewed debt/payment/order RPCs.
 function mapCustomerToDbRow(customer) {
   return {
     id: customer.id,
@@ -1771,23 +1850,14 @@ function mapCustomerToDbRow(customer) {
     invoice_address: customer.invoiceAddress || customer.invoice_address || null,
     address: customer.address,
     status: customer.status || 'active',
-    created_by: customer.createdBy || customer.created_by || null,
     assigned_brand: customer.assignedBrand,
     assigned_brand_id: customer.assignedBrandId || null,
     brand_discounts: customer.brandDiscounts,
     shipping_support: customer.shippingSupport || false,
-    debt: customer.debt,
-    total_transaction: customer.totalTransaction,
-    total_return: customer.totalReturn || customer.total_return || 0,
-    net_revenue: customer.netRevenue || customer.net_revenue || 0,
-    last_order_at: customer.lastOrderAt || customer.last_order_at || null,
-    last_payment_at: customer.lastPaymentAt || customer.last_payment_at || null,
     notes: customer.notes,
     pricelist_id: customer.pricelistId === undefined ? null : customer.pricelistId,
     default_price_list_id: resolveCustomerDefaultPriceListId(customer),
     managed_by: customer.managedBy === undefined ? null : customer.managedBy,
-    debt_history: customer.debtHistory || [],
-    created_at: customer.createdAt || customer.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
     deleted_at: customer.deletedAt || customer.deleted_at || null
   };
@@ -1874,11 +1944,12 @@ export async function dbFetchCustomers() {
         pricelistId: cust.pricelist_id || '',
         defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
         managedBy: cust.managed_by || '',
-        debtHistory: typeof cust.debt_history === 'string' ? JSON.parse(cust.debt_history) : (cust.debt_history || []),
+        debtHistory: parseDebtHistory(cust.debt_history),
         createdAt: cust.created_at || null,
         updatedAt: cust.updated_at || null,
         deletedAt: cust.deleted_at || null
       }));
+      await hydrateCustomerDebtHistory(state.customers);
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
       return true;
     } catch (err) {
@@ -1887,6 +1958,61 @@ export async function dbFetchCustomers() {
     }
   }
   return false;
+}
+
+export async function dbFetchCashbookTransactions() {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient
+      .from(tableCashbookTransactionsName)
+      .select('*')
+      .order('date', { ascending: false });
+    if (error) throw error;
+    const transactions = (data || []).map(mapCashbookTransaction);
+    localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(transactions));
+    return transactions;
+  } catch (error) {
+    console.error('Error fetching cashbook transactions:', error);
+    return false;
+  }
+}
+
+export async function dbRefreshCustomerFinancialState(customerId) {
+  if (!isCloudActive || !supabaseClient || !customerId) return false;
+  try {
+    const [{ data: customerRow, error: customerError }, ledgerRows] = await Promise.all([
+      supabaseClient
+        .from(tableCustomersName)
+        .select('id,debt,total_transaction,total_return,net_revenue,last_order_at,last_payment_at,updated_at')
+        .eq('id', customerId)
+        .single(),
+      fetchCustomerDebtRows(customerId)
+    ]);
+    if (customerError) throw customerError;
+
+    const customer = (state.customers || []).find(item => String(item.id) === String(customerId));
+    if (!customer) return false;
+    customer.debt = Number(customerRow.debt || 0);
+    customer.totalTransaction = Number(customerRow.total_transaction || 0);
+    customer.totalReturn = Number(customerRow.total_return || 0);
+    customer.netRevenue = Number(customerRow.net_revenue || 0);
+    customer.lastOrderAt = customerRow.last_order_at || null;
+    customer.lastPaymentAt = customerRow.last_payment_at || null;
+    customer.updatedAt = customerRow.updated_at || null;
+
+    const merged = new Map();
+    parseDebtHistory(customer.debtHistory).forEach(item => {
+      const key = String(item?.id || `legacy:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
+      merged.set(key, item);
+    });
+    (ledgerRows || []).map(mapCustomerDebtTransaction).forEach(item => merged.set(String(item.id), item));
+    customer.debtHistory = [...merged.values()];
+    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    return customer;
+  } catch (error) {
+    console.error('Error refreshing customer financial state:', error);
+    return false;
+  }
 }
 
 export async function dbDeleteAllCustomers() {
@@ -2082,6 +2208,7 @@ export async function dbSaveOrder(order) {
       const targetTable = order.status === 'draft' ? tableDraftOrdersName : tableOrdersName;
       const commonRow = {
         id: order.id,
+        idempotency_key: order.idempotencyKey || null,
         customer_id: order.customerId || null,
         customer_name: order.customerName,
         company_id: order.companyId || 'ABS_NORTH',
@@ -2098,10 +2225,17 @@ export async function dbSaveOrder(order) {
         other_fee_amount: order.otherFeeAmount || 0,
         total_payable: order.totalPayable,
         status: order.status || 'settled',
-        created_by: order.createdBy || 'admin',
+        created_by: state.currentUser?.authUserId || null,
         created_at: order.date || order.createdAt || new Date().toISOString(),
         pricelist_id: order.pricelistId || 'retail'
       };
+
+      // Older installations may not yet have the shipping columns on
+      // draft_orders. A draft must remain savable during that transition.
+      if (order.status !== 'draft') {
+        commonRow.shipping_fee_value = order.shippingFeeValue || 0;
+        commonRow.shipping_fee_amount = order.shippingFeeAmount || 0;
+      }
 
       const dbRow = order.status === 'draft' ? commonRow : {
         ...commonRow,
@@ -2121,6 +2255,12 @@ export async function dbSaveOrder(order) {
       let { error } = await supabaseClient
         .from(targetTable)
         .upsert(dbRow, { onConflict: 'id' });
+
+      if (error && order.status === 'draft' && /idempotency_key|schema cache|column/i.test(error.message || '')) {
+        delete dbRow.idempotency_key;
+        const retry = await supabaseClient.from(targetTable).upsert(dbRow, { onConflict: 'id' });
+        error = retry.error;
+      }
         
       if (error) throw error;
 
@@ -2184,15 +2324,11 @@ export async function dbDeleteOrder(id, status = null) {
           .eq('id', id);
         if (error) throw error;
       } else if (status === 'settled') {
-        const { error } = await supabaseClient
-          .from(tableOrdersName)
-          .delete()
-          .eq('id', id);
-        if (error) throw error;
+        showToast('Đơn đã chốt không được xóa vật lý. Hủy/đảo giao dịch sẽ được bổ sung ở giai đoạn 2.', 'warning');
+        return false;
       } else {
-        // Thử xóa ở cả 2 bảng nếu không chỉ rõ trạng thái
+        // Unknown status is treated as draft-only. Finalized history is immutable.
         await supabaseClient.from(tableDraftOrdersName).delete().eq('id', id);
-        await supabaseClient.from(tableOrdersName).delete().eq('id', id);
       }
       return true;
     } catch(err) {
@@ -2207,18 +2343,12 @@ export async function dbDeleteOrder(id, status = null) {
 export async function dbDeleteAllOrders() {
   if (isCloudActive && supabaseClient) {
     try {
-      const { error: err1 } = await supabaseClient
-        .from(tableOrdersName)
-        .delete()
-        .neq('id', 'temp_id_none');
-      if (err1) throw err1;
-
       const { error: err2 } = await supabaseClient
         .from(tableDraftOrdersName)
         .delete()
         .neq('id', 'temp_id_none');
       if (err2) throw err2;
-        
+      showToast('Chỉ đơn nháp được xóa. Lịch sử đơn đã chốt được giữ nguyên.', 'warning');
       return true;
     } catch(err) {
       console.error(err);
@@ -2231,95 +2361,29 @@ export async function dbDeleteAllOrders() {
 
 // --- Thao tác CSDL chi tiết (Người dùng & Auth) ---
 export async function authRegisterOrUpdateUser(user, isNew) {
-  if (!isCloudActive || !supabaseClient) return true;
-  if (user.isExternal) return true; // skip external reps from auth registration
-  try {
-    const savedUrl = localStorage.getItem('billing_supabase_url') || COMPANY_SUPABASE_URL;
-    const savedKey = localStorage.getItem('billing_supabase_key') || COMPANY_SUPABASE_KEY;
-    
-    const email = user.username.includes('@') ? user.username : `${user.username}@lendon.com`;
-
-    if (isNew) {
-      // Sử dụng client phụ để tránh làm mất session đăng nhập hiện tại của Admin
-      const tempClient = supabase.createClient(savedUrl, savedKey, {
-        auth: { persistSession: false }
-      });
-
-      const { data, error } = await tempClient.auth.signUp({
-        email: email,
-        password: user.password,
-        options: {
-          data: {
-            displayName: user.displayName,
-            role: user.role,
-            username: user.username
-          }
-        }
-      });
-      if (error) throw error;
-      if (data && data.user) {
-        user.id = data.user.id; // Gán ID dạng UUID của Supabase Auth
-      }
-    } else {
-      // Chỉnh sửa tài khoản đã có: Chỉ cho phép cập nhật password và metadata cho chính tài khoản đang đăng nhập
-      const { data: { user: authUser } } = await supabaseClient.auth.getUser();
-      if (authUser && authUser.id === user.id) {
-        const updateData = {
-          data: {
-            displayName: user.displayName,
-            role: user.role
-          }
-        };
-        if (user.password) {
-          updateData.password = user.password;
-        }
-        const { error } = await supabaseClient.auth.updateUser(updateData);
-        if (error) throw error;
-      } else {
-        console.warn("Chỉ có thể thay đổi thông tin xác thực cho chính tài khoản đang đăng nhập.");
-      }
-    }
-    return true;
-  } catch (err) {
-    console.error('Auth registration/update error:', err);
-    let errMsg = '';
-    if (typeof err === 'object' && err !== null) {
-      errMsg = err.message || err.error_description || JSON.stringify(err);
-    } else {
-      errMsg = String(err);
-    }
-    showToast('Lỗi đồng bộ tài khoản trên Cloud: ' + errMsg, 'danger');
+  if (!isCloudActive || !supabaseClient) return false;
+  if (isNew && !user.isExternal) {
+    showToast('Hãy tạo tài khoản trong Supabase Auth trước. Website không tự tạo tài khoản hoặc tự gán role.', 'warning');
     return false;
   }
+  return true;
 }
 
 export async function dbSaveUser(user) {
   if (isCloudActive && supabaseClient) {
     try {
-      const oldId = user.id;
-      const isLocalId = String(oldId).startsWith('u-');
-      const isNew = !state.users.some(u => u.id === oldId) || isLocalId;
-      
-      // Đồng bộ thông tin xác thực lên Supabase Auth
-      const authSuccess = await authRegisterOrUpdateUser(user, isNew);
-      if (!authSuccess) return false;
-      
-      // Nếu trước đó là ID offline dạng u-..., ta cần xóa dòng cũ có ID này trong CSDL
-      if (isNew && isLocalId && user.id !== oldId) {
-        const { error: delErr } = await supabaseClient
-          .from(tableUsersName)
-          .delete()
-          .eq('id', oldId);
-        if (delErr) console.warn("Could not delete old offline user row:", delErr.message);
-      }
-      
+      const isNew = !state.users.some(existing => existing.id === user.id);
+      if (!(await authRegisterOrUpdateUser(user, isNew))) return false;
       const dbRow = {
         id: user.id,
+        auth_user_id: user.authUserId || (/^[0-9a-f-]{36}$/i.test(String(user.id)) ? user.id : null),
         username: user.username,
-        password: user.password || '',
         display_name: user.displayName,
         role: user.role,
-        is_external: user.isExternal || false
+        company_id: user.companyId || 'ABS_NORTH',
+        is_external: user.isExternal || false,
+        is_active: user.isActive !== false,
+        updated_at: new Date().toISOString()
       };
       
       const { error } = await supabaseClient
@@ -2342,7 +2406,7 @@ export async function dbDeleteUser(id) {
     try {
       const { error } = await supabaseClient
         .from(tableUsersName)
-        .delete()
+        .update({ is_active: false, updated_at: new Date().toISOString() })
         .eq('id', id);
         
       if (error) throw error;
@@ -2423,122 +2487,84 @@ export async function dbDeleteBrand(name, id = null) {
 export async function dbSaveCashbookTransaction(tx) {
   if (isCloudActive && supabaseClient) {
     try {
-      const dbRow = {
-        id: tx.id,
-        date: tx.date || new Date().toISOString(),
-        transaction_date: tx.date || tx.transactionDate || new Date().toISOString(),
-        type: tx.type,
-        transaction_type: tx.transactionType || tx.category || tx.type,
-        direction: tx.direction || (tx.type === 'thu' ? 'in' : 'out'),
-        payment_method: tx.paymentMethod || tx.method || 'cash',
-        category: tx.category,
-        partner: tx.partner,
-        customer_id: tx.customerId || null,
-        supplier_id: tx.supplierId || null,
-        order_id: tx.orderId || null,
-        sales_return_id: tx.salesReturnId || null,
-        employee_id: tx.employeeId || null,
-        value: parseFloat(tx.value || 0),
-        method: tx.method || 'cash',
-        accounting: tx.accounting !== undefined ? tx.accounting : true,
-        status: tx.status || 'completed',
-        creator: tx.creator,
-        created_by: tx.createdBy || tx.creator || null,
-        note: tx.note,
-        starred: tx.starred || false
-      };
-      
-      let { error } = await supabaseClient
-        .from(tableCashbookTransactionsName)
-        .upsert(dbRow, { onConflict: 'id' });
-
-      if (error && /column|schema|cache|supplier_id|customer_id|transaction_date|payment_method|direction|transaction_type|created_by/i.test(error.message || '')) {
-        const legacyRow = {
-          id: dbRow.id,
-          date: dbRow.date,
-          type: dbRow.type,
-          category: dbRow.category,
-          partner: dbRow.partner,
-          value: dbRow.value,
-          method: dbRow.method,
-          accounting: dbRow.accounting,
-          status: dbRow.status,
-          creator: dbRow.creator,
-          note: tx.supplierId ? `${dbRow.note || ''} __supplierId=${tx.supplierId}`.trim() : dbRow.note,
-          starred: dbRow.starred
-        };
-        const retry = await supabaseClient
-          .from(tableCashbookTransactionsName)
-          .upsert(legacyRow, { onConflict: 'id' });
-        error = retry.error;
+      if (tx.customerId) {
+        throw new Error('Giao dịch công nợ phải dùng RPC nghiệp vụ riêng.');
       }
-        
-      if (error) {
-        console.warn('Lưu sổ quỹ lên Supabase cảnh báo (RLS):', error.message);
-        return false;
-      }
-      return true;
+      const idempotencyKey = String(tx.idempotencyKey || `cashbook:${tx.id || ''}`).trim();
+      const { data, error } = await supabaseClient.rpc('rpc_create_cashbook_transaction', {
+        p_input: {
+          idempotencyKey,
+          externalReference: tx.id || '',
+          transactionDate: tx.date || tx.transactionDate || new Date().toISOString(),
+          type: tx.type,
+          category: tx.category || '',
+          partner: tx.partner || '',
+          value: Number(tx.value || 0),
+          method: tx.paymentMethod || tx.method || 'cash',
+          accounting: tx.accounting !== false,
+          note: tx.note || ''
+        }
+      });
+      if (error) throw error;
+      if (data?.transaction) Object.assign(tx, data.transaction);
+      return data || { success: true };
     } catch(err) {
-      console.warn('Lưu giao dịch Sổ quỹ lên đám mây bị tạm hoãn:', err.message || err);
+      console.warn('Không thể ghi giao dịch Sổ quỹ:', err.message || err);
       return false;
     }
   }
-  return true;
+  showToast('Sổ quỹ chỉ được ghi khi đã kết nối và xác thực với Cloud.', 'danger');
+  return false;
 }
 
 export async function dbSaveStartingBalances(balances) {
   if (isCloudActive && supabaseClient) {
     try {
-      const dbRow = {
-        id: 'current_balances',
-        cash: balances.cash || 0,
-        bank: balances.bank || 0,
-        wallet: balances.wallet || 0,
-        updated_at: new Date().toISOString()
-      };
-      
-      const { error } = await supabaseClient
-        .from(tableStartingBalancesName)
-        .upsert(dbRow, { onConflict: 'id' });
-        
+      const { data, error } = await supabaseClient.rpc('rpc_set_cashbook_starting_balances', {
+        p_cash: Number(balances.cash || 0),
+        p_bank: Number(balances.bank || 0),
+        p_wallet: Number(balances.wallet || 0)
+      });
       if (error) throw error;
-      return true;
+      return data || { success: true };
     } catch(err) {
       console.error(err);
       showToast('Không thể lưu Số dư đầu kỳ lên đám mây: ' + err.message, 'danger');
       return false;
     }
   }
-  return true;
+  showToast('Số dư đầu kỳ chỉ được ghi khi đã kết nối và xác thực với Cloud.', 'danger');
+  return false;
 }
 
 export async function dbSaveSupplier(supplier) {
-  if (isCloudActive && supabaseClient) {
-    try {
-      const dbRow = {
-        id: supplier.id,
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Nhà cung cấp chỉ được lưu khi đã kết nối Cloud.', 'danger');
+    return false;
+  }
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_save_supplier', {
+      p_input: {
+        id: supplier.id || null,
         code: supplier.code,
         name: supplier.name,
-        phone: supplier.phone,
-        address: supplier.address,
-        debt: parseFloat(supplier.debt || 0),
+        phone: supplier.phone || '',
+        address: supplier.address || '',
+        openingDebt: Number(supplier.openingDebt ?? supplier.debt ?? 0),
         notes: supplier.notes || ''
-      };
-      const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
-      const { error } = await supabaseClient
-        .from(tableName)
-        .upsert(dbRow, { onConflict: 'id' });
-      if (error) {
-        console.warn("Could not save supplier to cloud table:", error.message);
       }
-    } catch (err) {
-      console.warn("Cloud save supplier failed:", err);
-    }
+    });
+    if (error) throw error;
+    if (data?.supplier) applyCanonicalSupplier(data.supplier);
+    return data || { success: true };
+  } catch (err) {
+    console.warn('Cloud supplier RPC failed:', err.message || err);
+    showToast(err.message || 'Không thể lưu nhà cung cấp.', 'danger');
+    return false;
   }
-  return true;
 }
 
-export async function dbSaveSuppliersBulk(suppliers) {
+async function legacyDbSaveSuppliersBulk(suppliers) {
   if (isCloudActive && supabaseClient && suppliers.length > 0) {
     try {
       const dbRows = suppliers.map(supplier => ({
@@ -2565,7 +2591,7 @@ export async function dbSaveSuppliersBulk(suppliers) {
   return true;
 }
 
-export async function dbDeleteSupplier(supplierId) {
+async function legacyDbDeleteSupplier(supplierId) {
   if (isCloudActive && supabaseClient) {
     try {
       const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
@@ -2584,6 +2610,172 @@ export async function dbDeleteSupplier(supplierId) {
 }
 
 // --- Thao tác CSDL chi tiết (Phân hệ Hàng hóa & Sản xuất) ---
+
+export async function dbSaveSuppliersBulk(suppliers) {
+  if (!Array.isArray(suppliers) || suppliers.length === 0) return { success: true, saved: 0 };
+  let saved = 0;
+  for (const supplier of suppliers) {
+    const result = await dbSaveSupplier(supplier);
+    if (!result) return false;
+    saved += 1;
+  }
+  return { success: true, saved };
+}
+
+export async function dbDeleteSupplier(supplierId, reason = 'Ngừng sử dụng nhà cung cấp') {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_deactivate_supplier', {
+      p_supplier_id: supplierId,
+      p_reason: reason
+    });
+    if (error) throw error;
+    state.suppliers = state.suppliers.filter(item => String(item.id) !== String(supplierId));
+    return data || { success: true };
+  } catch (err) {
+    console.warn('Cloud supplier deactivation failed:', err.message || err);
+    showToast(err.message || 'Không thể ngừng sử dụng nhà cung cấp.', 'danger');
+    return false;
+  }
+}
+
+function applyCanonicalSupplier(supplier) {
+  if (!supplier) return;
+  const normalized = {
+    id: supplier.id,
+    code: supplier.code,
+    name: supplier.name,
+    phone: supplier.phone || '',
+    address: supplier.address || '',
+    openingDebt: Number(supplier.openingDebt || 0),
+    totalPurchase: Number(supplier.totalPurchase || 0),
+    totalPaid: Number(supplier.totalPaid || 0),
+    debt: Number(supplier.debt || 0),
+    notes: supplier.notes || '',
+    isActive: supplier.isActive !== false
+  };
+  const index = state.suppliers.findIndex(item => String(item.id) === String(normalized.id));
+  if (normalized.isActive) {
+    if (index >= 0) state.suppliers[index] = normalized;
+    else state.suppliers.push(normalized);
+  } else if (index >= 0) state.suppliers.splice(index, 1);
+}
+
+function applyCanonicalPurchase(purchase) {
+  if (!purchase) return;
+  const normalized = {
+    ...purchase,
+    date: purchase.purchaseDate,
+    totalAmount: Number(purchase.totalAmount || 0),
+    totalPayable: Number(purchase.totalAmount || 0),
+    paidAmount: Number(purchase.paidAmount || 0),
+    balanceDue: Number(purchase.balanceDue || 0),
+    items: Array.isArray(purchase.items) ? purchase.items.map(item => ({
+      ...item,
+      quantity: Number(item.quantity || 0),
+      unitPrice: Number(item.unitPrice || 0),
+      price: Number(item.unitPrice || 0),
+      lineTotal: Number(item.lineTotal || 0)
+    })) : [],
+    payments: Array.isArray(purchase.payments) ? purchase.payments : []
+  };
+  const index = state.purchases.findIndex(item => String(item.id) === String(normalized.id));
+  if (index >= 0) state.purchases[index] = normalized;
+  else state.purchases.unshift(normalized);
+}
+
+function applyPhase4Response(data) {
+  if (data?.supplier) applyCanonicalSupplier(data.supplier);
+  if (data?.purchase) applyCanonicalPurchase(data.purchase);
+  return data;
+}
+
+export async function dbCreatePurchase(input) {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Phiếu mua chỉ được tạo khi đã kết nối Cloud.', 'danger');
+    return false;
+  }
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_create_purchase', {
+      p_input: {
+        supplierId: input.supplierId,
+        invoiceNumber: input.invoiceNumber || '',
+        purchaseDate: input.purchaseDate,
+        paidAmount: Number(input.paidAmount || 0),
+        paymentMethod: input.paymentMethod || 'cash',
+        notes: input.notes || '',
+        idempotencyKey: input.idempotencyKey,
+        items: (input.items || []).map(item => ({
+          code: item.code,
+          name: item.name,
+          unit: item.unit || '',
+          quantity: Number(item.quantity || 0),
+          unitPrice: Number(item.unitPrice ?? item.price ?? 0)
+        }))
+      }
+    });
+    if (error) throw error;
+    return applyPhase4Response(data);
+  } catch (err) {
+    console.warn('Create purchase RPC failed:', err.message || err);
+    showToast(err.message || 'Không thể tạo phiếu mua.', 'danger');
+    return false;
+  }
+}
+
+export async function dbRecordSupplierPayment(input) {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_record_supplier_payment', {
+      p_input: {
+        supplierId: input.supplierId,
+        purchaseId: input.purchaseId || null,
+        amount: Number(input.amount || 0),
+        paymentMethod: input.paymentMethod || 'cash',
+        notes: input.notes || '',
+        idempotencyKey: input.idempotencyKey
+      }
+    });
+    if (error) throw error;
+    return applyPhase4Response(data);
+  } catch (err) {
+    console.warn('Supplier payment RPC failed:', err.message || err);
+    showToast(err.message || 'Không thể ghi phiếu chi nhà cung cấp.', 'danger');
+    return false;
+  }
+}
+
+export async function dbCancelSupplierPayment(paymentId, reason) {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_cancel_supplier_payment', {
+      p_payment_id: paymentId,
+      p_reason: reason
+    });
+    if (error) throw error;
+    return applyPhase4Response(data);
+  } catch (err) {
+    console.warn('Cancel supplier payment RPC failed:', err.message || err);
+    showToast(err.message || 'Không thể hủy phiếu chi nhà cung cấp.', 'danger');
+    return false;
+  }
+}
+
+export async function dbCancelPurchase(purchaseId, reason) {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_cancel_purchase', {
+      p_purchase_id: purchaseId,
+      p_reason: reason
+    });
+    if (error) throw error;
+    return applyPhase4Response(data);
+  } catch (err) {
+    console.warn('Cancel purchase RPC failed:', err.message || err);
+    showToast(err.message || 'Không thể hủy phiếu mua.', 'danger');
+    return false;
+  }
+}
 
 export async function dbSaveRawMaterial(item) {
   if (isCloudActive && supabaseClient) {
@@ -2842,55 +3034,9 @@ export function saveSalesReturns(returns) {
 }
 
 export async function dbSaveSalesReturn(ret) {
-  saveSalesReturns(state.salesReturns);
-  if (isCloudActive && supabaseClient) {
-    try {
-      const dbRow = {
-        id: ret.id,
-        sale_id: ret.saleId || ret.orderId,
-        order_id: ret.orderId || ret.saleId,
-        customer_id: ret.customerId || null,
-        salesperson_id: ret.salespersonId || ret.createdBy || null,
-        total_return_amount: ret.totalRefund || ret.totalReturnAmount || 0,
-        debt_reduction_amount: ret.debtReductionAmount || ret.totalRefund || 0,
-        refund_amount: ret.refundAmount || 0,
-        status: ret.status || 'completed',
-        return_date: ret.returnDate || ret.createdAt || new Date().toISOString(),
-        created_by: ret.createdBy,
-        created_at: ret.createdAt || new Date().toISOString(),
-        reason: ret.reason,
-        total_refund: ret.totalRefund
-      };
-      await supabaseClient.from(tableSalesReturnsName).upsert(dbRow, { onConflict: 'id' });
-      
-      if (ret.items && ret.items.length > 0) {
-        const itemRows = ret.items.map(i => ({
-          id: i.id || `thitem_${ret.id}_${Math.random().toString(36).substr(2, 6)}`,
-          return_id: ret.id,
-          sale_item_id: i.saleItemId || null,
-          product_id: i.productId || null,
-          variant_id: i.variantId || null,
-          variant_code_snapshot: i.variantCode || i.productId || '',
-          product_name: i.productName || '',
-          quantity: i.quantity || 0,
-          import_price: i.importPrice || 0,
-          discount_type: i.discountType || 'percent',
-          discount_value: i.discountValue || 0,
-          refund_price: i.refundPrice || 0,
-          subtotal: i.subtotal || 0,
-          package_type: i.packageType || '',
-          packaging_name_snapshot: i.packagingName || i.packageType || '',
-          specification_snapshot: i.specificationSnapshot || ''
-        }));
-        await supabaseClient.from(tableSalesReturnItemsName).upsert(itemRows, { onConflict: 'id' });
-      }
-      return true;
-    } catch(err) {
-      console.warn('Lưu phiếu trả hàng đám mây:', err.message || err);
-      return false;
-    }
-  }
-  return true;
+  void ret;
+  showToast('Phiếu trả hàng chỉ được ghi bằng RPC nghiệp vụ có kiểm tra đơn gốc.', 'danger');
+  return false;
 }
 
 export function backfillMultiCompanyAndRevenueData() {
@@ -3052,7 +3198,50 @@ export async function dbConfirmOrder(order) {
   }
   if (isCloudActive && supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.rpc('rpc_confirm_order', { p_order: order });
+      // The browser sends only business inputs. The database derives actors,
+      // authorized prices, immutable snapshots and every persisted total.
+      const command = {
+        // Compatibility previews keep the current site usable while staging is
+        // migrated. Migration 0006 deliberately ignores these monetary fields.
+        id: order.id,
+        idempotencyKey: order.idempotencyKey,
+        draftId: order.draftId || null,
+        customerId: order.customerId || null,
+        customerName: order.customerName || '',
+        notes: order.notes || '',
+        pricelistId: order.pricelistId || null,
+        discountType: order.discountType || 'amount',
+        discountValue: Number(order.discountValue || 0),
+        otherFeeType: order.otherFeeType || 'amount',
+        otherFeeValue: Number(order.otherFeeValue || 0),
+        shippingFeeValue: Number(order.shippingFeeValue || order.shippingFeeAmount || 0),
+        shippingFeeAmount: Number(order.shippingFeeAmount || order.shippingFeeValue || 0),
+        totalMarket: Number(order.totalMarket || 0),
+        totalDiscount: Number(order.totalDiscount || 0),
+        subtotal: Number(order.subtotal || 0),
+        discountAmount: Number(order.discountAmount || 0),
+        otherFeeAmount: Number(order.otherFeeAmount || 0),
+        totalPayable: Number(order.totalPayable || 0),
+        amountDue: Number(order.amountDue || 0),
+        paidAmount: 0,
+        items: (order.items || []).map(item => ({
+          variantId: item.variantId || item.productId,
+          quantity: Number(item.quantity),
+          discountType: item.discountType || 'percent',
+          discountValue: Number(item.discountValue ?? item.discountPercent ?? 0),
+          discountPercent: Number(item.discountPercent || 0),
+          price: Number(item.price || item.unitPrice || 0),
+          unitPrice: Number(item.unitPrice || item.price || 0),
+          listPrice: Number(item.listPrice || item.price || 0),
+          finalUnitPrice: Number(item.finalUnitPrice || item.price || 0),
+          priceListId: item.priceListId || order.pricelistId || null,
+          productId: item.productId || item.variantId,
+          colorCode: item.colorCode || '',
+          colorPercent: Number(item.colorPercent || 0),
+          notes: item.notes || ''
+        }))
+      };
+      const { data, error } = await supabaseClient.rpc('rpc_confirm_order', { p_order: command });
       if (error) throw error;
       if (data && data.success === false) {
         throw new Error(data.message || 'Transaction chốt đơn không thành công');
@@ -3066,14 +3255,15 @@ export async function dbConfirmOrder(order) {
   return true;
 }
 
-export async function dbRecordCustomerPayment(customerId, amount, notes, createdBy) {
+export async function dbRecordCustomerPayment(customerId, amount, notes, paymentMethod = 'cash', idempotencyKey = '') {
   if (isCloudActive && supabaseClient) {
     try {
       const { data, error } = await supabaseClient.rpc('rpc_record_customer_payment', {
         p_customer_id: customerId,
         p_amount: amount,
         p_notes: notes || 'Thu tiền nợ',
-        p_created_by: createdBy || 'admin'
+        p_payment_method: paymentMethod || 'cash',
+        p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID()
       });
       if (error) throw error;
       return data || { success: true };
@@ -3083,73 +3273,217 @@ export async function dbRecordCustomerPayment(customerId, amount, notes, created
       return false;
     }
   }
-  return { success: true, new_debt: null };
+  showToast('Thu nợ cần kết nối Cloud để bảo đảm transaction và ledger.', 'danger');
+  return false;
 }
 
-export async function dbCancelCustomerPayment(cashbookId, createdBy) {
+export async function dbCancelCustomerPayment(cashbookId, _createdBy) {
+  return dbCancelCashbookEntry(cashbookId, 'Hủy phiếu thu công nợ');
+}
+
+function getFinancialCancellationMessage(error, subject) {
+  const message = String(error?.message || '').toLowerCase();
+  if (message.includes('không đủ quyền') || error?.code === '42501') {
+    return `Bạn không có quyền ${subject}.`;
+  }
+  if (message.includes('thiếu') && message.includes('liên kết')) {
+    return `Dữ liệu cũ thiếu liên kết cần thiết, chưa thể ${subject} an toàn.`;
+  }
+  if (message.includes('đã hủy') || message.includes('already')) {
+    return `Giao dịch này đã được hủy trước đó.`;
+  }
+  if (message.includes('failed to fetch') || message.includes('network')) {
+    return `Không thể kết nối Cloud. Dữ liệu chưa thay đổi.`;
+  }
+  return `Không thể ${subject}. Dữ liệu chưa thay đổi; vui lòng thử lại.`;
+}
+
+export async function dbCancelCashbookEntry(cashbookId, reason = '') {
   if (isCloudActive && supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.rpc('rpc_cancel_customer_payment', {
+      const { data, error } = await supabaseClient.rpc('rpc_cancel_cashbook_entry', {
         p_cashbook_id: cashbookId,
-        p_created_by: createdBy || 'admin'
+        p_reason: reason || 'Hủy phiếu sổ quỹ'
       });
       if (error) throw error;
       return data || { success: true };
     } catch (err) {
-      console.error('RPC cancel customer payment error:', err);
-      showToast('Lá»—i há»§y phiáº¿u thu: ' + err.message, 'danger');
+      const missingCompatibilityRpc = err?.code === 'PGRST202'
+        || (String(err?.message || '').includes('rpc_cancel_cashbook_entry')
+          && String(err?.message || '').toLowerCase().includes('schema cache'));
+      if (missingCompatibilityRpc) {
+        // Rolling-upgrade bridge only. Old database signatures remain server-side
+        // authorities; the browser still does not infer a financial operation type.
+        const legacyGeneric = await supabaseClient.rpc('rpc_cancel_cashbook_transaction', {
+          p_cashbook_id: cashbookId,
+          p_reason: reason || 'Hủy phiếu sổ quỹ'
+        });
+        if (!legacyGeneric.error) return legacyGeneric.data || { success: true };
+        const legacyCustomer = await supabaseClient.rpc('rpc_cancel_customer_payment', {
+          p_cashbook_id: cashbookId
+        });
+        if (!legacyCustomer.error) return legacyCustomer.data || { success: true };
+        console.error('Legacy cashbook cancellation unavailable before migration 0013:', legacyGeneric.error);
+        showToast('Cơ sở dữ liệu chưa được cập nhật để hủy phiếu cũ. Dữ liệu chưa thay đổi.', 'danger');
+        return false;
+      }
+      console.error('RPC cancel cashbook error:', err);
+      showToast(getFinancialCancellationMessage(err, 'hủy phiếu sổ quỹ'), 'danger');
       return false;
     }
   }
-  return { success: true, new_debt: null };
+  showToast('Không thể kết nối Cloud. Dữ liệu chưa thay đổi.', 'danger');
+  return false;
 }
 
-export async function dbRecordSalesReturn(ret, items, orderStatus) {
+// Kept for older callers; classification now belongs to the database RPC.
+export async function dbCancelCashbookTransaction(cashbookId, reason = '') {
+  return dbCancelCashbookEntry(cashbookId, reason);
+}
+
+export async function dbSetCashbookStarred(cashbookId, starred) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_set_cashbook_starred', {
+        p_cashbook_id: cashbookId,
+        p_starred: Boolean(starred)
+      });
+      if (error) throw error;
+      return data || { success: true };
+    } catch (err) {
+      console.error('RPC cashbook starred error:', err);
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function dbCancelOrder(orderId, reason) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_cancel_order', {
+        p_order_id: orderId,
+        p_reason: reason || ''
+      });
+      if (error) throw error;
+      return data || { success: true };
+    } catch (err) {
+      console.error('RPC cancel order error:', err);
+      showToast(getFinancialCancellationMessage(err, 'hủy đơn'), 'danger');
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function dbRecordSalesReturn(ret, items) {
   if (isCloudActive && supabaseClient) {
     try {
       const { data, error } = await supabaseClient.rpc('rpc_record_sales_return', {
-        p_return_id: ret.id,
-        p_sale_id: ret.saleId || ret.orderId,
-        p_customer_id: ret.customerId || null,
-        p_total_refund: ret.totalRefund || 0,
-        p_reason: ret.reason || '',
-        p_created_by: ret.createdBy || 'admin',
-        p_items: items || [],
-        p_order_status: orderStatus || 'partially_returned'
+        p_input: {
+          orderId: ret.saleId || ret.orderId,
+          reason: ret.reason || '',
+          paymentMethod: ret.paymentMethod || 'cash',
+          idempotencyKey: ret.idempotencyKey,
+          items: (items || []).map(item => ({
+            saleItemId: item.saleItemId,
+            quantity: Number(item.quantity || 0)
+          }))
+        }
       });
-      if (error) {
-        console.warn('RPC rpc_record_sales_return error, falling back:', error.message);
-        return await dbSaveSalesReturn(ret);
-      }
-      return true;
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.message || 'Không thể ghi nhận phiếu trả hàng');
+      return data || { success: true };
     } catch (err) {
       console.warn('RPC sales return error:', err);
-      return await dbSaveSalesReturn(ret);
+      showToast('Không thể ghi nhận phiếu trả hàng. Dữ liệu chưa thay đổi để tránh lệch công nợ.', 'danger');
+      return false;
     }
   }
-  return true;
+  showToast('Trả hàng cần kết nối Cloud để bảo đảm transaction và giao dịch đảo.', 'danger');
+  return false;
 }
 
-export async function dbAdjustCustomerDebt(customerId, newDebt, description, createdBy) {
+export async function dbCancelSalesReturn(returnId, reason) {
+  if (isCloudActive && supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.rpc('rpc_cancel_sales_return', {
+        p_return_id: returnId,
+        p_reason: reason || '',
+      });
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.message || 'Không thể hủy phiếu trả hàng');
+      return data || { success: true };
+    } catch (err) {
+      console.warn('RPC cancel sales return error:', err);
+      showToast('Không thể hủy phiếu trả hàng. Dữ liệu chưa thay đổi để tránh lệch công nợ.', 'danger');
+      return false;
+    }
+  }
+  showToast('Hủy trả hàng cần kết nối Cloud để bảo đảm giao dịch đảo.', 'danger');
+  return false;
+}
+
+export async function dbAdjustCustomerDebt(customerId, newDebt, description, _createdBy) {
   if (isCloudActive && supabaseClient) {
     try {
       const { data, error } = await supabaseClient.rpc('rpc_adjust_customer_debt', {
         p_customer_id: customerId,
         p_new_debt: newDebt,
         p_description: description || 'Điều chỉnh công nợ',
-        p_created_by: createdBy || 'admin'
       });
       if (error) throw error;
-      return true;
+      return data || { success: true };
     } catch (err) {
       console.error('RPC adjust customer debt error:', err);
       return false;
     }
   }
-  return true;
+  showToast('Điều chỉnh công nợ cần kết nối Cloud.', 'danger');
+  return false;
 }
 
 // --- BỘ LỌC VÀ PHÂN TRANG HIỆU NĂNG CAO (SERVER-SIDE PAGINATION & LAZY LOADING) ---
+
+// Phase 5 summaries and payroll are authoritative database calculations.
+export async function dbFetchPhase5Dashboard(filters = {}) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải báo cáo chính xác.');
+  const { data, error } = await supabaseClient.rpc('rpc_get_phase5_dashboard', { p_filters: filters });
+  if (error) throw error;
+  return data;
+}
+
+export async function dbFetchPhase5Report(input = {}) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải báo cáo chính xác.');
+  const { data, error } = await supabaseClient.rpc('rpc_get_phase5_report', { p_input: input });
+  if (error) throw error;
+  return data;
+}
+
+export async function dbFetchPayrollPeriod(period) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tính lương.');
+  const { data, error } = await supabaseClient.rpc('rpc_get_payroll_period', { p_period: period });
+  if (error) throw error;
+  return data;
+}
+
+export async function dbSavePayrollAdjustment(input) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để lưu điều chỉnh lương.');
+  const { data, error } = await supabaseClient.rpc('rpc_save_payroll_adjustment', { p_input: input });
+  if (error) throw error;
+  return data;
+}
+
+export async function dbSetPayrollPeriodLock(period, lock, reason = null) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để khóa kỳ lương.');
+  const { data, error } = await supabaseClient.rpc('rpc_set_payroll_period_lock', {
+    p_period: period,
+    p_lock: Boolean(lock),
+    p_reason: reason
+  });
+  if (error) throw error;
+  return data;
+}
 
 export async function dbFetchCustomersPaginated(search = '', managedBy = null, limit = 50, offset = 0) {
   if (isCloudActive && supabaseClient) {

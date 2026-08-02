@@ -1,15 +1,16 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbSaveSalesReturn, dbSaveCustomer, dbSaveOrder, dbRecordSalesReturn } from '../services/supabase.js?v=20260731-price-items-pagination';
-import { renderAll } from '../main.js';
-import { openPrintTypeModal } from './invoice.js?v=20260730-cashbook-reset';
-import { openHistoryOrderExportModal } from './customers.js?v=20260730-cashbook-reset';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
+import { openPrintTypeModal } from './invoice.js?v=20260802-backup-cell-fix1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260802-backup-cell-fix1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
 } from '../domain/order-financials.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
+let pendingSalesReturnKey = '';
 
 function updateHistorySummary(orders) {
   const beforeDiscountEl = document.getElementById('history-total-before-discount');
@@ -241,8 +242,8 @@ export async function deleteOrder(id) {
   const order = state.savedOrders.find(o => o.id === id);
   if (!order) return;
   
-  if (order.status === 'settled' && state.currentUser && state.currentUser.role !== 'admin') {
-    showToast('Chỉ có quản trị viên (Admin) mới có quyền xóa đơn hàng đã chốt thanh toán!', 'danger');
+  if (order.status === 'settled') {
+    showToast('Đơn đã chốt không được xóa vật lý. Vui lòng dùng nghiệp vụ hủy/đảo giao dịch khi giai đoạn 2 được triển khai.', 'warning');
     return;
   }
   
@@ -253,6 +254,44 @@ export async function deleteOrder(id) {
       renderAll();
       showToast(`Đã xóa đơn hàng ${id} thành công!`, 'warning');
     }
+  }
+}
+
+export async function cancelOrderById(id) {
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được hủy đơn đã chốt.', 'danger');
+    return;
+  }
+  const order = state.savedOrders.find(item => String(item.id) === String(id));
+  if (!order || order.status !== 'settled') {
+    showToast('Chỉ đơn đã chốt và chưa trả hàng mới được hủy ở giai đoạn này.', 'warning');
+    return;
+  }
+  const reason = prompt(`Nhập lý do hủy đơn ${order.id}:`, 'Hủy theo yêu cầu nghiệp vụ');
+  if (reason === null) return;
+  if (reason.trim().length < 3) {
+    showToast('Lý do hủy phải có ít nhất 3 ký tự.', 'warning');
+    return;
+  }
+  if (!confirm(`Xác nhận hủy đơn ${order.id}? Database sẽ tạo giao dịch đảo công nợ và doanh số.`)) return;
+
+  const result = await dbCancelOrder(order.id, reason.trim());
+  if (!result) return;
+  order.status = 'cancelled';
+  order.cancelledAt = result.cancelled_at || new Date().toISOString();
+  order.cancelledBy = result.cancelled_by || state.currentUser?.authUserId || '';
+  order.cancellationReason = result.cancellation_reason || reason.trim();
+  // Reload the authoritative customer balance and debt ledger. The cancellation
+  // RPC appends an order_cancel row; patching only customer.debt would hide it.
+  const customersRefreshed = order.customerId
+    ? await dbRefreshCustomerFinancialState(order.customerId)
+    : true;
+  localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+  renderAll();
+  if (customersRefreshed) {
+    showToast(`Đã hủy đơn ${order.id} và ghi giao dịch đảo.`, 'success');
+  } else {
+    showToast(`Đơn ${order.id} đã hủy trên Cloud nhưng chưa tải lại được lịch sử công nợ. Vui lòng tải lại trang.`, 'warning');
   }
 }
 
@@ -497,10 +536,14 @@ export function renderHistoryOrders() {
         statusBadge = `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
       }
 
-      let showDeleteBtn = true;
-      if ((order.status === 'settled' || order.status === 'partially_returned' || order.status === 'returned') && state.currentUser && state.currentUser.role !== 'admin') {
-        showDeleteBtn = false;
-      }
+      const showDeleteBtn = order.status === 'draft';
+      const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
+      const showReturnBtn = ['settled', 'partially_returned'].includes(order.status)
+        && ['admin', 'accounting'].includes(state.currentUser?.role);
+      const activeOrderReturns = (state.salesReturns || []).filter(item =>
+        String(item.saleId || item.orderId) === String(order.id)
+        && !['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())
+      );
 
       const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
       let plName = 'Nhập tay';
@@ -556,9 +599,24 @@ export function renderHistoryOrders() {
                 <button class="history-action-btn history-action-view history-view-btn" data-id="${order.id}" title="Xem chi tiết">
                   <i data-lucide="eye"></i> Xem
                 </button>
-                <button class="history-action-btn history-action-return history-return-btn" data-id="${order.id}" title="Trả hàng">
-                  <i data-lucide="rotate-ccw"></i> Trả
-                </button>
+                ${showReturnBtn ? `
+                  <button class="history-action-btn history-action-return history-return-btn" data-id="${order.id}" title="Trả hàng">
+                    <i data-lucide="rotate-ccw"></i> Trả
+                  </button>
+                ` : ''}
+                ${showCancelBtn ? `
+                  <button class="history-action-btn history-action-delete history-cancel-btn" data-id="${order.id}" title="Hủy đơn và đảo giao dịch">
+                    <i data-lucide="ban"></i> Hủy
+                  </button>
+                ` : ''}
+                ${['admin', 'accounting'].includes(state.currentUser?.role) ? activeOrderReturns.map(item => `
+                  <button class="history-action-btn history-return-print-btn" data-return-id="${item.id}" title="In phiếu trả ${item.id}">
+                    <i data-lucide="file-text"></i> ${item.id}
+                  </button>
+                  <button class="history-action-btn history-action-delete history-return-cancel-btn" data-return-id="${item.id}" title="Hủy phiếu trả ${item.id}">
+                    <i data-lucide="ban"></i>
+                  </button>
+                `).join('') : ''}
               `}
               ${showDeleteBtn ? `
                 <button class="history-action-btn history-action-delete history-delete-btn" data-id="${order.id}" title="Xóa đơn hàng">
@@ -616,10 +674,14 @@ export function renderHistoryOrders() {
       const creator = state.users.find(u => isSameUser(u.username, order.createdBy));
       const creatorName = creator ? creator.displayName : (order.createdBy && order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy);
 
-      let showDeleteBtn = true;
-      if ((order.status === 'settled' || order.status === 'partially_returned' || order.status === 'returned') && state.currentUser && state.currentUser.role !== 'admin') {
-        showDeleteBtn = false;
-      }
+      const showDeleteBtn = order.status === 'draft';
+      const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
+      const showReturnBtn = ['settled', 'partially_returned'].includes(order.status)
+        && ['admin', 'accounting'].includes(state.currentUser?.role);
+      const activeOrderReturns = (state.salesReturns || []).filter(item =>
+        String(item.saleId || item.orderId) === String(order.id)
+        && !['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())
+      );
 
       const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
       
@@ -700,9 +762,24 @@ export function renderHistoryOrders() {
                 <button class="btn btn-teal btn-sm flex items-center justify-center gap-1 history-view-btn" data-id="${order.id}">
                   <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Xem
                 </button>
-                <button class="btn btn-warning btn-sm flex items-center justify-center gap-1 history-return-btn" data-id="${order.id}" onclick="openSalesReturnModal('${order.id}')" style="background: #f59e0b; border-color: #f59e0b; color: #fff;">
-                  <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
-                </button>
+                ${showReturnBtn ? `
+                  <button class="btn btn-warning btn-sm flex items-center justify-center gap-1 history-return-btn" data-id="${order.id}" style="background: #f59e0b; border-color: #f59e0b; color: #fff;">
+                    <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
+                  </button>
+                ` : ''}
+                ${showCancelBtn ? `
+                  <button class="btn btn-danger btn-sm flex items-center justify-center gap-1 history-cancel-btn" data-id="${order.id}">
+                    <i data-lucide="ban" style="width: 13px; height: 13px;"></i> Hủy
+                  </button>
+                ` : ''}
+                ${['admin', 'accounting'].includes(state.currentUser?.role) ? activeOrderReturns.map(item => `
+                  <button class="btn btn-secondary btn-sm history-return-print-btn" data-return-id="${item.id}" title="In phiếu trả ${item.id}">
+                    <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> ${item.id}
+                  </button>
+                  <button class="btn btn-danger btn-sm history-return-cancel-btn" data-return-id="${item.id}" title="Hủy phiếu trả ${item.id}">
+                    <i data-lucide="ban" style="width: 13px; height: 13px;"></i>
+                  </button>
+                `).join('') : ''}
               `}
             </div>
           </div>
@@ -816,6 +893,27 @@ export function renderHistoryOrders() {
       const b = e.currentTarget;
       const id = b.getAttribute('data-id');
       openSalesReturnModal(id);
+    });
+  });
+
+  document.querySelectorAll('.history-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = e.currentTarget.getAttribute('data-id');
+      cancelOrderById(id);
+    });
+  });
+
+  document.querySelectorAll('.history-return-print-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const returnId = e.currentTarget.getAttribute('data-return-id');
+      const salesReturn = state.salesReturns.find(item => String(item.id) === String(returnId));
+      if (salesReturn) printReturnSlip(salesReturn);
+    });
+  });
+
+  document.querySelectorAll('.history-return-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      cancelSalesReturn(e.currentTarget.getAttribute('data-return-id'));
     });
   });
 
@@ -998,6 +1096,10 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
 // --- PHÂN HỆ TRẢ HÀNG (SALES RETURN LOGIC) ---
 
 export function openSalesReturnModal(orderId) {
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được lập phiếu trả hàng.', 'danger');
+    return;
+  }
   const order = state.savedOrders.find(o => String(o.id) === String(orderId));
 
   if (!order) {
@@ -1014,6 +1116,8 @@ export function openSalesReturnModal(orderId) {
   document.getElementById('return-meta-date').innerText = formatDateTime(order.date);
   document.getElementById('return-meta-creator').innerText = state.currentUser ? state.currentUser.displayName : 'Administrator';
   document.getElementById('return-reason-input').value = '';
+  document.getElementById('return-refund-method').value = 'cash';
+  pendingSalesReturnKey = globalThis.crypto.randomUUID();
 
   const existingReturns = (state.salesReturns || []).filter(r => r.saleId === order.id && r.status !== 'cancelled');
   
@@ -1067,15 +1171,6 @@ export function openSalesReturnModal(orderId) {
         <td style="text-align: center;">
           <input type="number" class="form-control return-qty-input" min="0" max="${maxReturnable}" value="0" ${maxReturnable === 0 ? 'disabled' : ''} style="width: 70px; text-align: center; font-weight: 700; height: 32px; padding: 2px;">
         </td>
-        <td>
-          <select class="form-control return-disc-type" style="height: 32px; font-size: 0.78rem; padding: 0 4px;" ${maxReturnable === 0 ? 'disabled' : ''}>
-            <option value="percent">%</option>
-            <option value="amount">VNĐ</option>
-          </select>
-        </td>
-        <td>
-          <input type="number" class="form-control return-disc-val" min="0" value="0" style="width: 80px; height: 32px; font-size: 0.8rem; padding: 2px 4px;" ${maxReturnable === 0 ? 'disabled' : ''}>
-        </td>
         <td style="text-align: right; font-weight: 600; color: var(--color-primary);" class="return-refund-price-lbl">${formatCurrency(unitPrice)}</td>
         <td style="text-align: right; font-weight: 700; color: #f59e0b;" class="return-subtotal-lbl">0 ₫</td>
       </tr>
@@ -1089,9 +1184,6 @@ export function openSalesReturnModal(orderId) {
       const maxReturnable = parseFloat(row.getAttribute('data-max-returnable')) || 0;
       
       const qtyInput = row.querySelector('.return-qty-input');
-      const discTypeSelect = row.querySelector('.return-disc-type');
-      const discValInput = row.querySelector('.return-disc-val');
-      
       let qty = parseFloat(qtyInput.value) || 0;
       if (qty < 0) { qty = 0; qtyInput.value = 0; }
       if (qty > maxReturnable) {
@@ -1100,21 +1192,8 @@ export function openSalesReturnModal(orderId) {
         qtyInput.value = maxReturnable;
       }
 
-      const discType = discTypeSelect.value;
-      let discVal = parseFloat(discValInput.value) || 0;
-      if (discVal < 0) { discVal = 0; discValInput.value = 0; }
-
-      let discAmt = 0;
-      if (discType === 'percent') {
-        if (discVal > 100) { discVal = 100; discValInput.value = 100; }
-        discAmt = (unitPrice * discVal) / 100;
-      } else {
-        if (discVal > unitPrice) { discVal = unitPrice; discValInput.value = unitPrice; }
-        discAmt = discVal;
-      }
-
-      const refundPrice = Math.max(0, unitPrice - discAmt);
-      const subtotal = Math.round(refundPrice * qty);
+      const refundPrice = unitPrice;
+      const subtotal = Math.round(unitPrice * qty);
 
       row.querySelector('.return-refund-price-lbl').innerText = formatCurrency(refundPrice);
       row.querySelector('.return-subtotal-lbl').innerText = formatCurrency(subtotal);
@@ -1140,7 +1219,7 @@ export function openSalesReturnModal(orderId) {
     }
   };
 
-  document.querySelectorAll('.return-qty-input, .return-disc-type, .return-disc-val').forEach(el => {
+  document.querySelectorAll('.return-qty-input').forEach(el => {
     el.addEventListener('input', recalculateTotals);
     el.addEventListener('change', recalculateTotals);
   });
@@ -1167,7 +1246,6 @@ export async function processSalesReturnSubmit(e) {
   }
 
   const returnItems = [];
-  let totalRefund = 0;
   let hasValidQty = false;
   let validationError = false;
 
@@ -1184,36 +1262,9 @@ export async function processSalesReturnSubmit(e) {
 
     if (qty > 0) {
       hasValidQty = true;
-      const unitPrice = parseFloat(row.getAttribute('data-unit-price')) || 0;
-      const discType = row.querySelector('.return-disc-type').value;
-      const discVal = parseFloat(row.querySelector('.return-disc-val').value) || 0;
-      
-      let discAmt = discType === 'percent' ? (unitPrice * discVal / 100) : discVal;
-      const refundPrice = Math.max(0, unitPrice - discAmt);
-      const subtotal = Math.round(refundPrice * qty);
-      
-      totalRefund += subtotal;
-
       returnItems.push({
-        id: `thitem_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         saleItemId: row.getAttribute('data-sale-item-id'),
-        productId: row.getAttribute('data-product-id'),
-        variantId: row.getAttribute('data-variant-id') || null,
-        variantCode: row.getAttribute('data-variant-code') || row.getAttribute('data-product-id'),
-        productName: prodName,
-        packageType: row.getAttribute('data-package'),
-        packagingName: row.getAttribute('data-package'),
-        specificationSnapshot: row.getAttribute('data-specification'),
-        quantity: qty,
-        importPrice: unitPrice,
-        discountType: discType,
-        discountValue: discVal,
-        refundPrice: refundPrice,
-        subtotal: subtotal,
-        productBrand: row.getAttribute('data-product-brand') || '',
-        agencyBrand: row.getAttribute('data-agency-brand') || '',
-        revenueBrand: row.getAttribute('data-revenue-brand') || '',
-        revenueCompany: row.getAttribute('data-revenue-company') || ''
+        quantity: qty
       });
     }
   });
@@ -1225,96 +1276,57 @@ export async function processSalesReturnSubmit(e) {
     return;
   }
 
-  const seq = (state.salesReturns || []).length + 1;
-  const returnId = `TH${String(seq).padStart(6, '0')}`;
-  
+  if (!pendingSalesReturnKey) pendingSalesReturnKey = globalThis.crypto.randomUUID();
   const returnObj = {
-    id: returnId,
     saleId: order.id,
-    customerId: order.customerId || null,
-    customerName: order.customerName,
-    createdBy: state.currentUser ? state.currentUser.username : 'admin',
-    creatorName: state.currentUser ? state.currentUser.displayName : 'Administrator',
-    createdAt: new Date().toISOString(),
     reason: reason,
-    totalRefund: totalRefund,
-    status: 'completed',
-    items: returnItems
+    paymentMethod: document.getElementById('return-refund-method').value,
+    idempotencyKey: pendingSalesReturnKey
   };
-
-  // 1. Save Sales Return
-  state.salesReturns.unshift(returnObj);
-  await dbSaveSalesReturn(returnObj);
-
-  // 2. Restore Finished Goods Stock
-  returnItems.forEach(item => {
-    const prodCode = item.variantCode || item.productId;
-    const pkg = item.packageType;
-    let stockItem = state.finishedGoodsStock.find(s => s.productCode === prodCode && s.packageType === pkg);
-    if (stockItem) {
-      stockItem.quantity += item.quantity;
-    } else {
-      state.finishedGoodsStock.push({
-        productCode: prodCode,
-        brand: 'Nano10*',
-        packageType: pkg,
-        quantity: item.quantity
-      });
-    }
-  });
-  localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify(state.finishedGoodsStock));
-
-  // 3. Update Order Status
-  const allOrderReturns = state.salesReturns.filter(r => r.saleId === order.id && r.status !== 'cancelled');
-  const totalReturnedMap = {};
-  allOrderReturns.forEach(r => {
-    (r.items || []).forEach(i => {
-      const key = i.saleItemId || `${i.productId}_${i.packageType}`;
-      totalReturnedMap[key] = (totalReturnedMap[key] || 0) + i.quantity;
-    });
-  });
-
-  let isFullyReturned = true;
-  order.items.forEach(i => {
-    const key = i.id || `${i.productCode || i.code}_${i.package}`;
-    const retQty = totalReturnedMap[key] || 0;
-    if (retQty < i.quantity) {
-      isFullyReturned = false;
-    }
-  });
-
-  order.status = isFullyReturned ? 'returned' : 'partially_returned';
+  const returnResult = await dbRecordSalesReturn(returnObj, returnItems);
+  if (!returnResult?.return) return;
+  const persistedReturn = {
+    ...returnResult.return,
+    customerName: order.customerName,
+    creatorName: state.currentUser?.displayName || returnResult.return.createdBy
+  };
+  const existingIndex = state.salesReturns.findIndex(item => item.id === persistedReturn.id);
+  if (existingIndex === -1) state.salesReturns.unshift(persistedReturn);
+  else state.salesReturns[existingIndex] = persistedReturn;
+  order.status = returnResult.order_status;
+  order.returnedAmount = Number(returnResult.order_returned_amount || 0);
+  order.netRevenue = Number(returnResult.order_net_revenue || 0);
+  localStorage.setItem('billing_system_sales_returns', JSON.stringify(state.salesReturns));
+  localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
 
   // 4. Update Customer Debt, Total Return & Net Revenue
   if (order.customerId) {
     const cust = state.customers.find(c => c.id === order.customerId);
     if (cust) {
-      const oldDebt = parseFloat(cust.debt || 0);
-      const newDebt = oldDebt - totalRefund;
-      cust.debt = newDebt;
-      cust.totalReturn = (cust.totalReturn || 0) + totalRefund;
-      cust.netRevenue = Math.max(0, (cust.netRevenue || 0) - totalRefund);
+      cust.debt = Number(returnResult.new_debt);
+      cust.totalReturn = Number(returnResult.new_total_return);
+      cust.netRevenue = Number(returnResult.new_net_revenue);
 
+      const localLedgerId = returnResult.debt_ledger_id || `return-${persistedReturn.id}`;
       if (!cust.debtHistory) cust.debtHistory = [];
-      cust.debtHistory.push({
-        date: new Date().toISOString(),
-        type: 'return',
-        amount: totalRefund,
-        debtAfter: newDebt,
-        note: `Phiếu trả hàng ${returnId} cho đơn ${order.id}: ${reason}`
-      });
-
-      await dbSaveCustomer(cust);
+      if (!returnResult.already_recorded && !cust.debtHistory.some(item => item.id === localLedgerId)) {
+        cust.debtHistory.push({
+          date: new Date().toISOString(),
+          type: 'return',
+          id: localLedgerId,
+          amount: Number(returnResult.debt_reduction || 0),
+          debtAfter: cust.debt,
+          note: `Phiếu trả hàng ${persistedReturn.id} cho đơn ${order.id}: ${reason}`
+        });
+      }
     }
   }
-
-  // Record Sales Return via Transactional RPC
-  await dbRecordSalesReturn(returnObj, returnItems, order.status);
-  await dbSaveOrder(order);
+  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
 
   document.getElementById('sales-return-modal').classList.remove('active');
+  pendingSalesReturnKey = '';
   renderAll();
-  showToast(`Đã tạo thành công phiếu trả hàng ${returnId}!`, 'success');
+  showToast(`Đã tạo thành công phiếu trả hàng ${persistedReturn.id}!`, 'success');
 }
 
 export async function cancelSalesReturn(returnId) {
@@ -1324,56 +1336,51 @@ export async function cancelSalesReturn(returnId) {
     return;
   }
 
-  if (!confirm(`Bạn có chắc chắn muốn HỦY phiếu trả hàng [${returnId}]? Thao tác này sẽ trừ lại tồn kho, khôi phục lại công nợ đối tác và không thể hoàn tác.`)) {
+  const cancellationReason = prompt(`Nhập lý do hủy phiếu trả hàng [${returnId}]:`, 'Hủy theo yêu cầu nghiệp vụ');
+  if (cancellationReason === null) return;
+  if (cancellationReason.trim().length < 3) {
+    showToast('Lý do hủy phải có ít nhất 3 ký tự.', 'warning');
     return;
   }
+  if (!confirm(`Xác nhận hủy phiếu [${returnId}]? Database sẽ đảo công nợ, tiền hoàn, doanh số và hoa hồng.`)) return;
+
+  const order = state.savedOrders.find(o => o.id === ret.saleId);
+  const cancelResult = await dbCancelSalesReturn(ret.id, cancellationReason.trim());
+  if (!cancelResult) return;
 
   ret.status = 'cancelled';
-
-  (ret.items || []).forEach(item => {
-    const prodCode = item.productId;
-    const pkg = item.packageType;
-    let stockItem = state.finishedGoodsStock.find(s => s.productCode === prodCode && s.packageType === pkg);
-    if (stockItem) {
-      stockItem.quantity = Math.max(0, stockItem.quantity - item.quantity);
-    }
-  });
-  localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify(state.finishedGoodsStock));
+  ret.cancelledAt = cancelResult.cancelled_at || new Date().toISOString();
+  ret.cancellationReason = cancelResult.cancellation_reason || cancellationReason.trim();
 
   if (ret.customerId) {
     const cust = state.customers.find(c => c.id === ret.customerId);
     if (cust) {
-      const oldDebt = parseFloat(cust.debt || 0);
-      const newDebt = oldDebt + ret.totalRefund;
-      cust.debt = newDebt;
-      cust.totalReturn = Math.max(0, (parseFloat(cust.totalReturn || cust.total_return || 0) || 0) - ret.totalRefund);
-      cust.netRevenue = Math.round((parseFloat(cust.netRevenue || cust.net_revenue || 0) || 0) + ret.totalRefund);
+      cust.debt = Number(cancelResult.new_debt);
+      cust.totalReturn = Number(cancelResult.new_total_return);
+      cust.netRevenue = Number(cancelResult.new_net_revenue);
 
-      if (!cust.debtHistory) cust.debtHistory = [];
-      cust.debtHistory.push({
-        date: new Date().toISOString(),
-        type: 'return_cancel',
-        amount: ret.totalRefund,
-        debtAfter: newDebt,
-        note: `Hủy phiếu trả hàng ${ret.id} của đơn ${ret.saleId}`
-      });
-
-      await dbSaveCustomer(cust);
+      if (!cancelResult.already_cancelled) {
+        if (!cust.debtHistory) cust.debtHistory = [];
+        cust.debtHistory.push({
+          id: `return-cancel-${ret.id}`,
+          date: new Date().toISOString(),
+          type: 'return_cancel',
+          amount: Number(ret.debtReductionAmount || 0),
+          debtAfter: cust.debt,
+          note: `Hủy phiếu trả hàng ${ret.id} của đơn ${ret.saleId}`
+        });
+      }
     }
   }
 
-  const order = state.savedOrders.find(o => o.id === ret.saleId);
   if (order) {
-    const activeReturns = state.salesReturns.filter(r => r.saleId === order.id && r.status !== 'cancelled');
-    if (activeReturns.length === 0) {
-      order.status = 'settled';
-    } else {
-      order.status = 'partially_returned';
-    }
-    await dbSaveOrder(order);
+    order.status = cancelResult.order_status;
+    order.returnedAmount = Number(cancelResult.order_returned_amount || 0);
+    order.netRevenue = Number(cancelResult.order_net_revenue || 0);
   }
-
-  await dbSaveSalesReturn(ret);
+  localStorage.setItem('billing_system_sales_returns', JSON.stringify(state.salesReturns));
+  localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
   renderAll();
   showToast(`Đã hủy phiếu trả hàng ${returnId} thành công!`, 'warning');
 }

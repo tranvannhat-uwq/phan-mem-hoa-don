@@ -1,9 +1,15 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260731-price-items-pagination';
-import { renderAll, switchTab } from '../main.js';
-import { populateManagedByDropdown } from './customers.js?v=20260730-cashbook-reset';
-import { exportBackupToExcel } from '../services/backup.js';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { renderAll, switchTab } from '../main.js?v=20260802-backup-cell-fix1';
+import { populateManagedByDropdown } from './customers.js?v=20260802-backup-cell-fix1';
+import { exportBackupToExcel } from '../services/backup.js?v=20260802-backup-cell-fix1';
+import {
+  LOGIN_ERROR,
+  classifySupabaseError,
+  loginErrorMessage,
+  validateProfileRows
+} from '../domain/auth-profile.js';
 
 export function renderUsersTable() {
   const tableBody = document.getElementById('users-table-body');
@@ -103,11 +109,11 @@ export function openUserModal(userId = '') {
     title.innerText = 'Thêm tài khoản mới';
     document.getElementById('user-edit-id').value = '';
     usernameInput.removeAttribute('disabled');
-    passwordInput.setAttribute('required', 'true');
-    passwordHelp.style.display = 'none';
+    passwordInput.removeAttribute('required');
+    passwordHelp.style.display = 'block';
     
     if (isExternalSelect) isExternalSelect.value = 'false';
-    passwordInput.disabled = false;
+    passwordInput.disabled = true;
     if (roleSelect) roleSelect.disabled = false;
     if (compSelect) compSelect.value = 'ABS_NORTH';
   } else {
@@ -133,7 +139,7 @@ export function openUserModal(userId = '') {
         if (roleSelect) roleSelect.disabled = true;
         passwordHelp.style.display = 'none';
       } else {
-        passwordInput.disabled = false;
+        passwordInput.disabled = true;
         if (roleSelect) roleSelect.disabled = false;
         passwordHelp.style.display = 'block';
       }
@@ -147,10 +153,7 @@ export function closeUserModal() {
 }
 
 function openOwnPasswordModal() {
-  if (state.currentUser?.role !== 'sale') {
-    showToast('Chức năng này dành cho tài khoản kinh doanh.', 'warning');
-    return;
-  }
+  if (!state.currentUser) return;
   const modal = document.getElementById('change-password-modal');
   const username = document.getElementById('change-password-username');
   const form = document.getElementById('change-password-form');
@@ -171,10 +174,7 @@ async function changeOwnPassword(event) {
   const confirmPassword = document.getElementById('confirm-password')?.value || '';
   const currentUser = state.currentUser;
 
-  if (!currentUser || currentUser.role !== 'sale') {
-    showToast('Chỉ nhân viên kinh doanh mới có thể đổi mật khẩu tại đây.', 'danger');
-    return;
-  }
+  if (!currentUser) return;
   if (newPassword.length < 6) {
     showToast('Mật khẩu mới phải có ít nhất 6 ký tự.', 'warning');
     return;
@@ -187,37 +187,16 @@ async function changeOwnPassword(event) {
   const submit = document.getElementById('btn-save-change-password');
   if (submit) submit.disabled = true;
   try {
-    if (!isCloudActive && currentUser.password !== currentPassword) {
-      throw new Error('Mật khẩu hiện tại không đúng.');
-    }
-    if (isCloudActive && supabaseClient) {
-      const { data: { user: authUser } } = await supabaseClient.auth.getUser();
-      if (!authUser) throw new Error('Phiên đăng nhập Cloud đã hết hạn. Vui lòng đăng nhập lại.');
-
-      // Một số tài khoản cũ có mật khẩu hồ sơ khác email Auth. Nếu mật khẩu
-      // hiện tại khớp hồ sơ đang đăng nhập thì dùng phiên Auth hiện tại để đổi.
-      if (currentUser.password !== currentPassword) {
-        const { error } = await supabaseClient.auth.signInWithPassword({
-          email: authUser.email || (currentUser.username.includes('@') ? currentUser.username : `${currentUser.username}@lendon.com`),
-          password: currentPassword
-        });
-        if (error) throw new Error('Mật khẩu hiện tại không đúng.');
-      }
-    }
-
-    const updatedUser = { ...currentUser, password: newPassword };
-    if (isCloudActive && supabaseClient) {
-      // Mật khẩu Cloud thuộc Supabase Auth. Không upsert bảng users ở đây vì
-      // RLS cố ý không cho tài khoản Sale tự ghi vào bảng hồ sơ người dùng.
-      const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-    } else if (!(await dbSaveUser(updatedUser))) {
-      return;
-    }
-    const index = state.users.findIndex(user => user.id === currentUser.id);
-    if (index !== -1) state.users[index] = updatedUser;
-    state.currentUser = updatedUser;
-    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
+    if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Supabase Auth để đổi mật khẩu.');
+    const { data: { user: authUser } } = await supabaseClient.auth.getUser();
+    if (!authUser?.email) throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    const { error: verifyError } = await supabaseClient.auth.signInWithPassword({
+      email: authUser.email,
+      password: currentPassword
+    });
+    if (verifyError) throw new Error('Mật khẩu hiện tại không đúng.');
+    const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+    if (error) throw error;
     closeOwnPasswordModal();
     showToast('Đổi mật khẩu thành công.', 'success');
   } catch (error) {
@@ -237,29 +216,11 @@ export async function saveUser() {
     username = `${username}@lendon.com`;
   }
   const displayName = document.getElementById('user-displayname').value.trim();
-  const password = document.getElementById('user-password').value.trim();
   const role = document.getElementById('user-role').value;
   
   if (!username || !displayName) {
     showToast('Tên đăng nhập và Tên hiển thị là bắt buộc!', 'danger');
     return;
-  }
-  
-  // Kiểm tra độ dài mật khẩu nếu có nhập (Supabase Auth yêu cầu >= 6 ký tự)
-  if (!isExternal && password && password.length < 6) {
-    showToast('Mật khẩu phải có độ dài tối thiểu 6 ký tự!', 'danger');
-    return;
-  }
-  
-  // Cảnh báo nếu admin cố đổi mật khẩu của tài khoản khác trong chế độ Cloud
-  if (isCloudActive && editId && state.currentUser && state.currentUser.id !== editId && password && !isExternal) {
-    const confirmSave = confirm(
-      "Lưu ý bảo mật (Chế độ Cloud):\n" +
-      "Bạn không thể trực tiếp đổi mật khẩu của người khác từ ứng dụng này.\n" +
-      "Mật khẩu của tài khoản này chỉ có thể được đặt lại trên trang quản trị Supabase Auth.\n\n" +
-      "Tên hiển thị và Vai trò vẫn sẽ được cập nhật. Bạn có muốn tiếp tục lưu không?"
-    );
-    if (!confirmSave) return;
   }
   
   let user;
@@ -269,8 +230,8 @@ export async function saveUser() {
       showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
       return;
     }
-    if (!isExternal && !password) {
-      showToast('Mật khẩu là bắt buộc cho tài khoản mới!', 'danger');
+    if (!isExternal) {
+      showToast('Tạo tài khoản đăng nhập trong Supabase Auth trước; profile sẽ tự sinh với role Sale.', 'warning');
       return;
     }
     
@@ -279,7 +240,6 @@ export async function saveUser() {
       id: 'u-' + Date.now(),
       username,
       displayName,
-      password: isExternal ? '' : password,
       role: isExternal ? 'sale' : role,
       isExternal,
       companyId
@@ -303,28 +263,21 @@ export async function saveUser() {
       isExternal,
       companyId
     };
-    if (!isExternal && password) {
-      user.password = password;
-    } else if (isExternal) {
-      user.password = '';
-    }
   }
   
   const saved = await dbSaveUser(user);
   if (saved) {
-    // Cập nhật State local và LocalStorage
+    // Profile/role chỉ lấy từ database; không lưu bản sao quyền trong browser.
     const idx = state.users.findIndex(u => u.id === user.id);
     if (idx !== -1) {
       state.users[idx] = user;
     } else {
       state.users.push(user);
     }
-    localStorage.setItem('billing_system_users', JSON.stringify(state.users));
 
     // Cập nhật lại UI Header nếu chỉnh sửa đúng tài khoản đang đăng nhập
     if (state.currentUser && state.currentUser.id === user.id) {
       state.currentUser = user;
-      sessionStorage.setItem('billing_system_username', user.username);
       document.getElementById('header-user-display').innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
       applyUserPermissions(user);
     }
@@ -355,7 +308,6 @@ export async function deleteUser(userId) {
     const deleted = await dbDeleteUser(userId);
     if (deleted) {
       state.users = state.users.filter(u => u.id !== userId);
-      localStorage.setItem('billing_system_users', JSON.stringify(state.users));
       renderAll();
       showToast('Xóa tài khoản thành công!', 'warning');
     }
@@ -390,6 +342,52 @@ export function populateCustomerEmployeeFilter() {
 
 let isLoggingIn = false;
 
+function createLoginFlowError(code) {
+  const error = new Error(loginErrorMessage(code));
+  error.loginCode = code;
+  return error;
+}
+
+export function clearAuthenticatedSessionState() {
+  state.currentUser = null;
+  state.users = [];
+  state.pricelists = [];
+  state.allPricelists = [];
+  state.priceListItems = [];
+  state.allPriceListItems = [];
+  state.selectedPriceListIds = [];
+}
+
+export async function loadAuthenticatedProfile(authUserId) {
+  const { data: profileRows, error: profileError } = await supabaseClient
+    .from('profiles')
+    .select('id,auth_user_id,username,display_name,role,company_id,is_external,is_active')
+    .eq('auth_user_id', authUserId)
+    .limit(2);
+
+  if (profileError) {
+    throw createLoginFlowError(classifySupabaseError(profileError));
+  }
+
+  if (!profileRows || profileRows.length === 0) {
+    // A SELECT blocked by RLS also returns zero rows. This narrow SECURITY
+    // DEFINER probe reveals only whether the caller's own link exists, so the
+    // UI can distinguish a missing link from a broken self-read policy.
+    const { data: linkStatus, error: linkError } = await supabaseClient
+      .rpc('rpc_my_profile_link_status');
+    if (linkError) {
+      throw createLoginFlowError(classifySupabaseError(linkError));
+    }
+    if (linkStatus?.profile_exists === true) {
+      throw createLoginFlowError(LOGIN_ERROR.PROFILE_ACCESS_DENIED);
+    }
+  }
+
+  const validation = validateProfileRows(profileRows || []);
+  if (!validation.ok) throw createLoginFlowError(validation.code);
+  return validation.profile;
+}
+
 export async function handleLogin(e) {
   e.preventDefault();
   if (isLoggingIn) return;
@@ -420,179 +418,79 @@ export async function handleLogin(e) {
     if (passwordField) passwordField.disabled = false;
   };
 
+  let authEstablished = false;
   try {
-    // Kiểm tra đăng nhập bằng tài khoản cục bộ / hệ thống mặc định trước
-    const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
-    const localUser = state.users.find(u => {
-      const uClean = (u.username || '').toLowerCase().trim();
-      const uCleanNoDomain = uClean.includes('@') ? uClean.split('@')[0] : uClean;
-      return (uClean === usernameInput || uCleanNoDomain === cleanUsername) && u.password === passwordInput && u.password !== '';
-    });
-
-    // Khi đã kết nối Cloud, xác thực bắt buộc đi qua Supabase Auth để không
-    // dùng lại mật khẩu cũ còn nằm trong bản sao hồ sơ users.
-    if (!isCloudActive && localUser) {
-      state.currentUser = localUser;
-      sessionStorage.setItem('billing_system_auth', 'true');
-      sessionStorage.setItem('billing_system_username', localUser.username);
-      
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app-layout').classList.remove('auth-hidden');
-      
-      const userInfoHeader = document.getElementById('user-info-header');
-      if (userInfoHeader) userInfoHeader.style.display = 'flex';
-      const logoutBtn = document.getElementById('btn-logout');
-      if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-      const userDisplay = document.getElementById('header-user-display');
-      if (userDisplay) {
-        userDisplay.innerText = `${localUser.displayName} (${localUser.role === 'admin' ? 'Admin' : localUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
-      }
-      
-      applyUserPermissions(localUser);
-      renderAll();
-      showToast(`Đăng nhập thành công (Tài khoản hệ thống)! Chào mừng ${localUser.displayName}!`, 'success');
-      resetFormState();
-      return;
+    if (!isCloudActive || !supabaseClient) {
+      throw new Error('Cần kết nối Supabase để đăng nhập an toàn. Chế độ đăng nhập ngoại tuyến đã bị tắt.');
     }
 
-    if (isCloudActive && supabaseClient) {
-      let loginSuccess = false;
-      let loginError = null;
-
-      if (usernameInput.includes('@')) {
-        const { error } = await supabaseClient.auth.signInWithPassword({
-          email: usernameInput,
-          password: passwordInput
-        });
-        if (error) {
-          loginError = error;
-        } else {
-          loginSuccess = true;
-        }
-      } else {
-        // Thử song song với các tên miền để tối ưu hóa thời gian phản hồi
-        const domains = ['@lendon.com', '@weblendon.com', '@gmail.com'];
-        const results = await Promise.all(
-          domains.map(async (domain) => {
-            const email = `${usernameInput}${domain}`;
-            try {
-              const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email,
-                password: passwordInput
-              });
-              if (error) throw error;
-              return { success: true, data, email };
-            } catch (err) {
-              return { success: false, error: err, email };
-            }
-          })
-        );
-
-        const successResult = results.find(r => r.success);
-        if (successResult) {
-          loginSuccess = true;
-        } else {
-          // Lấy lỗi từ @lendon.com làm lỗi mặc định nếu có, không thì lấy lỗi đầu tiên
-          const lendonResult = results.find(r => r.email.endsWith('@lendon.com'));
-          loginError = lendonResult ? lendonResult.error : results[0].error;
-        }
+    const candidates = usernameInput.includes('@')
+      ? [usernameInput]
+      : [`${usernameInput}@lendon.com`, `${usernameInput}@weblendon.com`, `${usernameInput}@gmail.com`];
+    let authUser = null;
+    let loginError = null;
+    for (const email of candidates) {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: passwordInput });
+      if (!error && data?.session?.user) {
+        authUser = data.session.user;
+        authEstablished = true;
+        break;
       }
-
-      if (!loginSuccess) {
-        throw loginError || new Error('Tài khoản hoặc mật khẩu không chính xác!');
+      if (classifySupabaseError(error) === LOGIN_ERROR.NETWORK) {
+        throw createLoginFlowError(LOGIN_ERROR.NETWORK);
       }
-
-      // Lấy thông tin xác thực vừa đăng nhập thành công từ Supabase Auth
-      const { data: { user: authUser } } = await supabaseClient.auth.getUser();
-      if (!authUser) {
-        throw new Error('Không thể lấy thông tin xác thực sau khi đăng nhập.');
-      }
-
-      // Đồng bộ dữ liệu mới nhất (bao gồm hồ sơ tài khoản từ bảng users) sau khi đăng nhập thành công
-      await fetchCloudData();
-
-      // Tìm user trong CSDL (state.users) bằng UUID trước, sau đó bằng Email/Username
-      let user = state.users.find(u => u.id === authUser.id);
-      if (!user && authUser.email) {
-        user = state.users.find(u => isSameUser(u.username, authUser.email));
-      }
-      if (user) {
-        state.currentUser = user;
-        sessionStorage.setItem('billing_system_auth', 'true');
-        sessionStorage.setItem('billing_system_username', user.username);
-        
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app-layout').classList.remove('auth-hidden');
-        
-        const userInfoHeader = document.getElementById('user-info-header');
-        if (userInfoHeader) userInfoHeader.style.display = 'flex';
-        const logoutBtn = document.getElementById('btn-logout');
-        if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-        const userDisplay = document.getElementById('header-user-display');
-        if (userDisplay) {
-          userDisplay.innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
-        }
-        
-        applyUserPermissions(user);
-        renderAll();
-        showToast(`Đăng nhập đám mây thành công! Chào mừng ${user.displayName}!`, 'success');
-      } else {
-        const fallbackUser = {
-          id: authUser.id,
-          username: authUser.email || usernameInput,
-          displayName: authUser.email ? authUser.email.split('@')[0] : usernameInput,
-          role: 'sale'
-        };
-        state.currentUser = fallbackUser;
-        sessionStorage.setItem('billing_system_auth', 'true');
-        sessionStorage.setItem('billing_system_username', fallbackUser.username);
-        
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app-layout').classList.remove('auth-hidden');
-        
-        const userInfoHeader = document.getElementById('user-info-header');
-        if (userInfoHeader) userInfoHeader.style.display = 'flex';
-        const logoutBtn = document.getElementById('btn-logout');
-        if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-        const userDisplay = document.getElementById('header-user-display');
-        if (userDisplay) {
-          userDisplay.innerText = `${fallbackUser.displayName} (Sale)`;
-        }
-        
-        applyUserPermissions(fallbackUser);
-        renderAll();
-        showToast('Đăng nhập đám mây thành công! (Tài khoản chưa khởi tạo hồ sơ)', 'warning');
-      }
-    } else {
-      const cleanUsername = usernameInput.includes('@') ? usernameInput.split('@')[0] : usernameInput;
-      const user = state.users.find(u => u.username === cleanUsername && u.password === passwordInput);
-      if (user) {
-        state.currentUser = user;
-        sessionStorage.setItem('billing_system_auth', 'true');
-        sessionStorage.setItem('billing_system_username', user.username);
-        
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app-layout').classList.remove('auth-hidden');
-        
-        const userInfoHeader = document.getElementById('user-info-header');
-        if (userInfoHeader) userInfoHeader.style.display = 'flex';
-        const logoutBtn = document.getElementById('btn-logout');
-        if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-        const userDisplay = document.getElementById('header-user-display');
-        if (userDisplay) {
-          userDisplay.innerText = `${user.displayName} (${user.role === 'admin' ? 'Admin' : user.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
-        }
-        
-        applyUserPermissions(user);
-        renderAll();
-        showToast(`Chế độ ngoại tuyến: Chào mừng ${user.displayName}!`, 'success');
-      } else {
-        showToast('Tên đăng nhập hoặc mật khẩu không chính xác!', 'danger');
-      }
+      loginError = error;
     }
+    if (!authUser) {
+      const authErrorCode = classifySupabaseError(loginError) === LOGIN_ERROR.NETWORK
+        ? LOGIN_ERROR.NETWORK
+        : LOGIN_ERROR.AUTH_FAILED;
+      throw createLoginFlowError(authErrorCode);
+    }
+
+    const profile = await loadAuthenticatedProfile(authUser.id);
+
+    const user = {
+      id: profile.id,
+      authUserId: profile.auth_user_id,
+      username: profile.username,
+      displayName: profile.display_name,
+      role: profile.role,
+      companyId: profile.company_id || 'ABS_NORTH',
+      isExternal: profile.is_external === true,
+      isActive: profile.is_active !== false
+    };
+    state.currentUser = user;
+    await fetchCloudData();
+    state.currentUser = state.users.find(item => item.authUserId === authUser.id || item.id === profile.id) || user;
+
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-layout').classList.remove('auth-hidden');
+    const userInfoHeader = document.getElementById('user-info-header');
+    if (userInfoHeader) userInfoHeader.style.display = 'flex';
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+    const userDisplay = document.getElementById('header-user-display');
+    if (userDisplay) {
+      const roleLabel = state.currentUser.role === 'admin' ? 'Admin' : state.currentUser.role === 'accounting' ? 'Kế toán' : 'Sale';
+      userDisplay.innerText = `${state.currentUser.displayName} (${roleLabel})`;
+    }
+    applyUserPermissions(state.currentUser);
+    renderAll();
+    showToast(`Đăng nhập thành công! Chào mừng ${state.currentUser.displayName}!`, 'success');
   } catch (err) {
-    console.error('Login error:', err);
-    showToast('Đăng nhập thất bại: ' + (err.message || 'Tài khoản hoặc mật khẩu không chính xác!'), 'danger');
+    if (authEstablished && isCloudActive && supabaseClient) {
+      try {
+        await supabaseClient.auth.signOut();
+      } catch (_) {
+        // Local session storage is cleared below even if the network sign-out fails.
+      }
+    }
+    clearAuthenticatedSessionState();
+    if (authEstablished) clearSupabaseAuthStorage();
+    const errorCode = err?.loginCode || classifySupabaseError(err);
+    console.warn('Login flow rejected', { code: errorCode });
+    showToast(loginErrorMessage(errorCode), 'danger');
   } finally {
     resetFormState();
   }
@@ -615,9 +513,10 @@ export async function handleLogout() {
     }
   }
 
+  // Remove obsolete pre-P0 markers; they are never read for authorization.
   sessionStorage.removeItem('billing_system_auth');
   sessionStorage.removeItem('billing_system_username');
-  state.currentUser = null;
+  clearAuthenticatedSessionState();
   if (isCloudActive && supabaseClient) {
     try {
       await supabaseClient.auth.signOut();
@@ -802,11 +701,11 @@ export function setupUserManagement() {
           roleSelect.disabled = true;
         }
       } else {
-        const editId = document.getElementById('user-edit-id').value;
-        if (!editId && passwordInput) {
-          passwordInput.setAttribute('required', 'true');
+        if (passwordInput) {
+          passwordInput.removeAttribute('required');
+          passwordInput.value = '';
+          passwordInput.disabled = true;
         }
-        if (passwordInput) passwordInput.disabled = false;
         if (roleSelect) roleSelect.disabled = false;
       }
     });

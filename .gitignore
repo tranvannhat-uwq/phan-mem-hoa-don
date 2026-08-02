@@ -1,0 +1,11 @@
+# Local database backups can contain customer and authentication data.
+backups/
+
+# Generated artifacts and installed dependencies are not application source.
+outputs/
+node_modules/
+
+# Local credentials and transient diagnostics must never be committed.
+.env
+.env.*
+*.log

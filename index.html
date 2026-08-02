@@ -99,7 +99,7 @@
             </div>
             <div class="purchase-menu-section">
               <div class="purchase-menu-heading">Mua hàng</div>
-              <a class="purchase-menu-link nav-link" data-target="goods-panel">Nhập hàng</a>
+              <a class="purchase-menu-link nav-link" data-target="goods-panel">Phiếu mua hàng</a>
             </div>
           </div>
         </li>
@@ -131,10 +131,10 @@
             <div class="staff-menu-item">
               <a class="staff-menu-link nav-link" data-target="reports-panel">
                 <i data-lucide="bar-chart-3"></i>
-                Báo cáo & KPI
+                Báo cáo nghiệp vụ
               </a>
             </div>
-            <div class="staff-menu-item">
+            <div class="staff-menu-item" style="display: none;" aria-hidden="true" data-feature-status="deferred">
               <a class="staff-menu-link nav-link" data-target="payroll-panel">
                 <i data-lucide="calculator"></i>
                 Tính lương
@@ -922,7 +922,7 @@
                     <col style="width: 90px;">   <!-- Mã màu -->
                     <col style="width: 190px;">  <!-- Quy cách -->
                     <col style="width: 70px;">   <!-- SL -->
-                    <col style="width: 85px;">   <!-- % CK -->
+                    <col style="width: 105px;">  <!-- Đơn giá sau chiết khấu -->
                     <col style="width: 180px;">  <!-- Ghi chú -->
                     <col style="width: 160px;">  <!-- Thành tiền -->
                     <col style="width: 46px;">   <!-- Xóa -->
@@ -934,7 +934,7 @@
                       <th style="text-align: center;">Mã màu</th>
                       <th>Quy cách</th>
                       <th style="text-align: center;">SL</th>
-                      <th style="text-align: center;">% CK</th>
+                      <th style="text-align: right;">Đơn giá</th>
                       <th style="text-align: center;">Ghi chú</th>
                       <th style="text-align: right;">Thành tiền</th>
                       <th style="text-align: center;">Xóa</th>
@@ -1839,7 +1839,7 @@
             </div>
           </form>
 
-          <div id="clear-sample-data-section" style="border-top: 1px dashed var(--border-color); margin-top: 1rem; padding-top: 1.5rem;">
+          <div id="clear-sample-data-section" data-feature-status="disabled-for-data-safety" style="display: none;">
             <h3 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--color-danger); display: flex; align-items: center; gap: 0.35rem;">
               <i data-lucide="trash-2"></i> Xóa dữ liệu thử nghiệm
             </h3>
@@ -1854,14 +1854,14 @@
 
           <div id="sync-section" style="display: none; border-top: 1px dashed var(--border-color); margin-top: 1rem; padding-top: 1.5rem;">
             <h3 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--color-primary); display: flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="refresh-cw"></i> Công cụ đồng bộ hóa dữ liệu (Migration)
+              <i data-lucide="refresh-cw"></i> Làm mới dữ liệu từ Cloud
             </h3>
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
-              Bạn đang có dữ liệu sản phẩm mẫu hoặc hóa đơn lưu cục bộ? Hãy đồng bộ chúng lên cơ sở dữ liệu Supabase mới kết nối của bạn.
+              Supabase là nguồn dữ liệu chính. Nút này chỉ tải lại dữ liệu mới nhất; cache trình duyệt không được ghi ngược lên Cloud.
             </p>
             <div style="display: flex; gap: 0.75rem;">
               <button type="button" class="btn btn-indigo" id="btn-sync-to-cloud">
-                <i data-lucide="upload-cloud"></i> Đẩy toàn bộ dữ liệu lên Cloud
+                <i data-lucide="cloud-download"></i> Tải lại dữ liệu từ Cloud
               </button>
             </div>
           </div>
@@ -1871,7 +1871,7 @@
               <i data-lucide="database"></i> Sao lưu & Khôi phục dữ liệu
             </h3>
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">
-              Xuất/Khôi phục toàn bộ dữ liệu hệ thống bao gồm: Danh sách khách hàng, Sản phẩm, Đơn hàng (đã chốt & nháp), Bảng giá, Danh sách tài khoản và các Hãng sơn dưới dạng tệp Excel đa sheet (.xlsx).
+              Excel là bản xuất kiểm tra có version và thống kê các phân hệ đang sử dụng. Khôi phục toàn bộ database chỉ thực hiện trên staging mới bằng công cụ quản trị, không ghi đè trực tiếp database đang chạy.
             </p>
             <div style="display: flex; flex-direction: column; gap: 1rem;">
               <div style="display: flex; gap: 0.75rem;">
@@ -1880,22 +1880,15 @@
                 </button>
               </div>
               <div style="border: 1px dashed var(--border-color); border-radius: 8px; padding: 1rem; background: rgba(255,255,255,0.02);">
-                <label class="form-label" style="margin-bottom: 0.5rem; display: block; font-weight: 600;">Khôi phục dữ liệu từ file sao lưu:</label>
+                <label class="form-label" style="margin-bottom: 0.5rem; display: block; font-weight: 600;">Kiểm tra file sao lưu trước khi khôi phục staging:</label>
                 <div style="display: flex; gap: 0.5rem; align-items: center;">
                   <input type="file" id="backup-file-input" accept=".xlsx" style="display: none;">
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-backup">Chọn file sao lưu (.xlsx)</button>
                   <span id="backup-file-name" style="font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px;">Chưa chọn file</span>
                 </div>
-                <div style="display: flex; gap: 1rem; margin-top: 0.75rem; font-size: 0.8rem;">
-                  <label style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; color: var(--text-secondary);">
-                    <input type="radio" name="backup-restore-mode" value="merge" checked style="accent-color: var(--color-primary);"> Gộp thêm (Trùng mã sẽ ghi đè)
-                  </label>
-                  <label style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; color: var(--text-secondary);">
-                    <input type="radio" name="backup-restore-mode" value="overwrite" style="accent-color: var(--color-primary);"> Ghi đè (Xóa sạch DB trước khi nạp)
-                  </label>
-                </div>
+                <p style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-secondary);">Dry-run chỉ đọc file, kiểm tra version, sheet, số dòng và dữ liệu trùng. Không ghi hoặc xóa dữ liệu Cloud.</p>
                 <button type="button" class="btn btn-danger btn-sm" id="btn-restore-backup" style="margin-top: 0.75rem; width: 100%; display: none;">
-                  <i data-lucide="upload"></i> Bắt đầu Khôi phục dữ liệu
+                  <i data-lucide="shield-check"></i> Kiểm tra file (Dry-run)
                 </button>
               </div>
             </div>
@@ -1909,7 +1902,7 @@
             <button class="btn btn-secondary report-subtab-btn" data-subtab="returns">
               <i data-lucide="rotate-ccw"></i> Báo cáo Trả hàng
             </button>
-            <button class="btn btn-secondary report-subtab-btn" data-subtab="kpi">
+            <button class="btn btn-secondary report-subtab-btn" data-subtab="kpi" style="display: none;" aria-hidden="true" data-feature-status="deferred">
               <i data-lucide="award"></i> Báo cáo KPI & Hiệu suất
             </button>
           </div>
@@ -1987,7 +1980,7 @@
           </div>
 
           <!-- Subtab 3: Báo cáo KPI & Hiệu suất -->
-          <div id="report-subtab-kpi" class="report-subtab-content" style="display: none;">
+          <div id="report-subtab-kpi" class="report-subtab-content" style="display: none;" aria-hidden="true" data-feature-status="deferred">
             <div class="widgets-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
               <div class="widget-card">
                 <div class="widget-info">
@@ -2051,7 +2044,7 @@
       </section>
 
       <!-- Màn hình Tính Lương (Payroll Panel) -->
-      <section id="payroll-panel" class="panel">
+      <section id="payroll-panel" class="panel" style="display: none;" aria-hidden="true" data-feature-status="deferred">
         <div class="glass-panel" style="margin-bottom: 1.25rem; padding: 1.25rem;">
           <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
             <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
@@ -2272,7 +2265,7 @@
           <div class="form-row-2">
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-debt">Công nợ hiện tại (đ)</label>
-              <input type="number" class="form-control" id="cust-debt" value="0" placeholder="Ví dụ: 5000000 hoặc -1000000" style="width: 100%;">
+              <input type="number" class="form-control" id="cust-debt" value="0" readonly aria-readonly="true" title="Công nợ chỉ thay đổi qua nghiệp vụ thu nợ hoặc điều chỉnh có kiểm soát" style="width: 100%; background: var(--bg-secondary);">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-province">Tỉnh/Thành phố *</label>
@@ -2525,7 +2518,7 @@
         <button type="button" class="btn btn-indigo" id="btn-open-customer-order-export" style="min-width: 120px;">
           <i data-lucide="download" style="width: 16px; height: 16px;"></i> Xu?t Excel
         </button>
-        <button type="button" class="btn btn-secondary" id="btn-close-detail-modal-footer" style="min-width: 100px;">Đóng</button>
+        <button type="button" class="btn btn-secondary" id="btn-close-customer-detail-modal-footer" style="min-width: 100px;">Đóng</button>
       </div>
     </div>
   </div>
@@ -2898,9 +2891,9 @@
             <input type="text" class="form-control" id="user-displayname" required placeholder="Ví dụ: Nguyễn Văn C" style="width: 100%;">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="user-password">Mật khẩu *</label>
-            <input type="text" class="form-control" id="user-password" required placeholder="Nhập mật khẩu" style="width: 100%;">
-            <small id="user-password-help" style="color: var(--text-muted); font-size: 0.75rem; display: none;">Để trống nếu không muốn thay đổi mật khẩu.</small>
+            <label class="form-label" for="user-password">Xác thực</label>
+            <input type="text" class="form-control" id="user-password" disabled value="Quản lý bằng Supabase Auth" style="width: 100%;">
+            <small id="user-password-help" style="color: var(--text-muted); font-size: 0.75rem;">Mật khẩu không được lưu trong profile hoặc trình duyệt. Tạo/reset tài khoản tại Supabase Auth.</small>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label" for="user-role">Quyền hạn / Vai trò *</label>
@@ -3660,10 +3653,8 @@
                   <th style="width: 7%; text-align: center;">Đã bán</th>
                   <th style="width: 7%; text-align: center;">Đã trả</th>
                   <th style="width: 10%; text-align: center;">SL trả lần này</th>
-                  <th style="width: 9%;">Loại CK</th>
-                  <th style="width: 9%;">Giá trị CK</th>
-                  <th style="width: 11%; text-align: right;">Giá hoàn</th>
-                  <th style="width: 11%; text-align: right;">Thành tiền</th>
+                  <th style="width: 11%; text-align: right;">Giá hoàn dự kiến</th>
+                  <th style="width: 11%; text-align: right;">Dự kiến</th>
                 </tr>
               </thead>
               <tbody id="sales-return-items-body"></tbody>
@@ -3678,8 +3669,17 @@
             </div>
             <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.75rem;">
               <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-                <span>Tổng tiền hoàn trả:</span>
+                <span>Tổng hoàn dự kiến:</span>
                 <strong id="return-total-refund-lbl" style="font-size: 1.2rem; color: #f59e0b;">0 ₫</strong>
+              </div>
+              <small style="color: var(--text-muted);">Database sẽ tính lại từ snapshot giá của đơn gốc.</small>
+              <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="return-refund-method" style="font-size: 0.78rem;">Phương thức hoàn phần tiền thừa</label>
+                <select class="form-control" id="return-refund-method" style="height: 34px;">
+                  <option value="cash">Tiền mặt</option>
+                  <option value="bank">Ngân hàng</option>
+                  <option value="wallet">Ví điện tử</option>
+                </select>
               </div>
               <div id="return-excess-warning" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.5rem; border-radius: 6px; font-size: 0.78rem; color: #ef4444; line-height: 1.4;">
                 ⚠️ Khách đã thanh toán nhiều hơn nợ. Tiền thừa cần hoàn lại cho khách: <strong id="return-excess-amount">0 ₫</strong>
@@ -3918,6 +3918,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260731-self-password-session-fix"></script>
+  <script type="module" src="js/main.js?v=20260802-backup-cell-fix1"></script>
 </body>
 </html>

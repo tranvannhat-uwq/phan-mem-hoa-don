@@ -1,25 +1,32 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData } from './services/supabase.js?v=20260731-price-items-pagination';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260730-test-data-cleanup';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260730-cashbook-reset';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260730-cashbook-reset';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260731-customer-pricelist-fix';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260731-price-excel-exact';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter } from './components/users.js?v=20260731-self-password-session-fix';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260730-cashbook-reset';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260730-cashbook-reset';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260730-cashbook-reset';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260731-searchable-party-selects';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderKpiReport } from './components/reports.js';
-import { setupPayrollPanel, renderPayrollTable } from './components/payroll.js';
-import { showToast, safeCreateIcons, updateDbStatusUI, isSameUser } from './utils.js';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage } from './services/supabase.js?v=20260802-backup-cell-fix1';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260802-backup-cell-fix1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260802-backup-cell-fix1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260802-backup-cell-fix1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260802-backup-cell-fix1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260802-backup-cell-fix1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260802-backup-cell-fix1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260802-backup-cell-fix1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260802-backup-cell-fix1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260802-backup-cell-fix1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260802-backup-cell-fix1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260802-backup-cell-fix1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260802-backup-cell-fix1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260802-backup-cell-fix1';
+import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
 // chuyển tab, tránh dựng hàng nghìn dòng DOM ẩn trong mỗi lần cập nhật.
 export function renderAll() {
+  // Never render or query business modules before an authenticated database
+  // profile has been established. This also prevents dashboard RPC noise on
+  // the login screen and avoids leaking stale cached business data.
+  if (!state.currentUser) {
+    safeCreateIcons();
+    return;
+  }
+
   backfillMultiCompanyAndRevenueData();
 
   switch (state.currentTab) {
@@ -60,13 +67,9 @@ export function renderAll() {
       populateCustomerEmployeeFilter();
       const activeReport = document.querySelector('.report-subtab-btn.active')?.getAttribute('data-subtab') || 'debt';
       if (activeReport === 'returns') renderReturnsReport();
-      else if (activeReport === 'kpi') renderKpiReport();
       else renderDebtReport();
       break;
     }
-    case 'payroll-panel':
-      renderPayrollTable();
-      break;
     case 'dashboard-panel':
     default:
       updateDashboardStats();
@@ -79,6 +82,7 @@ export function renderAll() {
 
 // Chuyển đổi giữa các phân hệ (Tab)
 export function switchTab(panelId) {
+  if (panelId === 'payroll-panel') panelId = 'dashboard-panel';
   if (state.currentUser?.role === 'sale' && panelId === 'dashboard-panel') {
     panelId = 'invoice-panel';
   }
@@ -91,7 +95,7 @@ export function switchTab(panelId) {
       return;
     }
     if (l.classList.contains('staff-menu-trigger')) {
-      l.classList.toggle('active', panelId === 'users-panel' || panelId === 'reports-panel' || panelId === 'payroll-panel');
+      l.classList.toggle('active', panelId === 'users-panel' || panelId === 'reports-panel');
       return;
     }
     if (l.getAttribute('data-target') === panelId) {
@@ -120,9 +124,8 @@ export function switchTab(panelId) {
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
-  else if (panelId === 'goods-panel') heading.innerText = 'Nhập hàng';
-  else if (panelId === 'reports-panel') heading.innerText = 'Báo cáo & Thống kê KPI';
-  else if (panelId === 'payroll-panel') heading.innerText = 'Quản lý & Tính lương Nhân viên';
+  else if (panelId === 'goods-panel') heading.innerText = 'Phiếu mua hàng';
+  else if (panelId === 'reports-panel') heading.innerText = 'Báo cáo nghiệp vụ';
   
   // Tự động làm mới dữ liệu và thống kê trên tất cả các tab khi chuyển đổi
   renderAll();
@@ -316,7 +319,6 @@ async function initApp() {
   setupBrandsPanel();
   setupGoodsPanel();
   setupReportsPanel();
-  setupPayrollPanel();
   setupBackupRestoreListeners(renderAll);
 
   let savedUrl = localStorage.getItem('billing_supabase_url');
@@ -368,36 +370,29 @@ async function initApp() {
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session && session.user) {
-        const authUser = session.user;
-        // 1. Tìm theo ID UUID trước (chính xác nhất)
-        let user = state.users.find(u => u.id === authUser.id);
-        
-        // 2. Nếu không tìm thấy, thử tìm theo email/username trùng khớp linh hoạt
-        if (!user && authUser.email) {
-          user = state.users.find(u => isSameUser(u.username, authUser.email));
-        }
-        
-        if (user) {
-          activeUser = user;
-        }
+        const profile = await loadAuthenticatedProfile(session.user.id);
+        activeUser = {
+          id: profile.id,
+          authUserId: profile.auth_user_id,
+          username: profile.username,
+          displayName: profile.display_name,
+          role: profile.role,
+          companyId: profile.company_id || 'ABS_NORTH',
+          isExternal: profile.is_external === true,
+          isActive: profile.is_active === true
+        };
       }
     } catch (err) {
-      console.error('Session recovery failed:', err);
+      console.warn('Session recovery rejected');
+      try { await supabaseClient.auth.signOut(); } catch (_) { /* clear local state below */ }
+      clearAuthenticatedSessionState();
+      clearSupabaseAuthStorage();
+      if (err?.message) showToast(err.message, 'danger');
     }
   }
   
-  if (!activeUser) {
-    const isAuth = sessionStorage.getItem('billing_system_auth') === 'true';
-    const username = sessionStorage.getItem('billing_system_username');
-    if (isAuth && username) {
-      activeUser = state.users.find(u => u.username === username);
-    }
-  }
-
   if (activeUser) {
     state.currentUser = activeUser;
-    sessionStorage.setItem('billing_system_auth', 'true');
-    sessionStorage.setItem('billing_system_username', activeUser.username);
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-layout').classList.remove('auth-hidden');
     const userInfoHeader = document.getElementById('user-info-header');

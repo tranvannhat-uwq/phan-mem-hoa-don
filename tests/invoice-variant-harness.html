@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="vi">
 <head>
+  <script>window.__app_initialized = true;</script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Invoice Variant UI Harness</title>
@@ -41,7 +42,7 @@
   <script>
     window.addEventListener('load', async () => {
       const { state } = await import('../js/state.js');
-      const { renderInvoiceTable, setupInvoiceCreator } = await import('../js/components/invoice.js');
+      const { renderInvoiceTable, setupInvoiceCreator } = await import('../js/components/invoice.js?v=20260802-backup-cell-fix1');
 
     state.currentUser = { id: 'admin-test', username: 'admin-test', displayName: 'Admin Test', role: 'admin' };
     state.products = [

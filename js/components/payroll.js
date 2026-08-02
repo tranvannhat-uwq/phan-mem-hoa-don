@@ -1,258 +1,159 @@
 import { state } from '../state.js';
-import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, showToast } from '../utils.js';
+import { formatCurrency, safeCreateIcons, showToast } from '../utils.js';
+import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js';
+
+let currentPayroll = null;
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
 export function getSalaryPeriods() {
-  const stored = localStorage.getItem('billing_system_salary_periods');
-  if (stored) {
-    try { return JSON.parse(stored); } catch(e) { return {}; }
-  }
-  return {};
+  return currentPayroll ? { [currentPayroll.period]: currentPayroll } : {};
 }
 
-export function saveSalaryPeriods(periods) {
-  localStorage.setItem('billing_system_salary_periods', JSON.stringify(periods));
-}
-
-export function setupPayrollPanel() {
-  const periodSelect = document.getElementById('payroll-period-select');
-  if (periodSelect) {
-    periodSelect.addEventListener('change', () => renderPayrollTable());
-  }
-
-  const btnLock = document.getElementById('btn-lock-payroll-period');
-  if (btnLock) {
-    btnLock.addEventListener('click', () => toggleLockPayrollPeriod());
-  }
-}
-
-export function toggleLockPayrollPeriod() {
-  const currUser = state.currentUser;
-  if (!currUser || (currUser.role !== 'admin' && currUser.role !== 'ketoan')) {
-    showToast('Chỉ Admin hoặc Kế toán mới có quyền khóa/mở khóa kỳ lương!', 'danger');
-    return;
-  }
-
-  const periodSelect = document.getElementById('payroll-period-select');
-  const selectedPeriod = periodSelect ? periodSelect.value : getSelectedSalaryPeriod();
-
-  const periods = getSalaryPeriods();
-  const isCurrentlyLocked = periods[selectedPeriod] && periods[selectedPeriod].isLocked;
-
-  if (isCurrentlyLocked) {
-    if (confirm(`Bạn có chắc muốn MỞ KHÓA kỳ lương [${selectedPeriod}]? Kỳ lương mở sẽ tự động cập nhật khi có đơn hàng/trả hàng mới.`)) {
-      periods[selectedPeriod].isLocked = false;
-      periods[selectedPeriod].unlockedAt = new Date().toISOString();
-      periods[selectedPeriod].unlockedBy = currUser.username || currUser.displayName;
-      saveSalaryPeriods(periods);
-      showToast(`Đã mở khóa kỳ lương ${selectedPeriod}!`, 'success');
-      renderPayrollTable();
-    }
-  } else {
-    if (confirm(`Bạn có chắc muốn KHÓA kỳ lương [${selectedPeriod}]? Sau khi khóa, đơn phát sinh mới sẽ không làm thay đổi bảng lương của kỳ này.`)) {
-      // Calculate snapshot
-      const snapshot = calculatePayrollData(selectedPeriod);
-      periods[selectedPeriod] = {
-        period: selectedPeriod,
-        isLocked: true,
-        lockedAt: new Date().toISOString(),
-        lockedBy: currUser.username || currUser.displayName,
-        snapshot: snapshot
-      };
-      saveSalaryPeriods(periods);
-      showToast(`Đã khóa kỳ lương ${selectedPeriod} thành công!`, 'success');
-      renderPayrollTable();
-    }
-  }
+export function saveSalaryPeriods() {
+  throw new Error('Kỳ lương chỉ được lưu bởi database.');
 }
 
 export function getSelectedSalaryPeriod() {
-  const select = document.getElementById('payroll-period-select');
-  if (select && select.value) return select.value;
-
-  const d = new Date();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  return `${d.getFullYear()}-${month}`;
+  const selected = document.getElementById('payroll-period-select')?.value;
+  if (selected) return selected;
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function calculatePayrollData(period) {
-  const users = state.users || [];
-  const orders = state.savedOrders || [];
-  const returns = (state.salesReturns || []).filter(r => r.status !== 'cancelled');
-  const commTxs = state.commissionTransactions || [];
-  const adjustments = getPayrollAdjustments(period);
-
-  return users.map(user => {
-    const userId = user.id || user.username;
-    const baseSalary = parseFloat(user.baseSalary || user.base_salary || 0);
-
-    // 1. Calculate Commission from commission_transactions or order rules in period
-    let commissionAmt = 0;
-    let returnDeduction = 0;
-
-    // Filter order items / transactions in period for this user
-    orders.forEach(o => {
-      if (o.status === 'settled') {
-        const oDateStr = (o.date || '').substring(0, 7);
-        if (oDateStr === period) {
-          const empId = o.salespersonId || o.createdBy;
-          if (empId && (empId === userId || empId === user.username)) {
-            // Standard commission calculation fallback (e.g. 3% if no rule specified)
-            commissionAmt += Math.round((o.totalPayable || 0) * 0.03);
-          }
-        }
-      }
-    });
-
-    returns.forEach(r => {
-      const rDateStr = (r.createdAt || r.returnDate || '').substring(0, 7);
-      if (rDateStr === period) {
-        const empId = r.salespersonId || r.createdBy;
-        if (empId && (empId === userId || empId === user.username)) {
-          returnDeduction += Math.round((r.totalRefund || 0) * 0.03);
-        }
-      }
-    });
-
-    const userAdj = adjustments[userId] || { kpiBonus: 0, deductions: 0, notes: '' };
-    const kpiBonus = parseFloat(userAdj.kpiBonus || 0);
-    const deductions = parseFloat(userAdj.deductions || 0);
-
-    // Formula: Lương = Lương cơ bản + Hoa hồng + Thưởng KPI - Trừ trả hàng - Khấu trừ khác
-    const netSalary = Math.max(0, Math.round(baseSalary + commissionAmt + kpiBonus - returnDeduction - deductions));
-
-    return {
-      userId,
-      userCode: user.employeeCode || user.employee_code || user.username,
-      userName: user.displayName || user.name || user.username,
-      position: user.position || (user.role === 'admin' ? 'Quản trị viên' : user.role === 'ketoan' ? 'Kế toán' : 'NVKD'),
-      baseSalary,
-      commissionAmt,
-      kpiBonus,
-      returnDeduction,
-      deductions,
-      netSalary,
-      notes: userAdj.notes || ''
-    };
-  });
+export function calculatePayrollData() {
+  return currentPayroll?.rows || [];
 }
 
-export function getPayrollAdjustments(period) {
-  const stored = localStorage.getItem(`billing_system_payroll_adj_${period}`);
-  if (stored) {
-    try { return JSON.parse(stored); } catch(e) { return {}; }
+export function getPayrollAdjustments() { return {}; }
+export function savePayrollAdjustments() { throw new Error('Điều chỉnh lương chỉ được lưu bởi database.'); }
+
+function canManagePayroll() {
+  return ['admin', 'accounting'].includes(state.currentUser?.role);
+}
+
+function renderStatus(payload) {
+  const isLocked = Boolean(payload.isLocked);
+  const badge = document.getElementById('payroll-lock-status-badge');
+  const button = document.getElementById('btn-lock-payroll-period');
+  if (badge) {
+    badge.className = `db-status-badge ${isLocked ? 'status-cloud' : 'status-local'}`;
+    badge.style.color = isLocked ? '#ef4444' : '#10b981';
+    badge.innerText = isLocked ? `ĐÃ KHÓA KỲ LƯƠNG (${payload.lockedBy || 'hệ thống'})` : 'KỲ LƯƠNG MỞ';
   }
-  return {};
+  if (button) {
+    button.disabled = !canManagePayroll();
+    button.className = isLocked ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
+    button.innerHTML = isLocked
+      ? '<i data-lucide="unlock"></i> Mở khóa kỳ lương'
+      : `<i data-lucide="lock"></i> Khóa kỳ lương ${payload.period}`;
+  }
 }
 
-export function savePayrollAdjustments(period, adj) {
-  localStorage.setItem(`billing_system_payroll_adj_${period}`, JSON.stringify(adj));
-}
-
-export function renderPayrollTable() {
+function renderRows(payload) {
   const tbody = document.getElementById('payroll-table-body');
   if (!tbody) return;
-
-  const period = getSelectedSalaryPeriod();
-  const periods = getSalaryPeriods();
-  const isLocked = periods[period] && periods[period].isLocked;
-
-  const btnLock = document.getElementById('btn-lock-payroll-period');
-  const lockStatusBadge = document.getElementById('payroll-lock-status-badge');
-
-  if (lockStatusBadge) {
-    if (isLocked) {
-      lockStatusBadge.className = 'db-status-badge status-cloud';
-      lockStatusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
-      lockStatusBadge.style.color = '#ef4444';
-      lockStatusBadge.style.border = '1px solid rgba(239, 68, 68, 0.3)';
-      lockStatusBadge.innerText = `ĐÃ KHÓA KỲ LƯƠNG (${periods[period].lockedBy || 'Admin'})`;
-    } else {
-      lockStatusBadge.className = 'db-status-badge status-local';
-      lockStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-      lockStatusBadge.style.color = '#10b981';
-      lockStatusBadge.style.border = '1px solid rgba(16, 185, 129, 0.3)';
-      lockStatusBadge.innerText = 'KỲ LƯƠNG MỞ (ĐANG TÍNH TỰ ĐỘNG)';
-    }
-  }
-
-  if (btnLock) {
-    btnLock.className = isLocked ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
-    btnLock.innerHTML = isLocked 
-      ? `<i data-lucide="unlock" style="width: 14px; height: 14px;"></i> Mở khóa kỳ lương`
-      : `<i data-lucide="lock" style="width: 14px; height: 14px;"></i> Khóa kỳ lương ${period}`;
-  }
-
-  // If period is locked, read frozen snapshot!
-  let payrollData = [];
-  if (isLocked && periods[period].snapshot) {
-    payrollData = periods[period].snapshot;
-  } else {
-    payrollData = calculatePayrollData(period);
-  }
-
-  if (payrollData.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">Không có nhân viên nào trong danh sách tính lương</td></tr>`;
+  const rows = payload.rows || [];
+  renderStatus(payload);
+  const totalElement = document.getElementById('stat-total-payroll-period');
+  if (totalElement) totalElement.innerText = formatCurrency(rows.reduce((sum, row) => sum + Number(row.netSalary || 0), 0));
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có nhân viên đang hoạt động trong kỳ lương.</td></tr>';
+    safeCreateIcons();
     return;
   }
-
-  let totalPayrollAll = 0;
-  payrollData.forEach(p => { totalPayrollAll += p.netSalary; });
-
-  const totalPayrollEl = document.getElementById('stat-total-payroll-period');
-  if (totalPayrollEl) totalPayrollEl.innerText = formatCurrency(totalPayrollAll);
-
-  tbody.innerHTML = payrollData.map(p => `
+  tbody.innerHTML = rows.map(row => `
     <tr>
-      <td style="font-weight: 600;">${p.userCode}</td>
-      <td style="font-weight: 600; color: var(--text-primary);">${p.userName}</td>
-      <td>${p.position}</td>
-      <td style="text-align: right; font-weight: 500;">${formatCurrency(p.baseSalary)}</td>
-      <td style="text-align: right; font-weight: 600; color: var(--color-primary);">${formatCurrency(p.commissionAmt)}</td>
-      <td style="text-align: right; font-weight: 600; color: var(--color-success);">${formatCurrency(p.kpiBonus)}</td>
-      <td style="text-align: right; font-weight: 600; color: var(--color-danger);">${formatCurrency(p.returnDeduction)}</td>
-      <td style="text-align: right; font-weight: 600; color: var(--color-warning);">${formatCurrency(p.deductions)}</td>
-      <td style="text-align: right; font-weight: 700; font-size: 1.05rem; color: var(--color-primary);">${formatCurrency(p.netSalary)}</td>
-      <td style="text-align: center;">
-        ${isLocked ? `<span style="font-size: 0.8rem; color: var(--text-muted);">Đã khóa</span>` : `
-          <button class="btn btn-secondary btn-xs" onclick="window.editEmployeePayroll('${p.userId}', '${period}')" title="Điều chỉnh thưởng KPI / Khấu trừ">
-            <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i> Sửa
-          </button>
-        `}
+      <td style="font-weight:600">${escapeHtml(row.userCode)}</td>
+      <td style="font-weight:600;color:var(--text-primary)">${escapeHtml(row.userName)}</td>
+      <td>${escapeHtml(row.position)}</td>
+      <td style="text-align:right">${formatCurrency(row.baseSalary)}</td>
+      <td style="text-align:right;color:var(--color-primary)">${formatCurrency(row.commissionAmt)}</td>
+      <td style="text-align:right;color:var(--color-success)">${formatCurrency(row.kpiBonus)}</td>
+      <td style="text-align:right;color:var(--color-danger)">${formatCurrency(row.returnDeduction)}</td>
+      <td style="text-align:right;color:var(--color-warning)">${formatCurrency(row.deductions)}</td>
+      <td style="text-align:right;font-weight:700;color:var(--color-primary)">${formatCurrency(row.netSalary)}</td>
+      <td style="text-align:center">${payload.isLocked
+        ? '<span style="font-size:.8rem;color:var(--text-muted)">Đã khóa</span>'
+        : `<button class="btn btn-secondary btn-xs payroll-edit-btn" data-user-id="${escapeHtml(row.userId)}"><i data-lucide="edit-3"></i> Sửa</button>`}
       </td>
-    </tr>
-  `).join('');
-
+    </tr>`).join('');
+  tbody.querySelectorAll('.payroll-edit-btn').forEach(button => {
+    button.addEventListener('click', () => editEmployeePayroll(button.dataset.userId, payload.period));
+  });
   safeCreateIcons();
 }
 
-window.editEmployeePayroll = function(userId, period) {
-  const periods = getSalaryPeriods();
-  if (periods[period] && periods[period].isLocked) {
-    showToast('Kỳ lương này đã bị khóa. Vui lòng mở khóa để chỉnh sửa!', 'danger');
+export async function renderPayrollTable() {
+  const tbody = document.getElementById('payroll-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem">Đang tính lương trên máy chủ...</td></tr>';
+  try {
+    currentPayroll = await dbFetchPayrollPeriod(getSelectedSalaryPeriod());
+    renderRows(currentPayroll);
+  } catch (error) {
+    currentPayroll = null;
+    console.error('Payroll RPC error:', error);
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được bảng lương. Kiểm tra migration 0012 và kết nối Cloud.</td></tr>';
+    showToast('Không tải được bảng lương chính xác từ cơ sở dữ liệu.', 'danger');
+  }
+}
+
+export async function toggleLockPayrollPeriod() {
+  if (!canManagePayroll()) {
+    showToast('Chỉ Admin hoặc Kế toán được quản lý kỳ lương.', 'danger');
     return;
   }
+  const period = getSelectedSalaryPeriod();
+  const lock = !currentPayroll?.isLocked;
+  let reason = null;
+  if (!lock) {
+    if (state.currentUser?.role !== 'admin') {
+      showToast('Chỉ Admin được mở khóa kỳ lương.', 'danger');
+      return;
+    }
+    reason = prompt('Nhập lý do mở khóa kỳ lương:')?.trim();
+    if (!reason) return;
+  }
+  if (!confirm(`${lock ? 'Khóa' : 'Mở khóa'} kỳ lương ${period}?`)) return;
+  try {
+    currentPayroll = await dbSetPayrollPeriodLock(period, lock, reason);
+    renderRows(currentPayroll);
+    showToast(`${lock ? 'Đã khóa' : 'Đã mở khóa'} kỳ lương ${period}.`, 'success');
+  } catch (error) {
+    console.error('Payroll lock error:', error);
+    showToast(error?.message || 'Không thay đổi được trạng thái kỳ lương.', 'danger');
+  }
+}
 
-  const user = (state.users || []).find(u => (u.id === userId || u.username === userId));
-  if (!user) return;
+async function editEmployeePayroll(userId, period) {
+  if (!canManagePayroll() || currentPayroll?.isLocked) return;
+  const row = currentPayroll?.rows?.find(item => String(item.userId) === String(userId));
+  if (!row) return;
+  const bonusInput = prompt(`Thưởng KPI cho ${row.userName}:`, String(row.kpiBonus || 0));
+  if (bonusInput === null) return;
+  const deductionInput = prompt(`Khấu trừ khác cho ${row.userName}:`, String(row.deductions || 0));
+  if (deductionInput === null) return;
+  const notes = prompt('Lý do điều chỉnh (bắt buộc):', '')?.trim();
+  if (!notes) return showToast('Phải nhập lý do điều chỉnh để lưu audit log.', 'danger');
+  const kpiBonus = Number(bonusInput);
+  const deduction = Number(deductionInput);
+  if (!Number.isFinite(kpiBonus) || kpiBonus < 0 || !Number.isFinite(deduction) || deduction < 0) {
+    return showToast('Tiền thưởng và khấu trừ phải là số không âm.', 'danger');
+  }
+  try {
+    await dbSavePayrollAdjustment({ period, employee_id: userId, adjustment_type: 'kpi_bonus', amount: kpiBonus, notes });
+    await dbSavePayrollAdjustment({ period, employee_id: userId, adjustment_type: 'deduction', amount: deduction, notes });
+    await renderPayrollTable();
+    showToast('Đã lưu điều chỉnh lương và audit log.', 'success');
+  } catch (error) {
+    console.error('Payroll adjustment error:', error);
+    showToast(error?.message || 'Không lưu được điều chỉnh lương.', 'danger');
+  }
+}
 
-  const adj = getPayrollAdjustments(period);
-  const userAdj = adj[userId] || { kpiBonus: 0, deductions: 0, notes: '' };
+window.editEmployeePayroll = editEmployeePayroll;
 
-  const bonusStr = prompt(`Nhập Thưởng KPI cho [${user.displayName || user.username}]:`, userAdj.kpiBonus || 0);
-  if (bonusStr === null) return;
-
-  const dedStr = prompt(`Nhập Khoản khấu trừ khác cho [${user.displayName || user.username}]:`, userAdj.deductions || 0);
-  if (dedStr === null) return;
-
-  const notesStr = prompt(`Nhập Ghi chú lý do điều chỉnh:`, userAdj.notes || '');
-
-  adj[userId] = {
-    kpiBonus: parseFloat(bonusStr) || 0,
-    deductions: parseFloat(dedStr) || 0,
-    notes: notesStr || ''
-  };
-
-  savePayrollAdjustments(period, adj);
-  showToast('Đã cập nhật điều chỉnh lương cho nhân viên!', 'success');
-  renderPayrollTable();
-};
+export function setupPayrollPanel() {
+  document.getElementById('payroll-period-select')?.addEventListener('change', renderPayrollTable);
+  document.getElementById('btn-lock-payroll-period')?.addEventListener('click', toggleLockPayrollPeriod);
+}

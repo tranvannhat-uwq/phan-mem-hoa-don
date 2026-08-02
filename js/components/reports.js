@@ -1,5 +1,8 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode } from '../utils.js';
+import { dbFetchPhase5Report } from '../services/supabase.js';
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
 export function setupReportsPanel() {
   const tabBtns = document.querySelectorAll('.report-subtab-btn');
@@ -22,6 +25,7 @@ export function setupReportsPanel() {
 }
 
 export function switchReportSubtab(subtab) {
+  if (subtab === 'kpi') subtab = 'debt';
   document.querySelectorAll('.report-subtab-btn').forEach(btn => {
     if (btn.getAttribute('data-subtab') === subtab) btn.classList.add('active');
     else btn.classList.remove('active');
@@ -41,7 +45,24 @@ function renderActiveReportSubtab(subtab) {
   else if (subtab === 'kpi') renderKpiReport();
 }
 
-export function renderDebtReport() {
+export async function renderDebtReport() {
+  const tbody = document.getElementById('report-debt-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem">Đang tải công nợ từ máy chủ...</td></tr>';
+  try {
+    const report = await dbFetchPhase5Report({ type: 'debt', search: document.getElementById('report-debt-search')?.value || '', limit: 200, offset: 0 });
+    document.getElementById('report-debt-total-stat').innerText = formatCurrency(report.summary?.total_debt);
+    document.getElementById('report-debt-overdue-stat').innerText = formatCurrency(report.summary?.overdue_debt);
+    tbody.innerHTML = report.rows?.length ? report.rows.map(row => `<tr><td style="font-weight:600">${escapeHtml(row.code)}</td><td style="font-weight:600">${escapeHtml(row.name)}</td><td>${escapeHtml(row.phone || '---')}</td><td>${escapeHtml(getManagerDisplayName(row.managed_by, 'Chưa bàn giao', state.users))}</td><td>${row.last_order_at ? formatDateTime(row.last_order_at) : 'Chưa có'}</td><td>${row.last_payment_at ? formatDateTime(row.last_payment_at) : 'Chưa có'}</td><td style="text-align:right;font-weight:700;color:${Number(row.debt) > 0 ? 'var(--color-danger)' : 'var(--color-success)'}">${formatCurrency(row.debt)}</td><td style="text-align:center"><span title="Số liệu từ ledger máy chủ">Đã đối soát</span></td></tr>`).join('')
+      : '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu công nợ</td></tr>';
+    safeCreateIcons();
+  } catch (error) {
+    console.error('Debt report RPC error:', error);
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được báo cáo công nợ. Kiểm tra migration 0012.</td></tr>';
+  }
+}
+
+function renderDebtReportLegacy() {
   const tbody = document.getElementById('report-debt-table-body');
   if (!tbody) return;
 
@@ -166,7 +187,32 @@ export function closeDebtHistoryModal() {
 }
 window.closeDebtHistoryModal = closeDebtHistoryModal;
 
-export function renderReturnsReport() {
+export async function renderReturnsReport() {
+  const tbody = document.getElementById('report-return-table-body');
+  const thead = document.getElementById('report-return-table-head');
+  if (!tbody || !thead) return;
+  const mode = document.getElementById('report-return-filter')?.value || 'product';
+  thead.innerHTML = mode === 'product'
+    ? '<tr><th>Mã SKU</th><th>Tên sản phẩm</th><th style="text-align:right">Số lượng trả</th><th style="text-align:right">Giá trị trả</th></tr>'
+    : mode === 'customer'
+      ? '<tr><th>Mã khách</th><th>Tên khách hàng / Đại lý</th><th style="text-align:right">Số lượt trả</th><th style="text-align:right">Giá trị trả</th></tr>'
+      : '<tr><th>Nhân viên bán hàng</th><th style="text-align:right">Số lượt trả</th><th style="text-align:right">Giá trị trừ doanh số</th></tr>';
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem">Đang tải trả hàng từ máy chủ...</td></tr>';
+  try {
+    const report = await dbFetchPhase5Report({ type: 'returns', mode, limit: 200, offset: 0 });
+    tbody.innerHTML = report.rows?.length ? report.rows.map(row => mode === 'product'
+      ? `<tr><td style="font-weight:600">${escapeHtml(row.code)}</td><td>${escapeHtml(row.name)}</td><td style="text-align:right">${Number(row.quantity || 0)}</td><td style="text-align:right;font-weight:700;color:var(--color-danger)">${formatCurrency(row.amount)}</td></tr>`
+      : mode === 'customer'
+        ? `<tr><td style="font-weight:600">${escapeHtml(row.code)}</td><td>${escapeHtml(row.name)}</td><td style="text-align:right">${Number(row.count || 0)}</td><td style="text-align:right;font-weight:700;color:var(--color-danger)">${formatCurrency(row.amount)}</td></tr>`
+        : `<tr><td style="font-weight:600">${escapeHtml(getUserDisplayName(row.key, 'Chưa phân công', state.users))}</td><td style="text-align:right">${Number(row.count || 0)}</td><td style="text-align:right;font-weight:700;color:var(--color-danger)">${formatCurrency(row.amount)}</td></tr>`).join('')
+      : '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu trả hàng</td></tr>';
+  } catch (error) {
+    console.error('Returns report RPC error:', error);
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được báo cáo trả hàng. Kiểm tra migration 0012.</td></tr>';
+  }
+}
+
+function renderReturnsReportLegacy() {
   const mode = document.getElementById('report-return-filter')?.value || 'product';
   const tbody = document.getElementById('report-return-table-body');
   const thead = document.getElementById('report-return-table-head');
@@ -287,7 +333,27 @@ export function renderReturnsReport() {
   }
 }
 
-export function renderKpiReport() {
+export async function renderKpiReport() {
+  const tbody = document.getElementById('report-kpi-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem">Đang tính KPI trên máy chủ...</td></tr>';
+  try {
+    const report = await dbFetchPhase5Report({ type: 'kpi' });
+    const summary = report.summary || {};
+    document.getElementById('kpi-gross-sales-stat').innerText = formatCurrency(summary.gross_sales);
+    document.getElementById('kpi-net-sales-stat').innerText = formatCurrency(summary.net_sales);
+    document.getElementById('kpi-cash-collected-stat').innerText = formatCurrency(summary.collected);
+    document.getElementById('kpi-new-debt-stat').innerText = formatCurrency(summary.debt_issued);
+    document.getElementById('kpi-debt-collected-stat').innerText = formatCurrency(summary.debt_collected);
+    tbody.innerHTML = report.kpi_by_employee?.length ? report.kpi_by_employee.map(row => `<tr><td style="font-weight:600">${escapeHtml(getUserDisplayName(row.key, 'Chưa phân công', state.users))}</td><td style="text-align:right">${formatCurrency(row.gross_sales)}</td><td style="text-align:right;color:var(--color-danger)">${formatCurrency(row.returns)}</td><td style="text-align:right;font-weight:700;color:var(--color-primary)">${formatCurrency(row.net_sales)}</td><td style="text-align:right;color:var(--color-success)">${formatCurrency(row.collected)}</td><td style="text-align:right">${formatCurrency(row.debt_issued)}</td></tr>`).join('')
+      : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu KPI</td></tr>';
+  } catch (error) {
+    console.error('KPI report RPC error:', error);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được KPI. Kiểm tra migration 0012.</td></tr>';
+  }
+}
+
+function renderKpiReportLegacy() {
   const tbody = document.getElementById('report-kpi-table-body');
   if (!tbody) return;
 

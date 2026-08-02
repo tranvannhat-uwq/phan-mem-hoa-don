@@ -1,10 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName, getManagerDisplayName, getProvinceNameByCode } from '../utils.js';
-import { switchTab } from '../main.js';
+import { switchTab } from '../main.js?v=20260802-backup-cell-fix1';
 import { openProductModal } from './products.js';
-import { fetchCloudData } from '../services/supabase.js?v=20260731-price-items-pagination';
+import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260802-backup-cell-fix1';
 
 let revenueChartInstance = null;
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
 const VN_TIMEZONE = 'Asia/Ho_Chi_Minh';
 const VALID_REVENUE_STATUSES = new Set(['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
@@ -481,7 +482,79 @@ export function renderTopProducts(orders) {
     return `<div class="top-product-item"><div class="top-product-info"><span class="top-product-name" title="${p.name}">${p.name}</span><span class="top-product-sales">${p.quantity} đã bán</span></div><div class="top-product-progress-bg"><div class="top-product-progress-bar" style="width: ${percent}%;"></div></div><div class="top-product-meta"><span>Mã: ${p.code}</span><span style="font-weight: 500; color: #fff;">${formatCurrency(p.revenue)}</span></div></div>`;
   }).join('');
 }
-export function updateDashboardStats() {
+function renderServerBreakdown(elementId, rows, labelResolver = key => key) {
+  const body = document.getElementById(elementId);
+  if (!body) return;
+  body.innerHTML = rows?.length ? rows.map(row => `<tr><td style="font-weight:500">${escapeHtml(labelResolver(row.key, row))}</td><td style="text-align:right;font-weight:600;color:var(--color-primary)">${formatCurrency(row.amount)}</td></tr>`).join('')
+    : '<tr><td colspan="2" style="text-align:center;color:var(--text-muted)">Không có dữ liệu</td></tr>';
+}
+
+function renderServerDashboard(payload) {
+  const summary = payload?.summary || {};
+  const setText = (id, value) => { const element = document.getElementById(id); if (element) element.innerText = value; };
+  setText('stat-total-revenue', formatCurrency(state.dashboardSalesMode === 'gross' ? summary.gross_sales : summary.net_sales));
+  setText('stat-total-orders', summary.order_count || 0);
+  setText('stat-total-debt', formatCurrency(summary.current_debt));
+  setText('stat-total-sold-products', summary.sold_quantity || 0);
+  renderServerBreakdown('company-revenue-breakdown-body', payload.by_company, key => getCompanyNameById(key, state.companies));
+  renderServerBreakdown('brand-revenue-breakdown-body', payload.by_brand, key => (state.brands || []).find(brand => String(brand.id) === String(key))?.name || key);
+  renderServerBreakdown('salesperson-breakdown-body', payload.by_salesperson, key => getUserDisplayName(key, 'Chưa phân công', state.users));
+  renderServerBreakdown('customer-breakdown-body', payload.by_customer, (_key, row) => row.name || row.key);
+
+  const topProducts = document.getElementById('top-products-list');
+  if (topProducts) {
+    topProducts.innerHTML = payload.top_skus?.length ? payload.top_skus.slice(0, 5).map(item => `<div class="top-product-item"><div class="top-product-info"><span class="top-product-name">${escapeHtml(item.name || item.code)}</span><span class="top-product-sales">${Number(item.quantity || 0)} đã bán</span></div><div class="top-product-meta"><span>Mã: ${escapeHtml(item.code)}</span><span>${formatCurrency(item.amount)}</span></div></div>`).join('')
+      : '<div style="text-align:center;color:var(--text-muted);padding:2rem">Không có dữ liệu bán hàng</div>';
+  }
+  const recentBody = document.getElementById('dashboard-recent-orders-body');
+  if (recentBody) {
+    recentBody.innerHTML = payload.recent_orders?.length ? payload.recent_orders.map(order => `<tr><td style="font-weight:600">${escapeHtml(order.id)}</td><td>${new Date(order.order_date).toLocaleDateString('vi-VN')}</td><td>${escapeHtml(order.customer_name)}</td><td style="text-align:right">${formatCurrency(order.net_revenue)}</td><td style="text-align:center"><button class="btn btn-secondary btn-sm dash-view-order-btn" data-id="${escapeHtml(order.id)}"><i data-lucide="eye"></i></button></td></tr>`).join('')
+      : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem">Không có đơn hàng phù hợp</td></tr>';
+  }
+  const chartCanvas = document.getElementById('revenue-chart');
+  if (chartCanvas && globalThis.Chart) {
+    if (revenueChartInstance) revenueChartInstance.destroy();
+    const chartContext = chartCanvas.getContext('2d');
+    revenueChartInstance = new Chart(chartContext, {
+      type: 'line',
+      data: { labels: (payload.series || []).map(point => point.date), datasets: [{ label: 'Doanh thu', data: (payload.series || []).map(point => Number(point.amount || 0)), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.15)', tension: .3, fill: true }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: value => formatCurrency(value) } } } }
+    });
+  }
+  document.querySelectorAll('.dash-view-order-btn').forEach(button => button.addEventListener('click', () => {
+    switchTab('history-panel');
+    const search = document.getElementById('order-search-input');
+    if (search) { search.value = button.dataset.id; search.dispatchEvent(new Event('input')); }
+  }));
+  safeCreateIcons();
+}
+
+export async function updateDashboardStats() {
+  populateDashboardFilters();
+  const range = getDashboardDateRange();
+  const endExclusive = range?.end ? new Date(`${range.end}T00:00:00+07:00`) : null;
+  if (endExclusive) endExclusive.setDate(endExclusive.getDate() + 1);
+  try {
+    const payload = await dbFetchPhase5Dashboard({
+      start: range?.start ? `${range.start}T00:00:00+07:00` : null,
+      end: endExclusive?.toISOString() || null,
+      company_id: state.dashboardFilter.companyId || 'all',
+      brand_id: state.dashboardFilter.brand || 'all',
+      salesperson_id: state.dashboardFilter.saleUser || 'all',
+      customer_id: state.dashboardFilter.customerId || 'all',
+      sales_mode: state.dashboardSalesMode || 'net'
+    });
+    renderServerDashboard(payload);
+  } catch (error) {
+    console.error('Phase 5 dashboard RPC error:', error);
+    ['stat-total-revenue', 'stat-total-orders', 'stat-total-debt', 'stat-total-sold-products'].forEach(id => {
+      const element = document.getElementById(id); if (element) element.innerText = '—';
+    });
+    showToast('Không tải được dashboard từ cơ sở dữ liệu. Kiểm tra migration 0012.', 'danger');
+  }
+}
+
+function updateDashboardStatsLegacy() {
   populateDashboardFilters();
   const filteredOrders = getFilteredDashboardOrders();
 
@@ -843,8 +916,7 @@ export function setupDashboardFilters() {
       state.dashboardChartView = view;
       updateChartViewActiveButton(view);
       
-      const filteredOrders = getFilteredDashboardOrders();
-      renderRevenueChart(filteredOrders);
+      updateDashboardStats();
     });
   });
 }

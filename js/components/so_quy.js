@@ -1,10 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
-import { renderAll } from '../main.js';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCustomerPayment } from '../services/supabase.js?v=20260731-price-items-pagination';
+import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260802-backup-cell-fix1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
+let pendingReceiptIdempotencyKey = '';
 
 // Helper: load/save transactions from LocalStorage
 export function getCashbookTransactions() {
@@ -99,9 +101,11 @@ export function getStartingBalances() {
   return defaults;
 }
 
-export function saveStartingBalances(balances) {
+export async function saveStartingBalances(balances) {
+  const saved = await dbSaveStartingBalances(balances);
+  if (!saved) return false;
   localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(balances));
-  dbSaveStartingBalances(balances);
+  return true;
 }
 
 // Global active filters in this view
@@ -328,7 +332,7 @@ export function setupSoQuyPanel() {
   if (startBalEl) {
     startBalEl.style.cursor = 'pointer';
     startBalEl.title = 'Kích đúp để thay đổi Quỹ đầu kỳ';
-    startBalEl.addEventListener('dblclick', () => {
+    startBalEl.addEventListener('dblclick', async () => {
       const type = activeFilters.accountType;
       if (type === 'all') {
         showToast('Vui lòng chọn cụ thể một loại Quỹ (Tiền mặt, Ngân hàng, Ví điện tử) để thay đổi quỹ đầu kỳ.', 'warning');
@@ -340,10 +344,11 @@ export function setupSoQuyPanel() {
       if (newValStr !== null) {
         const newVal = parseFloat(newValStr.replace(/,/g, ''));
         if (!isNaN(newVal)) {
-          balances[type] = newVal;
-          saveStartingBalances(balances);
-          showToast('Đã cập nhật Quỹ đầu kỳ thành công!', 'success');
-          renderSoQuyTable();
+          const nextBalances = { ...balances, [type]: newVal };
+          if (await saveStartingBalances(nextBalances)) {
+            showToast('Đã cập nhật Quỹ đầu kỳ thành công!', 'success');
+            renderSoQuyTable();
+          }
         } else {
           showToast('Giá trị nhập vào không hợp lệ!', 'danger');
         }
@@ -359,6 +364,9 @@ export function setupSoQuyPanel() {
   
   if (addThuBtn && receiptModal) {
     addThuBtn.addEventListener('click', () => {
+      // One stable key per modal attempt: retrying the same form is safe, while
+      // a newly opened receipt can never reuse an older display-code key.
+      pendingReceiptIdempotencyKey = globalThis.crypto.randomUUID();
       // Set time default to now in local format
       const now = new Date();
       now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -380,6 +388,7 @@ export function setupSoQuyPanel() {
   const hideReceiptModal = () => {
     if (receiptModal) receiptModal.classList.remove('active');
     if (receiptForm) receiptForm.reset();
+    pendingReceiptIdempotencyKey = '';
   };
   
   if (closeReceiptBtn) closeReceiptBtn.addEventListener('click', hideReceiptModal);
@@ -397,6 +406,9 @@ export function setupSoQuyPanel() {
       const method = document.getElementById('receipt-method').value;
       const accounting = document.getElementById('receipt-accounting').checked;
       const note = document.getElementById('receipt-note').value.trim();
+      if (!pendingReceiptIdempotencyKey) {
+        pendingReceiptIdempotencyKey = globalThis.crypto.randomUUID();
+      }
       
       // Auto-generate code if empty
       let finalCode = code;
@@ -430,7 +442,8 @@ export function setupSoQuyPanel() {
         status: 'Đã thanh toán',
         creator: state.currentUser ? state.currentUser.displayName : 'Administrator',
         note,
-        starred: false
+        starred: false,
+        idempotencyKey: pendingReceiptIdempotencyKey
       };
       
       const normalizedCategory = category.toLowerCase();
@@ -457,11 +470,11 @@ export function setupSoQuyPanel() {
 
         newTx.partner = matchedCustomer.name;
         const currentDebt = Number(matchedCustomer.debt) || 0;
-        if (currentDebt === 0) {
+        if (currentDebt <= 0) {
           showToast('Khách hàng này hiện không có công nợ cần thu!', 'danger');
           return;
         }
-        if (value <= 0 || value > Math.abs(currentDebt)) {
+        if (value <= 0 || value > currentDebt) {
           showToast(`Số tiền thu phải lớn hơn 0 và không vượt quá công nợ hiện tại (${formatCurrency(currentDebt)})!`, 'danger');
           return;
         }
@@ -470,7 +483,8 @@ export function setupSoQuyPanel() {
           matchedCustomer.id,
           value,
           note || `${category} - ${finalCode}`,
-          newTx.creator
+          method,
+          pendingReceiptIdempotencyKey
         );
         if (!paymentResult) return;
 
@@ -482,15 +496,17 @@ export function setupSoQuyPanel() {
 
         matchedCustomer.debt = newDebt;
         matchedCustomer.lastPaymentAt = new Date().toISOString();
-        if (!matchedCustomer.debtHistory) matchedCustomer.debtHistory = [];
-        matchedCustomer.debtHistory.push({
-          id: `pay-${Date.now()}`,
-          date: new Date().toISOString(),
-          type: 'payment',
-          amount: value,
-          notes: note || `${category} - ${finalCode}`,
-          debtAfter: newDebt
-        });
+        if (!paymentResult.already_recorded) {
+          if (!matchedCustomer.debtHistory) matchedCustomer.debtHistory = [];
+          matchedCustomer.debtHistory.push({
+            id: paymentResult.ledger_id || `pay-${finalCode}`,
+            date: new Date().toISOString(),
+            type: 'payment',
+            amount: value,
+            notes: note || `${category} - ${finalCode}`,
+            debtAfter: newDebt
+          });
+        }
         localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
 
         newTx.customerId = matchedCustomer.id;
@@ -657,7 +673,7 @@ export function addCashbookTransaction({
   supplierId = null,
   cloudId = null,
   debtImpact = false,
-  syncToCloud = true
+  syncToCloud = false
 }) {
   const txs = getCashbookTransactions();
   
@@ -1084,15 +1100,20 @@ export function renderSoQuyTable() {
 
   // Wire up Star toggle event
   tableBody.querySelectorAll('.star-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const txId = btn.getAttribute('data-id');
       const txs = getCashbookTransactions();
       const found = txs.find(t => t.id === txId);
       if (found) {
-        found.starred = !found.starred;
+        const nextStarred = !found.starred;
+        const saved = await dbSetCashbookStarred(found.cloudId || found.id, nextStarred);
+        if (!saved) {
+          showToast('Không thể cập nhật đánh dấu trên Cloud.', 'danger');
+          return;
+        }
+        found.starred = nextStarred;
         saveCashbookTransactions(txs);
-        dbSaveCashbookTransaction(found);
         btn.classList.toggle('starred');
         showToast(found.starred ? 'Đã thêm vào mục quan trọng' : 'Đã bỏ đánh dấu quan trọng', 'info');
       }
@@ -1161,50 +1182,39 @@ function showTransactionDetails(txId) {
       
       newCancelBtn.addEventListener('click', async () => {
         if (confirm(`Bạn có chắc chắn muốn hủy phiếu [${t.id}]? Số tiền giao dịch sẽ không còn được hạch toán vào Sổ quỹ và sẽ khôi phục lại công nợ đối tác nếu có.`)) {
-          const currentUserDisp = state.currentUser
-            ? (state.currentUser.displayName || state.currentUser.username)
-            : 'Administrator';
-
-          if (t.type === 'thu' && t.debtImpact) {
-            const cancelResult = await dbCancelCustomerPayment(
-              t.cloudId || t.id,
-              currentUserDisp
-            );
-            if (!cancelResult) return;
-
-            const customer = state.customers.find(c =>
-              c.id === t.customerId ||
-              String(c.name || '').trim().toLowerCase() === String(t.partner || '').trim().toLowerCase()
-            );
-            const newDebt = Number(cancelResult.new_debt);
-            if (customer && Number.isFinite(newDebt)) {
-              customer.debt = newDebt;
-              if (!customer.debtHistory) customer.debtHistory = [];
-              customer.debtHistory.push({
-                id: `void-${Date.now()}`,
-                date: new Date().toISOString(),
-                type: 'adjust',
-                amount: Number(t.value) || 0,
-                notes: `Hủy phiếu thu ${t.id} - khôi phục công nợ`,
-                debtAfter: newDebt
-              });
-              localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-            }
-          } else {
-            const savedToCloud = await dbSaveCashbookTransaction({
-              ...t,
-              status: 'Đã hủy'
-            });
-            if (!savedToCloud) {
-              showToast('Không thể hủy phiếu trên Cloud. Dữ liệu chưa thay đổi.', 'danger');
-              return;
-            }
+          const cashbookId = getCanonicalCashbookId(t);
+          if (!cashbookId) {
+            showToast('Không xác định được mã phiếu Cloud. Dữ liệu chưa thay đổi.', 'danger');
+            return;
           }
 
-          t.status = 'Đã hủy';
-          saveCashbookTransactions(txs);
+          const savedToCloud = await dbCancelCashbookEntry(cashbookId, `Hủy phiếu ${t.id}`);
+          if (!savedToCloud) return;
+
+          // The database ledger is authoritative. Do not convert an optional
+          // RPC field with Number(null), because that incorrectly becomes zero.
+          const customerRefreshed = savedToCloud.customer_id
+            ? await dbRefreshCustomerFinancialState(savedToCloud.customer_id)
+            : true;
+          const cashbookRefreshed = await dbFetchCashbookTransactions();
+          const supplierDebt = Number(savedToCloud.supplier_debt);
+          if (savedToCloud.supplier_id && savedToCloud.supplier_debt != null && Number.isFinite(supplierDebt)) {
+            const supplier = state.suppliers.find(s => String(s.id) === String(savedToCloud.supplier_id));
+            if (supplier) supplier.debt = supplierDebt;
+          }
+          localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
+
+          // Reversal rows have cancelled status so they do not affect totals.
+          // Enable this audit filter after cancellation so both rows are visible.
+          activeFilters.statusCancelled = true;
+          const cancelledCheckbox = document.getElementById('so-quy-status-cancelled');
+          if (cancelledCheckbox) cancelledCheckbox.checked = true;
           
-          showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
+          if (!customerRefreshed || !cashbookRefreshed) {
+            showToast('Phiếu đã hủy trên Cloud nhưng giao diện chưa tải lại đầy đủ. Vui lòng tải lại trang.', 'warning');
+          } else {
+            showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
+          }
           detailModal.classList.remove('active');
           renderAll();
         }

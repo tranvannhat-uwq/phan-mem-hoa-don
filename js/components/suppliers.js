@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260731-price-items-pagination';
-import { renderAll } from '../main.js';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
 
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return 0;
@@ -87,6 +87,12 @@ function cashbookTxMatchesSupplier(tx, supplier, purchaseIds) {
 }
 
 function calculateSupplierMetrics(supplier) {
+  return {
+    totalPurchase: toNumber(supplier.totalPurchase),
+    payableDebt: toNumber(supplier.debt)
+  };
+  /* Legacy local calculations are intentionally unreachable. Supplier totals
+     now come only from the database transaction aggregates. */
   const supplierId = String(supplier.id);
   const purchases = getSupplierPurchaseDocs().filter(doc => String(getDocSupplierId(doc)) === supplierId);
   const purchaseIds = new Set(purchases.map(getDocId).filter(Boolean).map(String));
@@ -251,6 +257,7 @@ export function setupSupplierManagement() {
       document.getElementById('supplier-modal-title').innerText = 'Thêm nhà cung cấp';
       form.reset();
       document.getElementById('supplier-id').value = '';
+      document.getElementById('supplier-debt').disabled = false;
       
       // Auto-generate code if empty
       const nextNum = state.suppliers.length + 1;
@@ -287,14 +294,22 @@ export function setupSupplierManagement() {
       }
 
       const supplierData = {
-        id: id || 'supplier-' + Date.now(),
+        id: id || null,
         code,
         name,
         phone,
         address,
-        debt,
+        openingDebt: debt,
         notes
       };
+
+      const saved = await dbSaveSupplier(supplierData);
+      if (!saved) return;
+      closeModal();
+      renderSuppliersTable();
+      populateSupplierDatalist();
+      showToast(id ? 'Cập nhật nhà cung cấp thành công!' : 'Thêm nhà cung cấp thành công!');
+      return;
 
       if (id) {
         // Cập nhật
@@ -427,14 +442,23 @@ function openEditSupplierModal(idx) {
   document.getElementById('supplier-phone').value = s.phone || '';
   document.getElementById('supplier-address').value = s.address || '';
   document.getElementById('supplier-debt').value = s.debt || 0;
+  document.getElementById('supplier-debt').disabled = true;
   document.getElementById('supplier-notes').value = s.notes || '';
 
   modal.classList.add('active');
 }
 
-function handleDeleteSupplier(idx) {
+async function handleDeleteSupplier(idx) {
   const s = state.suppliers[idx];
   if (!s) return;
+
+  if (!confirm(`Ngừng sử dụng nhà cung cấp "${s.name}"? Dữ liệu cũ sẽ được giữ nguyên.`)) return;
+  const deactivated = await dbDeleteSupplier(s.id, 'Ngừng sử dụng từ danh sách nhà cung cấp');
+  if (!deactivated) return;
+  showToast('Đã ngừng sử dụng nhà cung cấp.', 'warning');
+  renderSuppliersTable();
+  populateSupplierDatalist();
+  return;
 
   if (confirm(`Bạn có chắc chắn muốn xóa nhà cung cấp "${s.name}"?`)) {
     state.suppliers.splice(idx, 1);
@@ -638,8 +662,20 @@ async function processSupplierExcelImport() {
   
   const modeVal = document.querySelector('input[name="supplier-import-mode"]:checked');
   const mode = modeVal ? modeVal.value : 'merge';
+  if (mode === 'overwrite') {
+    showToast('Không hỗ trợ ghi đè/xóa hàng loạt nhà cung cấp. Hãy dùng chế độ gộp.', 'warning');
+    return;
+  }
   
   try {
+    const authoritativeResult = await dbSaveSuppliersBulk(supplierExcelImportData);
+    if (!authoritativeResult) return;
+    closeSupplierExcelModal();
+    renderSuppliersTable();
+    populateSupplierDatalist();
+    renderAll();
+    showToast(`Đã nhập thành công ${authoritativeResult.saved} nhà cung cấp!`, 'success');
+    return;
     showToast("Đang lưu nhà cung cấp vào hệ thống...", "info");
     
     if (mode === 'overwrite') {
@@ -680,9 +716,9 @@ async function processSupplierExcelImport() {
     }
     
     // Save suppliers to cloud in one batch
-    await dbSaveSuppliersBulk(supplierExcelImportData);
+    const bulkSaved = await dbSaveSuppliersBulk(supplierExcelImportData);
+    if (!bulkSaved) return;
     
-    localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
     closeSupplierExcelModal();
     
     renderSuppliersTable();

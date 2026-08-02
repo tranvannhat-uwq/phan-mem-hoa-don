@@ -14,8 +14,9 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20260731-price-items-pagination';
-import { renderAll } from '../main.js';
+} from '../services/supabase.js?v=20260802-backup-cell-fix1';
+import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
+import { renderPurchasesPanel } from './purchases.js?v=20260802-backup-cell-fix1';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---
 
@@ -23,7 +24,7 @@ export function renderGoodsPanel() {
   const panel = document.getElementById('goods-panel');
   if (!panel || !panel.classList.contains('active')) return;
 
-  renderPurchasePanel(panel);
+  renderPurchasesPanel(panel);
 }
 
 function getPurchaseReceipts() {
@@ -1473,6 +1474,11 @@ function handleRecipeExcelImport(event) {
 // --- THIẾT LẬP HÀNH VI CHUNG (LISTENERS & INITIALIZATION) ---
 
 export function setupGoodsPanel() {
+  // Inventory and production are outside the active project scope. The menu
+  // renders the database-backed purchase module directly via renderGoodsPanel;
+  // do not register any legacy stock/production actions or API calls.
+  return;
+
   // 1. Chuyển đổi Sub-tabs lớn (Kiểm kho <-> Sản xuất)
   const tabBtns = document.querySelectorAll('.goods-main-tab-btn');
   tabBtns.forEach(btn => {

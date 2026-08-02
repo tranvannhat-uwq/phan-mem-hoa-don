@@ -41,6 +41,7 @@ export const state = {
   customersPage: 1,
   suppliers: [],
   suppliersPage: 1,
+  purchases: [],
   rawMaterials: [],
   semiFinished: [],
   recipes: [],
