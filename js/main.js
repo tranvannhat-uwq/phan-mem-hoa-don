@@ -1,19 +1,19 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage } from './services/supabase.js?v=20260803-cloud-reset-sync1';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260803-cloud-reset-sync1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260803-cloud-reset-sync1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260803-cloud-reset-sync1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260803-cloud-reset-sync1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260803-cloud-reset-sync1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260803-cloud-reset-sync1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260803-cloud-reset-sync1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260803-cloud-reset-sync1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260803-cloud-reset-sync1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260803-cloud-reset-sync1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260803-cloud-reset-sync1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260803-cloud-reset-sync1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260803-cloud-reset-sync1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage } from './services/supabase.js?v=20260803-amend-advance1';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260803-amend-advance1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260803-amend-advance1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260803-amend-advance1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260803-amend-advance1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260803-amend-advance1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260803-amend-advance1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260803-amend-advance1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260803-amend-advance1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260803-amend-advance1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260803-amend-advance1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260803-amend-advance1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260803-amend-advance1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260803-amend-advance1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng

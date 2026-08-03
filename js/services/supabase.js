@@ -3298,6 +3298,49 @@ export function backfillMultiCompanyAndRevenueData() {
 
 // --- THỦ TỤC TRANSACTIONAL CSDL (DATABASE TRANSACTIONS) ---
 
+function buildOrderCommand(order) {
+  return {
+    id: order.id,
+    idempotencyKey: order.idempotencyKey,
+    draftId: order.draftId || null,
+    customerId: order.customerId || null,
+    customerName: order.customerName || '',
+    date: order.date || new Date().toISOString(),
+    notes: order.notes || '',
+    pricelistId: order.pricelistId || null,
+    discountType: order.discountType || 'amount',
+    discountValue: Number(order.discountValue || 0),
+    otherFeeType: order.otherFeeType || 'amount',
+    otherFeeValue: Number(order.otherFeeValue || 0),
+    shippingFeeValue: Number(order.shippingFeeValue || order.shippingFeeAmount || 0),
+    shippingFeeAmount: Number(order.shippingFeeAmount || order.shippingFeeValue || 0),
+    totalMarket: Number(order.totalMarket || 0),
+    totalDiscount: Number(order.totalDiscount || 0),
+    subtotal: Number(order.subtotal || 0),
+    discountAmount: Number(order.discountAmount || 0),
+    otherFeeAmount: Number(order.otherFeeAmount || 0),
+    totalPayable: Number(order.totalPayable || 0),
+    amountDue: Number(order.amountDue || 0),
+    paidAmount: 0,
+    items: (order.items || []).map(item => ({
+      variantId: item.variantId || item.productId,
+      quantity: Number(item.quantity),
+      discountType: item.discountType || 'percent',
+      discountValue: Number(item.discountValue ?? item.discountPercent ?? 0),
+      discountPercent: Number(item.discountPercent || 0),
+      price: Number(item.price || item.unitPrice || 0),
+      unitPrice: Number(item.unitPrice || item.price || 0),
+      listPrice: Number(item.listPrice || item.price || 0),
+      finalUnitPrice: Number(item.finalUnitPrice || item.price || 0),
+      priceListId: item.priceListId || order.pricelistId || null,
+      productId: item.productId || item.variantId,
+      colorCode: item.colorCode || '',
+      colorPercent: Number(item.colorPercent || 0),
+      notes: item.notes || ''
+    }))
+  };
+}
+
 export async function dbConfirmOrder(order) {
   if (state.currentUser?.role === 'sale') {
     const usedPriceListIds = new Set([
@@ -3376,25 +3419,55 @@ export async function dbConfirmOrder(order) {
   return true;
 }
 
+export async function dbAmendOrder(originalOrderId, order, reason) {
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    throw new Error('Chỉ Admin hoặc Kế toán được sửa đơn đã chốt.');
+  }
+  if (!isCloudActive || !supabaseClient) {
+    throw new Error('Sửa đơn đã chốt cần kết nối Cloud để bảo đảm transaction.');
+  }
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_amend_order', {
+      p_order_id: originalOrderId,
+      p_order: buildOrderCommand(order),
+      p_reason: String(reason || '').trim()
+    });
+    if (error) throw error;
+    if (data && data.success === false) {
+      throw new Error(data.message || 'Transaction sửa đơn đã chốt không thành công');
+    }
+    return data || { success: true };
+  } catch (err) {
+    console.error('RPC amend order error:', err);
+    const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_amend_order');
+    throw new Error(missingRpc
+      ? 'Chưa có chức năng sửa đơn trên Supabase. Hãy chạy migration 0019 rồi thử lại.'
+      : 'Không thể sửa đơn đã chốt: ' + (err.message || 'Transaction thất bại'));
+  }
+}
+
 export async function dbRecordCustomerPayment(customerId, amount, notes, paymentMethod = 'cash', idempotencyKey = '') {
   if (isCloudActive && supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.rpc('rpc_record_customer_payment', {
+      const { data, error } = await supabaseClient.rpc('rpc_record_customer_receipt', {
         p_customer_id: customerId,
         p_amount: amount,
-        p_notes: notes || 'Thu tiền nợ',
+        p_notes: notes || 'Thu tiền khách hàng',
         p_payment_method: paymentMethod || 'cash',
         p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID()
       });
       if (error) throw error;
       return data || { success: true };
     } catch (err) {
-      console.error('RPC customer payment error:', err);
-      showToast('Lỗi ghi nhận thu tiền: ' + err.message, 'danger');
+      console.error('RPC customer receipt error:', err);
+      const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_record_customer_receipt');
+      showToast(missingRpc
+        ? 'Chưa có chức năng nhận tiền trả trước trên Supabase. Hãy chạy migration 0019.'
+        : 'Lỗi ghi nhận thu tiền: ' + err.message, 'danger');
       return false;
     }
   }
-  showToast('Thu nợ cần kết nối Cloud để bảo đảm transaction và ledger.', 'danger');
+  showToast('Thu tiền khách hàng cần kết nối Cloud để bảo đảm transaction và ledger.', 'danger');
   return false;
 }
 

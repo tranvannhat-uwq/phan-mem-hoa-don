@@ -24,6 +24,7 @@ Run these files in order on a staging clone first:
 16. `0016_customer_import_rpc_variable_conflict_fix.sql`
 17. `0017_privileged_order_business_date.sql`
 18. `0018_quick_customer_creation_rpc.sql`
+19. `0019_order_amendment_and_customer_advance.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -121,3 +122,8 @@ the invoice screen. Admin/Accounting may choose an active manager; Sale users
 are forcibly assigned as the new customer's manager. Financial balances remain
 server-owned, direct customer-table insert policies are not widened, and every
 quick creation is audited.
+
+Migration `0019` lets Admin/Accounting amend a settled order by atomically
+cancelling the immutable original and confirming a replacement. Orders with
+active returns remain locked. It also adds customer receipts that may create a
+negative customer balance (advance credit) for later orders to consume.

@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
-import { renderAll } from '../main.js?v=20260803-cloud-reset-sync1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260803-cloud-reset-sync1';
-import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260803-cloud-reset-sync1';
+import { renderAll } from '../main.js?v=20260803-amend-advance1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260803-amend-advance1';
+import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260803-amend-advance1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -447,7 +447,10 @@ export function setupSoQuyPanel() {
       };
       
       const normalizedCategory = category.toLowerCase();
-      const affectsCustomerDebt = normalizedCategory.includes('nợ') || normalizedCategory.includes('tiền hàng');
+      const affectsCustomerDebt = normalizedCategory.includes('nợ')
+        || normalizedCategory.includes('tiền hàng')
+        || normalizedCategory.includes('tiền khách hàng')
+        || normalizedCategory.includes('trả trước');
       let paymentResult = null;
       let matchedCustomer = null;
 
@@ -469,13 +472,8 @@ export function setupSoQuyPanel() {
         }
 
         newTx.partner = matchedCustomer.name;
-        const currentDebt = Number(matchedCustomer.debt) || 0;
-        if (currentDebt <= 0) {
-          showToast('Khách hàng này hiện không có công nợ cần thu!', 'danger');
-          return;
-        }
-        if (value <= 0 || value > currentDebt) {
-          showToast(`Số tiền thu phải lớn hơn 0 và không vượt quá công nợ hiện tại (${formatCurrency(currentDebt)})!`, 'danger');
+        if (value <= 0) {
+          showToast('Số tiền thu phải lớn hơn 0!', 'danger');
           return;
         }
 

@@ -1,13 +1,13 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-cloud-reset-sync1';
-import { renderAll } from '../main.js?v=20260803-cloud-reset-sync1';
-import { openPrintTypeModal, syncInvoiceBusinessDateControl } from './invoice.js?v=20260803-cloud-reset-sync1';
-import { openHistoryOrderExportModal } from './customers.js?v=20260803-cloud-reset-sync1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-amend-advance1';
+import { renderAll } from '../main.js?v=20260803-amend-advance1';
+import { openPrintTypeModal, syncInvoiceBusinessDateControl } from './invoice.js?v=20260803-amend-advance1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260803-amend-advance1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260803-cloud-reset-sync1';
+} from '../domain/order-financials.js?v=20260803-amend-advance1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { orderDateToInputValue } from '../domain/order-business-date.js';
 
@@ -563,6 +563,9 @@ export function renderHistoryOrders() {
         String(item.saleId || item.orderId) === String(order.id)
         && !['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())
       );
+      const showAmendBtn = order.status === 'settled'
+        && ['admin', 'accounting'].includes(state.currentUser?.role)
+        && activeOrderReturns.length === 0;
 
       const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
       let plName = 'Nhập tay';
@@ -618,6 +621,11 @@ export function renderHistoryOrders() {
                 <button class="history-action-btn history-action-view history-view-btn" data-id="${order.id}" title="Xem chi tiết">
                   <i data-lucide="eye"></i> Xem
                 </button>
+                ${showAmendBtn ? `
+                  <button class="history-action-btn history-action-edit history-edit-btn" data-id="${order.id}" title="Sửa đơn đã chốt">
+                    <i data-lucide="edit"></i> Sửa
+                  </button>
+                ` : ''}
                 ${showReturnBtn ? `
                   <button class="history-action-btn history-action-return history-return-btn" data-id="${order.id}" title="Trả hàng">
                     <i data-lucide="rotate-ccw"></i> Trả
@@ -701,6 +709,9 @@ export function renderHistoryOrders() {
         String(item.saleId || item.orderId) === String(order.id)
         && !['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())
       );
+      const showAmendBtn = order.status === 'settled'
+        && ['admin', 'accounting'].includes(state.currentUser?.role)
+        && activeOrderReturns.length === 0;
 
       const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
       
@@ -781,6 +792,11 @@ export function renderHistoryOrders() {
                 <button class="btn btn-teal btn-sm flex items-center justify-center gap-1 history-view-btn" data-id="${order.id}">
                   <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Xem
                 </button>
+                ${showAmendBtn ? `
+                  <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}" title="Sửa đơn đã chốt">
+                    <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
+                  </button>
+                ` : ''}
                 ${showReturnBtn ? `
                   <button class="btn btn-warning btn-sm flex items-center justify-center gap-1 history-return-btn" data-id="${order.id}" style="background: #f59e0b; border-color: #f59e0b; color: #fff;">
                     <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
@@ -942,6 +958,7 @@ export function renderHistoryOrders() {
 
 
 function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
+  const isFinalizedAmendment = !isReadOnly && order.status === 'settled';
   syncInvoiceBusinessDateControl(orderDateToInputValue(order.date), isReadOnly);
   // Đồng bộ khách hàng
   if (order.customerId) {
@@ -1054,6 +1071,11 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   const saveBtn = document.getElementById('btn-save-order');
   const draftBtn = document.getElementById('btn-draft-order');
   const panelTitle = document.querySelector('#invoice-panel .panel-title');
+
+  if (saveBtn) {
+    saveBtn.removeAttribute('data-edit-order-id');
+    saveBtn.removeAttribute('data-amend-order-id');
+  }
   
   if (isReadOnly) {
     if (saveBtn) saveBtn.style.display = 'none';
@@ -1062,14 +1084,25 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   } else {
     if (saveBtn) {
       saveBtn.style.display = 'inline-flex';
-      saveBtn.innerHTML = `<i data-lucide="check-square"></i> Chốt đơn`;
-      saveBtn.setAttribute('data-edit-order-id', order.id);
+      if (isFinalizedAmendment) {
+        saveBtn.innerHTML = `<i data-lucide="check-square"></i> Lưu bản sửa & chốt lại`;
+        saveBtn.setAttribute('data-amend-order-id', order.id);
+      } else {
+        saveBtn.innerHTML = `<i data-lucide="check-square"></i> Chốt đơn`;
+        saveBtn.setAttribute('data-edit-order-id', order.id);
+      }
     }
     if (draftBtn) {
-      draftBtn.style.display = 'inline-flex';
-      draftBtn.innerHTML = `<i data-lucide="file-text"></i> Cập nhật nháp`;
+      draftBtn.style.display = isFinalizedAmendment ? 'none' : 'inline-flex';
+      if (!isFinalizedAmendment) {
+        draftBtn.innerHTML = `<i data-lucide="file-text"></i> Cập nhật nháp`;
+      }
     }
-    if (panelTitle) panelTitle.innerHTML = `<i data-lucide="edit"></i> Hiệu chỉnh đơn nháp ${getOrderDisplayCode(order)}`;
+    if (panelTitle) {
+      panelTitle.innerHTML = isFinalizedAmendment
+        ? `<i data-lucide="edit"></i> Sửa đơn đã chốt ${getOrderDisplayCode(order)}`
+        : `<i data-lucide="edit"></i> Hiệu chỉnh đơn nháp ${getOrderDisplayCode(order)}`;
+    }
   }
   
   // Chuyển Tab

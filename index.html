@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260803-cloud-reset-sync1">
+  <link rel="stylesheet" href="style.css?v=20260803-amend-advance1">
 </head>
 <body>
 
@@ -2484,7 +2484,7 @@
   <div class="modal-overlay" id="pay-debt-modal">
     <div class="modal-content" style="max-width: 400px;">
       <div class="modal-header">
-        <h3 class="modal-title">Thu nợ khách hàng</h3>
+        <h3 class="modal-title">Thu tiền / Nhận trả trước</h3>
         <button class="modal-close" id="btn-close-pay-debt-modal">
           <i data-lucide="x"></i>
         </button>
@@ -2494,7 +2494,7 @@
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
           <div style="font-size: 0.9rem; line-height: 1.5; background: rgba(255, 255, 255, 0.03); border-radius: 8px; padding: 0.75rem;">
             <div><strong>Khách hàng:</strong> <span id="pay-debt-cust-name" style="color: #fff; font-weight: 600;"></span></div>
-            <div style="margin-top: 0.25rem;"><strong>Công nợ hiện tại:</strong> <span id="pay-debt-cust-current-debt" style="color: var(--color-danger); font-weight: 700;">0 ₫</span></div>
+            <div style="margin-top: 0.25rem;"><strong>Số dư công nợ:</strong> <span id="pay-debt-cust-current-debt" style="color: var(--color-danger); font-weight: 700;">0 ₫</span></div>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label" for="pay-debt-amount">Số tiền khách trả *</label>
@@ -2504,13 +2504,13 @@
             </div>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label" for="pay-debt-notes">Ghi chú thu nợ</label>
+            <label class="form-label" for="pay-debt-notes">Ghi chú phiếu thu</label>
             <input type="text" class="form-control" id="pay-debt-notes" placeholder="Ví dụ: Chuyển khoản, tiền mặt..." style="width: 100%;">
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-pay-debt">Hủy bỏ</button>
-          <button type="submit" class="btn btn-primary" style="background-color: var(--color-primary);">Xác nhận thu nợ</button>
+          <button type="submit" class="btn btn-primary" style="background-color: var(--color-primary);">Xác nhận thu tiền</button>
         </div>
       </form>
     </div>
@@ -3596,7 +3596,7 @@
             <label class="form-label" for="receipt-category">Loại thu chi</label>
             <select class="form-control" id="receipt-category" required style="width: 100%;">
               <option value="Thu thu tiền hàng">Thu thu tiền hàng</option>
-              <option value="Thu nợ khách hàng">Thu nợ khách hàng</option>
+              <option value="Thu tiền khách hàng / Trả trước">Thu tiền khách hàng / Trả trước</option>
               <option value="Thu Hộ trợ vận chuyển cho khách">Thu Hộ trợ vận chuyển cho khách</option>
               <option value="Thu Thư lương thị trường">Thu Thư lương thị trường</option>
               <option value="Thu tiền phạt">Thu tiền phạt</option>
@@ -4057,6 +4057,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260803-cloud-reset-sync1"></script>
+  <script type="module" src="js/main.js?v=20260803-amend-advance1"></script>
 </body>
 </html>

@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-cloud-reset-sync1';
-import { renderAll } from '../main.js?v=20260803-cloud-reset-sync1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-cloud-reset-sync1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-cloud-reset-sync1';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260803-cloud-reset-sync1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-amend-advance1';
+import { renderAll } from '../main.js?v=20260803-amend-advance1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-amend-advance1';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-amend-advance1';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260803-amend-advance1';
 import { collectCustomerDebt } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
@@ -1406,7 +1406,7 @@ export async function handlePayDebtSubmit(e) {
   e.preventDefault();
   const customerId = document.getElementById('pay-debt-customer-id').value;
   const amountPaid = parseFloat(document.getElementById('pay-debt-amount').value);
-  const notes = document.getElementById('pay-debt-notes').value.trim() || 'Thu nợ khách hàng';
+  const notes = document.getElementById('pay-debt-notes').value.trim() || 'Thu tiền khách hàng';
   
   if (!customerId || isNaN(amountPaid) || amountPaid <= 0) {
     showToast('Số tiền trả không hợp lệ!', 'danger');
@@ -1417,14 +1417,6 @@ export async function handlePayDebtSubmit(e) {
   if (!cust) return;
 
   const debtBefore = Number(cust.debt) || 0;
-  if (debtBefore <= 0) {
-    showToast('Khách hàng không còn công nợ cần thu.', 'warning');
-    return;
-  }
-  if (amountPaid > debtBefore) {
-    showToast(`Số tiền thu không được vượt quá công nợ hiện tại (${formatCurrency(debtBefore)}).`, 'warning');
-    return;
-  }
   
   if (!pendingCustomerPaymentKey) pendingCustomerPaymentKey = globalThis.crypto.randomUUID();
   const currentUserDisp = state.currentUser ? (state.currentUser.displayName || state.currentUser.username) : 'Administrator';
@@ -1457,7 +1449,7 @@ export async function handlePayDebtSubmit(e) {
   localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
   addCashbookTransaction({
       type: 'thu',
-      category: 'Thu nợ khách hàng',
+      category: 'Thu tiền khách hàng / Trả trước',
       partner: cust.name,
       value: amountPaid,
       method: 'cash',
@@ -1472,7 +1464,10 @@ export async function handlePayDebtSubmit(e) {
     });
     closePayDebtModal();
     renderAll();
-    showToast(`Đã thu nợ ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}!`, 'success');
+    const balanceMessage = cust.debt < 0
+      ? ` Khách đang có ${formatCurrency(Math.abs(cust.debt))} tiền trả trước.`
+      : ` Công nợ còn lại ${formatCurrency(cust.debt)}.`;
+    showToast(`Đã nhận ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}.${balanceMessage}`, 'success');
 }
 
 function getAllowedCustomerExportColumns() {

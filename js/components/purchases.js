@@ -5,7 +5,7 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20260803-cloud-reset-sync1';
+} from '../services/supabase.js?v=20260803-amend-advance1';
 
 let pendingPurchaseKey = '';
 const pendingSupplierPaymentKeys = new Map();

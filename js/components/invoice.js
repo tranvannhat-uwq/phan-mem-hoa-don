@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-cloud-reset-sync1';
-import { renderAll, switchTab } from '../main.js?v=20260803-cloud-reset-sync1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260803-amend-advance1';
+import { renderAll, switchTab } from '../main.js?v=20260803-amend-advance1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260803-cloud-reset-sync1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-cloud-reset-sync1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260803-amend-advance1';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-amend-advance1';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
 import { supportsInvoiceLineDiscount } from '../domain/invoice-discount.js';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
@@ -145,7 +145,10 @@ function resolveProductPrice(product) {
 
 function isDraftPriceListOverrideEnabled() {
   const saveBtn = document.getElementById('btn-save-order');
-  return Boolean(saveBtn?.getAttribute('data-edit-order-id'));
+  return Boolean(
+    saveBtn?.getAttribute('data-edit-order-id')
+    || saveBtn?.getAttribute('data-amend-order-id')
+  );
 }
 
 function getSelectedInvoicePriceListId() {
@@ -1064,13 +1067,39 @@ export async function saveActiveOrder(status = 'settled') {
     // Lấy ID đơn sửa nếu có
     const saveBtnEl = document.getElementById('btn-save-order');
     const editOrderId = saveBtnEl ? saveBtnEl.getAttribute('data-edit-order-id') : null;
+    const amendOrderId = saveBtnEl ? saveBtnEl.getAttribute('data-amend-order-id') : null;
+
+    if (amendOrderId && status !== 'settled') {
+      showToast('Đơn đã chốt chỉ có thể được lưu thành một bản chốt thay thế.', 'warning');
+      return null;
+    }
+
+    let amendmentReason = '';
+    if (amendOrderId) {
+      amendmentReason = window.prompt('Nhập lý do sửa đơn đã chốt (ít nhất 3 ký tự):', 'Điều chỉnh thông tin đơn hàng')?.trim() || '';
+      if (!amendmentReason) return null;
+      if (amendmentReason.length < 3) {
+        showToast('Lý do sửa đơn phải có ít nhất 3 ký tự.', 'warning');
+        return null;
+      }
+    }
 
     showToast('Đang lưu hóa đơn...', 'info');
 
-    const saved = status === 'settled' ? await dbConfirmOrder(order) : await dbSaveOrder(order);
+    const saved = amendOrderId
+      ? await dbAmendOrder(amendOrderId, order, amendmentReason)
+      : (status === 'settled' ? await dbConfirmOrder(order) : await dbSaveOrder(order));
     if (saved) {
       // Finalized IDs, snapshots, prices and totals come back from the database.
       const persistedOrder = status === 'settled' && saved.order ? saved.order : order;
+      if (amendOrderId) {
+        lastFinalizedOrder = persistedOrder;
+        await fetchCloudData();
+        resetInvoiceBuilder();
+        renderAll();
+        showToast(`Đã lưu bản sửa ${persistedOrder.id}; đơn cũ ${amendOrderId} được giữ lại ở trạng thái đã hủy.`, 'success');
+        return persistedOrder;
+      }
       if (status === 'draft') {
         showToast(`Đã lưu đơn nháp ${persistedOrder.id} thành công!`, 'success');
       } else {
@@ -1197,6 +1226,7 @@ export function resetInvoiceBuilder() {
     saveBtn.style.display = 'inline-flex';
     saveBtn.innerHTML = `<i data-lucide="check-square"></i> Thanh toán & Chốt đơn`;
     saveBtn.removeAttribute('data-edit-order-id');
+    saveBtn.removeAttribute('data-amend-order-id');
   }
   if (draftBtn) {
     draftBtn.style.display = 'inline-flex';
