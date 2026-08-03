@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260802-backup-cell-fix1';
-import { renderAll, switchTab } from '../main.js?v=20260802-backup-cell-fix1';
+import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-customer-toolbar-layout1';
+import { renderAll, switchTab } from '../main.js?v=20260803-customer-toolbar-layout1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260802-backup-cell-fix1';
-import { addCashbookTransaction } from './so_quy.js?v=20260802-backup-cell-fix1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260803-customer-toolbar-layout1';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-customer-toolbar-layout1';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';

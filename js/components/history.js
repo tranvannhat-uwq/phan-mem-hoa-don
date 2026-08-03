@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260802-backup-cell-fix1';
-import { renderAll } from '../main.js?v=20260802-backup-cell-fix1';
-import { openPrintTypeModal } from './invoice.js?v=20260802-backup-cell-fix1';
-import { openHistoryOrderExportModal } from './customers.js?v=20260802-backup-cell-fix1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-customer-toolbar-layout1';
+import { renderAll } from '../main.js?v=20260803-customer-toolbar-layout1';
+import { openPrintTypeModal } from './invoice.js?v=20260803-customer-toolbar-layout1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260803-customer-toolbar-layout1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary

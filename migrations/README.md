@@ -19,6 +19,9 @@ Run these files in order on a staging clone first:
 11. `0011_confirm_order_variable_conflict_fix.sql`
 12. `0012_phase5_reporting_kpi_payroll.sql`
 13. `0013_legacy_cashbook_customer_and_order_compatibility.sql`
+14. `0014_sales_return_variable_conflict_fix.sql`
+15. `0015_customer_opening_financial_import.sql`
+16. `0016_customer_import_rpc_variable_conflict_fix.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -94,3 +97,14 @@ turn preserved receipts into customer credit instead of deleting money or
 forcing debt to zero. The old cancellation RPC signatures remain as wrappers.
 It has no inventory or production dependency. Run
 `migrations/tests/phase6_legacy_compatibility_integration.sql` after applying it.
+
+Migration `0015` adds an Admin/Accounting-only RPC for importing legacy
+customer financial baselines. Re-importing replaces the previous imported
+contribution instead of adding it again, while totals produced later by orders,
+returns and payments remain intact. Direct API writes to both operational totals
+and imported baseline columns stay blocked.
+
+Migration `0016` fixes the `customer_id is ambiguous` error for databases that
+already ran the first revision of `0015`. It changes only PL/pgSQL identifier
+resolution, reasserts the RPC security settings and leaves all imported totals,
+ledgers and formulas unchanged.

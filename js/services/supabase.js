@@ -698,6 +698,13 @@ export async function fetchCloudData() {
             totalTransaction: parseFloat(cust.total_transaction || 0),
             totalReturn: parseFloat(cust.total_return || 0),
             netRevenue: parseFloat(cust.net_revenue || 0),
+            importedDebtBaseline: parseFloat(cust.imported_debt_baseline || 0),
+            importedTotalTransactionBaseline: parseFloat(cust.imported_total_transaction_baseline || 0),
+            importedTotalReturnBaseline: parseFloat(cust.imported_total_return_baseline || 0),
+            importedNetRevenueBaseline: parseFloat(cust.imported_net_revenue_baseline || 0),
+            importedLastOrderAtBaseline: cust.imported_last_order_at_baseline || null,
+            importedCreatedAtBaseline: cust.imported_created_at_baseline || null,
+            financialBaselineImportedAt: cust.financial_baseline_imported_at || null,
             lastOrderAt: cust.last_order_at || null,
             lastPaymentAt: cust.last_payment_at || null,
             createdAt: cust.created_at || null,
@@ -1889,6 +1896,13 @@ export async function dbSaveCustomersBulk(customers) {
       const dbRows = customers.map(customer => mapCustomerToDbRow(customer));
       const chunkSize = 200;
 
+      if (dbRows.length > 0) {
+        console.info('[Customer Excel Import] Customer profile upsert payload sample', {
+          payload: dbRows[0],
+          dateFields: 'created_at and last_order_at are sent through the reviewed baseline RPC'
+        });
+      }
+
       for (let offset = 0; offset < dbRows.length; offset += chunkSize) {
         const chunk = dbRows.slice(offset, offset + chunkSize);
         const { error } = await supabaseClient
@@ -1905,6 +1919,80 @@ export async function dbSaveCustomersBulk(customers) {
     }
   }
   return true;
+}
+
+// Customer profile fields and imported financial baselines use separate write
+// boundaries. This RPC is Admin/Accounting-only and replaces only the previous
+// imported contribution, so retrying the same file cannot double the totals.
+export async function dbImportCustomerFinancialBaselines(customers) {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Cần kết nối Supabase để lưu số liệu đầu kỳ của khách hàng.', 'warning');
+    return false;
+  }
+
+  try {
+    const importedAt = new Date().toISOString();
+    const rows = (customers || []).map(customer => {
+      const presence = customer.importFieldPresence || {};
+      return {
+        id: customer.id,
+        debt: presence.debt === false ? null : Number(customer.debt ?? 0),
+        totalTransaction: presence.totalTransaction === false ? null : Number(customer.totalTransaction ?? 0),
+        totalReturn: presence.totalReturn === false ? null : Number(customer.totalReturn ?? 0),
+        netRevenue: presence.netRevenue === false ? null : Number(customer.netRevenue ?? 0),
+        lastOrderAt: presence.lastOrderAt === false ? null : (customer.lastOrderAt || null),
+        createdAt: presence.createdAt === false ? null : (customer.createdAt || null),
+        importedAt: customer.salesBaselineImportedAt || importedAt
+      };
+    });
+    if (rows.length > 0) {
+      console.info('[Customer Excel Import] Supabase RPC payload sample', {
+        rpc: 'rpc_import_customer_financial_baselines',
+        databaseMapping: {
+          createdAt: 'customers.created_at',
+          lastOrderAt: 'customers.last_order_at',
+          debt: 'customers.debt + customer_debt_transactions',
+          totalTransaction: 'customers.total_transaction',
+          totalReturn: 'customers.total_return',
+          netRevenue: 'customers.net_revenue'
+        },
+        payload: rows[0]
+      });
+    }
+    const chunkSize = 200;
+
+    for (let offset = 0; offset < rows.length; offset += chunkSize) {
+      const chunk = rows.slice(offset, offset + chunkSize);
+      const batchNumber = Math.floor(offset / chunkSize) + 1;
+      const { data, error } = await supabaseClient.rpc('rpc_import_customer_financial_baselines', {
+        p_rows: chunk
+      });
+      if (error) {
+        const batchError = new Error(`Batch ${batchNumber}, dòng ${offset + 2}-${offset + chunk.length + 1}: ${error.message}`);
+        batchError.code = error.code;
+        throw batchError;
+      }
+      if (!data?.success || Number(data.processed) !== Math.min(chunkSize, rows.length - offset)) {
+        throw new Error(`Batch ${batchNumber}: Máy chủ không xác nhận đủ ${chunk.length} dòng số liệu đầu kỳ.`);
+      }
+    }
+    return true;
+  } catch (error) {
+    console.error('Error importing customer financial baselines:', error);
+    const migrationMissing = error?.code === 'PGRST202'
+      || String(error?.message || '').includes('rpc_import_customer_financial_baselines');
+    const variableConflict = /column reference ["']customer_id["'] is ambiguous/i
+      .test(String(error?.message || ''));
+    showToast(
+      variableConflict
+        ? 'Supabase đang dùng RPC nhập khách hàng bản cũ. Hãy chạy migration 0016 rồi nhập lại file; dữ liệu đầu kỳ chưa được cộng ở batch lỗi.'
+        : migrationMissing
+        ? 'Máy chủ chưa có bản nâng cấp nhập số liệu khách hàng (migration 0015). Chưa có số liệu tài chính nào bị ghi trực tiếp.'
+        : `Không thể lưu số liệu đầu kỳ khách hàng: ${error.message}`,
+      'danger'
+    );
+    return false;
+  }
 }
 
 export async function dbFetchCustomers() {
@@ -1938,6 +2026,13 @@ export async function dbFetchCustomers() {
         totalTransaction: parseFloat(cust.total_transaction || 0),
         totalReturn: parseFloat(cust.total_return || 0),
         netRevenue: parseFloat(cust.net_revenue || 0),
+        importedDebtBaseline: parseFloat(cust.imported_debt_baseline || 0),
+        importedTotalTransactionBaseline: parseFloat(cust.imported_total_transaction_baseline || 0),
+        importedTotalReturnBaseline: parseFloat(cust.imported_total_return_baseline || 0),
+        importedNetRevenueBaseline: parseFloat(cust.imported_net_revenue_baseline || 0),
+        importedLastOrderAtBaseline: cust.imported_last_order_at_baseline || null,
+        importedCreatedAtBaseline: cust.imported_created_at_baseline || null,
+        financialBaselineImportedAt: cust.financial_baseline_imported_at || null,
         lastOrderAt: cust.last_order_at || null,
         lastPaymentAt: cust.last_payment_at || null,
         notes: cust.notes || '',
@@ -2013,24 +2108,6 @@ export async function dbRefreshCustomerFinancialState(customerId) {
     console.error('Error refreshing customer financial state:', error);
     return false;
   }
-}
-
-export async function dbDeleteAllCustomers() {
-  if (isCloudActive && supabaseClient) {
-    try {
-      const { error } = await supabaseClient
-        .from(tableCustomersName)
-        .delete()
-        .neq('id', '');
-      if (error) throw error;
-      return true;
-    } catch(err) {
-      console.error(err);
-      showToast('Không thể xóa danh sách khách hàng trên đám mây: ' + err.message, 'danger');
-      return false;
-    }
-  }
-  return true;
 }
 
 export async function dbDeleteCustomer(id) {

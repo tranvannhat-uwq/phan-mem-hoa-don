@@ -5,7 +5,7 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20260802-backup-cell-fix1';
+} from '../services/supabase.js?v=20260803-customer-toolbar-layout1';
 
 let pendingPurchaseKey = '';
 const pendingSupplierPaymentKeys = new Map();

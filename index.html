@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260730-customer-column-picker">
+  <link rel="stylesheet" href="style.css?v=20260803-customer-toolbar-layout1">
 </head>
 <body>
 
@@ -1499,7 +1499,7 @@
         <div class="glass-panel">
           <div class="panel-header">
             <h2 class="panel-title"><i data-lucide="users"></i> Danh sách khách hàng & Đại lý</h2>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <div class="customer-header-actions">
               <div class="customer-column-picker" id="customer-column-picker">
                 <button class="btn btn-secondary btn-sm" id="btn-customer-column-picker" type="button" aria-expanded="false" aria-controls="customer-column-picker-popover">
                   <i data-lucide="columns-3"></i> Cột hiển thị
@@ -1526,6 +1526,7 @@
                   </div>
                 </div>
               </div>
+              <button class="btn btn-success btn-sm" id="btn-export-customers-excel" type="button"><i data-lucide="file-spreadsheet"></i> Xuất Excel</button>
               <button class="btn btn-indigo btn-sm" id="btn-open-cust-excel-modal">
                 <i data-lucide="file-up"></i> Nhập Excel
               </button>
@@ -1537,17 +1538,128 @@
             </div>
           </div>
 
-          <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <div class="customer-query-toolbar">
             <div class="search-wrapper" style="flex: 1; min-width: 250px;">
               <i data-lucide="search" class="search-icon"></i>
-              <input type="text" class="form-control-search" id="customer-search-input" placeholder="Tìm kiếm theo mã, tên hoặc số điện thoại...">
+              <input type="text" class="form-control-search" id="customer-search-input" placeholder="Mã, tên, SĐT, địa chỉ, nhãn, quản lý...">
             </div>
-            <div class="filter-wrapper" style="width: 220px;" id="cust-managed-filter-wrapper">
-              <select class="form-control" id="customer-managed-filter" style="height: 42px; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; width: 100%;">
+            <div class="filter-wrapper customer-legacy-manager-filter" id="cust-managed-filter-wrapper">
+              <select class="form-control" id="customer-managed-filter" aria-label="Lọc theo nhân viên">
                 <option value="">-- Tất cả nhân viên --</option>
               </select>
             </div>
+            <button class="btn btn-secondary" id="btn-customer-advanced-filter" type="button" aria-expanded="false">
+              <i data-lucide="list-filter"></i> Bộ lọc <span id="customer-active-filter-count" class="customer-filter-count" hidden>0</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-reset-customer-query" type="button"><i data-lucide="rotate-ccw"></i> Xóa lọc</button>
           </div>
+
+          <div class="customer-sort-toolbar" aria-label="Sắp xếp danh sách khách hàng">
+            <span class="customer-sort-label"><i data-lucide="arrow-up-down"></i> Sắp xếp</span>
+            <select class="form-control customer-sort-select" id="customer-sort-key" aria-label="Sắp xếp khách hàng">
+              <option value="lastTransactionAt">Ngày giao dịch</option>
+              <option value="createdAt">Ngày tạo</option>
+              <option value="netSales">Doanh số sau trả</option>
+              <option value="grossSales">Tổng doanh số</option>
+              <option value="totalReturns">Tổng trả hàng</option>
+              <option value="debt">Công nợ</option>
+              <option value="overdueDays">Số ngày quá hạn</option>
+              <option value="daysInactive">Số ngày không giao dịch</option>
+              <option value="name">Tên khách hàng</option>
+              <option value="code">Mã khách hàng</option>
+              <option value="manager">Người quản lý</option>
+              <option value="brand">Nhãn sơn</option>
+              <option value="pricelist">Bảng giá</option>
+              <option value="province">Tỉnh/Thành</option>
+              <option value="missing">Mức thiếu thông tin</option>
+            </select>
+            <select class="form-control customer-null-sort" id="customer-sort-nulls" aria-label="Vị trí giá trị trống"><option value="last">Chưa có: cuối</option><option value="first">Chưa có: đầu</option></select>
+            <button class="btn btn-secondary btn-circle" id="btn-customer-sort-direction" type="button" title="Đổi chiều sắp xếp" aria-label="Đổi chiều sắp xếp">
+              <i data-lucide="arrow-down"></i>
+            </button>
+          </div>
+
+          <div class="customer-query-status-row">
+            <span id="customer-result-count">Đang hiển thị 0/0 khách hàng</span>
+            <span id="customer-selection-count" hidden>Đã chọn 0 khách hàng</span>
+            <button class="btn btn-link btn-sm" id="btn-clear-customer-selection" type="button" hidden>Bỏ chọn</button>
+            <label>Số dòng
+              <select class="form-control" id="customer-page-size">
+                <option value="20">20</option><option value="50">50</option><option value="100">100</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="customer-filter-drawer-backdrop" id="customer-filter-drawer-backdrop" aria-hidden="true"></div>
+          <aside class="customer-advanced-filter-panel" id="customer-advanced-filter-panel" aria-hidden="true" aria-label="Bộ lọc khách hàng">
+            <div class="customer-filter-drawer-header">
+              <div>
+                <h3><i data-lucide="list-filter"></i> Bộ lọc khách hàng</h3>
+                <p>Tinh chỉnh danh sách theo nhiều điều kiện cùng lúc</p>
+              </div>
+              <button class="btn btn-secondary btn-circle" id="btn-close-customer-filter" type="button" aria-label="Đóng bộ lọc"><i data-lucide="x"></i></button>
+            </div>
+            <div class="customer-filter-modal-body">
+            <div class="customer-filter-section">
+              <strong>Ngày tạo</strong>
+              <select class="form-control" id="customer-created-preset">
+                <option value="">Tất cả</option><option value="today">Hôm nay</option><option value="yesterday">Hôm qua</option>
+                <option value="last7">7 ngày gần nhất</option><option value="last30">30 ngày gần nhất</option>
+                <option value="thisMonth">Tháng này</option><option value="previousMonth">Tháng trước</option>
+                <option value="thisYear">Năm nay</option><option value="missing">Chưa có ngày tạo</option>
+              </select>
+              <div class="customer-filter-range"><input class="form-control" id="customer-created-from" type="date"><input class="form-control" id="customer-created-to" type="date"></div>
+            </div>
+            <div class="customer-filter-section">
+              <strong>Ngày giao dịch gần nhất</strong>
+              <select class="form-control" id="customer-last-preset">
+                <option value="">Tất cả</option><option value="today">Hôm nay</option><option value="last7">Trong 7 ngày</option>
+                <option value="last30">Trong 30 ngày</option><option value="last90">Trong 90 ngày</option>
+                <option value="last180">Trong 180 ngày</option><option value="last365">Trong 1 năm</option>
+                <option value="never">Chưa từng giao dịch</option><option value="inactive30">Quá 30 ngày</option>
+                <option value="inactive60">Quá 60 ngày</option><option value="inactive90">Quá 90 ngày</option>
+                <option value="inactive180">Quá 180 ngày</option><option value="inactive365">Lâu không phát sinh</option>
+              </select>
+              <div class="customer-filter-range"><input class="form-control" id="customer-last-from" type="date"><input class="form-control" id="customer-last-to" type="date"></div>
+            </div>
+            <div class="customer-filter-section">
+              <strong>Doanh số</strong>
+              <select class="form-control" id="customer-sales-metric"><option value="netSales">Sau trả hàng</option><option value="grossSales">Tổng doanh số</option><option value="totalReturns">Tổng trả hàng</option></select>
+              <select class="form-control" id="customer-sales-preset"><option value="">Tất cả</option><option value="zero">Chưa có doanh số</option><option value="positive">Có doanh số</option><option value="gt10000000">Trên 10 triệu</option><option value="gt50000000">Trên 50 triệu</option><option value="gt100000000">Trên 100 triệu</option><option value="gt500000000">Trên 500 triệu</option><option value="gt1000000000">Trên 1 tỷ</option></select>
+              <div class="customer-filter-range"><input class="form-control" id="customer-sales-min" type="number" placeholder="Từ"><input class="form-control" id="customer-sales-max" type="number" placeholder="Đến"></div>
+            </div>
+            <div class="customer-filter-section">
+              <strong>Công nợ</strong>
+              <select class="form-control" id="customer-debt-preset"><option value="">Tất cả</option><option value="zero">Không công nợ</option><option value="positive">Đang còn nợ</option><option value="negative">Công nợ âm</option><option value="gt10000000">Trên 10 triệu</option><option value="gt50000000">Trên 50 triệu</option><option value="gt100000000">Trên 100 triệu</option><option value="overdue">Quá hạn</option><option value="notOverdue">Chưa quá hạn</option><option value="unconfigured">Chưa thiết lập ngày nợ</option><option value="overdue1-7">Quá hạn 1–7 ngày</option><option value="overdue8-30">Quá hạn 8–30 ngày</option><option value="overdue31-0">Quá hạn trên 30 ngày</option></select>
+              <div class="customer-filter-range"><input class="form-control" id="customer-debt-min" type="number" placeholder="Từ"><input class="form-control" id="customer-debt-max" type="number" placeholder="Đến"></div>
+            </div>
+            <div class="customer-filter-section customer-filter-span-2">
+              <strong>Phân loại (giữ Ctrl để chọn nhiều)</strong>
+              <div class="customer-filter-multi-grid">
+                <label>Nhãn sơn<select class="form-control" id="customer-filter-brands" multiple></select></label>
+                <label>Bảng giá<select class="form-control" id="customer-filter-pricelists" multiple></select></label>
+                <label>Người quản lý<select class="form-control" id="customer-filter-managers" multiple></select></label>
+                <label>Tỉnh/Thành<select class="form-control" id="customer-filter-provinces" multiple></select></label>
+              </div>
+            </div>
+            <div class="customer-filter-section customer-filter-span-2">
+              <strong>Mức đầy đủ thông tin</strong>
+              <div class="customer-presence-grid">
+                <label>Trạng thái<select class="form-control" id="customer-status"><option value="">Tất cả</option><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option></select></label>
+                <label>SĐT<select class="form-control" id="customer-phone-state"><option value="">Tất cả</option><option value="has">Có</option><option value="missing">Không có</option></select></label>
+                <label>Địa chỉ<select class="form-control" id="customer-address-state"><option value="">Tất cả</option><option value="has">Có</option><option value="missing">Không có</option></select></label>
+                <label>Bảng giá<select class="form-control" id="customer-pricelist-state"><option value="">Tất cả</option><option value="has">Có</option><option value="missing">Không có</option></select></label>
+                <label>Quản lý<select class="form-control" id="customer-manager-state"><option value="">Tất cả</option><option value="has">Có</option><option value="missing">Không có</option></select></label>
+                <label>Nhãn sơn<select class="form-control" id="customer-brand-state"><option value="">Tất cả</option><option value="has">Có</option><option value="missing">Không có</option></select></label>
+                <label>Ghi chú<select class="form-control" id="customer-notes-state"><option value="">Tất cả</option><option value="has">Có</option><option value="missing">Không có</option></select></label>
+              </div>
+            </div>
+            </div>
+            <div class="customer-filter-modal-footer">
+              <button class="btn btn-secondary" id="btn-reset-customer-filter-modal" type="button"><i data-lucide="rotate-ccw"></i> Xóa toàn bộ lọc</button>
+              <button class="btn btn-success" id="btn-apply-customer-filter-modal" type="button"><i data-lucide="check"></i> Xem kết quả</button>
+            </div>
+          </aside>
 
           <!-- Customer Summary Statistics -->
           <div id="customer-summary-bar" style="display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
@@ -1575,7 +1687,7 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table customers-table" style="table-layout: fixed; min-width: 1880px;">
+            <table class="table customers-table" style="table-layout: fixed; min-width: 2000px;">
               <colgroup>
                 <col style="width: 45px;">   <!-- Chon -->
                 <col data-customer-column="code" style="width: 100px;">  <!-- Mã KH -->
@@ -1587,6 +1699,7 @@
                 <col data-customer-column="pricelist" style="width: 125px;">  <!-- Bảng giá -->
                 <col data-customer-column="debt" style="width: 115px;">  <!-- Công nợ -->
                 <col data-customer-column="grossSales" style="width: 120px;">  <!-- Tổng doanh số -->
+                <col data-customer-column="totalReturns" style="width: 120px;">  <!-- Tổng trả hàng -->
                 <col data-customer-column="netSales" style="width: 140px;">  <!-- Tổng doanh số trừ trả hàng -->
                 <col data-customer-column="createdAt" style="width: 110px;">  <!-- Ngày tạo -->
                 <col data-customer-column="debtDays" style="width: 95px;">   <!-- Số ngày nợ -->
@@ -1605,6 +1718,7 @@
                   <th data-customer-column="pricelist">Bảng giá</th>
                   <th data-customer-column="debt" style="text-align: right;">Công nợ</th>
                   <th data-customer-column="grossSales" style="text-align: right;">Tổng doanh số</th>
+                  <th data-customer-column="totalReturns" style="text-align: right;">Tổng trả hàng</th>
                   <th data-customer-column="netSales" style="text-align: right;">Tổng doanh số trừ trả hàng</th>
                   <th data-customer-column="createdAt" style="text-align: center;">Ngày tạo</th>
                   <th data-customer-column="debtDays" style="text-align: center;">Số ngày nợ</th>
@@ -3105,6 +3219,20 @@
     </div>
   </div>
 
+  <!-- Customer list export modal -->
+  <div class="modal-overlay" id="customer-list-export-modal">
+    <div class="modal-content" style="max-width: 760px;">
+      <div class="modal-header"><h3>Xuất danh sách khách hàng</h3><button class="btn-icon" id="btn-close-customer-list-export" type="button"><i data-lucide="x"></i></button></div>
+      <div class="modal-body">
+        <div class="form-group"><label>Phạm vi xuất</label><select class="form-control" id="customer-list-export-scope"><option value="filtered">Kết quả đang lọc</option><option value="all">Tất cả theo quyền được xem</option><option value="selected">Khách hàng đang chọn</option><option value="page">Trang hiện tại</option></select></div>
+        <div class="customer-export-column-actions"><button class="btn btn-secondary btn-sm" id="btn-customer-export-all-columns" type="button">Chọn tất cả</button><button class="btn btn-secondary btn-sm" id="btn-customer-export-no-columns" type="button">Bỏ chọn</button><button class="btn btn-secondary btn-sm" id="btn-customer-export-default-columns" type="button">Mặc định</button></div>
+        <div class="customer-export-column-grid" id="customer-export-column-grid"></div>
+        <p id="customer-export-estimate" class="text-muted"></p>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" id="btn-cancel-customer-list-export" type="button">Hủy</button><button class="btn btn-success" id="btn-submit-customer-list-export" type="button"><i data-lucide="file-spreadsheet"></i> Xuất Excel</button></div>
+    </div>
+  </div>
+
   <!-- Customer Excel Import Modal -->
   <div class="modal-overlay" id="cust-excel-modal">
     <div class="modal-content" style="max-width: 850px;">
@@ -3135,7 +3263,7 @@
             Gộp thêm (Giữ lại khách cũ, trùng mã/SĐT sẽ cập nhật)
           </label>
           <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; ">
-            <input type="radio" name="cust-import-mode" value="overwrite" style="accent-color: var(--color-primary);"> 
+            <input type="radio" name="cust-import-mode" value="overwrite" disabled style="accent-color: var(--color-primary);">
             Ghi đè toàn bộ (Xóa danh sách cũ trước khi nhập)
           </label>
         </div>
@@ -3918,6 +4046,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260802-backup-cell-fix1"></script>
+  <script type="module" src="js/main.js?v=20260803-customer-toolbar-layout1"></script>
 </body>
 </html>

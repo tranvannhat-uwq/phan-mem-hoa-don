@@ -20,7 +20,9 @@ const migrationNames = [
   '0011_confirm_order_variable_conflict_fix.sql',
   '0012_phase5_reporting_kpi_payroll.sql',
   '0013_legacy_cashbook_customer_and_order_compatibility.sql',
-  '0014_sales_return_variable_conflict_fix.sql'
+  '0014_sales_return_variable_conflict_fix.sql',
+  '0015_customer_opening_financial_import.sql',
+  '0016_customer_import_rpc_variable_conflict_fix.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
