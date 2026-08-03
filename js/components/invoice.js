@@ -1,13 +1,14 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-customer-toolbar-layout1';
-import { renderAll, switchTab } from '../main.js?v=20260803-customer-toolbar-layout1';
+import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-customer-all-pages1';
+import { renderAll, switchTab } from '../main.js?v=20260803-customer-all-pages1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260803-customer-toolbar-layout1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-customer-toolbar-layout1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260803-customer-all-pages1';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-customer-all-pages1';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';
+import { getOrderDisplayCode } from '../domain/order-display.js';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;
@@ -1358,7 +1359,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     }
   }
 
-  document.getElementById('print-invoice-id').innerText = order.id;
+  document.getElementById('print-invoice-id').innerText = getOrderDisplayCode(order);
   document.getElementById('print-invoice-date').innerText = formatDateTime(order.date);
   document.getElementById('print-customer-name').innerText = order.customerName;
   
@@ -1491,8 +1492,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   const warehouseEl = document.getElementById('print-warehouse-name');
   const reasonEl = document.getElementById('print-invoice-reason');
 
-  const creatorUser = state.users ? state.users.find(u => u.username === order.createdBy) : null;
-  const creatorName = creatorUser ? creatorUser.displayName : order.createdBy;
+  const creatorName = getUserDisplayName(order.createdBy, 'Không xác định', state.users);
 
   if (creatorEl) creatorEl.innerText = creatorName || 'admin';
   if (warehouseEl) warehouseEl.innerText = config.companyName;

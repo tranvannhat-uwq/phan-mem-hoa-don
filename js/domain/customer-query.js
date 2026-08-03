@@ -214,8 +214,7 @@ export function filterCustomerRows(rows, query = {}, now = new Date()) {
 
   return rows.filter(customer => {
     if (search && !normalizeCustomerSearch([
-      customer.code, customer.name, customer.phone, customer.address, customer.provinceName,
-      customer.brand, customer.pricelistName, customer.managerName, customer.notes
+      customer.code, customer.name, customer.phone
     ].join(' ')).includes(search)) return false;
 
     const createdAt = customer.createdAt;

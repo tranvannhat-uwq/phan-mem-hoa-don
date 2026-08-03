@@ -1,14 +1,14 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-customer-toolbar-layout1';
-import { renderAll } from '../main.js?v=20260803-customer-toolbar-layout1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-customer-toolbar-layout1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-customer-toolbar-layout1';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-customer-all-pages1';
+import { renderAll } from '../main.js?v=20260803-customer-all-pages1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-customer-all-pages1';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-customer-all-pages1';
 import { getOrderFinancialBreakdown } from '../domain/order-financials.js';
 import { collectCustomerDebt } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
-import { customerDateKey, customerDaysSince, finiteCustomerNumber, queryCustomerRows } from '../domain/customer-query.js';
+import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
 
 let pendingCustomerPaymentKey = '';
 
@@ -27,7 +27,7 @@ let customerViewQuery = { ...DEFAULT_CUSTOMER_QUERY };
 let customerCurrentPageRows = [];
 let customerFilteredRows = [];
 let customerSearchDebounce = null;
-let customerFilterOptionSignature = '';
+let customerFilterOptionSignature = null;
 
 const CUSTOMER_QUERY_CONTROL_MAP = Object.freeze({
   nulls: 'customer-sort-nulls',
@@ -428,7 +428,8 @@ function getCustomerPriceListName(customer) {
   if (!id) return '';
   if (id === 'custom') return 'Chiết khấu riêng';
   if (id === 'retail') return 'Khách lẻ';
-  return (state.allPricelists || state.pricelists || []).find(item => String(item.id) === String(id))?.name || id;
+  return [...(state.allPricelists || []), ...(state.pricelists || [])]
+    .find(item => String(item.id) === String(id))?.name || id;
 }
 
 function addBusinessDaysKey(value, days) {
@@ -480,6 +481,121 @@ function buildCustomerViewRows() {
 
 function selectedValues(select) {
   return select ? [...select.selectedOptions].map(option => option.value).filter(Boolean) : [];
+}
+
+const CUSTOMER_MULTI_SELECT_CONFIG = Object.freeze({
+  'customer-filter-brands': 'Chọn nhãn sơn',
+  'customer-filter-pricelists': 'Chọn bảng giá',
+  'customer-filter-managers': 'Chọn người quản lý',
+  'customer-filter-provinces': 'Chọn Tỉnh/Thành'
+});
+
+function syncCustomerMultiSelectVisual(select) {
+  const root = select?.nextElementSibling?.classList.contains('customer-multi-select') ? select.nextElementSibling : null;
+  if (!root) return;
+  const selected = [...select.selectedOptions];
+  const label = root.querySelector('.customer-multi-select-value');
+  if (label) label.textContent = selected.length === 0
+    ? root.dataset.placeholder
+    : (selected.length === 1 ? selected[0].textContent : `${selected.length} mục đã chọn`);
+  root.classList.toggle('has-value', selected.length > 0);
+  root.querySelectorAll('.customer-multi-select-option input').forEach(input => {
+    const option = select.options[Number(input.dataset.optionIndex)];
+    input.checked = Boolean(option?.selected);
+  });
+}
+
+function syncCustomerMultiSelectVisuals() {
+  Object.keys(CUSTOMER_MULTI_SELECT_CONFIG).forEach(id => syncCustomerMultiSelectVisual(document.getElementById(id)));
+}
+
+function renderCustomerMultiSelect(selectId, placeholder, shellOnly = false) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.hidden = true;
+  select.setAttribute('aria-hidden', 'true');
+  let root = select.nextElementSibling?.classList.contains('customer-multi-select') ? select.nextElementSibling : null;
+  if (!root) {
+    root = document.createElement('div');
+    root.className = 'customer-multi-select';
+    root.dataset.placeholder = placeholder;
+    root.innerHTML = `
+      <button class="customer-multi-select-trigger" type="button" aria-expanded="false">
+        <span class="customer-multi-select-value"></span><span class="customer-multi-select-chevron">▾</span>
+      </button>
+      <div class="customer-multi-select-dropdown" hidden>
+        <div class="customer-multi-select-tools">
+          <input type="search" class="customer-multi-select-search" placeholder="Tìm nhanh...">
+          <button type="button" class="customer-multi-select-clear">Bỏ chọn</button>
+        </div>
+        <div class="customer-multi-select-options"></div>
+        <div class="customer-multi-select-empty" hidden>Không tìm thấy kết quả</div>
+      </div>`;
+    select.after(root);
+    root.querySelector('.customer-multi-select-value').textContent = placeholder;
+    const trigger = root.querySelector('.customer-multi-select-trigger');
+    const dropdown = root.querySelector('.customer-multi-select-dropdown');
+    trigger.addEventListener('click', event => {
+      event.stopPropagation();
+      const open = !root.classList.contains('open');
+      document.querySelectorAll('.customer-multi-select.open').forEach(item => {
+        item.classList.remove('open');
+        item.querySelector('.customer-multi-select-dropdown').hidden = true;
+        item.querySelector('.customer-multi-select-trigger').setAttribute('aria-expanded', 'false');
+      });
+      root.classList.toggle('open', open);
+      dropdown.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) root.querySelector('.customer-multi-select-search').focus();
+    });
+    root.addEventListener('click', event => event.stopPropagation());
+    document.addEventListener('click', () => {
+      root.classList.remove('open');
+      dropdown.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    });
+    root.querySelector('.customer-multi-select-search').addEventListener('input', event => {
+      const query = normalizeCustomerSearch(event.target.value);
+      let visible = 0;
+      root.querySelectorAll('.customer-multi-select-option').forEach(item => {
+        const show = !query || item.dataset.search.includes(query);
+        item.hidden = !show;
+        if (show) visible += 1;
+      });
+      root.querySelector('.customer-multi-select-empty').hidden = visible > 0;
+    });
+    root.querySelector('.customer-multi-select-clear').addEventListener('click', () => {
+      [...select.options].forEach(option => { option.selected = false; });
+      syncCustomerMultiSelectVisual(select);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  // Build all four visible shells first. Option data is populated in a second
+  // independent pass so one malformed option can never hide the other fields.
+  if (shellOnly) {
+    syncCustomerMultiSelectVisual(select);
+    return;
+  }
+
+  const options = root.querySelector('.customer-multi-select-options');
+  options.innerHTML = [...select.options].map((option, index) => `
+    <label class="customer-multi-select-option" data-search="${escapeCustomerHtml(normalizeCustomerSearch(option.textContent))}">
+      <input type="checkbox" data-option-index="${index}" ${option.selected ? 'checked' : ''}>
+      <span title="${escapeCustomerHtml(option.textContent)}">${escapeCustomerHtml(option.textContent)}</span>
+    </label>`).join('');
+  options.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
+    const option = select.options[Number(input.dataset.optionIndex)];
+    if (option) option.selected = input.checked;
+    syncCustomerMultiSelectVisual(select);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }));
+  const empty = root.querySelector('.customer-multi-select-empty');
+  if (empty) {
+    empty.textContent = 'Chưa có dữ liệu phù hợp';
+    empty.hidden = select.options.length > 0;
+  }
+  syncCustomerMultiSelectVisual(select);
 }
 
 function syncCustomerQueryFromControls() {
@@ -545,6 +661,7 @@ function syncCustomerQueryControls() {
     direction.innerHTML = `<i data-lucide="arrow-${customerViewQuery.sortDirection === 'asc' ? 'up' : 'down'}"></i>`;
     direction.title = customerViewQuery.sortDirection === 'asc' ? 'Đang tăng dần' : 'Đang giảm dần';
   }
+  syncCustomerMultiSelectVisuals();
 }
 
 function populateCustomerQueryOptions() {
@@ -554,20 +671,53 @@ function populateCustomerQueryOptions() {
     select.innerHTML = entries.map(([value, label]) => `<option value="${escapeCustomerHtml(value)}">${escapeCustomerHtml(label)}</option>`).join('');
   };
   const rows = buildCustomerViewRows();
-  const uniqueEntries = (valueKey, labelKey = valueKey) => [...new Map(rows
+  const rowEntries = (valueKey, labelKey = valueKey) => rows
     .filter(row => row[valueKey])
-    .map(row => [String(row[valueKey]), String(row[labelKey] || row[valueKey])])).entries()]
+    .map(row => [String(row[valueKey]), String(row[labelKey] || row[valueKey])]);
+  const mergeEntries = (...groups) => [...new Map(groups.flat()
+    .filter(entry => entry?.[0])
+    .map(([value, label]) => [String(value), String(label || value)])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1], 'vi', { sensitivity: 'base', numeric: true }));
-  setOptions('customer-filter-brands', uniqueEntries('brand'));
-  setOptions('customer-filter-pricelists', uniqueEntries('pricelistId', 'pricelistName'));
-  setOptions('customer-filter-managers', uniqueEntries('managerId', 'managerName'));
-  setOptions('customer-filter-provinces', uniqueEntries('provinceCode', 'provinceName'));
+  const priceLists = [...(state.allPricelists || []), ...(state.pricelists || [])];
+  setOptions('customer-filter-brands', mergeEntries(
+    rowEntries('brand'),
+    (state.brands || []).map(brand => [brand.name || brand.id, brand.name || brand.id])));
+  setOptions('customer-filter-pricelists', mergeEntries(
+    rowEntries('pricelistId', 'pricelistName'),
+    priceLists.map(list => [list.id, list.name || list.id])));
+  setOptions('customer-filter-managers', mergeEntries(
+    rowEntries('managerId', 'managerName'),
+    (state.users || []).map(user => [user.username, user.displayName || user.username])));
+  setOptions('customer-filter-provinces', mergeEntries(
+    rowEntries('provinceCode', 'provinceName'),
+    Object.entries(PROVINCES)));
   syncCustomerQueryControls();
+  const multiSelects = Object.entries(CUSTOMER_MULTI_SELECT_CONFIG);
+  multiSelects.forEach(([id, placeholder]) => {
+    try {
+      renderCustomerMultiSelect(id, placeholder, true);
+    } catch (error) {
+      console.error(`Không thể khởi tạo ô phân loại ${id}:`, error);
+    }
+  });
+  multiSelects.forEach(([id, placeholder]) => {
+    try {
+      renderCustomerMultiSelect(id, placeholder);
+    } catch (error) {
+      console.error(`Không thể nạp lựa chọn cho ${id}:`, error);
+    }
+  });
 }
 
 function refreshCustomerQueryOptionsIfNeeded() {
-  const signature = (state.customers || []).map(customer => [customer.id, customer.assignedBrand, customer.pricelistId,
-    customer.managedBy, customer.brandDiscounts?.province || customer.province].join(':')).join('|');
+  const signature = [
+    (state.customers || []).map(customer => [customer.id, customer.assignedBrand, customer.pricelistId,
+      customer.managedBy, customer.brandDiscounts?.province || customer.province].join(':')).join('|'),
+    (state.brands || []).map(item => `${item.id}:${item.name}`).join('|'),
+    [...(state.allPricelists || []), ...(state.pricelists || [])]
+      .map(item => `${item.id}:${item.name}`).join('|'),
+    (state.users || []).map(item => `${item.username}:${item.displayName}`).join('|')
+  ].join('||');
   if (signature === customerFilterOptionSignature) return;
   customerFilterOptionSignature = signature;
   populateCustomerQueryOptions();
@@ -1490,6 +1640,11 @@ export function setupCustomerManagement() {
   const filterButton = document.getElementById('btn-customer-advanced-filter');
   const filterPanel = document.getElementById('customer-advanced-filter-panel');
   const filterBackdrop = document.getElementById('customer-filter-drawer-backdrop');
+  // A fixed element inside .glass-panel is positioned against that panel
+  // because backdrop-filter creates a containing block. Portal both elements
+  // to <body> so the popup is centered and clipped against the viewport only.
+  if (filterBackdrop?.parentElement !== document.body) document.body.appendChild(filterBackdrop);
+  if (filterPanel?.parentElement !== document.body) document.body.appendChild(filterPanel);
   const closeFilterButton = document.getElementById('btn-close-customer-filter');
   const setFilterDrawerOpen = (open) => {
     if (!filterPanel || !filterButton) return;

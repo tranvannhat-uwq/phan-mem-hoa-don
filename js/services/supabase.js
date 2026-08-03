@@ -3,6 +3,7 @@ import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
 import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js';
+import { collectAllPages } from '../domain/pagination.js';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -348,31 +349,11 @@ export async function retrySupabaseConnection() {
 
 // Hàm phụ trợ tải toàn bộ dữ liệu (bỏ giới hạn mặc định 1000 dòng của PostgREST)
 async function fetchFullTableData(tableName) {
-  let allData = [];
-  let page = 0;
   const pageSize = 1000;
-  let hasMore = true;
-  
-  while (hasMore) {
-    const { data, error } = await supabaseClient
+  return collectAllPages((offset, end) => supabaseClient
       .from(tableName)
-      .select('*')
-      .range(page * pageSize, (page + 1) * pageSize - 1);
-      
-    if (error) throw error;
-    
-    if (data && data.length > 0) {
-      allData = allData.concat(data);
-      if (data.length < pageSize) {
-        hasMore = false;
-      } else {
-        page++;
-      }
-    } else {
-      hasMore = false;
-    }
-  }
-  return allData;
+      .select('*', { count: 'exact' })
+      .range(offset, end), pageSize);
 }
 
 function parseDebtHistory(value) {
@@ -675,13 +656,9 @@ export async function fetchCloudData() {
     // Các luồng tải phụ trợ (lỗi từng bảng sẽ được bắt riêng biệt để tránh hỏng cả ứng dụng)
     const fetchCustomers = async () => {
       try {
-        const { data: customerPage, error: customerPageError } = await supabaseClient.rpc(
-          'rpc_get_customers_paginated',
-          { p_search: '', p_managed_by: null, p_limit: 10000, p_offset: 0 }
-        );
-        const customerData = !customerPageError && customerPage && Array.isArray(customerPage.data)
-          ? customerPage.data
-          : await fetchFullTableData(tableCustomersName);
+        // The paginated RPC intentionally caps one call at 500 rows. The
+        // customer screen filters client-side, so load every RLS-visible page.
+        const customerData = await fetchFullTableData(tableCustomersName);
         const localCust = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
 
         if (customerData && customerData.length > 0) {

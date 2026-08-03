@@ -9,12 +9,14 @@ const rows = [
   { id: '3', code: 'KH003', name: 'Trần Lan', phone: '', address: 'Vĩnh Phúc', provinceName: 'Vĩnh Phúc', provinceCode: 'VP', brand: 'NANO10', pricelistId: 'p2', pricelistName: 'Bảng giá 02', managerId: 'thuy', managerName: 'Thanh Thụy', notes: 'Theo dõi', createdAt: '', lastTransactionAt: '2026-04-01T12:00:00Z', grossSales: 50000000, totalReturns: 5000000, netSales: 45000000, debt: 0, debtDays: 30, status: 'inactive' }
 ];
 
-test('Vietnamese search is accent-insensitive across all customer fields', () => {
+test('quick search is accent-insensitive and limited to customer code, name and phone', () => {
   assert.equal(normalizeCustomerSearch('  ĐƯỜNG   hoàn '), 'duong hoan');
   assert.deepEqual(filterCustomerRows(rows, { q: 'nguyen thanh' }, now).map(row => row.id), ['1']);
   assert.deepEqual(filterCustomerRows(rows, { q: '0912' }, now).map(row => row.id), ['1']);
-  assert.deepEqual(filterCustomerRows(rows, { q: 'duong hoan' }, now).map(row => row.id), ['1']);
   assert.deepEqual(filterCustomerRows(rows, { q: 'kh003' }, now).map(row => row.id), ['3']);
+  for (const excludedValue of ['duong hoan', 'ha noi', 'nano10', 'bang gia 01', 'khach vip']) {
+    assert.deepEqual(filterCustomerRows(rows, { q: excludedValue }, now), []);
+  }
 });
 
 test('date keys do not swap day/month or drift through UTC', () => {
@@ -35,7 +37,7 @@ test('sales, returns, zero and signed debt filters preserve numeric meaning', ()
 
 test('classification and completeness filters combine with search', () => {
   const result = filterCustomerRows(rows, {
-    q: 'nano10', brands: ['NANO10'], managers: ['thuy'], provinces: ['VP'], phoneState: 'missing'
+    q: 'tran lan', brands: ['NANO10'], managers: ['thuy'], provinces: ['VP'], phoneState: 'missing'
   }, now);
   assert.deepEqual(result.map(row => row.id), ['3']);
   assert.deepEqual(filterCustomerRows(rows, { pricelistState: 'missing', addressState: 'missing' }, now).map(row => row.id), ['2']);
@@ -46,5 +48,5 @@ test('stable sorting handles nulls, Vietnamese names, zero and negative numbers'
   assert.deepEqual(sortCustomerRows(rows, { sortKey: 'debt', sortDirection: 'asc' }, now).map(row => row.id), ['2', '3', '1']);
   assert.deepEqual(sortCustomerRows(rows, { sortKey: 'createdAt', sortDirection: 'desc' }, now).map(row => row.id), ['1', '2', '3']);
   assert.deepEqual(sortCustomerRows(rows, { sortKey: 'lastTransactionAt', sortDirection: 'desc', nulls: 'first' }, now).map(row => row.id), ['2', '1', '3']);
-  assert.deepEqual(queryCustomerRows(rows, { q: 'nano10', sortKey: 'name', sortDirection: 'asc' }, now).map(row => row.id), ['1', '3']);
+  assert.deepEqual(queryCustomerRows(rows, { q: 'kh00', sortKey: 'name', sortDirection: 'asc' }, now).map(row => row.id), ['2', '1', '3']);
 });

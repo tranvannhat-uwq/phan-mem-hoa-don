@@ -1,16 +1,31 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-customer-toolbar-layout1';
-import { renderAll } from '../main.js?v=20260803-customer-toolbar-layout1';
-import { openPrintTypeModal } from './invoice.js?v=20260803-customer-toolbar-layout1';
-import { openHistoryOrderExportModal } from './customers.js?v=20260803-customer-toolbar-layout1';
+import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-customer-all-pages1';
+import { renderAll } from '../main.js?v=20260803-customer-all-pages1';
+import { openPrintTypeModal } from './invoice.js?v=20260803-customer-all-pages1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260803-customer-all-pages1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
 } from '../domain/order-financials.js';
+import { getOrderDisplayCode } from '../domain/order-display.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
+
+function orderWasCreatedByUser(order, user) {
+  if (!order?.createdBy || !user) return false;
+  const creator = getUserById(order.createdBy, state.users);
+  if (creator) {
+    const creatorAuthId = creator.authUserId || creator.auth_user_id || '';
+    const userAuthId = user.authUserId || user.auth_user_id || '';
+    return (creator.id && user.id && String(creator.id) === String(user.id))
+      || (creatorAuthId && userAuthId && String(creatorAuthId) === String(userAuthId))
+      || isSameUser(creator.username, user.username);
+  }
+  return isSameUser(order.createdBy, user.username)
+    || String(order.createdBy) === String(user.authUserId || user.auth_user_id || user.id || '');
+}
 
 function updateHistorySummary(orders) {
   const beforeDiscountEl = document.getElementById('history-total-before-discount');
@@ -393,11 +408,13 @@ export function renderHistoryOrders() {
   const filtered = state.savedOrders.filter(o => {
     // 1. Phân quyền hiển thị đơn của Sale
     if (state.currentUser && state.currentUser.role === 'sale') {
-      if (!isSameUser(o.createdBy, state.currentUser.username)) return false;
+      if (!orderWasCreatedByUser(o, state.currentUser)) return false;
     }
     
     // 2. Lọc theo tìm kiếm từ khóa
-    const matchesSearch = o.id.toLowerCase().includes(searchVal) || o.customerName.toLowerCase().includes(searchVal);
+    const matchesSearch = String(o.id || '').toLowerCase().includes(searchVal)
+      || getOrderDisplayCode(o).toLowerCase().includes(searchVal)
+      || String(o.customerName || '').toLowerCase().includes(searchVal);
     if (!matchesSearch) return false;
 
     if (!orderMatchesHistoryCompany(o, selectedCompany)) return false;
@@ -443,7 +460,7 @@ export function renderHistoryOrders() {
         if (creatorClean.includes(filterLower)) {
           matched = true;
         } else if (matchingUsers.length > 0) {
-          matched = matchingUsers.some(u => isSameUser(o.createdBy, u.username));
+          matched = matchingUsers.some(u => Boolean(getUserById(o.createdBy, [u])));
         }
       }
       
@@ -522,6 +539,7 @@ export function renderHistoryOrders() {
     const tableRows = paginatedItems.map((order, idx) => {
       const indexNumber = startIndex + idx + 1;
       const amountBreakdown = getHistoryOrderAmountBreakdown(order);
+      const displayOrderCode = getOrderDisplayCode(order);
 
       let statusBadge = '';
       if (['cancelled', 'canceled'].includes(String(order.status || '').toLowerCase())) {
@@ -564,7 +582,7 @@ export function renderHistoryOrders() {
           <td style="text-align: center;"><input type="checkbox" class="history-export-checkbox" data-id="${order.id}" ${selectedHistoryOrderIdsForExport.has(String(order.id)) ? 'checked' : ''}></td>
           <td style="text-align: center; font-weight: 600; color: var(--text-muted);">${indexNumber}</td>
           <td>
-            <div style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; margin-bottom: 2px;">${order.id}</div>
+            <div title="${order.id}" style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; margin-bottom: 2px;">${displayOrderCode}</div>
             <div>${statusBadge}</div>
           </td>
           <td style="white-space: nowrap; color: var(--text-secondary); font-size: 0.8rem;">
@@ -658,6 +676,7 @@ export function renderHistoryOrders() {
     ordersContentHtml = paginatedItems.map(order => {
       const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
       const amountBreakdown = getHistoryOrderAmountBreakdown(order);
+      const displayOrderCode = getOrderDisplayCode(order);
       let statusBadge = '';
       if (['cancelled', 'canceled'].includes(String(order.status || '').toLowerCase())) {
         statusBadge = `<span style="background: rgba(107, 114, 128, 0.14); color: #6b7280; border: 1px solid rgba(107, 114, 128, 0.28); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã hủy</span>`;
@@ -671,8 +690,7 @@ export function renderHistoryOrders() {
         statusBadge = `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
       }
         
-      const creator = state.users.find(u => isSameUser(u.username, order.createdBy));
-      const creatorName = creator ? creator.displayName : (order.createdBy && order.createdBy.includes('@') ? order.createdBy.split('@')[0] : order.createdBy);
+      const creatorName = getUserDisplayName(order.createdBy, 'Không xác định', state.users);
 
       const showDeleteBtn = order.status === 'draft';
       const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
@@ -714,7 +732,7 @@ export function renderHistoryOrders() {
           ` : ''}
           <div>
             <div class="flex justify-between items-center" style="margin-bottom: 0.75rem; padding-right: ${showDeleteBtn ? '2rem' : '0'}; padding-left: 1.4rem;">
-              <span class="order-id" style="font-weight: 700; color: #fff; font-size: 1.05rem;">${order.id}</span>
+              <span class="order-id" title="${order.id}" style="font-weight: 700; color: #fff; font-size: 1.05rem;">${displayOrderCode}</span>
               <div style="display: flex; gap: 0.35rem; align-items: center;">
                 ${statusBadge}
               </div>
@@ -1038,7 +1056,7 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   if (isReadOnly) {
     if (saveBtn) saveBtn.style.display = 'none';
     if (draftBtn) draftBtn.style.display = 'none';
-    if (panelTitle) panelTitle.innerHTML = `<i data-lucide="eye"></i> Chi tiết đơn hàng ${order.id} (Chỉ xem)`;
+    if (panelTitle) panelTitle.innerHTML = `<i data-lucide="eye"></i> Chi tiết đơn hàng ${getOrderDisplayCode(order)} (Chỉ xem)`;
   } else {
     if (saveBtn) {
       saveBtn.style.display = 'inline-flex';
@@ -1049,7 +1067,7 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
       draftBtn.style.display = 'inline-flex';
       draftBtn.innerHTML = `<i data-lucide="file-text"></i> Cập nhật nháp`;
     }
-    if (panelTitle) panelTitle.innerHTML = `<i data-lucide="edit"></i> Hiệu chỉnh đơn nháp ${order.id}`;
+    if (panelTitle) panelTitle.innerHTML = `<i data-lucide="edit"></i> Hiệu chỉnh đơn nháp ${getOrderDisplayCode(order)}`;
   }
   
   // Chuyển Tab

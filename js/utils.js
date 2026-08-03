@@ -282,7 +282,12 @@ export function getCustomerName(customerId, fallbackName = '', customersList = s
 export function getUserById(userIdOrUsername, usersList = state.users) {
   if (!userIdOrUsername || userIdOrUsername === 'all') return null;
   const str = String(userIdOrUsername).trim();
-  return (usersList || []).find(u => u.id === str || isSameUser(u.username, str)) || null;
+  return (usersList || []).find(u =>
+    String(u.id || '') === str
+    || String(u.authUserId || u.auth_user_id || '') === str
+    || isSameUser(u.username, str)
+    || isSameUser(u.email, str)
+  ) || null;
 }
 
 export function getUserDisplayName(userIdOrUsername, fallbackName = '', usersList = state.users) {
