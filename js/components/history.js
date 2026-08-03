@@ -1,14 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-invoice-market-discount3';
-import { renderAll } from '../main.js?v=20260803-invoice-market-discount3';
-import { openPrintTypeModal } from './invoice.js?v=20260803-invoice-market-discount3';
-import { openHistoryOrderExportModal } from './customers.js?v=20260803-invoice-market-discount3';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-order-business-date1';
+import { renderAll } from '../main.js?v=20260803-order-business-date1';
+import { openPrintTypeModal, syncInvoiceBusinessDateControl } from './invoice.js?v=20260803-order-business-date1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260803-order-business-date1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
 } from '../domain/order-financials.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
+import { orderDateToInputValue } from '../domain/order-business-date.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -941,6 +942,7 @@ export function renderHistoryOrders() {
 
 
 function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
+  syncInvoiceBusinessDateControl(orderDateToInputValue(order.date), isReadOnly);
   // Đồng bộ khách hàng
   if (order.customerId) {
     const cust = state.customers.find(c => c.id === order.customerId);

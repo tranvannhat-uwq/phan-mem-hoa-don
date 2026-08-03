@@ -22,6 +22,7 @@ Run these files in order on a staging clone first:
 14. `0014_sales_return_variable_conflict_fix.sql`
 15. `0015_customer_opening_financial_import.sql`
 16. `0016_customer_import_rpc_variable_conflict_fix.sql`
+17. `0017_privileged_order_business_date.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -108,3 +109,8 @@ Migration `0016` fixes the `customer_id is ambiguous` error for databases that
 already ran the first revision of `0015`. It changes only PL/pgSQL identifier
 resolution, reasserts the RPC security settings and leaves all imported totals,
 ledgers and formulas unchanged.
+
+Migration `0017` lets Admin/Accounting preserve the actual business day for
+orders entered after a weekend or holiday. The chosen date drives order history,
+debt-ledger timing and reporting, while confirmation/audit timestamps retain the
+real posting time. Sale-role payload dates are ignored and future dates are rejected.

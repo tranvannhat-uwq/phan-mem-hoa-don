@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260803-invoice-market-discount3';
-import { renderAll, switchTab } from '../main.js?v=20260803-invoice-market-discount3';
-import { populateManagedByDropdown } from './customers.js?v=20260803-invoice-market-discount3';
-import { exportBackupToExcel } from '../services/backup.js?v=20260803-invoice-market-discount3';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260803-order-business-date1';
+import { renderAll, switchTab } from '../main.js?v=20260803-order-business-date1';
+import { populateManagedByDropdown } from './customers.js?v=20260803-order-business-date1';
+import { exportBackupToExcel } from '../services/backup.js?v=20260803-order-business-date1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -543,6 +543,12 @@ export function showLoginGate() {
 export function applyUserPermissions(user) {
   if (!user) return;
   const role = user.role;
+
+  const invoiceDateGroup = document.getElementById('invoice-business-date-group');
+  const invoiceDateInput = document.getElementById('invoice-business-date');
+  const canAdjustInvoiceDate = role === 'admin' || role === 'accounting';
+  if (invoiceDateGroup) invoiceDateGroup.style.display = canAdjustInvoiceDate ? 'block' : 'none';
+  if (invoiceDateInput) invoiceDateInput.disabled = !canAdjustInvoiceDate;
 
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach(link => {

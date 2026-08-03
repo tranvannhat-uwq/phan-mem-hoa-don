@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260803-invoice-market-discount3">
+  <link rel="stylesheet" href="style.css?v=20260803-order-business-date1">
 </head>
 <body>
 
@@ -1081,6 +1081,15 @@
                       </select>
                     </div>
                   </div>
+                </div>
+
+                <div class="form-group" id="invoice-business-date-group" style="display: none; margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(34, 197, 94, 0.06); border: 1px solid rgba(34, 197, 94, 0.22); border-radius: 8px;">
+                  <label class="form-label" for="invoice-business-date" style="display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem;">
+                    <i data-lucide="calendar-days" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
+                    Ngày lên đơn
+                  </label>
+                  <input type="date" class="form-control" id="invoice-business-date" style="width: 100%;">
+                  <small style="display: block; margin-top: 0.35rem; color: var(--text-muted); line-height: 1.35;">Dùng ngày khách thực tế mua/nhận hàng. Ngày này được dùng trong lịch sử, báo cáo và bản in.</small>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 0.75rem;">
@@ -4048,6 +4057,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260803-invoice-market-discount3"></script>
+  <script type="module" src="js/main.js?v=20260803-order-business-date1"></script>
 </body>
 </html>
