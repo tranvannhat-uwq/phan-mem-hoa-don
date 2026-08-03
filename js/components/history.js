@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-customer-all-pages1';
-import { renderAll } from '../main.js?v=20260803-customer-all-pages1';
-import { openPrintTypeModal } from './invoice.js?v=20260803-customer-all-pages1';
-import { openHistoryOrderExportModal } from './customers.js?v=20260803-customer-all-pages1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-invoice-market-discount3';
+import { renderAll } from '../main.js?v=20260803-invoice-market-discount3';
+import { openPrintTypeModal } from './invoice.js?v=20260803-invoice-market-discount3';
+import { openHistoryOrderExportModal } from './customers.js?v=20260803-invoice-market-discount3';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary

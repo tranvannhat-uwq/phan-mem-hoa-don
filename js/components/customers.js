@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-customer-all-pages1';
-import { renderAll } from '../main.js?v=20260803-customer-all-pages1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-customer-all-pages1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-customer-all-pages1';
+import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-invoice-market-discount3';
+import { renderAll } from '../main.js?v=20260803-invoice-market-discount3';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-invoice-market-discount3';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-invoice-market-discount3';
 import { getOrderFinancialBreakdown } from '../domain/order-financials.js';
 import { collectCustomerDebt } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';

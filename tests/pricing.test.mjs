@@ -9,6 +9,7 @@ import {
   isPrivilegedPricingRole,
   parseVndInteger
 } from '../js/domain/pricing.js';
+import { supportsInvoiceLineDiscount } from '../js/domain/invoice-discount.js';
 
 const priceLists = [
   { id: 'standard', name: 'Giá chung', type: PRICE_LIST_TYPES.GENERAL, isActive: true, isAvailableForSales: false, displayOrder: 0 },
@@ -20,6 +21,11 @@ const priceLists = [
 const standardOnly = [
   { priceListId: 'standard', productId: 'ba46-lon', price: 2116000 }
 ];
+
+assert.equal(supportsInvoiceLineDiscount(priceLists[0]), true);
+assert.equal(supportsInvoiceLineDiscount({ name: 'Bảng giá thị trường 20/07/2026', type: PRICE_LIST_TYPES.SALES }), true);
+assert.equal(supportsInvoiceLineDiscount(priceLists[1]), false);
+assert.equal(supportsInvoiceLineDiscount(priceLists[2]), false);
 
 assert.deepEqual(
   resolvePriceForList({

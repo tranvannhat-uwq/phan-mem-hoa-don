@@ -40,12 +40,17 @@ test('cashbook UI never guesses the financial route', async () => {
   assert.doesNotMatch(service, /isCustomerDebtReceipt\(transaction/);
 });
 
-test('sales screen and print template do not expose the discount-percent column', async () => {
+test('market pricing exposes line discount input but agent invoice never prints its percentage', async () => {
   const html = await read('index.html');
   const invoice = await read('js/components/invoice.js');
-  assert.equal(html.includes('% CK'), false);
-  assert.equal(invoice.includes('% CK'), false);
+  const history = await read('js/components/history.js');
+  assert.match(html, /id="invoice-discount-header"[^>]*>Chiết khấu \(%\)<\/th>/);
+  assert.match(invoice, /supportsInvoiceLineDiscount/);
+  assert.match(invoice, /class="form-control-inline item-discount"/);
+  assert.match(history, /plSelect\.value = order\.pricelistId \|\| 'retail'/);
+  assert.match(history, /new CustomEvent\('loadDraftOrder'/);
   assert.doesNotMatch(invoice, /item\.discountPercent[^\n]*%<\/td>/);
+  assert.match(invoice, /isRetail && order\.discountType === 'percent'/);
   assert.match(invoice, /discountMultiplier/); // calculation remains intact
   assert.match(invoice, /discountAmount/);
 });

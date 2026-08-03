@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260803-customer-all-pages1">
+  <link rel="stylesheet" href="style.css?v=20260803-invoice-market-discount3">
 </head>
 <body>
 
@@ -915,7 +915,7 @@
               </div>
 
               <div class="table-responsive">
-                <table class="table invoice-items-table" style="table-layout: fixed; min-width: 1080px;">
+                <table class="table invoice-items-table" style="table-layout: fixed; min-width: 1160px;">
                   <colgroup>
                     <col style="width: 85px;">   <!-- Mã SP -->
                     <col style="width: auto;">   <!-- Tên SP (flexible, includes màu sắc) -->
@@ -923,6 +923,7 @@
                     <col style="width: 190px;">  <!-- Quy cách -->
                     <col style="width: 70px;">   <!-- SL -->
                     <col style="width: 105px;">  <!-- Đơn giá sau chiết khấu -->
+                    <col id="invoice-discount-col" style="width: 90px; display: none;"> <!-- Chiết khấu dòng -->
                     <col style="width: 180px;">  <!-- Ghi chú -->
                     <col style="width: 160px;">  <!-- Thành tiền -->
                     <col style="width: 46px;">   <!-- Xóa -->
@@ -935,6 +936,7 @@
                       <th>Quy cách</th>
                       <th style="text-align: center;">SL</th>
                       <th style="text-align: right;">Đơn giá</th>
+                      <th id="invoice-discount-header" style="text-align: center; display: none;">Chiết khấu (%)</th>
                       <th style="text-align: center;">Ghi chú</th>
                       <th style="text-align: right;">Thành tiền</th>
                       <th style="text-align: center;">Xóa</th>
@@ -942,7 +944,7 @@
                   </thead>
                   <tbody id="invoice-items-body">
                     <tr id="invoice-empty-row">
-                      <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                      <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 3rem;">
                         Chưa chọn sản phẩm nào. Tìm kiếm sản phẩm ở trên để thêm vào hóa đơn.
                       </td>
                     </tr>
@@ -4046,6 +4048,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260803-customer-all-pages1"></script>
+  <script type="module" src="js/main.js?v=20260803-invoice-market-discount3"></script>
 </body>
 </html>

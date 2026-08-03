@@ -5,9 +5,9 @@ import {
   dbDeletePricelist,
   dbSavePriceListItems,
   dbDeletePriceListItem
-} from '../services/supabase.js?v=20260803-customer-all-pages1';
-import { renderAll } from '../main.js?v=20260803-customer-all-pages1';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20260803-customer-all-pages1';
+} from '../services/supabase.js?v=20260803-invoice-market-discount3';
+import { renderAll } from '../main.js?v=20260803-invoice-market-discount3';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20260803-invoice-market-discount3';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,

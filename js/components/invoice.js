@@ -1,11 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-customer-all-pages1';
-import { renderAll, switchTab } from '../main.js?v=20260803-customer-all-pages1';
+import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-invoice-market-discount3';
+import { renderAll, switchTab } from '../main.js?v=20260803-invoice-market-discount3';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260803-customer-all-pages1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-customer-all-pages1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260803-invoice-market-discount3';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-invoice-market-discount3';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
+import { supportsInvoiceLineDiscount } from '../domain/invoice-discount.js';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -43,6 +44,18 @@ export function getActiveInvoiceDiscount(brand) {
   // Bảng giá mới lưu đơn giá SKU trực tiếp. Chiết khấu dòng là nghiệp vụ riêng,
   // không còn được suy ra từ brand_discounts của bảng giá cũ.
   return 0;
+}
+
+function activeInvoicePriceListSupportsDiscount() {
+  const selectedId = document.getElementById('invoice-pricelist-select')?.value || '';
+  if (!selectedId || selectedId === 'retail') return false;
+  const priceLists = [...(state.allPricelists || []), ...(state.pricelists || [])];
+  const selected = priceLists.find(priceList => String(priceList.id) === String(selectedId));
+  if (supportsInvoiceLineDiscount(selected)) return true;
+
+  // Legacy drafts may only retain the price-list name on each line.
+  return (state.invoiceItems || []).some(item => String(item.priceListName || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('thi truong'));
 }
 
 function getProductId(product) {
@@ -340,13 +353,18 @@ export function renderInvoiceTable() {
   populateQuickCustomerManagerDropdown();
 
   const manualPriceMode = isManualInvoicePriceMode();
+  const showLineDiscount = activeInvoicePriceListSupportsDiscount();
+  const discountColumn = document.getElementById('invoice-discount-col');
+  const discountHeader = document.getElementById('invoice-discount-header');
+  if (discountColumn) discountColumn.style.display = showLineDiscount ? '' : 'none';
+  if (discountHeader) discountHeader.style.display = showLineDiscount ? '' : 'none';
   const adjustmentHeader = document.querySelector('.invoice-items-table thead th:nth-child(6)');
-  if (adjustmentHeader) adjustmentHeader.innerText = 'Đơn giá';
+  if (adjustmentHeader) adjustmentHeader.innerText = showLineDiscount ? 'Giá thị trường' : 'Đơn giá';
   
   if (state.invoiceItems.length === 0) {
     tableBody.innerHTML = `
       <tr id="invoice-empty-row">
-        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="${showLineDiscount ? 10 : 9}" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Chưa chọn sản phẩm nào. Tìm kiếm sản phẩm ở trên để thêm vào hóa đơn.
         </td>
       </tr>
@@ -369,7 +387,9 @@ export function renderInvoiceTable() {
     const effectiveUnitPrice = Math.round((item.price || 0) * (1 - (item.discountPercent || 0) / 100));
     const adjustmentCellHtml = manualPriceMode
       ? `<input type="text" class="form-control-inline item-manual-price" value="${formatNumber(item.price || 0)}" style="width: 80px; text-align: right;" ${disabledAttr}>`
-      : `<span class="invoice-effective-unit-price" title="Đơn giá sau chiết khấu">${formatNumber(effectiveUnitPrice)}</span>`;
+      : showLineDiscount
+        ? `<span class="invoice-market-unit-price" title="Giá trước chiết khấu">${formatNumber(item.price || 0)}</span>`
+        : `<span class="invoice-effective-unit-price" title="Đơn giá sau chiết khấu">${formatNumber(effectiveUnitPrice)}</span>`;
 
     // Kiểm tra sản phẩm sơn lót hoặc bột bả (loại trừ trường hợp sơn giả đá)
     const nameLower = p.name.toLowerCase();
@@ -408,10 +428,14 @@ export function renderInvoiceTable() {
         <td style="text-align: center;">
           ${adjustmentCellHtml}
         </td>
+        ${showLineDiscount ? `
+        <td style="text-align: center;">
+          <input type="number" class="form-control-inline item-discount" value="${Number(item.discountPercent || 0)}" min="0" max="100" step="0.01" style="width: 72px; text-align: center; font-weight: 600;" ${disabledAttr}>
+        </td>` : ''}
         <td>
           <input type="text" class="form-control-inline item-notes" value="${item.notes}" placeholder="VD: Màu pha đậm..." style="width: 100%; font-size: 0.75rem;" ${disabledAttr}>
         </td>
-        <td style="text-align: right; font-weight: 600; color: #fff; font-size: 0.9rem;">
+        <td class="invoice-line-total" style="text-align: right; font-weight: 600; color: #fff; font-size: 0.9rem;">
           ${formatCurrency(subTotal)}
         </td>
         <td style="text-align: center;">
@@ -427,10 +451,8 @@ export function renderInvoiceTable() {
   const updateRowSubtotal = (row, idx) => {
     const item = state.invoiceItems[idx];
     const subTotal = Math.round(item.quantity * item.price * (1 - item.discountPercent / 100));
-    // Cột Thành tiền là cột thứ 8 (chỉ số index là 7)
-    if (row && row.cells && row.cells[7]) {
-      row.cells[7].innerText = formatCurrency(subTotal);
-    }
+    const totalCell = row?.querySelector('.invoice-line-total');
+    if (totalCell) totalCell.innerText = formatCurrency(subTotal);
   };
 
   // Gán sự kiện cho các ô nhập liệu trong bảng
@@ -470,7 +492,7 @@ export function renderInvoiceTable() {
   });
 
   document.querySelectorAll('.item-discount').forEach(input => {
-    input.addEventListener('change', (e) => {
+    input.addEventListener('input', (e) => {
       const row = e.target.closest('tr');
       const idx = parseInt(row.getAttribute('data-index'));
       let disc = parseFloat(e.target.value);
@@ -1690,7 +1712,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Giảm giá${order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
+          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Giảm giá${isRetail && order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printDiscount)}</td>
         </tr>
         
