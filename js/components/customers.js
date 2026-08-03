@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-order-business-date1';
-import { renderAll } from '../main.js?v=20260803-order-business-date1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-order-business-date1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-order-business-date1';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-cloud-reset-sync1';
+import { renderAll } from '../main.js?v=20260803-cloud-reset-sync1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-cloud-reset-sync1';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-cloud-reset-sync1';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260803-cloud-reset-sync1';
 import { collectCustomerDebt } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
@@ -2816,6 +2816,8 @@ export function openCustExcelModal() {
     custExcelImportData = [];
     custExcelDuplicateCodeCount = 0;
     custExcelImportDebug = null;
+    const mergeMode = document.querySelector('input[name="cust-import-mode"][value="merge"]');
+    if (mergeMode) mergeMode.checked = true;
     document.getElementById('cust-excel-file-input').value = '';
     document.getElementById('cust-excel-preview-container').style.display = 'none';
     const submitBtn = document.getElementById('btn-save-cust-excel-submit');
@@ -3206,14 +3208,20 @@ function handleCustExcelFile(file) {
 
 async function processCustomerExcelImport() {
   if (custExcelImportData.length === 0) return;
-  
-  // Customer imports are merge-only. The destructive overwrite path remains
-  // unreachable even if stale HTML or browser state selects that radio value.
-  const mode = 'merge';
+
+  const mode = document.querySelector('input[name="cust-import-mode"]:checked')?.value || 'merge';
+  if (mode === 'overwrite' && !['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được ghi đè danh sách khách hàng.', 'danger');
+    return;
+  }
   
   try {
     showToast("Đang đồng bộ dữ liệu đám mây mới nhất...", "info");
-    await dbFetchCustomers();
+    const cloudCustomersLoaded = await dbFetchCustomers();
+    if (mode === 'overwrite' && !cloudCustomersLoaded) {
+      throw new Error('Không tải được danh sách khách hàng mới nhất; đã hủy ghi đè để bảo vệ dữ liệu hiện tại.');
+    }
+    const customersBeforeImport = [...state.customers];
     
     showToast("Đang nhập dữ liệu khách hàng vào hệ thống...", "info");
     
@@ -3222,13 +3230,15 @@ async function processCustomerExcelImport() {
     const claimedExistingIds = new Set();
     for (const c of custExcelImportData) {
       let idx = -1;
-      if (mode === 'merge') {
-        const cCodeClean = c.code.trim().toUpperCase().normalize('NFC');
-        idx = state.customers.findIndex(oc =>
-          !claimedExistingIds.has(oc.id) &&
-          (oc.code || '').toString().trim().toUpperCase().normalize('NFC') === cCodeClean
-        );
-      }
+      const cCodeClean = c.code.trim().toUpperCase().normalize('NFC');
+      const cPhoneClean = String(c.phone || '').replace(/\D/g, '');
+      idx = state.customers.findIndex(oc => {
+        if (claimedExistingIds.has(oc.id)) return false;
+        const sameCode = (oc.code || '').toString().trim().toUpperCase().normalize('NFC') === cCodeClean;
+        const existingPhone = String(oc.phone || '').replace(/\D/g, '');
+        const samePhone = Boolean(cPhoneClean && existingPhone && cPhoneClean === existingPhone);
+        return sameCode || samePhone;
+      });
       
       if (idx > -1) {
         // Update existing customer
@@ -3238,23 +3248,25 @@ async function processCustomerExcelImport() {
         c.id = oldId; // keep original ID
 
         const presence = c.importFieldPresence || {};
-        if (!presence.phone) c.phone = existingCustomer.phone || '';
-        if (!presence.address) c.address = existingCustomer.address || '';
-        if (!presence.assignedBrand) {
-          c.assignedBrand = existingCustomer.assignedBrand || c.assignedBrand;
-          c.assignedBrandId = existingCustomer.assignedBrandId || existingCustomer.assigned_brand_id || c.assignedBrandId;
-        }
-        if (!presence.pricelistId) c.pricelistId = existingCustomer.pricelistId || '';
-        if (!presence.managedBy) c.managedBy = existingCustomer.managedBy || '';
-        if (!presence.notes) c.notes = existingCustomer.notes || '';
-        if (!presence.debt) c.debt = Number(existingCustomer.importedDebtBaseline || 0);
-        if (!presence.totalTransaction) c.totalTransaction = Number(existingCustomer.importedTotalTransactionBaseline || 0);
-        if (!presence.totalReturn) c.totalReturn = Number(existingCustomer.importedTotalReturnBaseline || 0);
-        if (!presence.netRevenue) c.netRevenue = Number(existingCustomer.importedNetRevenueBaseline || 0);
-        c.brandDiscounts = { ...(existingCustomer.brandDiscounts || {}), ...(c.brandDiscounts || {}) };
-        if (!presence.debtDays && existingCustomer.brandDiscounts?.debtDays !== undefined) {
-          c.brandDiscounts.debtDays = existingCustomer.brandDiscounts.debtDays;
-          c.debtDays = existingCustomer.brandDiscounts.debtDays;
+        if (mode === 'merge') {
+          if (!presence.phone) c.phone = existingCustomer.phone || '';
+          if (!presence.address) c.address = existingCustomer.address || '';
+          if (!presence.assignedBrand) {
+            c.assignedBrand = existingCustomer.assignedBrand || c.assignedBrand;
+            c.assignedBrandId = existingCustomer.assignedBrandId || existingCustomer.assigned_brand_id || c.assignedBrandId;
+          }
+          if (!presence.pricelistId) c.pricelistId = existingCustomer.pricelistId || '';
+          if (!presence.managedBy) c.managedBy = existingCustomer.managedBy || '';
+          if (!presence.notes) c.notes = existingCustomer.notes || '';
+          if (!presence.debt) c.debt = Number(existingCustomer.importedDebtBaseline || 0);
+          if (!presence.totalTransaction) c.totalTransaction = Number(existingCustomer.importedTotalTransactionBaseline || 0);
+          if (!presence.totalReturn) c.totalReturn = Number(existingCustomer.importedTotalReturnBaseline || 0);
+          if (!presence.netRevenue) c.netRevenue = Number(existingCustomer.importedNetRevenueBaseline || 0);
+          c.brandDiscounts = { ...(existingCustomer.brandDiscounts || {}), ...(c.brandDiscounts || {}) };
+          if (!presence.debtDays && existingCustomer.brandDiscounts?.debtDays !== undefined) {
+            c.brandDiscounts.debtDays = existingCustomer.brandDiscounts.debtDays;
+            c.debtDays = existingCustomer.brandDiscounts.debtDays;
+          }
         }
         
         // Merge debt histories
@@ -3279,6 +3291,21 @@ async function processCustomerExcelImport() {
       uniqueImportMap.set(c.id, c);
     }
     const uniqueImportData = Array.from(uniqueImportMap.values());
+    const importedIds = new Set(uniqueImportData.map(customer => customer.id));
+    const obsoleteCustomerIds = mode === 'overwrite'
+      ? customersBeforeImport.filter(customer => !importedIds.has(customer.id)).map(customer => customer.id)
+      : [];
+
+    if (mode === 'overwrite') {
+      const confirmed = confirm(
+        `Ghi đè toàn bộ sẽ thay danh sách hiện tại bằng ${uniqueImportData.length} khách hàng trong file` +
+        ` và xóa ${obsoleteCustomerIds.length} khách hàng không có trong file. Lịch sử đơn hàng vẫn được giữ nguyên. Bạn có chắc chắn tiếp tục?`
+      );
+      if (!confirmed) {
+        state.customers = customersBeforeImport;
+        return;
+      }
+    }
     
     const saved = await dbSaveCustomersBulk(uniqueImportData);
     if (saved) {
@@ -3288,7 +3315,6 @@ async function processCustomerExcelImport() {
       const expectedTotals = calculateCustomerTotals(uniqueImportData);
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
       const refreshedFromCloud = await dbFetchCustomers();
-      const importedIds = new Set(uniqueImportData.map(customer => customer.id));
       const persistedImportData = refreshedFromCloud
         ? state.customers.filter(customer => importedIds.has(customer.id))
         : uniqueImportData;
@@ -3306,10 +3332,18 @@ async function processCustomerExcelImport() {
         return;
       }
 
+      // Chỉ xóa hồ sơ cũ sau khi toàn bộ dữ liệu mới đã được máy chủ xác nhận.
+      // Lịch sử đơn, sổ nợ và chứng từ không nằm trong phạm vi xóa này.
+      if (mode === 'overwrite' && obsoleteCustomerIds.length > 0) {
+        const removed = await dbDeleteCustomersBulk(obsoleteCustomerIds);
+        if (!removed) return;
+        await dbFetchCustomers();
+      }
+
       renderAll();
       closeCustExcelModal();
       showToast(
-        `Đã nhập đủ ${uniqueImportData.length} khách hàng · Doanh số ${formatCurrency(persistedTotals.grossSales)} · Sau trả hàng ${formatCurrency(persistedTotals.netSales)}.`,
+        `${mode === 'overwrite' ? 'Đã ghi đè' : 'Đã nhập đủ'} ${uniqueImportData.length} khách hàng · Doanh số ${formatCurrency(persistedTotals.grossSales)} · Sau trả hàng ${formatCurrency(persistedTotals.netSales)}.`,
         "success"
       );
     }

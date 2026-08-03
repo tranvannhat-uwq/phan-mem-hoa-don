@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbSaveCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-order-business-date1';
-import { renderAll, switchTab } from '../main.js?v=20260803-order-business-date1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder } from '../services/supabase.js?v=20260803-cloud-reset-sync1';
+import { renderAll, switchTab } from '../main.js?v=20260803-cloud-reset-sync1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260803-order-business-date1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-order-business-date1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260803-cloud-reset-sync1';
+import { addCashbookTransaction } from './so_quy.js?v=20260803-cloud-reset-sync1';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
 import { supportsInvoiceLineDiscount } from '../domain/invoice-discount.js';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
@@ -1040,9 +1040,8 @@ export async function saveActiveOrder(status = 'settled') {
         managedBy: qManager
       };
       
-      const custSaved = await dbSaveCustomer(newCustomer);
+      const custSaved = await dbCreateQuickCustomer(newCustomer);
       if (!custSaved) {
-        showToast('Không thể tạo thông tin khách hàng mới. Vui lòng thử lại!', 'danger');
         return null;
       }
       state.activeCustomerId = newCustId;

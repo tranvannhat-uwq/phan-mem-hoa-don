@@ -23,6 +23,7 @@ Run these files in order on a staging clone first:
 15. `0015_customer_opening_financial_import.sql`
 16. `0016_customer_import_rpc_variable_conflict_fix.sql`
 17. `0017_privileged_order_business_date.sql`
+18. `0018_quick_customer_creation_rpc.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -114,3 +115,9 @@ Migration `0017` lets Admin/Accounting preserve the actual business day for
 orders entered after a weekend or holiday. The chosen date drives order history,
 debt-ledger timing and reporting, while confirmation/audit timestamps retain the
 real posting time. Sale-role payload dates are ignored and future dates are rejected.
+
+Migration `0018` adds a narrow authenticated RPC for creating a customer from
+the invoice screen. Admin/Accounting may choose an active manager; Sale users
+are forcibly assigned as the new customer's manager. Financial balances remain
+server-owned, direct customer-table insert policies are not widened, and every
+quick creation is audited.

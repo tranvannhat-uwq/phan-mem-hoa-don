@@ -73,14 +73,20 @@ test('imported dates replace stale legacy dates but preserve newer authoritative
   assert.match(service, /Supabase RPC payload sample/);
 });
 
-test('customer Excel import is merge-only and never substitutes today for a supplied date', () => {
+test('customer Excel overwrite is explicit, verified before cleanup and never substitutes today for a supplied date', () => {
   const customers = read('js/components/customers.js');
+  const service = read('js/services/supabase.js');
   const html = read('index.html');
-  assert.doesNotMatch(customers, /dbDeleteAllCustomers/);
-  assert.match(customers, /const mode = 'merge'/);
+  assert.match(customers, /input\[name="cust-import-mode"\]:checked/);
+  assert.match(customers, /await dbDeleteCustomersBulk\(obsoleteCustomerIds\)/);
+  assert.ok(customers.indexOf('customerImportDatesMatch') < customers.indexOf('await dbDeleteCustomersBulk(obsoleteCustomerIds)'));
+  assert.match(customers, /Lịch sử đơn hàng vẫn được giữ nguyên/);
+  assert.match(service, /export async function dbDeleteCustomersBulk/);
+  assert.match(service, /\.delete\(\)[\s\S]*\.in\('id', chunk\)/);
   assert.doesNotMatch(customers, /c\.createdAt\s*=\s*c\.createdAt\s*\|\|\s*new Date/);
   assert.match(customers, /c\.createdAt = c\.createdAt \|\| null/);
-  assert.match(html, /value="overwrite"[^>]*disabled/);
+  assert.match(html, /value="overwrite"/);
+  assert.doesNotMatch(html, /value="overwrite"[^>]*disabled/);
 });
 
 test('blank imported fields preserve prior baselines and signed values are not clamped', () => {

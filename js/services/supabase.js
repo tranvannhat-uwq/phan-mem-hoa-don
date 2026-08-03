@@ -613,6 +613,7 @@ export async function fetchCloudData() {
             notes: notes,
             items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
             date: order.order_date || order.created_at,
+            pricingVersion: order.pricing_version || order.pricingVersion || '',
             totalMarket: parseFloat(order.total_market || 0),
             totalDiscount: parseFloat(order.total_discount || 0),
             subtotal: parseFloat(order.subtotal !== undefined ? order.subtotal : (order.total_payable || 0)),
@@ -659,10 +660,10 @@ export async function fetchCloudData() {
         // The paginated RPC intentionally caps one call at 500 rows. The
         // customer screen filters client-side, so load every RLS-visible page.
         const customerData = await fetchFullTableData(tableCustomersName);
-        const localCust = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
-
-        if (customerData && customerData.length > 0) {
-          state.customers = customerData.map(cust => ({
+        // A successful empty Cloud response is authoritative (for example
+        // after the guarded business-data reset). Local data is used only in
+        // the catch branch when the Cloud request actually fails.
+        state.customers = (customerData || []).map(cust => ({
             id: cust.id,
             code: cust.code,
             name: cust.name,
@@ -693,9 +694,11 @@ export async function fetchCloudData() {
             managedBy: cust.managed_by || '',
             debtHistory: parseDebtHistory(cust.debt_history)
           }));
+        if (state.customers.length > 0) {
           await hydrateCustomerDebtHistory(state.customers);
-        } else if (localCust.length > 0) {
-          state.customers = localCust;
+        }
+        if (state.activeCustomerId && !state.customers.some(customer => customer.id === state.activeCustomerId)) {
+          state.activeCustomerId = null;
         }
         localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
       } catch (custErr) {
@@ -1867,6 +1870,39 @@ export async function dbSaveCustomer(customer) {
   return true;
 }
 
+// Quick customer creation is available from the order screen to every role,
+// but it goes through a narrow server RPC instead of widening direct customer
+// table writes. The database forces Sale users to own the new customer and
+// ignores every financial field from the browser.
+export async function dbCreateQuickCustomer(customer) {
+  if (!isCloudActive || !supabaseClient) return true;
+
+  try {
+    const command = {
+      id: customer.id,
+      code: customer.code,
+      name: customer.name,
+      phone: customer.phone || '',
+      address: customer.address || '',
+      province: customer.brandDiscounts?.province || customer.province || '',
+      assignedBrand: customer.assignedBrand || 'Tất cả',
+      pricelistId: customer.pricelistId || null,
+      managedBy: customer.managedBy || null,
+      notes: customer.notes || 'Thêm nhanh từ màn hình lên đơn'
+    };
+    const { data, error } = await supabaseClient.rpc('rpc_create_quick_customer', {
+      p_customer: command
+    });
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.message || 'Máy chủ không tạo được khách hàng');
+    return data.customer || true;
+  } catch (err) {
+    console.error(err);
+    showToast('Không thể thêm nhanh khách hàng: ' + (err.message || 'Lỗi hệ thống'), 'danger');
+    return false;
+  }
+}
+
 export async function dbSaveCustomersBulk(customers) {
   if (isCloudActive && supabaseClient) {
     try {
@@ -2104,6 +2140,36 @@ export async function dbDeleteCustomer(id) {
     }
   }
   return true;
+}
+
+export async function dbDeleteCustomersBulk(customerIds) {
+  if (!Array.isArray(customerIds) || customerIds.length === 0) return true;
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được ghi đè danh sách khách hàng.', 'danger');
+    return false;
+  }
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Cần kết nối Supabase để ghi đè danh sách khách hàng.', 'danger');
+    return false;
+  }
+
+  try {
+    const uniqueIds = [...new Set(customerIds.map(id => String(id || '')).filter(Boolean))];
+    const chunkSize = 200;
+    for (let offset = 0; offset < uniqueIds.length; offset += chunkSize) {
+      const chunk = uniqueIds.slice(offset, offset + chunkSize);
+      const { error } = await supabaseClient
+        .from(tableCustomersName)
+        .delete()
+        .in('id', chunk);
+      if (error) throw error;
+    }
+    return true;
+  } catch (error) {
+    console.error('Customer overwrite cleanup failed:', error);
+    showToast('Dữ liệu mới đã được lưu nhưng không thể xóa hết khách hàng cũ: ' + error.message, 'danger');
+    return false;
+  }
 }
 
 // --- Thao tác CSDL chi tiết (Bảng giá) ---
@@ -3594,6 +3660,7 @@ export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExc
     notes: order.notes || '',
     items: typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || []),
     date: order.order_date || order.created_at || order.date || order.createdAt,
+    pricingVersion: order.pricing_version || order.pricingVersion || '',
     createdAt: order.created_at || order.createdAt || order.date,
     updatedAt: order.updated_at || order.updatedAt || order.created_at || order.date,
     totalMarket: parseFloat(order.total_market ?? order.totalMarket ?? 0),

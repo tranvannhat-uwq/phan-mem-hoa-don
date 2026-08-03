@@ -92,7 +92,17 @@ export function getOrderFinancialBreakdown(order, salesReturns = []) {
     ? Math.round(storedMarket)
     : itemTotals.gross;
 
-  const storedProductDiscount = numberOrNull(order.totalDiscount) ?? numberOrNull(order.total_discount);
+  const storedTotalDiscount = numberOrNull(order.totalDiscount) ?? numberOrNull(order.total_discount);
+  const storedInvoiceDiscount = numberOrNull(order.discountAmount) ?? numberOrNull(order.discount_amount);
+  const pricingVersion = String(order.pricingVersion ?? order.pricing_version ?? '').toLowerCase();
+
+  // Since pricing version p1-v1, orders.total_discount is authoritative and
+  // already contains both line discounts and the order-level discount. Older
+  // browser-created orders stored only line discounts in this field. Keep the
+  // legacy interpretation unless the row explicitly identifies the new model.
+  const storedProductDiscount = storedTotalDiscount !== null && pricingVersion === 'p1-v1'
+    ? Math.max(0, storedTotalDiscount - nonNegative(storedInvoiceDiscount))
+    : storedTotalDiscount;
   let productDiscount = storedProductDiscount !== null && storedProductDiscount > 0
     ? Math.round(storedProductDiscount)
     : itemTotals.itemDiscount;
@@ -118,7 +128,6 @@ export function getOrderFinancialBreakdown(order, salesReturns = []) {
     Math.max(0, afterItemDiscount || (totalBeforeDiscount - productDiscount))
   );
 
-  const storedInvoiceDiscount = numberOrNull(order.discountAmount) ?? numberOrNull(order.discount_amount);
   const discountValue = nonNegative(order.discountValue ?? order.discount_value);
   const discountType = String(order.discountType ?? order.discount_type ?? 'amount').toLowerCase();
   let invoiceDiscount = storedInvoiceDiscount !== null && storedInvoiceDiscount > 0

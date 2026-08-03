@@ -46,6 +46,28 @@ assert.deepEqual(
   [200000, 38000, 162000]
 );
 
+const authoritativeCombinedDiscount = getOrderFinancialBreakdown({
+  id: 'P1',
+  status: 'settled',
+  pricingVersion: 'p1-v1',
+  items: [{ quantity: 5, price: 2539000 }, { quantity: 2, price: 3772000 }],
+  totalMarket: 20239000,
+  totalDiscount: 12548180,
+  subtotal: 20239000,
+  discountType: 'amount',
+  discountValue: 12548180,
+  discountAmount: 12548180,
+  totalPayable: 7690820
+});
+assert.deepEqual(
+  [
+    authoritativeCombinedDiscount.totalBeforeDiscount,
+    authoritativeCombinedDiscount.totalDiscountAmount,
+    authoritativeCombinedDiscount.totalAfterDiscount
+  ],
+  [20239000, 12548180, 7690820]
+);
+
 const oldOrder = getOrderFinancialBreakdown({
   id: 'D',
   status: 'settled',
@@ -88,7 +110,7 @@ assert.deepEqual(
   [0, 0, 0]
 );
 
-[noDiscount, lineAndAmountDiscount, percentDiscount, oldOrder, partialReturn, fullReturn].forEach(assertInvariant);
+[noDiscount, lineAndAmountDiscount, percentDiscount, authoritativeCombinedDiscount, oldOrder, partialReturn, fullReturn].forEach(assertInvariant);
 assert.equal(isOrderIncludedInFinancialSummary({ status: 'settled' }), true);
 assert.equal(isOrderIncludedInFinancialSummary({ status: 'cancelled' }), false);
 assert.equal(isOrderIncludedInFinancialSummary({ status: 'draft' }), false);
