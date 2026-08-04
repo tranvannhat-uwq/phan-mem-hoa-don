@@ -554,77 +554,31 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
       const exported = await exportBackupToExcel();
       if (exported) {
         if (reminderBanner) reminderBanner.style.display = 'none';
-        const mandatoryModal = document.getElementById('mandatory-backup-modal');
-        if (mandatoryModal) mandatoryModal.style.display = 'none';
       }
     });
   }
 
   if (reminderIgnoreBtn) {
     reminderIgnoreBtn.addEventListener('click', () => {
-      // Bỏ qua lời nhắc banner nhẹ cho ngày hôm nay (nhưng 16h30 vẫn sẽ hiện modal bắt buộc)
+      // Trước 16h30 có thể ẩn lời nhắc. Sau 16h30 cảnh báo đỏ sẽ xuất hiện lại,
+      // nhưng không khóa hoặc che màn hình làm việc.
       localStorage.setItem('weblendon_banner_ignored_date', new Date().toLocaleDateString('vi-VN'));
       if (reminderBanner) reminderBanner.style.display = 'none';
-      showToast('Đã ẩn nhắc nhở sao lưu (16:30 hệ thống sẽ yêu cầu bắt buộc).', 'secondary');
+      showToast('Đã ẩn lời nhắc sao lưu trước 16:30.', 'secondary');
     });
   }
 
-  // Đăng ký sự kiện cho modal bắt buộc sao lưu (16h30)
-  const mandatoryDownloadBtn = document.getElementById('btn-mandatory-backup-download');
-  const mandatoryModal = document.getElementById('mandatory-backup-modal');
-
-  if (mandatoryDownloadBtn) {
-    mandatoryDownloadBtn.addEventListener('click', async () => {
-      try {
-        mandatoryDownloadBtn.disabled = true;
-        mandatoryDownloadBtn.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i> Đang chuẩn bị bản sao lưu...';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        
-        const exported = await exportBackupToExcel();
-        if (!exported) throw new Error('Không tạo được bản xuất dữ liệu');
-        if (mandatoryModal) mandatoryModal.style.display = 'none';
-        showToast('Sao lưu thành công! Đã mở khóa ứng dụng.', 'success');
-      } catch (err) {
-        showToast('Sao lưu thất bại: ' + err.message, 'danger');
-      } finally {
-        mandatoryDownloadBtn.disabled = false;
-        mandatoryDownloadBtn.innerHTML = '<i data-lucide="download"></i> Tải bản sao lưu & Mở khóa ứng dụng';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-      }
-    });
-  }
-
-  // Sự kiện trước khi đóng trình duyệt (bật cảnh báo nếu sau 16h30 chưa sao lưu)
-  window.addEventListener('beforeunload', (e) => {
-    if (state.currentUser?.role === 'admin') {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const isAfter1630 = hours > 16 || (hours === 16 && minutes >= 30);
-      const todayStr = now.toLocaleDateString('vi-VN');
-      const lastBackup = localStorage.getItem('weblendon_last_backup_date');
-      
-      if (isAfter1630 && lastBackup !== todayStr) {
-        e.preventDefault();
-        e.returnValue = 'Bạn chưa thực hiện sao lưu dữ liệu bắt buộc lúc 16:30! Bạn có chắc chắn muốn thoát?';
-        return 'Bạn chưa thực hiện sao lưu dữ liệu bắt buộc lúc 16:30! Bạn có chắc chắn muốn thoát?';
-      }
-    }
-  });
-
-  // Chạy kiểm tra định kỳ mỗi 30 giây để tự động kích hoạt nhắc nhở/modal
+  // Chạy kiểm tra định kỳ mỗi 30 giây để cập nhật lời nhắc trên thanh điều hướng.
   setInterval(checkAndShowBackupReminder, 30000);
 }
 
-// Kiểm tra và hiển thị nhắc nhở / modal bắt buộc sao lưu cuối ngày
+// Kiểm tra và hiển thị lời nhắc sao lưu không chặn trên thanh điều hướng.
 export function checkAndShowBackupReminder() {
   const banner = document.getElementById('backup-reminder-banner');
-  const mandatoryModal = document.getElementById('mandatory-backup-modal');
 
-  // Chỉ hiển thị nhắc nhở cho Admin và Kế toán
+  // Chỉ hiển thị nhắc nhở cho Admin.
   if (state.currentUser?.role !== 'admin') {
     if (banner) banner.style.display = 'none';
-    if (mandatoryModal) mandatoryModal.style.display = 'none';
     return;
   }
 
@@ -639,22 +593,22 @@ export function checkAndShowBackupReminder() {
   const isAfter1630 = hours > 16 || (hours === 16 && minutes >= 30);
 
   if (lastBackup === todayStr) {
-    // Đã sao lưu hôm nay -> Ẩn tất cả nhắc nhở
+    // Đã sao lưu hôm nay -> Ẩn lời nhắc.
     if (banner) banner.style.display = 'none';
-    if (mandatoryModal) mandatoryModal.style.display = 'none';
+    banner?.classList.remove('is-urgent');
     return;
   }
 
   if (isAfter1630) {
-    // Sau 16h30: Bắt buộc sao lưu (hiển thị modal khóa màn hình, ẩn banner)
-    if (banner) banner.style.display = 'none';
-    if (mandatoryModal && mandatoryModal.style.display !== 'flex') {
-      mandatoryModal.style.display = 'flex';
+    // Sau 16h30: cảnh báo đỏ nhấp nháy, luôn nhìn thấy nhưng không khóa ứng dụng.
+    if (banner) {
+      banner.classList.add('is-urgent');
+      banner.style.display = 'flex';
       if (typeof lucide !== 'undefined') lucide.createIcons();
     }
   } else if (hours >= 16) {
-    // Từ 16h00 đến 16h29: Hiện banner nhắc nhở nhẹ nhàng (nếu chưa nhấn ẩn), ẩn modal bắt buộc
-    if (mandatoryModal) mandatoryModal.style.display = 'none';
+    // Từ 16h00 đến 16h29: hiện lời nhắc nhẹ nếu chưa nhấn ẩn.
+    banner?.classList.remove('is-urgent');
     if (lastIgnoredBanner !== todayStr) {
       if (banner && banner.style.display !== 'flex') {
         banner.style.display = 'flex';
@@ -664,8 +618,8 @@ export function checkAndShowBackupReminder() {
       if (banner) banner.style.display = 'none';
     }
   } else {
-    // Chưa đến 16h00: Ẩn tất cả
+    // Chưa đến 16h00: ẩn lời nhắc.
     if (banner) banner.style.display = 'none';
-    if (mandatoryModal) mandatoryModal.style.display = 'none';
+    banner?.classList.remove('is-urgent');
   }
 }

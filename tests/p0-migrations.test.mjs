@@ -30,7 +30,8 @@ const migrationNames = [
   '0021_enable_scoped_realtime.sql',
   '0022_dot_color_surcharge.sql',
   '0023_authoritative_color_surcharges.sql',
-  '0024_sale_managed_customer_debt_history.sql'
+  '0024_sale_managed_customer_debt_history.sql',
+  '0025_global_price_list_order_override.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 

@@ -11,6 +11,7 @@ import {
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -1126,7 +1127,27 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
   document.getElementById('invoice-notes').value = order.notes || '';
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
-    plSelect.value = order.pricelistId || 'retail';
+    const orderPriceListId = order.pricelistId || 'retail';
+    const customerDefaultPriceListId = customerContext.customer
+      ? getApplicablePriceList(
+        customerContext.customer,
+        state.allPricelists.length ? state.allPricelists : state.pricelists
+      ).priceList?.id || ''
+      : '';
+    const orderPriceList = (state.pricelists || []).find(priceList => priceList.id === orderPriceListId);
+    const isGlobalPriceList = Boolean(
+      orderPriceList
+      && normalizePriceListType(orderPriceList.type, orderPriceList.customerId) === PRICE_LIST_TYPES.GENERAL
+      && !orderPriceList.customerId
+      && !orderPriceList.customerGroupId
+    );
+    plSelect.value = orderPriceListId;
+    plSelect.dataset.explicitOverride = String(
+      orderPriceListId !== 'retail'
+      && Boolean(orderPriceListId)
+      && orderPriceListId !== customerDefaultPriceListId
+      && isGlobalPriceList
+    );
   }
   
   // Thiết lập Giảm giá & Thu khác
@@ -1199,7 +1220,7 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
   
   // Chuyển Tab
   if (plSelect) {
-    plSelect.disabled = isReadOnly || (isCopy && state.currentUser?.role === 'sale');
+    plSelect.disabled = isReadOnly;
   }
   const plGroup = document.getElementById('invoice-pricelist-group');
   if (plGroup) plGroup.style.display = isReadOnly ? 'none' : 'block';

@@ -1331,7 +1331,10 @@ export async function saveCustomer() {
 
       
       const invoicePlSelect = document.getElementById('invoice-pricelist-select');
-      if (invoicePlSelect) invoicePlSelect.value = pricelistId;
+      if (invoicePlSelect) {
+        invoicePlSelect.value = pricelistId;
+        invoicePlSelect.dataset.explicitOverride = 'false';
+      }
       
       applyActivePriceListToInvoice();
     }

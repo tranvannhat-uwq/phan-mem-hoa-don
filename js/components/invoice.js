@@ -127,7 +127,7 @@ function resolveProductPrice(product) {
   if (selectedId === 'retail') {
     return { status: 'missing', price: null, priceListId: null, priceListName: '', source: 'manual_override' };
   }
-  const customerForPricing = isDraftPriceListOverrideEnabled() && selectedId ? null : customer;
+  const customerForPricing = isExplicitInvoicePriceListOverride() && selectedId ? null : customer;
   // Bảng giá gán cho khách có thể là bảng nội bộ/legacy và không nằm trong
   // dropdown của Sale, nhưng vẫn phải được dùng để tính giá của khách đó.
   const priceListsForPricing = customerForPricing
@@ -144,11 +144,12 @@ function resolveProductPrice(product) {
   });
 }
 
-function isDraftPriceListOverrideEnabled() {
-  const saveBtn = document.getElementById('btn-save-order');
+function isExplicitInvoicePriceListOverride() {
+  const select = document.getElementById('invoice-pricelist-select');
   return Boolean(
-    saveBtn?.getAttribute('data-edit-order-id')
-    || saveBtn?.getAttribute('data-amend-order-id')
+    select?.dataset.explicitOverride === 'true'
+    && select.value
+    && select.value !== 'retail'
   );
 }
 
@@ -184,6 +185,16 @@ function isUsingCustomerDefaultPriceList(customer) {
 }
 
 function canPersistCurrentInvoicePricing() {
+  if (isExplicitInvoicePriceListOverride()) {
+    const selected = getSelectedInvoicePriceList();
+    return Boolean(
+      selected
+      && normalizePriceListType(selected.type, selected.customerId) === PRICE_LIST_TYPES.GENERAL
+      && !selected.customerId
+      && !selected.customerGroupId
+      && canUserViewPriceList(state.currentUser, selected)
+    );
+  }
   if (!state.activeCustomerId || state.isQuickCustomerMode) return true;
   const customer = state.customers.find(item => item.id === state.activeCustomerId);
   return isUsingCustomerDefaultPriceList(customer);
@@ -309,13 +320,15 @@ export function applyActivePriceListToInvoice() {
   if (!plSelect) return;
   const customer = state.activeCustomerId ? state.customers.find(item => item.id === state.activeCustomerId) : null;
   const requestedId = plSelect.value && plSelect.value !== 'retail' ? plSelect.value : '';
-  const customerForPricing = isDraftPriceListOverrideEnabled() && requestedId ? null : customer;
+  const customerForPricing = isExplicitInvoicePriceListOverride() && requestedId ? null : customer;
   const visibleLists = customerForPricing
     ? (state.allPricelists.length ? state.allPricelists : state.pricelists)
     : filterPriceListsForUser(state.pricelists, state.currentUser);
   const applicable = getApplicablePriceList(customerForPricing, visibleLists, requestedId);
   const activePriceList = applicable.priceList;
-  if (customer && activePriceList && plSelect.value !== 'retail') plSelect.value = activePriceList.id;
+  if (customer && activePriceList && plSelect.value !== 'retail' && !isExplicitInvoicePriceListOverride()) {
+    plSelect.value = activePriceList.id;
+  }
   
   state.invoiceItems.forEach(item => {
     item.discountPercent = getActiveInvoiceDiscount(item.brand);
@@ -994,6 +1007,7 @@ export function compileActiveOrder() {
     amountDue,
     totalPayable,
     pricelistId,
+    priceListOverride: isExplicitInvoicePriceListOverride(),
     priceListNameSnapshot: state.pricelists.find(priceList => priceList.id === pricelistId)?.name || '',
     priceSelectedBy: state.currentUser ? state.currentUser.username : 'admin',
     createdBy: state.currentUser ? state.currentUser.username : 'admin'
@@ -1120,7 +1134,7 @@ export async function saveActiveOrder(status = 'settled') {
     if (!order) return null;
 
     if (!canPersistCurrentInvoicePricing()) {
-      showToast('Bảng giá đang chọn chỉ dùng để in thử, không được lưu/cập nhật vào đơn nháp. Vui lòng in đơn hoặc chọn lại bảng giá mặc định của khách.', 'warning');
+      showToast('Chỉ Bảng giá chung được phép ghi đè bảng giá mặc định của khách hàng.', 'warning');
       return null;
     }
     
@@ -1256,6 +1270,7 @@ export function resetInvoiceCustomer() {
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
     plSelect.value = '';
+    plSelect.dataset.explicitOverride = 'false';
     plSelect.disabled = false;
   }
   
@@ -2201,6 +2216,9 @@ export function setupInvoiceCreator() {
   const invoicePlSelect = document.getElementById('invoice-pricelist-select');
   if (invoicePlSelect) {
     invoicePlSelect.addEventListener('change', () => {
+      invoicePlSelect.dataset.explicitOverride = String(
+        Boolean(invoicePlSelect.value) && invoicePlSelect.value !== 'retail'
+      );
       applyActivePriceListToInvoice();
     });
   }
@@ -2325,12 +2343,13 @@ function selectInvoiceCustomer(customer) {
       state.allPricelists.length ? state.allPricelists : state.pricelists
     );
     plSelect.value = applicable.priceList?.id || '';
-    plSelect.disabled = state.currentUser?.role === 'sale';
+    plSelect.dataset.explicitOverride = 'false';
+    plSelect.disabled = false;
   }
   
   const plGroup = document.getElementById('invoice-pricelist-group');
   if (plGroup) {
-    plGroup.style.display = state.currentUser?.role === 'sale' ? 'none' : 'block';
+    plGroup.style.display = 'block';
   }
   
   applyActivePriceListToInvoice();

@@ -913,6 +913,89 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
+.backup-nav-alert {
+  align-items: center;
+  gap: 0.55rem;
+  max-width: min(520px, 55vw);
+  padding: 0.45rem 0.55rem 0.45rem 0.75rem;
+  color: #991b1b;
+  background: #fff1f2;
+  border: 1px solid #fda4af;
+  border-radius: 9px;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.08);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.backup-nav-alert.is-urgent {
+  color: #fff;
+  background: #dc2626;
+  border-color: #fca5a5;
+  animation: backupAlertPulse 1s ease-in-out infinite;
+}
+
+.backup-nav-alert-icon,
+.backup-nav-alert-download svg,
+.backup-nav-alert-close svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.backup-nav-alert-text {
+  white-space: nowrap;
+}
+
+.backup-nav-alert-download,
+.backup-nav-alert-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.backup-nav-alert-download {
+  padding: 0.3rem 0.6rem;
+  color: #fff;
+  background: #b91c1c;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.backup-nav-alert.is-urgent .backup-nav-alert-download {
+  color: #991b1b;
+  background: #fff;
+}
+
+.backup-nav-alert-close {
+  width: 30px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+}
+
+@keyframes backupAlertPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2), 0 0 14px rgba(239, 68, 68, 0.35);
+  }
+  50% {
+    opacity: 0.68;
+    box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.08), 0 0 4px rgba(239, 68, 68, 0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backup-nav-alert.is-urgent {
+    animation: none;
+  }
+}
+
 .page-title {
   font-family: var(--font-heading);
   font-size: 1.75rem;
@@ -2459,6 +2542,18 @@ select option {
   .top-header {
     border-bottom: 1px solid var(--border-color) !important;
     padding-bottom: 0.5rem !important;
+    align-items: flex-start !important;
+    gap: 0.5rem;
+  }
+
+  .backup-nav-alert {
+    max-width: 58vw;
+    padding: 0.4rem;
+  }
+
+  .backup-nav-alert-text,
+  .backup-nav-alert-download span {
+    display: none;
   }
 
   .page-title {

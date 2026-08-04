@@ -198,27 +198,21 @@
             <span class="db-status-badge status-local" id="db-status-badge">Cục bộ (LocalStorage)</span>
           </div>
         </div>
+        <div id="backup-reminder-banner" class="backup-nav-alert" role="alert" aria-live="polite" style="display: none;">
+          <i data-lucide="alert-triangle" class="backup-nav-alert-icon"></i>
+          <span class="backup-nav-alert-text">Chưa sao lưu dữ liệu cuối ngày</span>
+          <button type="button" id="btn-backup-reminder-download" class="backup-nav-alert-download" title="Tải bản sao lưu Excel">
+            <i data-lucide="download"></i>
+            <span>Tải sao lưu</span>
+          </button>
+          <button type="button" id="btn-backup-reminder-ignore" class="backup-nav-alert-close" title="Ẩn lời nhắc">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
       </header>
 
       <!-- Dashboard Panel -->
       <section id="dashboard-panel" class="panel active">
-        <!-- Banner Nhắc nhở Sao lưu Cuối ngày (Chỉ hiển thị cho Admin và Kế toán) -->
-        <div id="backup-reminder-banner" class="glass-panel" style="display: none; align-items: center; gap: 1rem; padding: 1.25rem; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; margin-bottom: 1.25rem;">
-          <div style="font-size: 1.75rem; color: #f59e0b; display: flex; align-items: center; justify-content: center;">
-            <i data-lucide="alert-triangle"></i>
-          </div>
-          <div style="flex-grow: 1;">
-            <h4 style="margin: 0 0 0.25rem 0; color: #f59e0b; font-size: 0.95rem; font-weight: 600;">Nhắc nhở sao lưu dữ liệu cuối ngày</h4>
-            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">Hôm nay bạn chưa tải bản sao lưu dữ liệu Excel dự phòng về máy tính. Vui lòng tải bản sao lưu để đảm bảo an toàn dữ liệu.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-backup-reminder-download" style="background: #f59e0b; border-color: #f59e0b; color: #fff; display: inline-flex; align-items: center; gap: 0.5rem; height: 38px; font-weight: 500;">
-            <i data-lucide="download"></i> Tải bản sao lưu Excel
-          </button>
-          <button id="btn-backup-reminder-ignore" style="padding: 0.5rem; border-radius: 6px; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center;">
-            <i data-lucide="x"></i>
-          </button>
-        </div>
-
         <!-- Dashboard Filter Toolbar -->
         <div class="dashboard-toolbar glass-panel" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; margin-bottom: 1.25rem; position: relative; z-index: 100; overflow: visible;">
           <!-- Row 1: Primary Filters & Action Buttons -->
@@ -4067,26 +4061,6 @@
           <button type="submit" class="btn btn-primary btn-sm">Xác nhận điều chỉnh</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- Modal Bắt buộc Sao lưu Dữ liệu Cuối ngày (16h30) -->
-  <div class="modal-overlay" id="mandatory-backup-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
-    <div class="modal-content" style="max-width: 500px; background: #1e1e2e; border: 2px solid #f59e0b; border-radius: 12px; padding: 2.5rem; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.6); position: relative;">
-      <div style="font-size: 4rem; color: #f59e0b; margin-bottom: 1rem; display: flex; justify-content: center; align-items: center;">
-        <i data-lucide="alert-octagon" style="width: 72px; height: 72px;"></i>
-      </div>
-      <h3 style="color: #fff; font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; letter-spacing: 0.5px;">YÊU CẦU SAO LƯU BẮT BUỘC</h3>
-      <p style="color: #a6adc8; font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem;">
-        Đã đến thời gian quy định sao lưu dữ liệu cuối ngày (<strong style="color: #f59e0b;">16:30</strong>). 
-        Để đảm bảo an toàn dữ liệu hóa đơn, kho hàng và công nợ của công ty, vui lòng tải bản sao lưu Excel về máy tính của bạn trước khi đóng phần mềm.
-      </p>
-      <div style="background: rgba(245, 158, 11, 0.08); border: 1px dashed rgba(245, 158, 11, 0.3); padding: 0.75rem; border-radius: 8px; font-size: 0.85rem; color: #f59e0b; margin-bottom: 2rem; text-align: left; line-height: 1.4;">
-        <strong>* Lưu ý:</strong> Màn hình này tạm thời bị khóa cho đến khi bạn hoàn thành việc tải xuống bản sao lưu.
-      </div>
-      <button class="btn btn-primary" id="btn-mandatory-backup-download" style="background: #f59e0b; border-color: #f59e0b; color: #fff; width: 100%; height: 48px; font-size: 1rem; font-weight: 600; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; transition: all 0.2s; border: none;">
-        <i data-lucide="download"></i> Tải bản sao lưu & Mở khóa ứng dụng
-      </button>
     </div>
   </div>
 

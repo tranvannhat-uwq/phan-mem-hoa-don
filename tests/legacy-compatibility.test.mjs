@@ -47,7 +47,8 @@ test('market pricing exposes line discount input but agent invoice never prints 
   assert.match(html, /id="invoice-discount-header"[^>]*>Chiết khấu \(%\)<\/th>/);
   assert.match(invoice, /supportsInvoiceLineDiscount/);
   assert.match(invoice, /class="form-control-inline item-discount"/);
-  assert.match(history, /plSelect\.value = order\.pricelistId \|\| 'retail'/);
+  assert.match(history, /const orderPriceListId = order\.pricelistId \|\| 'retail'/);
+  assert.match(history, /plSelect\.value = orderPriceListId/);
   assert.match(history, /new CustomEvent\('loadDraftOrder'/);
   assert.doesNotMatch(invoice, /item\.discountPercent[^\n]*%<\/td>/);
   assert.match(invoice, /isRetail && order\.discountType === 'percent'/);
