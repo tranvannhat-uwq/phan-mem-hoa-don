@@ -197,7 +197,7 @@ function addVariantEditorRow(variant = {}) {
       <td>
         <select class="form-control variant-package-input" required>
           <option value="">Chọn</option>
-          ${['Thùng', 'Lon', 'Hộp', 'Bao', 'Túi', 'Chai', 'Gói', 'Kg', 'Lít'].map(value =>
+          ${['Thùng', 'Lon', 'Hộp', 'Bao', 'Túi', 'Chai', 'Gói', 'Kg', 'Lít', 'Cái'].map(value =>
             `<option value="${value}" ${packageName === value ? 'selected' : ''}>${value}</option>`
           ).join('')}
         </select>

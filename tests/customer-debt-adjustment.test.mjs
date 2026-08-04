@@ -14,6 +14,7 @@ test('customer debt adjustment uses the reviewed RPC and keeps profile debt read
 
   assert.match(html, /id="cust-debt"[^>]*readonly/);
   assert.match(html, /id="btn-open-customer-debt-adjust"/);
+  assert.match(html, /id="customer-debt-adjust-modal"[\s\S]*?<div class="modal-content"/);
   assert.match(html, /id="customer-debt-adjust-reason"[^>]*minlength="3"/);
   assert.match(customers, /\['admin', 'accounting'\]\.includes\(state\.currentUser\?\.role\)/);
   assert.match(customers, /await dbAdjustCustomerDebt\(customerId, newDebt, reason\)/);

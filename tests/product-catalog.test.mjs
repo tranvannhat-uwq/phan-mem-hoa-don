@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   buildVariantSnapshot,
   buildProductFamilies,
@@ -8,6 +9,9 @@ import {
   shouldAutoSelectVariant,
   variantSpecification
 } from '../js/domain/product-catalog.js';
+
+const productsUi = readFileSync(new URL('../js/components/products.js', import.meta.url), 'utf8');
+assert.match(productsUi, /'Lít', 'Cái'\]\.map\(value =>/);
 
 const products = [
   {
@@ -60,10 +64,12 @@ const products = [
 ];
 
 assert.equal(inferLegacyBaseCode('CT-Đ1-THÙNG'), 'CT-Đ1');
+assert.equal(inferLegacyBaseCode('SP-01-CAI'), 'SP-01');
 assert.equal(inferLegacyBaseCode('ABC-LÍT'), 'ABC');
 assert.equal(inferLegacyBaseCode('NO-SUFFIX'), 'NO-SUFFIX');
 assert.equal(getProductBaseCode(products[3], products), 'BA-46');
 assert.equal(variantSpecification(products[0]), 'Lon 6,3 kg');
+assert.equal(variantSpecification({ packageType: 'Cái', packageWeight: 1, packageWeightUnit: 'cái' }), 'Cái 1 cái');
 assert.deepEqual(buildVariantSnapshot(products[0]), {
   productGroupId: null,
   variantId: 'ct-d1-lon',
