@@ -1,4 +1,4 @@
-const LEGACY_PACKAGE_SUFFIX = /(?:[-_\s]+)(LON|THUNG|THÙNG|HOP|HỘP|BAO|TUI|TÚI|CHAI|GOI|GÓI|KG|LIT|LÍT|CAI|CÁI)$/iu;
+const LEGACY_PACKAGE_SUFFIX = /(?:[-_\s]+)(LON|THUNG|THÙNG|HOP|HỘP|BAO|TUI|TÚI|CHAI|GOI|GÓI|KG|LIT|LÍT|CAI|CÁI|BO|BỘ)$/iu;
 
 export function normalizeCatalogText(value) {
   return String(value ?? '')
