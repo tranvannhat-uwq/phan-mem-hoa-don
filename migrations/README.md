@@ -25,6 +25,8 @@ Run these files in order on a staging clone first:
 17. `0017_privileged_order_business_date.sql`
 18. `0018_quick_customer_creation_rpc.sql`
 19. `0019_order_amendment_and_customer_advance.sql`
+20. `0020_customer_debt_adjustment_credit.sql`
+21. `0021_enable_scoped_realtime.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -132,3 +134,7 @@ Migration `0020` exposes the existing audited customer-debt correction workflow
 in a way that supports the signed balance convention from `0019`. Admin and
 Accounting may set either a receivable or advance-credit balance, but every
 change still requires a reason and appends both debt-ledger and audit records.
+
+Migration `0021` registers the active order, customer, cashbook and catalog tables
+with Supabase Realtime. It changes publication metadata only, preserves every
+business row and continues to rely on the existing RLS policies for event access.

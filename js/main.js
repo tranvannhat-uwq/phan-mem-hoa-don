@@ -15,6 +15,7 @@ import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist
 import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260803-amend-advance1';
 import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260803-amend-advance1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260803-amend-advance1';
 
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
 // chuyển tab, tránh dựng hàng nghìn dòng DOM ẩn trong mỗi lần cập nhật.
@@ -288,7 +289,10 @@ function setupSupabaseSettings() {
     }
   });
 
-  disconnectBtn.addEventListener('click', disconnectSupabase);
+  disconnectBtn.addEventListener('click', async () => {
+    await stopRealtimeSync();
+    disconnectSupabase();
+  });
   syncBtn.addEventListener('click', syncLocalToCloud);
 }
 
@@ -413,6 +417,7 @@ async function initApp() {
 
 
   renderAll();
+  if (activeUser) void startRealtimeSync(renderAll);
 }
 
 // Xử lý khi nhấn nút kết nối lại trên Badge trạng thái
@@ -421,6 +426,7 @@ document.addEventListener('click', async (e) => {
     const success = await retrySupabaseConnection();
     if (success) {
       renderAll();
+      if (state.currentUser) void startRealtimeSync(renderAll);
     }
   }
 });

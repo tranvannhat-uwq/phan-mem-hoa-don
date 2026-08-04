@@ -10,6 +10,7 @@ import {
 } from '../domain/order-financials.js?v=20260803-amend-advance1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { orderDateToInputValue } from '../domain/order-business-date.js';
+import { normalizeOrderItemsForEditing } from '../domain/order-edit.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -1081,51 +1082,11 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   }
   
   // Tải các mặt hàng
-  state.invoiceItems = order.items.map(item => {
-    let pObj = state.products.find(product =>
-      product.id === (item.variantId || item.productId) ||
-      (product.code === (item.variantCode || item.productCode) && product.brand === item.brand)
-    );
-    if (!pObj) {
-      pObj = {
-        id: item.variantId || item.productId || null,
-        code: item.variantCode || item.productCode || item.code,
-        variantCode: item.variantCode || item.productCode || item.code,
-        productGroupId: item.productGroupId || null,
-        baseCode: item.baseCode || '',
-        name: item.productName || item.name,
-        brand: item.brand,
-        packagingName: item.packagingName || item.package,
-        packageType: item.packagingName || item.package,
-        packageWeight: item.weightOrVolume || item.packageWeight || '',
-        packageWeightUnit: item.unitName || item.packageWeightUnit || '',
-        displaySpecification: item.specificationSnapshot || ''
-      };
-    }
-    return {
-      product: pObj,
-      productGroupId: item.productGroupId || pObj.productGroupId || null,
-      variantId: item.variantId || item.productId || pObj.id || null,
-      variantCode: item.variantCode || item.productCode || pObj.code,
-      baseCode: item.baseCode || pObj.baseCode || '',
-      brand: item.brand,
-      package: item.packagingName || item.package,
-      packagingName: item.packagingName || item.package,
-      packageWeight: item.weightOrVolume || item.packageWeight || pObj.packageWeight || '',
-      unitName: item.unitName || item.packageWeightUnit || pObj.packageWeightUnit || '',
-      colorCode: item.colorCode || '',
-      colorPercent: item.colorPercent || 0,
-      quantity: item.quantity,
-      discountPercent: item.discountPercent,
-      price: item.price,
-      unitPrice: item.unitPrice || item.price,
-      listPrice: item.listPrice || item.price,
-      priceListId: item.priceListId || order.pricelistId || '',
-      priceListName: item.priceListNameSnapshot || '',
-      priceSource: item.priceSource || 'legacy_snapshot',
-      notes: item.notes || ''
-    };
-  });
+  state.invoiceItems = normalizeOrderItemsForEditing(order.items, state.products)
+    .map(item => ({
+      ...item,
+      priceListId: item.priceListId || order.pricelistId || ''
+    }));
   
   // Cài đặt Ghi chú & bảng giá
   document.getElementById('invoice-notes').value = order.notes || '';
@@ -1200,6 +1161,11 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   if (plSelect) plSelect.disabled = isReadOnly;
   const plGroup = document.getElementById('invoice-pricelist-group');
   if (plGroup) plGroup.style.display = isReadOnly ? 'none' : 'block';
+
+  // Keep the central navigation state aligned with the panel shown below.
+  // Realtime/background renders use currentTab as their source of truth; if it
+  // remains on history-panel they immediately pull the user out of order edit.
+  state.currentTab = 'invoice-panel';
 
   document.querySelectorAll('.nav-link').forEach(l => {
     if (l.getAttribute('data-target') === 'invoice-panel') {

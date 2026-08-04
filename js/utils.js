@@ -422,7 +422,7 @@ export function updateDbStatusUI(status, message = '') {
   
   if (status === 'cloud') {
     badge.classList.add('status-cloud');
-    badge.innerHTML = `<i data-lucide="cloud" style="width:12px;height:12px;"></i> Đám mây (Supabase)`;
+    badge.innerHTML = `<i data-lucide="cloud" style="width:12px;height:12px;"></i> ${message || 'Đám mây (Supabase)'}`;
   } else if (status === 'connecting') {
     badge.classList.add('status-connecting');
     badge.innerHTML = `<i data-lucide="loader" style="width:12px;height:12px;animation:spin 1s linear infinite;"></i> ${message || 'Đang kết nối...'}`;

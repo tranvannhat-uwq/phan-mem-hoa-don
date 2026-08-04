@@ -309,12 +309,18 @@ export async function connectSupabase(url, key, verbose = true) {
 
 // Ngắt kết nối đám mây
 export function disconnectSupabase() {
+  const connectedClient = supabaseClient;
   localStorage.removeItem('billing_supabase_url');
   localStorage.removeItem('billing_supabase_key');
   clearSupabaseAuthStorage();
   
   supabaseClient = null;
   isCloudActive = false;
+  if (connectedClient?.removeAllChannels) {
+    void connectedClient.removeAllChannels().catch(error => {
+      console.warn('Could not close Cloud realtime channels:', error);
+    });
+  }
   
   const form = document.getElementById('supabase-config-form');
   const disconnectBtn = document.getElementById('btn-disconnect-db');
@@ -453,6 +459,43 @@ function mapCashbookTransaction(t) {
   };
 }
 
+function mapOrderRowForState(order, isDraft = false) {
+  return {
+    id: order.id,
+    customerId: order.customer_id || null,
+    customerName: order.customer_name,
+    notes: order.notes || '',
+    items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
+    date: order.order_date || order.created_at,
+    pricingVersion: order.pricing_version || order.pricingVersion || '',
+    totalMarket: parseFloat(order.total_market || 0),
+    totalDiscount: parseFloat(order.total_discount || 0),
+    subtotal: parseFloat(order.subtotal !== undefined ? order.subtotal : (order.total_payable || 0)),
+    discountValue: parseFloat(order.discount_value !== undefined ? order.discount_value : (order.discountValue || 0)),
+    discountType: order.discount_type || order.discountType || 'amount',
+    discountAmount: parseFloat(order.discount_amount !== undefined ? order.discount_amount : (order.discountAmount || 0)),
+    otherFeeValue: parseFloat(order.other_fee_value !== undefined ? order.other_fee_value : (order.otherFeeValue || 0)),
+    otherFeeType: order.other_fee_type || order.otherFeeType || 'amount',
+    otherFeeAmount: parseFloat(order.other_fee_amount !== undefined ? order.other_fee_amount : (order.otherFeeAmount || 0)),
+    shippingFeeValue: parseFloat(order.shipping_fee_value !== undefined ? order.shipping_fee_value : (order.shippingFeeValue || 0)),
+    shippingFeeAmount: parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0)),
+    totalPayable: parseFloat(order.total_payable || 0),
+    returnedAmount: parseFloat(order.returned_amount || 0),
+    netRevenue: parseFloat(order.net_revenue || order.total_payable || 0),
+    paidAmount: parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)),
+    amountDue: Math.max(
+      0,
+      parseFloat(order.total_payable || 0)
+        - parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0))
+        + parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0))
+    ),
+    pricelistId: order.pricelist_id || 'retail',
+    createdBy: order.created_by || 'admin',
+    companyId: order.company_id || order.companyId || 'ABS_NORTH',
+    status: isDraft ? 'draft' : (order.status || 'settled')
+  };
+}
+
 function isMissingSchemaCacheRelationError(error, relationName) {
   const message = String(error?.message || '');
   return error?.code === 'PGRST205' &&
@@ -558,6 +601,9 @@ export async function fetchCloudData(options = {}) {
   if (!supabaseClient) return;
   const deferSecondary = options.deferSecondary === true;
   const hydrateCustomerHistory = options.hydrateCustomerHistory !== false;
+  const onlyDomains = Array.isArray(options.onlyDomains)
+    ? new Set(options.onlyDomains.filter(Boolean))
+    : null;
   try {
     // Luồng tải dữ liệu lõi (nếu lỗi sẽ dừng và báo lỗi toàn cục)
     const fetchProducts = async () => {
@@ -580,15 +626,19 @@ export async function fetchCloudData(options = {}) {
 
     const fetchOrders = async () => {
       try {
-        try {
-          const twoDaysAgo = new Date();
-          twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-          await supabaseClient
-            .from(tableDraftOrdersName)
-            .delete()
-            .lt('created_at', twoDaysAgo.toISOString());
-        } catch (cleanErr) {
-          console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
+        // Preserve the existing login cleanup behavior, but never delete rows
+        // from a read-only Realtime catch-up refresh.
+        if (!onlyDomains) {
+          try {
+            const twoDaysAgo = new Date();
+            twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+            await supabaseClient
+              .from(tableDraftOrdersName)
+              .delete()
+              .lt('created_at', twoDaysAgo.toISOString());
+          } catch (cleanErr) {
+            console.warn("Could not auto-cleanup old drafts on Cloud:", cleanErr.message);
+          }
         }
 
         const [{ data: orderPage, error: orderPageError }, rawDrafts] = await Promise.all([
@@ -605,47 +655,8 @@ export async function fetchCloudData(options = {}) {
           ? orderPage.data
           : await fetchFullTableData(tableOrdersName);
 
-        const mapOrderRow = (order, isDraft) => {
-          let status = isDraft ? 'draft' : (order.status || 'settled');
-          let notes = order.notes || '';
-          return {
-            id: order.id,
-            customerId: order.customer_id || null,
-            customerName: order.customer_name,
-            notes: notes,
-            items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
-            date: order.order_date || order.created_at,
-            pricingVersion: order.pricing_version || order.pricingVersion || '',
-            totalMarket: parseFloat(order.total_market || 0),
-            totalDiscount: parseFloat(order.total_discount || 0),
-            subtotal: parseFloat(order.subtotal !== undefined ? order.subtotal : (order.total_payable || 0)),
-            discountValue: parseFloat(order.discount_value !== undefined ? order.discount_value : (order.discountValue || 0)),
-            discountType: order.discount_type || order.discountType || 'amount',
-            discountAmount: parseFloat(order.discount_amount !== undefined ? order.discount_amount : (order.discountAmount || 0)),
-            otherFeeValue: parseFloat(order.other_fee_value !== undefined ? order.other_fee_value : (order.otherFeeValue || 0)),
-            otherFeeType: order.other_fee_type || order.otherFeeType || 'amount',
-            otherFeeAmount: parseFloat(order.other_fee_amount !== undefined ? order.other_fee_amount : (order.otherFeeAmount || 0)),
-            shippingFeeValue: parseFloat(order.shipping_fee_value !== undefined ? order.shipping_fee_value : (order.shippingFeeValue || 0)),
-            shippingFeeAmount: parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0)),
-            totalPayable: parseFloat(order.total_payable || 0),
-            returnedAmount: parseFloat(order.returned_amount || 0),
-            netRevenue: parseFloat(order.net_revenue || order.total_payable || 0),
-            paidAmount: parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)),
-            amountDue: Math.max(
-              0,
-              parseFloat(order.total_payable || 0) -
-              parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)) +
-              parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0))
-            ),
-            pricelistId: order.pricelist_id || 'retail',
-            createdBy: order.created_by || 'admin',
-            companyId: order.company_id || order.companyId || 'ABS_NORTH',
-            status: status
-          };
-        };
-
-        const mappedOrders = rawOrders.map(o => mapOrderRow(o, false));
-        const mappedDrafts = rawDrafts.map(o => mapOrderRow(o, true));
+        const mappedOrders = rawOrders.map(o => mapOrderRowForState(o, false));
+        const mappedDrafts = rawDrafts.map(o => mapOrderRowForState(o, true));
 
         const combined = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
         state.savedOrders = combined;
@@ -1185,6 +1196,55 @@ export async function fetchCloudData(options = {}) {
       }
     };
 
+    const enrichSecondaryState = () => {
+      state.purchases = (state.purchases || []).map(purchase => {
+        const supplier = state.suppliers.find(item => String(item.id) === String(purchase.supplierId));
+        return {
+          ...purchase,
+          supplierName: purchase.supplierName || supplier?.name || '',
+          supplierCode: purchase.supplierCode || supplier?.code || ''
+        };
+      });
+
+      state.salesReturns = (state.salesReturns || []).map(ret => {
+        const sourceOrder = state.savedOrders.find(order => String(order.id) === String(ret.saleId));
+        const customer = state.customers.find(item => String(item.id) === String(ret.customerId));
+        const creator = state.users.find(user =>
+          String(user.authUserId || user.auth_user_id || user.id) === String(ret.createdBy)
+          || isSameUser(user.username, ret.createdBy)
+        );
+        return {
+          ...ret,
+          customerName: ret.customerName || customer?.name || sourceOrder?.customerName || '',
+          creatorName: ret.creatorName || creator?.displayName || ret.createdBy
+        };
+      });
+      saveSalesReturns(state.salesReturns);
+    };
+
+    // Realtime catch-up refreshes only the affected domain. This path remains
+    // read-only and avoids downloading unrelated business tables.
+    if (onlyDomains) {
+      const loaders = {
+        products: fetchProducts,
+        orders: fetchOrders,
+        customers: fetchCustomers,
+        pricelists: fetchPricelists,
+        brands: fetchBrands,
+        cashbook: fetchCashbook,
+        startingBalances: fetchStartingBalances,
+        suppliers: fetchSuppliers,
+        purchases: fetchPurchases,
+        salesReturns: fetchSalesReturns
+      };
+      await Promise.all([...onlyDomains]
+        .map(domain => loaders[domain])
+        .filter(Boolean)
+        .map(loader => loader()));
+      if (onlyDomains.has('purchases') || onlyDomains.has('salesReturns')) enrichSecondaryState();
+      return { background: null, domains: [...onlyDomains] };
+    }
+
     // Start every request together, but login may stop waiting once the data
     // needed for the first useful screen is ready. Secondary panels continue
     // loading in the background and are rendered again when complete.
@@ -1208,32 +1268,9 @@ export async function fetchCloudData(options = {}) {
 
     const finishSecondaryLoad = async () => {
       await secondaryLoad;
-
-      state.purchases = (state.purchases || []).map(purchase => {
-        const supplier = state.suppliers.find(item => String(item.id) === String(purchase.supplierId));
-        return {
-          ...purchase,
-          supplierName: purchase.supplierName || supplier?.name || '',
-          supplierCode: purchase.supplierCode || supplier?.code || ''
-        };
-      });
-
       // Returns load in parallel with customers/orders; enrich display-only names
       // after every authoritative collection has completed.
-      state.salesReturns = (state.salesReturns || []).map(ret => {
-        const sourceOrder = state.savedOrders.find(order => String(order.id) === String(ret.saleId));
-        const customer = state.customers.find(item => String(item.id) === String(ret.customerId));
-        const creator = state.users.find(user =>
-          String(user.authUserId || user.auth_user_id || user.id) === String(ret.createdBy)
-          || isSameUser(user.username, ret.createdBy)
-        );
-        return {
-          ...ret,
-          customerName: ret.customerName || customer?.name || sourceOrder?.customerName || '',
-          creatorName: ret.creatorName || creator?.displayName || ret.createdBy
-        };
-      });
-      saveSalesReturns(state.salesReturns);
+      enrichSecondaryState();
       return true;
     };
 
@@ -2159,6 +2196,43 @@ export async function dbFetchCustomerById(customerId) {
     return customer;
   } catch (error) {
     console.error('Error refreshing customer profile:', error);
+    return false;
+  }
+}
+
+export async function dbRefreshOrderById(orderId, { isDraft = false, deleted = false } = {}) {
+  if (!isCloudActive || !supabaseClient || !orderId) return false;
+  const removeFromState = () => {
+    state.savedOrders = (state.savedOrders || []).filter(order => String(order.id) !== String(orderId));
+    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+  };
+
+  if (deleted) {
+    removeFromState();
+    return true;
+  }
+
+  try {
+    const tableName = isDraft ? tableDraftOrdersName : tableOrdersName;
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .select('*')
+      .eq('id', orderId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      removeFromState();
+      return true;
+    }
+
+    const mapped = mapOrderRowForState(data, isDraft);
+    state.savedOrders = (state.savedOrders || []).filter(order => String(order.id) !== String(orderId));
+    state.savedOrders.push(mapped);
+    state.savedOrders.sort((a, b) => new Date(b.date) - new Date(a.date));
+    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+    return mapped;
+  } catch (error) {
+    console.error('Error refreshing realtime order:', error);
     return false;
   }
 }

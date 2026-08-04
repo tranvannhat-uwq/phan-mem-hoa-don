@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
 import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260803-amend-advance1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260803-amend-advance1';
 import { renderAll, switchTab } from '../main.js?v=20260803-amend-advance1';
 import { populateManagedByDropdown } from './customers.js?v=20260803-amend-advance1';
 import { exportBackupToExcel } from '../services/backup.js?v=20260803-amend-advance1';
@@ -483,6 +484,7 @@ export async function handleLogin(e) {
     }
     applyUserPermissions(state.currentUser);
     renderAll();
+    void startRealtimeSync(renderAll);
     showToast(`Đăng nhập thành công! Chào mừng ${state.currentUser.displayName}!`, 'success');
 
     const loginUserId = String(state.currentUser.authUserId || state.currentUser.id || '');
@@ -493,6 +495,7 @@ export async function handleLogin(e) {
       });
     }
   } catch (err) {
+    await stopRealtimeSync();
     if (authEstablished && isCloudActive && supabaseClient) {
       try {
         await supabaseClient.auth.signOut();
@@ -528,6 +531,7 @@ export async function handleLogout() {
   }
 
   // Remove obsolete pre-P0 markers; they are never read for authorization.
+  await stopRealtimeSync();
   sessionStorage.removeItem('billing_system_auth');
   sessionStorage.removeItem('billing_system_username');
   clearAuthenticatedSessionState();

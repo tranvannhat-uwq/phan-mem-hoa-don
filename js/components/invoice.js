@@ -393,7 +393,8 @@ export function renderInvoiceTable() {
   const isReadOnly = saveBtn && saveBtn.style.display === 'none';
 
   tableBody.innerHTML = state.invoiceItems.map((item, index) => {
-    const p = item.product;
+    const p = item.product || {};
+    const productName = String(p.name || `Sản phẩm ${index + 1}`);
 
     const subTotal = item.quantity * item.price * (1 - item.discountPercent / 100);
     
@@ -407,7 +408,7 @@ export function renderInvoiceTable() {
         : `<span class="invoice-effective-unit-price" title="Đơn giá sau chiết khấu">${formatNumber(effectiveUnitPrice)}</span>`;
 
     // Kiểm tra sản phẩm sơn lót hoặc bột bả (loại trừ trường hợp sơn giả đá)
-    const nameLower = p.name.toLowerCase();
+    const nameLower = productName.toLowerCase();
     const isPrimerOrPutty = (nameLower.includes('lót') || nameLower.includes('bả')) && !nameLower.includes('giả đá');
     if (isPrimerOrPutty) {
       item.colorCode = '';
@@ -419,7 +420,7 @@ export function renderInvoiceTable() {
         <td style="font-weight: 600; color: #fff;">${p.code}</td>
         <td>
           <div class="flex flex-col gap-1">
-            <span style="font-weight: 500; font-size: 0.85rem;">${p.name}</span>
+            <span style="font-weight: 500; font-size: 0.85rem;">${productName}</span>
             <div class="flex gap-2 items-center" style="margin-top: 2px;">
               <span class="suggestion-brand-badge" style="font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.2);">${item.brand}</span>
             </div>
