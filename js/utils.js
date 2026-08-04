@@ -47,6 +47,7 @@ export function formatNumber(amount) {
 export function getColorPercentFromCode(colorCode) {
   if (!colorCode) return 0;
   const lastChar = colorCode.trim().slice(-1).toUpperCase();
+  if (lastChar === '.') return 5;
   if (lastChar === 'P') return 0;
   if (lastChar === 'T') return 15;
   if (lastChar === 'D') return 20;
