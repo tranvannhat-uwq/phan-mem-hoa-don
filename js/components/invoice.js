@@ -11,6 +11,7 @@ import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shou
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { canAdjustOrderBusinessDate, currentBusinessDateInputValue, parseOrderBusinessDateInput } from '../domain/order-business-date.js';
+import { reorderOrderItems } from '../domain/order-edit.js';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;
@@ -417,7 +418,14 @@ export function renderInvoiceTable() {
 
     return `
       <tr class="invoice-item-row" data-index="${index}">
-        <td style="font-weight: 600; color: #fff;">${p.code}</td>
+        <td style="font-weight: 600; color: #fff;">
+          <div class="invoice-product-code-cell">
+            <button type="button" class="invoice-item-drag-handle" data-index="${index}" title="Kéo để đổi vị trí sản phẩm" aria-label="Kéo để đổi vị trí sản phẩm ${productName}" ${isReadOnly ? 'disabled' : 'draggable="true"'}>
+              <i data-lucide="grip-vertical"></i>
+            </button>
+            <span>${p.code}</span>
+          </div>
+        </td>
         <td>
           <div class="flex flex-col gap-1">
             <span style="font-weight: 500; font-size: 0.85rem;">${productName}</span>
@@ -555,6 +563,59 @@ export function renderInvoiceTable() {
       const idx = parseInt(btn.getAttribute('data-index'));
       state.invoiceItems.splice(idx, 1);
       renderInvoiceTable();
+    });
+  });
+
+  let draggedItemIndex = null;
+  const clearDragIndicators = () => {
+    tableBody.querySelectorAll('.invoice-item-row').forEach(row => {
+      row.classList.remove('is-dragging', 'drag-drop-before', 'drag-drop-after');
+    });
+  };
+
+  tableBody.querySelectorAll('.invoice-item-drag-handle[draggable="true"]').forEach(handle => {
+    handle.addEventListener('dragstart', event => {
+      draggedItemIndex = Number(handle.dataset.index);
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(draggedItemIndex));
+      handle.closest('.invoice-item-row')?.classList.add('is-dragging');
+    });
+
+    handle.addEventListener('dragend', () => {
+      draggedItemIndex = null;
+      clearDragIndicators();
+    });
+  });
+
+  tableBody.querySelectorAll('.invoice-item-row').forEach(row => {
+    row.addEventListener('dragover', event => {
+      if (!Number.isInteger(draggedItemIndex)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const targetIndex = Number(row.dataset.index);
+      clearDragIndicators();
+      row.classList.add(event.clientY >= row.getBoundingClientRect().top + row.offsetHeight / 2
+        ? 'drag-drop-after'
+        : 'drag-drop-before');
+      tableBody.querySelector(`.invoice-item-row[data-index="${draggedItemIndex}"]`)?.classList.add('is-dragging');
+    });
+
+    row.addEventListener('drop', event => {
+      if (!Number.isInteger(draggedItemIndex)) return;
+      event.preventDefault();
+      const targetIndex = Number(row.dataset.index);
+      const placeAfter = row.classList.contains('drag-drop-after');
+      let destinationIndex = targetIndex + (placeAfter ? 1 : 0);
+      if (draggedItemIndex < destinationIndex) destinationIndex -= 1;
+      destinationIndex = Math.max(0, Math.min(state.invoiceItems.length - 1, destinationIndex));
+
+      const reordered = reorderOrderItems(state.invoiceItems, draggedItemIndex, destinationIndex);
+      draggedItemIndex = null;
+      clearDragIndicators();
+      if (reordered !== state.invoiceItems) {
+        state.invoiceItems = reordered;
+        renderInvoiceTable();
+      }
     });
   });
 

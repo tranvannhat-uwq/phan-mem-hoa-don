@@ -68,3 +68,19 @@ export function normalizeOrderItemsForEditing(items, products = []) {
   if (!Array.isArray(items)) return [];
   return items.map((item, index) => normalizeOrderItemForEditing(item, products, index));
 }
+
+export function reorderOrderItems(items, fromIndex, toIndex) {
+  if (!Array.isArray(items)) return [];
+  const from = Number(fromIndex);
+  const to = Number(toIndex);
+  if (!Number.isInteger(from) || !Number.isInteger(to)
+    || from < 0 || from >= items.length || to < 0 || to >= items.length
+    || from === to) {
+    return items;
+  }
+
+  const reordered = [...items];
+  const [movedItem] = reordered.splice(from, 1);
+  reordered.splice(to, 0, movedItem);
+  return reordered;
+}

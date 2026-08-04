@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeOrderItemsForEditing } from '../js/domain/order-edit.js';
+import { normalizeOrderItemsForEditing, reorderOrderItems } from '../js/domain/order-edit.js';
 
 test('legacy draft items with an embedded product remain editable', () => {
   const [item] = normalizeOrderItemsForEditing([{
@@ -51,4 +51,27 @@ test('incomplete legacy rows receive safe display fallbacks instead of stopping 
   assert.equal(item.product.code, 'LEGACY-1');
   assert.equal(item.quantity, 2);
   assert.equal(item.price, 50000);
+});
+
+test('order items can be moved forward or backward without mutating their data', () => {
+  const source = [
+    { id: 'a', quantity: 1, discountPercent: 5 },
+    { id: 'b', quantity: 2, discountPercent: 10 },
+    { id: 'c', quantity: 3, discountPercent: 15 }
+  ];
+
+  const movedDown = reorderOrderItems(source, 0, 2);
+  assert.deepEqual(movedDown.map(item => item.id), ['b', 'c', 'a']);
+  assert.deepEqual(movedDown[2], source[0]);
+  assert.deepEqual(source.map(item => item.id), ['a', 'b', 'c']);
+
+  const movedUp = reorderOrderItems(movedDown, 2, 0);
+  assert.deepEqual(movedUp.map(item => item.id), ['a', 'b', 'c']);
+});
+
+test('invalid item moves leave the current order array untouched', () => {
+  const source = [{ id: 'a' }, { id: 'b' }];
+  assert.equal(reorderOrderItems(source, 0, 0), source);
+  assert.equal(reorderOrderItems(source, -1, 1), source);
+  assert.equal(reorderOrderItems(source, 0, 5), source);
 });

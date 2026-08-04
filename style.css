@@ -1921,6 +1921,11 @@ select option {
   color: #fff;
 }
 
+.history-action-copy {
+  background: #6366f1;
+  color: #fff;
+}
+
 .history-action-return {
   background: #f59e0b;
   color: #fff;
@@ -4037,6 +4042,66 @@ textarea::placeholder,
 .invoice-items-table td[style*="color: #fff"],
 .invoice-items-table td[style*="color:#fff"] {
   color: #000000 !important;
+}
+
+.invoice-product-code-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.invoice-product-code-cell > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.invoice-item-drag-handle {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  cursor: grab;
+  touch-action: none;
+}
+
+.invoice-item-drag-handle:hover {
+  color: var(--color-primary);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.invoice-item-drag-handle:active {
+  cursor: grabbing;
+}
+
+.invoice-item-drag-handle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.invoice-item-drag-handle i {
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
+}
+
+.invoice-item-row.is-dragging {
+  opacity: 0.45;
+}
+
+.invoice-item-row.drag-drop-before {
+  box-shadow: inset 0 3px 0 var(--color-primary);
+}
+
+.invoice-item-row.drag-drop-after {
+  box-shadow: inset 0 -3px 0 var(--color-primary);
 }
 
 .form-control-inline {

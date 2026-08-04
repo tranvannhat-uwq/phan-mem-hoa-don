@@ -2,14 +2,14 @@ import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
 import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-amend-advance1';
 import { renderAll } from '../main.js?v=20260803-amend-advance1';
-import { openPrintTypeModal, syncInvoiceBusinessDateControl } from './invoice.js?v=20260803-amend-advance1';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260803-amend-advance1';
 import { openHistoryOrderExportModal } from './customers.js?v=20260803-amend-advance1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
 } from '../domain/order-financials.js?v=20260803-amend-advance1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
-import { orderDateToInputValue } from '../domain/order-business-date.js';
+import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing } from '../domain/order-edit.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
@@ -708,6 +708,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <button class="history-action-btn history-action-print history-print-btn" data-id="${order.id}" title="In đơn">
                 <i data-lucide="printer"></i> In
               </button>
+              <button class="history-action-btn history-action-copy history-copy-btn" data-id="${order.id}" title="Sao chép thành đơn mới">
+                <i data-lucide="copy"></i> Chép
+              </button>
               ${order.status === 'draft' ? `
                 <button class="history-action-btn history-action-edit history-edit-btn" data-id="${order.id}" title="Sửa đơn">
                   <i data-lucide="edit"></i> Sửa
@@ -875,6 +878,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <button class="btn btn-indigo btn-sm flex items-center justify-center gap-1 history-print-btn" data-id="${order.id}">
                 <i data-lucide="printer" style="width: 13px; height: 13px;"></i> In
               </button>
+              <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-copy-btn" data-id="${order.id}" title="Sao chép thành đơn mới">
+                <i data-lucide="copy" style="width: 13px; height: 13px;"></i> Sao chép
+              </button>
               
               ${order.status === 'draft' ? `
                 <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}">
@@ -1023,6 +1029,14 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     });
   });
 
+  document.querySelectorAll('.history-copy-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = e.currentTarget.getAttribute('data-id');
+      const order = state.savedOrders.find(item => String(item.id) === String(id));
+      if (order) loadDraftOrderIntoInvoice(order, false, true);
+    });
+  });
+
   document.querySelectorAll('.history-cancel-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const id = e.currentTarget.getAttribute('data-id');
@@ -1049,9 +1063,16 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
 
 
-function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
+function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
+  // A copied order starts from a clean builder so it receives a fresh
+  // idempotency key and can never overwrite/amend the source order.
+  if (isCopy) resetInvoiceBuilder();
   const isFinalizedAmendment = !isReadOnly && order.status === 'settled';
-  syncInvoiceBusinessDateControl(orderDateToInputValue(order.date), isReadOnly);
+  const isAmendment = isFinalizedAmendment && !isCopy;
+  syncInvoiceBusinessDateControl(
+    isCopy ? currentBusinessDateInputValue() : orderDateToInputValue(order.date),
+    isReadOnly
+  );
   // Đồng bộ khách hàng
   if (order.customerId) {
     const cust = state.customers.find(c => c.id === order.customerId);
@@ -1075,9 +1096,11 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
     }
   } else {
     // Khách lẻ
-    state.isQuickCustomerMode = true;
     document.getElementById('invoice-customer-search').value = order.customerName;
-    document.getElementById('invoice-customer-search').setAttribute('disabled', 'true');
+    if (!isCopy) {
+      state.isQuickCustomerMode = true;
+      document.getElementById('invoice-customer-search').setAttribute('disabled', 'true');
+    }
     document.getElementById('btn-clear-invoice-customer').style.display = 'inline-flex';
   }
   
@@ -1136,29 +1159,37 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   } else {
     if (saveBtn) {
       saveBtn.style.display = 'inline-flex';
-      if (isFinalizedAmendment) {
+      if (isAmendment) {
         saveBtn.innerHTML = `<i data-lucide="check-square"></i> Lưu bản sửa & chốt lại`;
         saveBtn.setAttribute('data-amend-order-id', order.id);
+      } else if (isCopy) {
+        saveBtn.innerHTML = `<i data-lucide="check-square"></i> Thanh toán & Chốt đơn mới`;
       } else {
         saveBtn.innerHTML = `<i data-lucide="check-square"></i> Chốt đơn`;
         saveBtn.setAttribute('data-edit-order-id', order.id);
       }
     }
     if (draftBtn) {
-      draftBtn.style.display = isFinalizedAmendment ? 'none' : 'inline-flex';
-      if (!isFinalizedAmendment) {
-        draftBtn.innerHTML = `<i data-lucide="file-text"></i> Cập nhật nháp`;
+      draftBtn.style.display = isAmendment ? 'none' : 'inline-flex';
+      if (!isAmendment) {
+        draftBtn.innerHTML = isCopy
+          ? `<i data-lucide="file-text"></i> Lưu thành đơn nháp mới`
+          : `<i data-lucide="file-text"></i> Cập nhật nháp`;
       }
     }
     if (panelTitle) {
-      panelTitle.innerHTML = isFinalizedAmendment
+      panelTitle.innerHTML = isCopy
+        ? `<i data-lucide="copy"></i> Đơn mới sao chép từ ${getOrderDisplayCode(order)}`
+        : isAmendment
         ? `<i data-lucide="edit"></i> Sửa đơn đã chốt ${getOrderDisplayCode(order)}`
         : `<i data-lucide="edit"></i> Hiệu chỉnh đơn nháp ${getOrderDisplayCode(order)}`;
     }
   }
   
   // Chuyển Tab
-  if (plSelect) plSelect.disabled = isReadOnly;
+  if (plSelect) {
+    plSelect.disabled = isReadOnly || (isCopy && state.currentUser?.role === 'sale');
+  }
   const plGroup = document.getElementById('invoice-pricelist-group');
   if (plGroup) plGroup.style.display = isReadOnly ? 'none' : 'block';
 
@@ -1184,7 +1215,7 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   });
   
   const heading = document.getElementById('page-title-heading');
-  if (heading) heading.innerText = 'Cập nhật hóa đơn';
+  if (heading) heading.innerText = isCopy ? 'Tạo hóa đơn từ bản sao' : 'Cập nhật hóa đơn';
   
   // Tải lại bảng
   const invoiceItemsBody = document.getElementById('invoice-items-body');
@@ -1199,8 +1230,12 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false) {
   }
   
   // Trình kích hoạt Render bảng
-  const event = new CustomEvent('loadDraftOrder', { detail: { order, isReadOnly } });
+  const event = new CustomEvent('loadDraftOrder', { detail: { order, isReadOnly, isCopy } });
   document.dispatchEvent(event);
+
+  if (isCopy) {
+    showToast(`Đã sao chép dữ liệu từ đơn ${getOrderDisplayCode(order)}. Hãy kiểm tra và lưu để tạo mã đơn mới.`, 'success');
+  }
 }
 
 // --- PHÂN HỆ TRẢ HÀNG (SALES RETURN LOGIC) ---
