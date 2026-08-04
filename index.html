@@ -2390,7 +2390,10 @@
           <div class="form-row-2">
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-debt">Công nợ hiện tại (đ)</label>
-              <input type="number" class="form-control" id="cust-debt" value="0" readonly aria-readonly="true" title="Công nợ chỉ thay đổi qua nghiệp vụ thu nợ hoặc điều chỉnh có kiểm soát" style="width: 100%; background: var(--bg-secondary);">
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="number" class="form-control" id="cust-debt" value="0" readonly aria-readonly="true" title="Công nợ chỉ thay đổi qua nghiệp vụ thu nợ hoặc điều chỉnh có kiểm soát" style="width: 100%; background: var(--bg-secondary);">
+                <button type="button" class="btn btn-secondary" id="btn-open-customer-debt-adjust" style="display: none; white-space: nowrap;">Điều chỉnh</button>
+              </div>
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-province">Tỉnh/Thành phố *</label>
@@ -2481,6 +2484,37 @@
   </div>
 
   <!-- Collect/Pay Debt Modal -->
+  <div class="modal-overlay" id="customer-debt-adjust-modal">
+    <div class="modal" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Điều chỉnh công nợ</h3>
+        <button class="modal-close" id="btn-close-customer-debt-adjust" type="button"><i data-lucide="x"></i></button>
+      </div>
+      <form id="customer-debt-adjust-form">
+        <input type="hidden" id="customer-debt-adjust-id" value="">
+        <div class="modal-body">
+          <div style="padding: 0.75rem; margin-bottom: 1rem; border-radius: 8px; background: var(--bg-secondary);">
+            <div><strong>Khách hàng:</strong> <span id="customer-debt-adjust-name"></span></div>
+            <div style="margin-top: 0.25rem;"><strong>Số dư hiện tại:</strong> <span id="customer-debt-adjust-current" style="font-weight: 700; color: var(--color-danger);">0 ₫</span></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="customer-debt-adjust-value">Số dư mới (đ) *</label>
+            <input type="number" class="form-control" id="customer-debt-adjust-value" required step="1" style="width: 100%;">
+            <small style="color: var(--text-muted);">Số dương: khách còn nợ; số âm: tiền khách trả trước.</small>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="customer-debt-adjust-reason">Lý do điều chỉnh *</label>
+            <textarea class="form-control" id="customer-debt-adjust-reason" required minlength="3" rows="3" placeholder="Ví dụ: Đối chiếu công nợ ngày 04/08/2026" style="width: 100%;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-customer-debt-adjust">Hủy bỏ</button>
+          <button type="submit" class="btn btn-primary">Lưu điều chỉnh</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="pay-debt-modal">
     <div class="modal-content" style="max-width: 400px;">
       <div class="modal-header">

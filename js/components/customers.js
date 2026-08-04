@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbRecordCustomerPayment, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-amend-advance1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260803-amend-advance1';
 import { renderAll } from '../main.js?v=20260803-amend-advance1';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260803-amend-advance1';
 import { addCashbookTransaction } from './so_quy.js?v=20260803-amend-advance1';
@@ -1085,19 +1085,12 @@ export function openCustomerModal(index = -1) {
   modal.classList.add('active');
   form.reset();
   
-  // Giới hạn quyền sửa công nợ: Chỉ Admin mới được phép sửa công nợ trực tiếp
+  // Số dư luôn chỉ đọc. Người có quyền điều chỉnh qua RPC để lưu ledger/audit.
   const debtInput = document.getElementById('cust-debt');
-  if (debtInput) {
-    if (state.currentUser && state.currentUser.role === 'admin') {
-      debtInput.removeAttribute('disabled');
-      debtInput.style.opacity = '1';
-      debtInput.style.cursor = 'auto';
-    } else {
-      debtInput.setAttribute('disabled', 'true');
-      debtInput.style.opacity = '0.6';
-      debtInput.style.cursor = 'not-allowed';
-    }
-  }
+  if (debtInput) debtInput.readOnly = true;
+  const adjustDebtBtn = document.getElementById('btn-open-customer-debt-adjust');
+  const canAdjustDebt = ['admin', 'accounting'].includes(state.currentUser?.role) && index !== -1;
+  if (adjustDebtBtn) adjustDebtBtn.style.display = canAdjustDebt ? 'inline-flex' : 'none';
   
   const isSale = state.currentUser && state.currentUser.role === 'sale';
   const plSelect = document.getElementById('cust-pricelist');
@@ -1312,8 +1305,7 @@ export async function saveCustomer() {
   
   const saved = await dbSaveCustomer(customerData);
   if (saved) {
-    await dbFetchCustomers();
-    const refreshedCustomer = state.customers.find(c => String(c.id) === String(customerId));
+    const refreshedCustomer = await dbFetchCustomerById(customerId);
     if (refreshedCustomer) {
       debt = Number(refreshedCustomer.debt || 0);
       Object.assign(customerData, refreshedCustomer);
@@ -1468,6 +1460,75 @@ export async function handlePayDebtSubmit(e) {
       ? ` Khách đang có ${formatCurrency(Math.abs(cust.debt))} tiền trả trước.`
       : ` Công nợ còn lại ${formatCurrency(cust.debt)}.`;
     showToast(`Đã nhận ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}.${balanceMessage}`, 'success');
+}
+
+export function openCustomerDebtAdjustModal() {
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được điều chỉnh công nợ.', 'warning');
+    return;
+  }
+
+  const editId = document.getElementById('customer-edit-id')?.value;
+  const customer = state.customers.find(item => String(item.id) === String(editId));
+  const modal = document.getElementById('customer-debt-adjust-modal');
+  const form = document.getElementById('customer-debt-adjust-form');
+  if (!customer || !modal || !form) return;
+
+  form.reset();
+  document.getElementById('customer-debt-adjust-id').value = customer.id;
+  document.getElementById('customer-debt-adjust-name').innerText = `${customer.name} (${customer.code})`;
+  document.getElementById('customer-debt-adjust-current').innerText = formatCurrency(customer.debt || 0);
+  document.getElementById('customer-debt-adjust-value').value = Number(customer.debt || 0);
+  modal.classList.add('active');
+  document.getElementById('customer-debt-adjust-value').focus();
+}
+
+export function closeCustomerDebtAdjustModal() {
+  document.getElementById('customer-debt-adjust-modal')?.classList.remove('active');
+}
+
+export async function handleCustomerDebtAdjustSubmit(event) {
+  event.preventDefault();
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Bạn không có quyền điều chỉnh công nợ.', 'danger');
+    return;
+  }
+
+  const customerId = document.getElementById('customer-debt-adjust-id').value;
+  const newDebt = Number(document.getElementById('customer-debt-adjust-value').value);
+  const reason = document.getElementById('customer-debt-adjust-reason').value.trim();
+  if (!customerId || !Number.isFinite(newDebt)) {
+    showToast('Số dư công nợ không hợp lệ.', 'danger');
+    return;
+  }
+  if (reason.length < 3) {
+    showToast('Vui lòng nhập lý do điều chỉnh (ít nhất 3 ký tự).', 'warning');
+    return;
+  }
+
+  const result = await dbAdjustCustomerDebt(customerId, newDebt, reason);
+  if (!result?.success) {
+    showToast('Không thể điều chỉnh công nợ. Dữ liệu chưa thay đổi.', 'danger');
+    return;
+  }
+
+  const refreshedFromCloud = Boolean(await dbRefreshCustomerFinancialState(customerId));
+  if (!refreshedFromCloud) {
+    const localCustomer = state.customers.find(item => String(item.id) === String(customerId));
+    if (localCustomer) localCustomer.debt = Number(result.new_debt);
+  }
+  const refreshed = state.customers.find(item => String(item.id) === String(customerId));
+  if (refreshed) {
+    const debtInput = document.getElementById('cust-debt');
+    if (debtInput) debtInput.value = Number(refreshed.debt || 0);
+  }
+  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  closeCustomerDebtAdjustModal();
+  renderAll();
+  const refreshNote = refreshedFromCloud ? '' : ' Hãy tải lại trang để đồng bộ đầy đủ lịch sử.';
+  showToast((result.already_at_balance
+    ? 'Công nợ đã ở đúng số dư này.'
+    : `Đã điều chỉnh công nợ thành ${formatCurrency(newDebt)} và lưu lịch sử.`) + refreshNote, refreshedFromCloud ? 'success' : 'warning');
 }
 
 function getAllowedCustomerExportColumns() {
@@ -1751,6 +1812,15 @@ export function setupCustomerManagement() {
   if (payDebtForm) {
     payDebtForm.addEventListener('submit', handlePayDebtSubmit);
   }
+
+  const openDebtAdjustBtn = document.getElementById('btn-open-customer-debt-adjust');
+  const closeDebtAdjustBtn = document.getElementById('btn-close-customer-debt-adjust');
+  const cancelDebtAdjustBtn = document.getElementById('btn-cancel-customer-debt-adjust');
+  const debtAdjustForm = document.getElementById('customer-debt-adjust-form');
+  if (openDebtAdjustBtn) openDebtAdjustBtn.addEventListener('click', openCustomerDebtAdjustModal);
+  if (closeDebtAdjustBtn) closeDebtAdjustBtn.addEventListener('click', closeCustomerDebtAdjustModal);
+  if (cancelDebtAdjustBtn) cancelDebtAdjustBtn.addEventListener('click', closeCustomerDebtAdjustModal);
+  if (debtAdjustForm) debtAdjustForm.addEventListener('submit', handleCustomerDebtAdjustSubmit);
 
   // Thay đổi hiển thị phần trăm chiết khấu hãng sơn theo bảng giá
   const custPricelistSelect = document.getElementById('cust-pricelist');
@@ -2624,12 +2694,19 @@ async function exportCustomerOrderHistoryExcel() {
   }
 }
 
-export function openCustomerDetailModal(index) {
+export async function openCustomerDetailModal(index) {
   const modal = document.getElementById('customer-detail-modal');
-  const cust = state.customers[index];
+  let cust = state.customers[index];
   if (!modal || !cust) return;
 
   modal.classList.add('active');
+
+  const loadingHistoryBody = document.getElementById('detail-debt-history-body');
+  if (loadingHistoryBody) {
+    loadingHistoryBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
+  }
+  const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id);
+  if (refreshedCustomer) cust = refreshedCustomer;
 
   // Điền thông tin cơ bản
   const modalTitle = document.getElementById('customer-detail-modal-title');

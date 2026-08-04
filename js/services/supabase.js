@@ -554,8 +554,10 @@ function normalizeProductRow(row, localProducts = []) {
 }
 
 // Tải toàn bộ dữ liệu từ Supabase về State
-export async function fetchCloudData() {
+export async function fetchCloudData(options = {}) {
   if (!supabaseClient) return;
+  const deferSecondary = options.deferSecondary === true;
+  const hydrateCustomerHistory = options.hydrateCustomerHistory !== false;
   try {
     // Luồng tải dữ liệu lõi (nếu lỗi sẽ dừng và báo lỗi toàn cục)
     const fetchProducts = async () => {
@@ -694,7 +696,7 @@ export async function fetchCloudData() {
             managedBy: cust.managed_by || '',
             debtHistory: parseDebtHistory(cust.debt_history)
           }));
-        if (state.customers.length > 0) {
+        if (hydrateCustomerHistory && state.customers.length > 0) {
           await hydrateCustomerDebtHistory(state.customers);
         }
         if (state.activeCustomerId && !state.customers.some(customer => customer.id === state.activeCustomerId)) {
@@ -1183,14 +1185,18 @@ export async function fetchCloudData() {
       }
     };
 
-    // Tải song song tất cả các bảng dữ liệu bằng Promise.all để tăng tốc độ phản hồi tối đa
-    await Promise.all([
+    // Start every request together, but login may stop waiting once the data
+    // needed for the first useful screen is ready. Secondary panels continue
+    // loading in the background and are rendered again when complete.
+    const coreLoad = Promise.all([
       fetchProducts(),
       fetchOrders(),
       fetchCustomers(),
       fetchPricelists(),
       fetchUsers(),
-      fetchBrands(),
+      fetchBrands()
+    ]);
+    const secondaryLoad = Promise.all([
       fetchCashbook(),
       fetchStartingBalances(),
       fetchSuppliers(),
@@ -1198,31 +1204,49 @@ export async function fetchCloudData() {
       fetchSalesReturns()
     ]);
 
-    state.purchases = (state.purchases || []).map(purchase => {
-      const supplier = state.suppliers.find(item => String(item.id) === String(purchase.supplierId));
-      return {
-        ...purchase,
-        supplierName: purchase.supplierName || supplier?.name || '',
-        supplierCode: purchase.supplierCode || supplier?.code || ''
-      };
-    });
+    await coreLoad;
 
-    // Returns load in parallel with customers/orders; enrich display-only names
-    // after every authoritative collection has completed.
-    state.salesReturns = (state.salesReturns || []).map(ret => {
-      const sourceOrder = state.savedOrders.find(order => String(order.id) === String(ret.saleId));
-      const customer = state.customers.find(item => String(item.id) === String(ret.customerId));
-      const creator = state.users.find(user =>
-        String(user.authUserId || user.auth_user_id || user.id) === String(ret.createdBy)
-        || isSameUser(user.username, ret.createdBy)
-      );
-      return {
-        ...ret,
-        customerName: ret.customerName || customer?.name || sourceOrder?.customerName || '',
-        creatorName: ret.creatorName || creator?.displayName || ret.createdBy
-      };
-    });
-    saveSalesReturns(state.salesReturns);
+    const finishSecondaryLoad = async () => {
+      await secondaryLoad;
+
+      state.purchases = (state.purchases || []).map(purchase => {
+        const supplier = state.suppliers.find(item => String(item.id) === String(purchase.supplierId));
+        return {
+          ...purchase,
+          supplierName: purchase.supplierName || supplier?.name || '',
+          supplierCode: purchase.supplierCode || supplier?.code || ''
+        };
+      });
+
+      // Returns load in parallel with customers/orders; enrich display-only names
+      // after every authoritative collection has completed.
+      state.salesReturns = (state.salesReturns || []).map(ret => {
+        const sourceOrder = state.savedOrders.find(order => String(order.id) === String(ret.saleId));
+        const customer = state.customers.find(item => String(item.id) === String(ret.customerId));
+        const creator = state.users.find(user =>
+          String(user.authUserId || user.auth_user_id || user.id) === String(ret.createdBy)
+          || isSameUser(user.username, ret.createdBy)
+        );
+        return {
+          ...ret,
+          customerName: ret.customerName || customer?.name || sourceOrder?.customerName || '',
+          creatorName: ret.creatorName || creator?.displayName || ret.createdBy
+        };
+      });
+      saveSalesReturns(state.salesReturns);
+      return true;
+    };
+
+    if (deferSecondary) {
+      const background = finishSecondaryLoad().catch(error => {
+        console.error('Error loading secondary cloud data:', error);
+        return false;
+      });
+      return { background };
+    }
+
+    await finishSecondaryLoad();
+    return { background: null };
 
   } catch(err) {
     console.error('Error fetching cloud data:', err);
@@ -2066,6 +2090,77 @@ export async function dbFetchCustomers() {
     }
   }
   return false;
+}
+
+// Refresh one profile after an edit instead of downloading every customer and
+// every debt-ledger row. Existing ledger history stays in memory unchanged.
+export async function dbFetchCustomerById(customerId) {
+  if (!isCloudActive || !supabaseClient || !customerId) return false;
+  try {
+    const { data: cust, error } = await supabaseClient
+      .from(tableCustomersName)
+      .select('*')
+      .eq('id', customerId)
+      .single();
+    if (error) throw error;
+
+    const existingIndex = (state.customers || []).findIndex(item => String(item.id) === String(customerId));
+    const existing = existingIndex >= 0 ? state.customers[existingIndex] : null;
+    const customer = {
+      ...(existing || {}),
+      id: cust.id,
+      code: cust.code,
+      name: cust.name,
+      phone: cust.phone,
+      phone2: cust.phone2 || '',
+      email: cust.email || '',
+      facebook: cust.facebook || '',
+      birthday: cust.birthday || '',
+      gender: cust.gender || '',
+      avatarUrl: cust.avatar_url || '',
+      province: cust.province || '',
+      ward: cust.ward || '',
+      customerGroupId: cust.customer_group_id || '',
+      companyName: cust.company_name || '',
+      taxCode: cust.tax_code || '',
+      invoiceAddress: cust.invoice_address || '',
+      address: cust.address,
+      status: cust.status || 'active',
+      createdBy: cust.created_by || '',
+      assignedBrand: cust.assigned_brand || 'Tất cả',
+      brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
+      shippingSupport: cust.shipping_support || false,
+      debt: Number(cust.debt || 0),
+      totalTransaction: Number(cust.total_transaction || 0),
+      totalReturn: Number(cust.total_return || 0),
+      netRevenue: Number(cust.net_revenue || 0),
+      importedDebtBaseline: Number(cust.imported_debt_baseline || 0),
+      importedTotalTransactionBaseline: Number(cust.imported_total_transaction_baseline || 0),
+      importedTotalReturnBaseline: Number(cust.imported_total_return_baseline || 0),
+      importedNetRevenueBaseline: Number(cust.imported_net_revenue_baseline || 0),
+      importedLastOrderAtBaseline: cust.imported_last_order_at_baseline || null,
+      importedCreatedAtBaseline: cust.imported_created_at_baseline || null,
+      financialBaselineImportedAt: cust.financial_baseline_imported_at || null,
+      lastOrderAt: cust.last_order_at || null,
+      lastPaymentAt: cust.last_payment_at || null,
+      notes: cust.notes || '',
+      pricelistId: cust.pricelist_id || '',
+      defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
+      managedBy: cust.managed_by || '',
+      debtHistory: existing?.debtHistory || parseDebtHistory(cust.debt_history),
+      createdAt: cust.created_at || null,
+      updatedAt: cust.updated_at || null,
+      deletedAt: cust.deleted_at || null
+    };
+
+    if (existingIndex >= 0) state.customers[existingIndex] = customer;
+    else state.customers.push(customer);
+    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    return customer;
+  } catch (error) {
+    console.error('Error refreshing customer profile:', error);
+    return false;
+  }
 }
 
 export async function dbFetchCashbookTransactions() {

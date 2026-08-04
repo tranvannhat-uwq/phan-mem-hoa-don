@@ -32,7 +32,7 @@ test('financial history is append-only and browser debt writes are rejected', ()
   assert.match(migration, /reversal_of_id/);
   const saveCustomer = customers.slice(customers.indexOf('export async function saveCustomer'), customers.indexOf('export async function deleteCustomer'));
   assert.doesNotMatch(saveCustomer, /dbAdjustCustomerDebt/);
-  assert.match(saveCustomer, /await dbFetchCustomers/);
+  assert.match(saveCustomer, /await dbFetchCustomerById\(customerId\)/);
   const mapper = service.slice(service.indexOf('function mapCustomerToDbRow'), service.indexOf('export async function dbSaveCustomer'));
   assert.doesNotMatch(mapper, /\bdebt\s*:/);
   assert.doesNotMatch(mapper, /total_transaction\s*:/);

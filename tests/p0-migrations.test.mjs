@@ -25,7 +25,8 @@ const migrationNames = [
   '0016_customer_import_rpc_variable_conflict_fix.sql',
   '0017_privileged_order_business_date.sql',
   '0018_quick_customer_creation_rpc.sql',
-  '0019_order_amendment_and_customer_advance.sql'
+  '0019_order_amendment_and_customer_advance.sql',
+  '0020_customer_debt_adjustment_credit.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 

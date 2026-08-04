@@ -424,9 +424,11 @@ export async function handleLogin(e) {
       throw new Error('Cần kết nối Supabase để đăng nhập an toàn. Chế độ đăng nhập ngoại tuyến đã bị tắt.');
     }
 
+    const rememberedEmailKey = `billing_system_login_email:${usernameInput}`;
+    const rememberedEmail = usernameInput.includes('@') ? '' : (localStorage.getItem(rememberedEmailKey) || '');
     const candidates = usernameInput.includes('@')
       ? [usernameInput]
-      : [`${usernameInput}@lendon.com`, `${usernameInput}@weblendon.com`, `${usernameInput}@gmail.com`];
+      : [...new Set([rememberedEmail, `${usernameInput}@lendon.com`, `${usernameInput}@weblendon.com`, `${usernameInput}@gmail.com`].filter(Boolean))];
     let authUser = null;
     let loginError = null;
     for (const email of candidates) {
@@ -434,6 +436,7 @@ export async function handleLogin(e) {
       if (!error && data?.session?.user) {
         authUser = data.session.user;
         authEstablished = true;
+        if (!usernameInput.includes('@')) localStorage.setItem(rememberedEmailKey, email);
         break;
       }
       if (classifySupabaseError(error) === LOGIN_ERROR.NETWORK) {
@@ -461,7 +464,10 @@ export async function handleLogin(e) {
       isActive: profile.is_active !== false
     };
     state.currentUser = user;
-    await fetchCloudData();
+    const cloudLoad = await fetchCloudData({
+      deferSecondary: true,
+      hydrateCustomerHistory: false
+    });
     state.currentUser = state.users.find(item => item.authUserId === authUser.id || item.id === profile.id) || user;
 
     document.getElementById('login-screen').style.display = 'none';
@@ -478,6 +484,14 @@ export async function handleLogin(e) {
     applyUserPermissions(state.currentUser);
     renderAll();
     showToast(`Đăng nhập thành công! Chào mừng ${state.currentUser.displayName}!`, 'success');
+
+    const loginUserId = String(state.currentUser.authUserId || state.currentUser.id || '');
+    if (cloudLoad?.background) {
+      void cloudLoad.background.then(loaded => {
+        const activeUserId = String(state.currentUser?.authUserId || state.currentUser?.id || '');
+        if (loaded && activeUserId === loginUserId) renderAll();
+      });
+    }
   } catch (err) {
     if (authEstablished && isCloudActive && supabaseClient) {
       try {

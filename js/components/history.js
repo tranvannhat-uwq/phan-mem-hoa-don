@@ -13,6 +13,52 @@ import { orderDateToInputValue } from '../domain/order-business-date.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
+let historyFilterTimer = null;
+let historyRenderCache = null;
+let historyFinancialCache = null;
+
+function scheduleHistoryFilter(onFilterChange) {
+  if (historyFilterTimer) clearTimeout(historyFilterTimer);
+  historyFilterTimer = setTimeout(() => {
+    historyFilterTimer = null;
+    onFilterChange();
+  }, 180);
+}
+
+function createHistoryLookups() {
+  const customerById = new Map();
+  const customerByName = new Map();
+  (state.customers || []).forEach(customer => {
+    if (customer.id !== null && customer.id !== undefined) {
+      customerById.set(String(customer.id), customer);
+    }
+    const normalizedName = String(customer.name || '').toLowerCase();
+    if (normalizedName && !customerByName.has(normalizedName)) customerByName.set(normalizedName, customer);
+  });
+
+  const pricelistById = new Map((state.pricelists || []).map(item => [String(item.id), item]));
+  const returnsByOrderId = new Map();
+  const activeReturnsByOrderId = new Map();
+  (state.salesReturns || []).forEach(item => {
+    const orderId = String(item.saleId || item.orderId || item.sale_id || item.order_id || '');
+    if (!orderId) return;
+    if (!returnsByOrderId.has(orderId)) returnsByOrderId.set(orderId, []);
+    returnsByOrderId.get(orderId).push(item);
+    if (!['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())) {
+      if (!activeReturnsByOrderId.has(orderId)) activeReturnsByOrderId.set(orderId, []);
+      activeReturnsByOrderId.get(orderId).push(item);
+    }
+  });
+
+  return { customerById, customerByName, pricelistById, returnsByOrderId, activeReturnsByOrderId };
+}
+
+function getHistoryCustomer(order, lookups) {
+  if (order.customerId !== null && order.customerId !== undefined && order.customerId !== '') {
+    return lookups.customerById.get(String(order.customerId)) || null;
+  }
+  return lookups.customerByName.get(String(order.customerName || '').toLowerCase()) || null;
+}
 
 function orderWasCreatedByUser(order, user) {
   if (!order?.createdBy || !user) return false;
@@ -28,7 +74,7 @@ function orderWasCreatedByUser(order, user) {
     || String(order.createdBy) === String(user.authUserId || user.auth_user_id || user.id || '');
 }
 
-function updateHistorySummary(orders) {
+function updateHistorySummary(orders, lookups) {
   const beforeDiscountEl = document.getElementById('history-total-before-discount');
   const discountEl = document.getElementById('history-total-discount');
   const afterDiscountEl = document.getElementById('history-total-after-discount');
@@ -37,7 +83,7 @@ function updateHistorySummary(orders) {
 
   const settledOrders = (orders || []).filter(isOrderIncludedInFinancialSummary);
   const totals = settledOrders.reduce((summary, order) => {
-    const breakdown = getHistoryOrderAmountBreakdown(order);
+    const breakdown = getHistoryOrderAmountBreakdown(order, lookups);
     summary.totalBeforeDiscount += breakdown.totalBeforeDiscount;
     summary.totalDiscountAmount += breakdown.totalDiscountAmount;
     summary.totalAfterDiscount += breakdown.totalAfterDiscount;
@@ -50,8 +96,29 @@ function updateHistorySummary(orders) {
   countEl.innerText = `${settledOrders.length} / ${(orders || []).length} đơn hợp lệ`;
 }
 
-function getHistoryOrderAmountBreakdown(order) {
-  return getOrderFinancialBreakdown(order, state.salesReturns || []);
+function getHistoryOrderAmountBreakdown(order, lookups) {
+  const ordersRef = state.savedOrders || [];
+  const returnsRef = state.salesReturns || [];
+  if (!historyFinancialCache
+      || historyFinancialCache.ordersRef !== ordersRef
+      || historyFinancialCache.orderCount !== ordersRef.length
+      || historyFinancialCache.returnsRef !== returnsRef
+      || historyFinancialCache.returnCount !== returnsRef.length) {
+    historyFinancialCache = {
+      ordersRef,
+      orderCount: ordersRef.length,
+      returnsRef,
+      returnCount: returnsRef.length,
+      breakdownByOrderId: new Map()
+    };
+  }
+
+  const orderId = String(order.id || '');
+  if (!historyFinancialCache.breakdownByOrderId.has(orderId)) {
+    const orderReturns = lookups?.returnsByOrderId?.get(orderId) || [];
+    historyFinancialCache.breakdownByOrderId.set(orderId, getOrderFinancialBreakdown(order, orderReturns));
+  }
+  return historyFinancialCache.breakdownByOrderId.get(orderId);
 }
 
 function populateHistoryCompanyAndBrandFilters() {
@@ -110,7 +177,7 @@ export function setupHistoryPanel() {
   };
 
   if (searchInput) {
-    searchInput.addEventListener('input', onFilterChange);
+    searchInput.addEventListener('input', () => scheduleHistoryFilter(onFilterChange));
   }
   
   // Thiết lập các bộ lọc thời gian, công ty, nhãn sơn, nhân viên
@@ -168,7 +235,7 @@ export function setupHistoryPanel() {
   if (creatorFilter) {
     creatorFilter.addEventListener('input', () => {
       renderHistoryCreatorSuggestions();
-      onFilterChange();
+      scheduleHistoryFilter(onFilterChange);
     });
     creatorFilter.addEventListener('focus', renderHistoryCreatorSuggestions);
   }
@@ -233,14 +300,14 @@ export function setupHistoryPanel() {
     btnCard.addEventListener('click', () => {
       state.historyViewMode = 'card';
       localStorage.setItem('historyViewMode', 'card');
-      renderHistoryOrders();
+      renderHistoryOrders({ reuseFiltered: true });
     });
   }
   if (btnDetails) {
     btnDetails.addEventListener('click', () => {
       state.historyViewMode = 'details';
       localStorage.setItem('historyViewMode', 'details');
-      renderHistoryOrders();
+      renderHistoryOrders({ reuseFiltered: true });
     });
   }
 }
@@ -361,7 +428,7 @@ function renderHistoryCreatorSuggestions() {
   suggestions.style.display = document.activeElement === input ? 'block' : 'none';
 }
 
-export function renderHistoryOrders() {
+export function renderHistoryOrders({ reuseFiltered = false } = {}) {
   const container = document.getElementById('history-orders-container');
   if (!container) return;
   
@@ -382,7 +449,7 @@ export function renderHistoryOrders() {
     }
   }
   
-  const searchVal = document.getElementById('history-search-input').value.toLowerCase().trim();
+  const searchVal = (document.getElementById('history-search-input')?.value || '').toLowerCase().trim();
   
   const dateModeSelect = document.getElementById('history-date-mode');
   const filterDateInput = document.getElementById('history-filter-date');
@@ -405,8 +472,43 @@ export function renderHistoryOrders() {
   const selectedBrand = brandFilterSelect ? brandFilterSelect.value : 'all';
   const selectedStatus = statusFilterSelect ? statusFilterSelect.value : 'all';
   const selectedCreator = creatorFilterSelect ? creatorFilterSelect.value : '';
+  const filterKey = JSON.stringify({
+    searchVal, dateMode, filterDate, filterMonth, filterYear, filterFrom, filterTo,
+    selectedCompany, selectedBrand, selectedStatus, selectedCreator,
+    currentUserId: state.currentUser?.id || state.currentUser?.authUserId || state.currentUser?.username || '',
+    currentUserRole: state.currentUser?.role || ''
+  });
+  const canReuseFiltered = reuseFiltered
+    && historyRenderCache
+    && historyRenderCache.ordersRef === state.savedOrders
+    && historyRenderCache.orderCount === (state.savedOrders || []).length
+    && historyRenderCache.returnsRef === state.salesReturns
+    && historyRenderCache.returnCount === (state.salesReturns || []).length
+    && historyRenderCache.customersRef === state.customers
+    && historyRenderCache.usersRef === state.users
+    && historyRenderCache.filterKey === filterKey;
 
-  const filtered = state.savedOrders.filter(o => {
+  let sorted;
+  let lookups;
+  if (canReuseFiltered) {
+    ({ sorted, lookups } = historyRenderCache);
+  } else {
+    // A normal render may follow an in-place order edit. Rebuild financial
+    // values for correctness; page/view changes explicitly reuse this cache.
+    historyFinancialCache = null;
+    lookups = createHistoryLookups();
+    const filterLower = selectedCreator.toLowerCase().trim();
+    const matchingUsers = filterLower
+      ? (state.users || []).filter(u =>
+        (u.displayName || '').toLowerCase().includes(filterLower)
+        || (u.username || '').toLowerCase().includes(filterLower))
+      : [];
+    const fromDate = dateMode === 'range' && filterFrom ? new Date(filterFrom) : null;
+    const toDate = dateMode === 'range' && filterTo ? new Date(filterTo) : null;
+    if (fromDate) fromDate.setHours(0, 0, 0, 0);
+    if (toDate) toDate.setHours(23, 59, 59, 999);
+
+    const filtered = (state.savedOrders || []).filter(o => {
     // 1. Phân quyền hiển thị đơn của Sale
     if (state.currentUser && state.currentUser.role === 'sale') {
       if (!orderWasCreatedByUser(o, state.currentUser)) return false;
@@ -431,16 +533,7 @@ export function renderHistoryOrders() {
     
     // 3. Lọc theo nhân viên quản lý đại lý (Tìm kiếm tương đối)
     if (selectedCreator) {
-      const filterLower = selectedCreator.toLowerCase().trim();
-      
-      const matchingUsers = state.users.filter(u => 
-        (u.displayName || '').toLowerCase().includes(filterLower) || 
-        (u.username || '').toLowerCase().includes(filterLower)
-      );
-      
-      const orderCustomer = o.customerId
-        ? state.customers.find(c => String(c.id) === String(o.customerId))
-        : state.customers.find(c => (c.name || '').toLowerCase() === (o.customerName || '').toLowerCase());
+      const orderCustomer = getHistoryCustomer(o, lookups);
       const managerValue = orderCustomer ? (orderCustomer.managedBy || orderCustomer.managed_by || '') : '';
       const managerDisplay = managerValue ? getManagerDisplayName(managerValue, state.users) : '';
 
@@ -490,25 +583,30 @@ export function renderHistoryOrders() {
       else if (dateMode === 'range') {
         const checkDate = new Date(oDate);
         checkDate.setHours(0,0,0,0);
-        if (filterFrom) {
-          const fromDate = new Date(filterFrom);
-          fromDate.setHours(0,0,0,0);
-          if (checkDate < fromDate) return false;
-        }
-        if (filterTo) {
-          const toDate = new Date(filterTo);
-          toDate.setHours(23,59,59,999);
-          if (checkDate > toDate) return false;
-        }
+        if (fromDate && checkDate < fromDate) return false;
+        if (toDate && checkDate > toDate) return false;
       }
     }
     
     return true;
-  });
+    });
+    sorted = filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+    historyRenderCache = {
+      ordersRef: state.savedOrders,
+      orderCount: (state.savedOrders || []).length,
+      returnsRef: state.salesReturns,
+      returnCount: (state.salesReturns || []).length,
+      customersRef: state.customers,
+      usersRef: state.users,
+      filterKey,
+      sorted,
+      lookups
+    };
+    updateHistorySummary(sorted, lookups);
+  }
 
-  updateHistorySummary(filtered);
-
-  if (filtered.length === 0) {
+  if (sorted.length === 0) {
+    state.historyFilteredOrderIds = [];
     container.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
         <i data-lucide="clipboard-list"></i>
@@ -520,7 +618,6 @@ export function renderHistoryOrders() {
     return;
   }
 
-  const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
   state.historyFilteredOrderIds = sorted.map(o => String(o.id));
 
   const ITEMS_PER_PAGE = 20;
@@ -539,7 +636,7 @@ export function renderHistoryOrders() {
     // ---------------------- DẠNG CHI TIẾT (DETAILS TABLE VIEW) ----------------------
     const tableRows = paginatedItems.map((order, idx) => {
       const indexNumber = startIndex + idx + 1;
-      const amountBreakdown = getHistoryOrderAmountBreakdown(order);
+      const amountBreakdown = getHistoryOrderAmountBreakdown(order, lookups);
       const displayOrderCode = getOrderDisplayCode(order);
 
       let statusBadge = '';
@@ -559,25 +656,22 @@ export function renderHistoryOrders() {
       const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
       const showReturnBtn = ['settled', 'partially_returned'].includes(order.status)
         && ['admin', 'accounting'].includes(state.currentUser?.role);
-      const activeOrderReturns = (state.salesReturns || []).filter(item =>
-        String(item.saleId || item.orderId) === String(order.id)
-        && !['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())
-      );
+      const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
       const showAmendBtn = order.status === 'settled'
         && ['admin', 'accounting'].includes(state.currentUser?.role)
         && activeOrderReturns.length === 0;
 
-      const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
+      const cust = getHistoryCustomer(order, lookups);
       let plName = 'Nhập tay';
       let debtText = '0 ₫';
       
       if (cust) {
-        const pl = state.pricelists.find(p => p.id === cust.pricelistId);
+        const pl = lookups.pricelistById.get(String(cust.pricelistId));
         plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
         debtText = formatCurrency(cust.debt || 0);
       } else {
         const orderPlId = order.pricelistId || 'retail';
-        const pl = state.pricelists.find(p => p.id === orderPlId);
+        const pl = lookups.pricelistById.get(String(orderPlId));
         plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
       }
 
@@ -684,7 +778,7 @@ export function renderHistoryOrders() {
     // ---------------------- DẠNG THẺ (CARD VIEW) ----------------------
     ordersContentHtml = paginatedItems.map(order => {
       const totalItemsCount = order.items.reduce((sum, item) => sum + Number(item.quantity), 0);
-      const amountBreakdown = getHistoryOrderAmountBreakdown(order);
+      const amountBreakdown = getHistoryOrderAmountBreakdown(order, lookups);
       const displayOrderCode = getOrderDisplayCode(order);
       let statusBadge = '';
       if (['cancelled', 'canceled'].includes(String(order.status || '').toLowerCase())) {
@@ -705,15 +799,12 @@ export function renderHistoryOrders() {
       const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
       const showReturnBtn = ['settled', 'partially_returned'].includes(order.status)
         && ['admin', 'accounting'].includes(state.currentUser?.role);
-      const activeOrderReturns = (state.salesReturns || []).filter(item =>
-        String(item.saleId || item.orderId) === String(order.id)
-        && !['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())
-      );
+      const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
       const showAmendBtn = order.status === 'settled'
         && ['admin', 'accounting'].includes(state.currentUser?.role)
         && activeOrderReturns.length === 0;
 
-      const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
+      const cust = getHistoryCustomer(order, lookups);
       
       let managerName = 'Chưa phân công';
       let plName = 'Nhập tay';
@@ -722,13 +813,13 @@ export function renderHistoryOrders() {
       if (cust) {
         managerName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa phân công';
         
-        const pl = state.pricelists.find(p => p.id === cust.pricelistId);
+        const pl = lookups.pricelistById.get(String(cust.pricelistId));
         plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
         
         debtText = formatCurrency(cust.debt || 0);
       } else {
         const orderPlId = order.pricelistId || 'retail';
-        const pl = state.pricelists.find(p => p.id === orderPlId);
+        const pl = lookups.pricelistById.get(String(orderPlId));
         plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
       }
 
@@ -843,7 +934,7 @@ export function renderHistoryOrders() {
   if (prevPageBtn) {
     prevPageBtn.addEventListener('click', () => {
       state.historyPage--;
-      renderHistoryOrders();
+      renderHistoryOrders({ reuseFiltered: true });
       container.scrollIntoView({ behavior: 'smooth' });
     });
   }
@@ -852,7 +943,7 @@ export function renderHistoryOrders() {
   if (nextPageBtn) {
     nextPageBtn.addEventListener('click', () => {
       state.historyPage++;
-      renderHistoryOrders();
+      renderHistoryOrders({ reuseFiltered: true });
       container.scrollIntoView({ behavior: 'smooth' });
     });
   }
@@ -880,7 +971,7 @@ export function renderHistoryOrders() {
         if (selectAllHistory.checked) selectedHistoryOrderIdsForExport.add(id);
         else selectedHistoryOrderIdsForExport.delete(id);
       });
-      renderHistoryOrders();
+      renderHistoryOrders({ reuseFiltered: true });
     };
   }
 

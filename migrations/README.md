@@ -127,3 +127,8 @@ Migration `0019` lets Admin/Accounting amend a settled order by atomically
 cancelling the immutable original and confirming a replacement. Orders with
 active returns remain locked. It also adds customer receipts that may create a
 negative customer balance (advance credit) for later orders to consume.
+
+Migration `0020` exposes the existing audited customer-debt correction workflow
+in a way that supports the signed balance convention from `0019`. Admin and
+Accounting may set either a receivable or advance-credit balance, but every
+change still requires a reason and appends both debt-ledger and audit records.
