@@ -11,7 +11,7 @@ import {
 } from '../js/domain/product-catalog.js';
 
 const productsUi = readFileSync(new URL('../js/components/products.js', import.meta.url), 'utf8');
-assert.match(productsUi, /'Lít', 'Cái', 'Bộ'\]\.map\(value =>/);
+assert.match(productsUi, /'Lít', 'Cái', 'Bộ', 'Mét', 'Lọ'\]\.map\(value =>/);
 
 const products = [
   {
@@ -66,12 +66,16 @@ const products = [
 assert.equal(inferLegacyBaseCode('CT-Đ1-THÙNG'), 'CT-Đ1');
 assert.equal(inferLegacyBaseCode('SP-01-CAI'), 'SP-01');
 assert.equal(inferLegacyBaseCode('SP-02-BO'), 'SP-02');
+assert.equal(inferLegacyBaseCode('SP-03-MET'), 'SP-03');
+assert.equal(inferLegacyBaseCode('SP-04-LO'), 'SP-04');
 assert.equal(inferLegacyBaseCode('ABC-LÍT'), 'ABC');
 assert.equal(inferLegacyBaseCode('NO-SUFFIX'), 'NO-SUFFIX');
 assert.equal(getProductBaseCode(products[3], products), 'BA-46');
 assert.equal(variantSpecification(products[0]), 'Lon 6,3 kg');
 assert.equal(variantSpecification({ packageType: 'Cái', packageWeight: 1, packageWeightUnit: 'cái' }), 'Cái 1 cái');
 assert.equal(variantSpecification({ packageType: 'Bộ', packageWeight: 1, packageWeightUnit: 'bộ' }), 'Bộ 1 bộ');
+assert.equal(variantSpecification({ packageType: 'Mét', packageWeight: 1, packageWeightUnit: 'm' }), 'Mét 1 m');
+assert.equal(variantSpecification({ packageType: 'Lọ', packageWeight: 1, packageWeightUnit: 'cái' }), 'Lọ 1 cái');
 assert.deepEqual(buildVariantSnapshot(products[0]), {
   productGroupId: null,
   variantId: 'ct-d1-lon',

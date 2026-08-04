@@ -20,10 +20,19 @@ test('Vietnam business date remains stable across timestamp conversion', () => {
   assert.equal(currentBusinessDateInputValue(now), '2026-08-03');
   assert.deepEqual(parseOrderBusinessDateInput('2026-08-02', now), {
     ok: true,
-    value: '2026-08-02T00:00:00+07:00',
+    value: '2026-08-02T09:00:00+07:00',
     dateKey: '2026-08-02'
   });
   assert.equal(orderDateToInputValue('2026-08-02T00:00:00+07:00'), '2026-08-02');
+});
+
+test('order business date keeps the actual Vietnam finalization time', () => {
+  const finalizedAt = new Date('2026-08-03T18:23:45Z');
+  assert.deepEqual(parseOrderBusinessDateInput('2026-08-03', finalizedAt), {
+    ok: true,
+    value: '2026-08-03T01:23:45+07:00',
+    dateKey: '2026-08-03'
+  });
 });
 
 test('invalid and future order dates are rejected', () => {

@@ -17,6 +17,20 @@ function datePartsInTimeZone(value, timeZone = ORDER_DATE_TIME_ZONE) {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+function timePartsInTimeZone(value, timeZone = ORDER_DATE_TIME_ZONE) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+  const get = type => parts.find(part => part.type === type)?.value;
+  return `${get('hour')}:${get('minute')}:${get('second')}`;
+}
+
 export function currentBusinessDateInputValue(now = new Date()) {
   return datePartsInTimeZone(now);
 }
@@ -45,6 +59,8 @@ export function parseOrderBusinessDateInput(value, now = new Date()) {
     return { ok: false, message: 'Ngày lên đơn không được lớn hơn ngày hiện tại.' };
   }
 
-  // Store the selected Vietnamese business day as an unambiguous timestamptz.
-  return { ok: true, value: `${input}T00:00:00+07:00`, dateKey: input };
+  // Keep the selected Vietnamese business day, but use the actual clock time
+  // of finalization instead of making every order appear at 00:00.
+  const businessTime = timePartsInTimeZone(now);
+  return { ok: true, value: `${input}T${businessTime}+07:00`, dateKey: input };
 }
