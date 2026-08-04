@@ -9,6 +9,21 @@ function sameValue(left, right) {
     && String(left) === String(right);
 }
 
+export function resolveOrderCustomerForEditing(order = {}, customers = []) {
+  const customerId = order.customerId ?? order.customer_id ?? null;
+  const customer = customerId === null || customerId === undefined || customerId === ''
+    ? null
+    : (customers || []).find(item => sameValue(item.id, customerId)) || null;
+  const snapshotName = String(order.customerName || order.customer_name || '').trim();
+
+  return {
+    customer,
+    customerId: customer?.id || null,
+    customerName: customer?.name || snapshotName || 'Khách lẻ',
+    isGuest: !customer
+  };
+}
+
 export function normalizeOrderItemForEditing(item = {}, products = [], index = 0) {
   const embeddedProduct = item.product && typeof item.product === 'object' ? item.product : {};
   const variantId = item.variantId || item.productId || embeddedProduct.id || null;

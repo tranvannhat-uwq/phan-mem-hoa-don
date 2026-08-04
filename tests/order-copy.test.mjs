@@ -13,7 +13,7 @@ test('history exposes order copy in both table and card views', () => {
 });
 
 test('copy mode cannot retain the source edit or amendment identity', () => {
-  assert.match(historySource, /if \(isCopy\) resetInvoiceBuilder\(\)/);
+  assert.match(historySource, /function loadDraftOrderIntoInvoice[\s\S]{0,500}resetInvoiceBuilder\(\)/);
   assert.match(historySource, /isCopy \? currentBusinessDateInputValue\(\)/);
   assert.match(historySource, /const isAmendment = isFinalizedAmendment && !isCopy/);
 
@@ -27,6 +27,7 @@ test('copy mode cannot retain the source edit or amendment identity', () => {
 test('copy mode keeps the loaded order fields editable and offers new-order actions', () => {
   assert.match(historySource, /Thanh toán & Chốt đơn mới/);
   assert.match(historySource, /Lưu thành đơn nháp mới/);
-  assert.match(historySource, /if \(!isCopy\) \{\s*state\.isQuickCustomerMode = true/);
+  assert.match(historySource, /state\.isQuickCustomerMode = false/);
+  assert.doesNotMatch(historySource, /if \(!isCopy\) \{\s*state\.isQuickCustomerMode = true/);
   assert.match(historySource, /detail: \{ order, isReadOnly, isCopy \}/);
 });

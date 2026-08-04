@@ -1,6 +1,43 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeOrderItemsForEditing, reorderOrderItems } from '../js/domain/order-edit.js';
+import {
+  normalizeOrderItemsForEditing,
+  reorderOrderItems,
+  resolveOrderCustomerForEditing
+} from '../js/domain/order-edit.js';
+
+test('guest drafts remain guest orders when reopened or copied', () => {
+  const context = resolveOrderCustomerForEditing({
+    customerId: null,
+    customerName: 'Khách lẻ anh Nam'
+  }, [{ id: 'customer-1', name: 'Khách có hồ sơ' }]);
+
+  assert.equal(context.isGuest, true);
+  assert.equal(context.customerId, null);
+  assert.equal(context.customerName, 'Khách lẻ anh Nam');
+});
+
+test('drafts whose old customer record is unavailable keep their name snapshot', () => {
+  const context = resolveOrderCustomerForEditing({
+    customerId: 'deleted-customer',
+    customerName: 'Tên khách trên đơn'
+  }, []);
+
+  assert.equal(context.isGuest, true);
+  assert.equal(context.customerId, null);
+  assert.equal(context.customerName, 'Tên khách trên đơn');
+});
+
+test('registered draft customers still resolve to the current customer record', () => {
+  const context = resolveOrderCustomerForEditing({
+    customerId: 'customer-1',
+    customerName: 'Tên snapshot cũ'
+  }, [{ id: 'customer-1', name: 'Tên hiện tại' }]);
+
+  assert.equal(context.isGuest, false);
+  assert.equal(context.customerId, 'customer-1');
+  assert.equal(context.customerName, 'Tên hiện tại');
+});
 
 test('legacy draft items with an embedded product remain editable', () => {
   const [item] = normalizeOrderItemsForEditing([{

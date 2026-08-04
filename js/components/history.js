@@ -10,7 +10,7 @@ import {
 } from '../domain/order-financials.js?v=20260803-amend-advance1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
-import { normalizeOrderItemsForEditing } from '../domain/order-edit.js';
+import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -1064,9 +1064,10 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
 
 function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
-  // A copied order starts from a clean builder so it receives a fresh
-  // idempotency key and can never overwrite/amend the source order.
-  if (isCopy) resetInvoiceBuilder();
+  // Every history action starts from a clean customer/builder state. This is
+  // especially important for guest drafts, which have a name snapshot but no
+  // customer record and must not inherit quick-create or prior-customer state.
+  resetInvoiceBuilder();
   const isFinalizedAmendment = !isReadOnly && order.status === 'settled';
   const isAmendment = isFinalizedAmendment && !isCopy;
   syncInvoiceBusinessDateControl(
@@ -1074,8 +1075,9 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
     isReadOnly
   );
   // Đồng bộ khách hàng
-  if (order.customerId) {
-    const cust = state.customers.find(c => c.id === order.customerId);
+  const customerContext = resolveOrderCustomerForEditing(order, state.customers);
+  if (!customerContext.isGuest) {
+    const cust = customerContext.customer;
     if (cust) {
       state.activeCustomerId = cust.id;
       state.activeCustomerBrand = cust.assignedBrand;
@@ -1095,13 +1097,22 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
       document.getElementById('selected-customer-debt-lbl').innerText = formatCurrency(cust.debt);
     }
   } else {
-    // Khách lẻ
-    document.getElementById('invoice-customer-search').value = order.customerName;
-    if (!isCopy) {
-      state.isQuickCustomerMode = true;
-      document.getElementById('invoice-customer-search').setAttribute('disabled', 'true');
+    // Khách lẻ chỉ là tên snapshot trên đơn, không phải chế độ tạo nhanh
+    // khách hàng mới (chế độ đó còn yêu cầu tỉnh, nhãn và quản lý).
+    state.activeCustomerId = '';
+    state.activeCustomerBrand = 'Tất cả';
+    state.isQuickCustomerMode = false;
+    const customerIdInput = document.getElementById('invoice-customer-id');
+    if (customerIdInput) customerIdInput.value = '';
+    const customerSearchInput = document.getElementById('invoice-customer-search');
+    if (customerSearchInput) {
+      customerSearchInput.value = customerContext.customerName;
+      customerSearchInput.removeAttribute('disabled');
     }
-    document.getElementById('btn-clear-invoice-customer').style.display = 'inline-flex';
+    const customerInfoCard = document.getElementById('invoice-customer-info-card');
+    if (customerInfoCard) customerInfoCard.style.display = 'none';
+    const clearCustomerButton = document.getElementById('btn-clear-invoice-customer');
+    if (clearCustomerButton) clearCustomerButton.style.display = 'inline-flex';
   }
   
   // Tải các mặt hàng
