@@ -3,6 +3,7 @@ import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
 import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-history-status-multi1';
 import { collectAllPages } from '../domain/pagination.js';
 
 export let supabaseClient = null;
@@ -281,7 +282,10 @@ export async function connectSupabase(url, key, verbose = true) {
     
     updateDbStatusUI('cloud');
     
-    if (connectionSession?.user) {
+    // On initial session recovery the Auth session exists before the database
+    // profile has been validated. Do not load role-scoped pricing until
+    // state.currentUser contains that authoritative profile.
+    if (connectionSession?.user && state.currentUser) {
       try {
         await fetchCloudData();
       } catch (cloudErr) {
@@ -491,6 +495,7 @@ function mapOrderRowForState(order, isDraft = false) {
     ),
     pricelistId: order.pricelist_id || 'retail',
     createdBy: order.created_by || 'admin',
+    customerManagerId: order.customer_manager_id || order.customerManagerId || '',
     companyId: order.company_id || order.companyId || 'ABS_NORTH',
     status: isDraft ? 'draft' : (order.status || 'settled')
   };
@@ -721,6 +726,9 @@ export async function fetchCloudData(options = {}) {
     };
 
     const fetchPricelists = async () => {
+      const pricingActorId = String(
+        state.currentUser?.authUserId || state.currentUser?.auth_user_id || state.currentUser?.id || ''
+      );
       try {
         const { data: plData, error: plErr } = await supabaseClient
           .from(tablePricelistsName)
@@ -740,18 +748,19 @@ export async function fetchCloudData(options = {}) {
             effectiveTo: pl.effective_to || '',
             isActive: pl.is_active !== false,
             isAvailableForSales: pl.is_available_for_sales === true,
+            isPrintOnly: pl.is_print_only === true ? true : (pl.is_print_only === false ? false : undefined),
             displayOrder: Number(pl.display_order || 0),
             createdAt: pl.created_at || '',
             updatedAt: pl.updated_at || '',
             brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
           }));
-        state.allPricelists = mappedPricelists;
-        state.pricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
-
-        try {
-          const itemData = await fetchFullTableData(tablePriceListItemsName);
-          const visiblePriceListIds = new Set(state.pricelists.map(priceList => priceList.id));
-          state.allPriceListItems = (itemData || []).map(item => ({
+        // Build one complete authorized snapshot before touching shared state.
+        // A price-list refresh is used by login and Realtime; publishing the
+        // list before its item rows arrive makes prices briefly disappear.
+        const itemData = await fetchFullTableData(tablePriceListItemsName);
+        const visiblePricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
+        const visiblePriceListIds = new Set(visiblePricelists.map(priceList => priceList.id));
+        const mappedPriceListItems = (itemData || []).map(item => ({
             id: item.id || `${item.price_list_id}:${item.product_id}`,
             priceListId: item.price_list_id,
             productId: item.variant_id || item.product_id,
@@ -763,19 +772,33 @@ export async function fetchCloudData(options = {}) {
             updatedAt: item.updated_at || '',
             updatedBy: item.updated_by || ''
           }));
-          state.priceListItems = state.allPriceListItems
+
+        state.allPricelists = mappedPricelists;
+        state.pricelists = visiblePricelists;
+        state.allPriceListItems = mappedPriceListItems;
+        state.priceListItems = mappedPriceListItems
           .filter(item => visiblePriceListIds.has(item.priceListId));
-        } catch (itemErr) {
-          console.warn("Could not load authorized price_list_items:", itemErr.message);
+        state.pricingSnapshotActorId = pricingActorId;
+      } catch (plErr) {
+        // Keep the last in-memory snapshot for this authenticated session on
+        // transient refresh failures. Bootstrap data or a snapshot belonging
+        // to another account must still fail closed.
+        const canKeepCurrentSnapshot = Boolean(
+          pricingActorId && state.pricingSnapshotActorId === pricingActorId
+        );
+        if (!canKeepCurrentSnapshot) {
+          state.pricelists = [];
+          state.allPricelists = [];
           state.priceListItems = [];
           state.allPriceListItems = [];
+          state.pricingSnapshotActorId = '';
         }
-      } catch (plErr) {
-        console.warn("Could not load authorized pricelists from Supabase:", plErr.message);
-        state.pricelists = [];
-        state.allPricelists = [];
-        state.priceListItems = [];
-        state.allPriceListItems = [];
+        console.warn(
+          canKeepCurrentSnapshot
+            ? "Could not refresh authorized pricelists from Supabase; keeping the last snapshot:"
+            : "Could not load an authorized pricing snapshot from Supabase:",
+          plErr.message
+        );
       }
     };
 
@@ -2362,6 +2385,7 @@ export async function dbSavePricelist(pricelist) {
         effective_to: pricelist.effectiveTo || null,
         is_active: pricelist.isActive !== false,
         is_available_for_sales: pricelist.isAvailableForSales === true,
+        is_print_only: pricelist.isPrintOnly === true,
         display_order: Number(pricelist.displayOrder || 0),
         brand_discounts: pricelist.brandDiscounts || {},
         updated_at: new Date().toISOString()
@@ -2474,7 +2498,23 @@ export async function dbDeletePricelist(id) {
 }
 
 // --- Thao tác CSDL chi tiết (Hóa đơn / Đơn hàng) ---
+function findPrintOnlyOrderPriceList(order) {
+  const priceLists = [...(state.allPricelists || []), ...(state.pricelists || [])];
+  const usedIds = new Set([
+    order?.pricelistId,
+    ...(order?.items || []).map(item => item.priceListId)
+  ].filter(id => id && id !== 'retail'));
+  return priceLists.find(priceList =>
+    usedIds.has(priceList.id) && isPrintOnlyPriceList(priceList)
+  ) || null;
+}
+
 export async function dbSaveOrder(order) {
+  const printOnlyList = findPrintOnlyOrderPriceList(order);
+  if (printOnlyList) {
+    showToast('Bảng giá này chưa được Kế toán cho phép lưu; chỉ có thể in và không được ghi công nợ.', 'warning');
+    return false;
+  }
   if (state.currentUser?.role === 'sale') {
     const usedPriceListIds = new Set([
       order.pricelistId,
@@ -3512,6 +3552,11 @@ function buildOrderCommand(order) {
 }
 
 export async function dbConfirmOrder(order) {
+  const printOnlyList = findPrintOnlyOrderPriceList(order);
+  if (printOnlyList) {
+    showToast('Bảng giá này chưa được Kế toán cho phép lưu; không thể chốt đơn hoặc ghi công nợ.', 'warning');
+    return false;
+  }
   if (state.currentUser?.role === 'sale') {
     const usedPriceListIds = new Set([
       order.pricelistId,
@@ -3591,6 +3636,10 @@ export async function dbConfirmOrder(order) {
 }
 
 export async function dbAmendOrder(originalOrderId, order, reason) {
+  const printOnlyList = findPrintOnlyOrderPriceList(order);
+  if (printOnlyList) {
+    throw new Error('Bảng giá này chưa được Kế toán cho phép lưu; không thể lưu thành đơn thay thế.');
+  }
   if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
     throw new Error('Chỉ Admin hoặc Kế toán được sửa đơn đã chốt.');
   }
@@ -3927,6 +3976,7 @@ export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExc
     pricelistId: order.pricelist_id || order.pricelistId || 'retail',
     createdBy: order.created_by || order.createdBy || '',
     salespersonId: order.salesperson_id || order.salespersonId || order.created_by || order.createdBy || '',
+    customerManagerId: order.customer_manager_id || order.customerManagerId || '',
     status: order.status || 'settled',
     companyId: order.company_id || order.companyId || 'ABS_NORTH'
   });

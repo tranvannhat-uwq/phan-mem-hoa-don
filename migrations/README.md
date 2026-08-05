@@ -32,6 +32,8 @@ Run these files in order on a staging clone first:
 24. `0024_sale_managed_customer_debt_history.sql`
 25. `0025_global_price_list_order_override.sql`
 26. `0026_sale_managed_customer_order_history.sql`
+27. `0027_market_price_lists_are_print_only.sql`
+28. `0028_tt_20072026_requires_accounting_approval.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -148,3 +150,12 @@ Migration `0026` lets a Sale read finalized order history for a dealer already
 inside that Sale's managed or assigned customer scope. It keeps price-list
 authorization, draft ownership, finalized-order immutability and all mutation
 permissions unchanged.
+
+Migration `0027` marks restricted market and `TT 20/07/2026` price lists as
+print-only. It blocks inserts into finalized and draft orders when either the
+order or an item references such a list, preventing revenue and customer-debt
+effects while leaving invoice preview and printing available.
+
+Migration `0028` also marks the existing `TT 20/07/2026` list as print-only.
+Accounting (or Admin) can explicitly enable order saving from the price-list
+editor; this permission is independent from the existing Sale visibility toggle.

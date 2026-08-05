@@ -18,6 +18,7 @@ export const state = {
   allPricelists: [],
   priceListItems: [],
   allPriceListItems: [],
+  pricingSnapshotActorId: '',
   selectedPriceListIds: [],
   users: [],
   currentUser: null,

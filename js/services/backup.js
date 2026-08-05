@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast } from '../utils.js';
-import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260803-amend-advance1';
+import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260805-history-status-multi1';
 import { 
   supabaseClient, 
   isCloudActive,
@@ -21,7 +21,7 @@ import {
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js?v=20260803-amend-advance1';
+} from './supabase.js?v=20260805-history-status-multi1';
 
 async function deleteAllRows(tableName, key = 'id') {
   const { error } = await supabaseClient

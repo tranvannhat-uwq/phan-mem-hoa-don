@@ -5,9 +5,9 @@ import {
   dbDeletePricelist,
   dbSavePriceListItems,
   dbDeletePriceListItem
-} from '../services/supabase.js?v=20260803-amend-advance1';
-import { renderAll } from '../main.js?v=20260803-amend-advance1';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20260803-amend-advance1';
+} from '../services/supabase.js?v=20260805-history-status-multi1';
+import { renderAll } from '../main.js?v=20260805-history-status-multi1';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20260805-history-status-multi1';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -18,6 +18,7 @@ import {
   sortPriceLists,
   parseVndInteger
 } from '../domain/pricing.js';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-history-status-multi1';
 
 const pendingChanges = new Map();
 const pendingDeletes = new Set();
@@ -41,6 +42,35 @@ function itemKey(priceListId, productId) {
 
 function getPriceItem(priceListId, productId) {
   return (state.priceListItems || []).find(item => item.priceListId === priceListId && item.productId === productId) || null;
+}
+
+function upsertPriceListSnapshot(priceList) {
+  const allLists = [...(state.allPricelists || [])];
+  const index = allLists.findIndex(item => item.id === priceList.id);
+  if (index >= 0) allLists[index] = priceList;
+  else allLists.push(priceList);
+  state.allPricelists = allLists;
+  state.pricelists = filterPriceListsForUser(allLists, state.currentUser);
+}
+
+function commitPriceListItemSnapshot(changes, deletedKeys = new Set()) {
+  let allItems = [...(state.allPriceListItems || [])];
+  changes.forEach(change => {
+    const index = allItems.findIndex(item =>
+      item.priceListId === change.priceListId && item.productId === change.productId
+    );
+    if (index >= 0) allItems[index] = { ...allItems[index], ...change };
+    else allItems.push(change);
+  });
+  deletedKeys.forEach(key => {
+    const [priceListId, productId] = key.split('::');
+    allItems = allItems.filter(item =>
+      !(item.priceListId === priceListId && item.productId === productId)
+    );
+  });
+  const visibleIds = new Set((state.pricelists || []).map(priceList => priceList.id));
+  state.allPriceListItems = allItems;
+  state.priceListItems = allItems.filter(item => visibleIds.has(item.priceListId));
 }
 
 function formatVndInput(price) {
@@ -322,6 +352,7 @@ export function openPricelistModal(index = -1) {
   document.getElementById('pl-type').value = PRICE_LIST_TYPES.GENERAL;
   document.getElementById('pl-active').checked = true;
   document.getElementById('pl-available-for-sales').checked = false;
+  document.getElementById('pl-allow-order-save').checked = true;
   document.getElementById('pl-display-order').value = '0';
   document.getElementById('pricelist-modal-title').innerText = index === -1 ? 'Thêm bảng giá mới' : 'Chỉnh sửa bảng giá';
 
@@ -344,6 +375,7 @@ export function openPricelistModal(index = -1) {
     document.getElementById('pl-display-order').value = String(priceList.displayOrder || 0);
     document.getElementById('pl-active').checked = priceList.isActive !== false;
     document.getElementById('pl-available-for-sales').checked = priceList.isAvailableForSales === true;
+    document.getElementById('pl-allow-order-save').checked = !isPrintOnlyPriceList(priceList);
   }
   makeSelectSearchable('pl-customer-id', 'Tìm khách hàng/đại lý');
   updatePricelistTypeFields();
@@ -397,6 +429,7 @@ export async function savePricelist() {
     effectiveTo: document.getElementById('pl-effective-to').value || '',
     isActive: document.getElementById('pl-active').checked,
     isAvailableForSales: type === PRICE_LIST_TYPES.DEALER_PRIVATE ? false : document.getElementById('pl-available-for-sales').checked,
+    isPrintOnly: !document.getElementById('pl-allow-order-save').checked,
     displayOrder: Number(document.getElementById('pl-display-order').value || 0),
     brandDiscounts: {}
   };
@@ -406,9 +439,7 @@ export async function savePricelist() {
     return;
   }
   if (!(await dbSavePricelist(priceList))) return;
-  const currentIndex = state.pricelists.findIndex(item => item.id === id);
-  if (currentIndex >= 0) state.pricelists[currentIndex] = priceList;
-  else state.pricelists.push(priceList);
+  upsertPriceListSnapshot(priceList);
   closePricelistModal();
   renderAll();
   populatePricelistsDropdowns();
@@ -444,15 +475,7 @@ export async function savePriceMatrix() {
     if (!(await dbDeletePriceListItem(priceListId, productId))) return;
   }
 
-  changes.forEach(change => {
-    const current = getPriceItem(change.priceListId, change.productId);
-    if (current) Object.assign(current, change);
-    else state.priceListItems.push(change);
-  });
-  pendingDeletes.forEach(key => {
-    const [priceListId, productId] = key.split('::');
-    state.priceListItems = state.priceListItems.filter(item => !(item.priceListId === priceListId && item.productId === productId));
-  });
+  commitPriceListItemSnapshot(changes, pendingDeletes);
   const count = changes.length + pendingDeletes.size;
   pendingChanges.clear();
   pendingDeletes.clear();
@@ -473,7 +496,7 @@ export async function deletePricelist(index) {
   }
   if (!priceList || !confirm(`Ngừng áp dụng bảng giá "${priceList.name}"? Dữ liệu giá và đơn cũ vẫn được giữ.`)) return;
   if (!(await dbDeletePricelist(priceList.id))) return;
-  priceList.isActive = false;
+  upsertPriceListSnapshot({ ...priceList, isActive: false });
   state.selectedPriceListIds = state.selectedPriceListIds.filter(id => id !== priceList.id);
   renderAll();
   showToast('Bảng giá đã được ngừng áp dụng.');

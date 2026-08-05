@@ -23,13 +23,11 @@
     </div>
     <select id="history-company-filter"><option value="all">Tất cả công ty</option></select>
     <select id="history-brand-filter"><option value="all">Tất cả hãng</option></select>
-    <select id="history-status-filter">
-      <option value="all">Tất cả trạng thái</option>
-      <option value="settled">Đã chốt</option>
-      <option value="partially_returned">Trả một phần</option>
-      <option value="returned">Đã trả toàn bộ</option>
-      <option value="cancelled">Đã hủy</option>
-    </select>
+    <div id="history-status-filter">
+      <label><input type="checkbox" class="history-status-filter-check" value="settled" checked>Đã chốt</label>
+      <label><input type="checkbox" class="history-status-filter-check" value="draft" checked>Nháp</label>
+      <label><input type="checkbox" class="history-status-filter-check" value="cancelled" checked>Đã hủy</label>
+    </div>
     <div class="history-creator-filter-wrap">
       <input id="history-creator-filter">
       <ul id="history-creator-suggestions"></ul>
@@ -45,7 +43,7 @@
 
   <script type="module">
     import { state } from '../js/state.js';
-    import { renderHistoryOrders, setupHistoryPanel } from '../js/components/history.js?v=20260802-backup-cell-fix1';
+    import { renderHistoryOrders, setupHistoryPanel } from '../js/components/history.js?v=20260805-history-status-multi1';
 
     state.currentUser = { username: 'admin', role: 'admin' };
     state.historyViewMode = 'details';
@@ -87,6 +85,14 @@
         date: '2026-07-03T08:00:00Z',
         status: 'cancelled',
         items: [{ productName: 'SP C', package: 'Lon', quantity: 1, price: 500000 }]
+      },
+      {
+        id: 'HD-4',
+        customerName: 'Khách D',
+        createdBy: 'admin',
+        date: '2026-07-04T08:00:00Z',
+        status: 'draft',
+        items: [{ productName: 'SP D', package: 'Lon', quantity: 1, price: 120000 }]
       }
     ];
 

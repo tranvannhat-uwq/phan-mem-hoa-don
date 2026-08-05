@@ -34,6 +34,6 @@ test('realtime lifecycle follows authentication and disconnect paths', () => {
   const main = read('js/main.js');
   assert.match(users, /void startRealtimeSync\(renderAll\)/);
   assert.match(users, /await stopRealtimeSync\(\)/);
-  assert.match(main, /if \(activeUser\) void startRealtimeSync\(renderAll\)/);
+  assert.match(main, /if \(activeUser\) \{[\s\S]{0,100}void startRealtimeSync\(renderAll\)/);
   assert.match(main, /await stopRealtimeSync\(\);\s*disconnectSupabase\(\)/);
 });

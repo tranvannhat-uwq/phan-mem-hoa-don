@@ -5210,3 +5210,46 @@ body.customer-filter-drawer-open { overflow: hidden; }
   .customer-filter-multi-grid, .customer-presence-grid, .customer-export-column-grid { grid-template-columns: 1fr; }
   .customer-query-status-row label { margin-left: 0; }
 }
+.history-status-multi-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--bg-secondary);
+}
+
+.history-status-multi-filter label {
+  cursor: pointer;
+}
+
+.history-status-multi-filter input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.history-status-multi-filter span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: 0.16s ease;
+}
+
+.history-status-multi-filter input:focus-visible + span {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.history-status-multi-filter input:checked + span {
+  color: #fff;
+  background: var(--color-primary);
+  box-shadow: 0 2px 7px rgba(79, 70, 229, 0.22);
+}

@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260803-amend-advance1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260803-amend-advance1';
-import { renderAll, switchTab } from '../main.js?v=20260803-amend-advance1';
-import { populateManagedByDropdown } from './customers.js?v=20260803-amend-advance1';
-import { exportBackupToExcel } from '../services/backup.js?v=20260803-amend-advance1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260805-history-status-multi1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260805-history-status-multi1';
+import { renderAll, switchTab } from '../main.js?v=20260805-history-status-multi1';
+import { populateManagedByDropdown } from './customers.js?v=20260805-history-status-multi1';
+import { exportBackupToExcel } from '../services/backup.js?v=20260805-history-status-multi1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -356,6 +356,7 @@ export function clearAuthenticatedSessionState() {
   state.allPricelists = [];
   state.priceListItems = [];
   state.allPriceListItems = [];
+  state.pricingSnapshotActorId = '';
   state.selectedPriceListIds = [];
 }
 

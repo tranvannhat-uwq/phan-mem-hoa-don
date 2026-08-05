@@ -1,21 +1,21 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage } from './services/supabase.js?v=20260803-amend-advance1';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260803-amend-advance1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260803-amend-advance1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260803-amend-advance1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260803-amend-advance1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260803-amend-advance1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260803-amend-advance1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260803-amend-advance1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260803-amend-advance1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260803-amend-advance1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260803-amend-advance1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260803-amend-advance1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260803-amend-advance1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260803-amend-advance1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData } from './services/supabase.js?v=20260805-history-status-multi1';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260805-history-status-multi1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260805-history-status-multi1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260805-history-status-multi1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260805-history-status-multi1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260805-history-status-multi1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260805-history-status-multi1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260805-history-status-multi1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260805-history-status-multi1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260805-history-status-multi1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260805-history-status-multi1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260805-history-status-multi1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260805-history-status-multi1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260805-history-status-multi1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260803-amend-advance1';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260805-history-status-multi1';
 
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
 // chuyển tab, tránh dựng hàng nghìn dòng DOM ẩn trong mỗi lần cập nhật.
@@ -395,8 +395,16 @@ async function initApp() {
     }
   }
   
+  let recoveredCloudLoad = null;
   if (activeUser) {
     state.currentUser = activeUser;
+    recoveredCloudLoad = await fetchCloudData({
+      deferSecondary: true,
+      hydrateCustomerHistory: false
+    });
+    state.currentUser = state.users.find(item =>
+      item.authUserId === activeUser.authUserId || item.id === activeUser.id
+    ) || activeUser;
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-layout').classList.remove('auth-hidden');
     const userInfoHeader = document.getElementById('user-info-header');
@@ -405,9 +413,9 @@ async function initApp() {
     if (logoutBtn) logoutBtn.style.display = 'inline-flex';
     const userDisplay = document.getElementById('header-user-display');
     if (userDisplay) {
-      userDisplay.innerText = `${activeUser.displayName} (${activeUser.role === 'admin' ? 'Admin' : activeUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
+      userDisplay.innerText = `${state.currentUser.displayName} (${state.currentUser.role === 'admin' ? 'Admin' : state.currentUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
     }
-    applyUserPermissions(activeUser);
+    applyUserPermissions(state.currentUser);
   } else {
     showLoginGate();
   }
@@ -417,7 +425,16 @@ async function initApp() {
 
 
   renderAll();
-  if (activeUser) void startRealtimeSync(renderAll);
+  if (activeUser) {
+    void startRealtimeSync(renderAll);
+    const recoveredUserId = String(state.currentUser?.authUserId || state.currentUser?.id || '');
+    if (recoveredCloudLoad?.background) {
+      void recoveredCloudLoad.background.then(loaded => {
+        const currentUserId = String(state.currentUser?.authUserId || state.currentUser?.id || '');
+        if (loaded && currentUserId === recoveredUserId) renderAll();
+      });
+    }
+  }
 }
 
 // Xử lý khi nhấn nút kết nối lại trên Badge trạng thái

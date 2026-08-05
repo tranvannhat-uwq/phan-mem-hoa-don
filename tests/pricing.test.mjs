@@ -9,7 +9,7 @@ import {
   isPrivilegedPricingRole,
   parseVndInteger
 } from '../js/domain/pricing.js';
-import { supportsInvoiceLineDiscount } from '../js/domain/invoice-discount.js';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../js/domain/invoice-discount.js';
 
 const priceLists = [
   { id: 'standard', name: 'Giá chung', type: PRICE_LIST_TYPES.GENERAL, isActive: true, isAvailableForSales: false, displayOrder: 0 },
@@ -24,8 +24,17 @@ const standardOnly = [
 
 assert.equal(supportsInvoiceLineDiscount(priceLists[0]), true);
 assert.equal(supportsInvoiceLineDiscount({ name: 'Bảng giá thị trường 20/07/2026', type: PRICE_LIST_TYPES.SALES }), true);
+assert.equal(supportsInvoiceLineDiscount({ name: 'TT 20/07/2026', type: PRICE_LIST_TYPES.SALES }), true);
 assert.equal(supportsInvoiceLineDiscount(priceLists[1]), false);
 assert.equal(supportsInvoiceLineDiscount(priceLists[2]), false);
+assert.equal(isPrintOnlyPriceList({ name: 'Bảng giá thị trường 20/07/2026' }), true);
+assert.equal(isPrintOnlyPriceList({ code: 'THI_TRUONG_2026', name: 'Bảng báo giá' }), true);
+assert.equal(isPrintOnlyPriceList({ name: 'TT 20/07/2026' }), true);
+assert.equal(isPrintOnlyPriceList({ name: 'TT 20/07/2026', isPrintOnly: false }), false);
+assert.equal(isPrintOnlyPriceList({ name: 'Bảng giá chung', isPrintOnly: true }), true);
+assert.equal(isPrintOnlyPriceList({ name: 'Bảng giá chung' }), false);
+assert.equal(requiresOrderSaveApproval({ name: 'TT 20-07-2026' }), true);
+assert.equal(requiresOrderSaveApproval({ name: 'Bảng giá chung' }), false);
 
 assert.deepEqual(
   resolvePriceForList({

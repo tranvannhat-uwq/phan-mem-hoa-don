@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260803-amend-advance1';
-import { renderAll, switchTab } from '../main.js?v=20260803-amend-advance1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-history-status-multi1';
+import { renderAll, switchTab } from '../main.js?v=20260805-history-status-multi1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260803-amend-advance1';
-import { addCashbookTransaction } from './so_quy.js?v=20260803-amend-advance1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260805-history-status-multi1';
+import { addCashbookTransaction } from './so_quy.js?v=20260805-history-status-multi1';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
-import { supportsInvoiceLineDiscount } from '../domain/invoice-discount.js';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260805-history-status-multi1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -164,6 +164,28 @@ function getSelectedInvoicePriceList() {
     : null;
 }
 
+function isPrintOnlyInvoiceMode() {
+  if (isPrintOnlyPriceList(getSelectedInvoicePriceList())) return true;
+  const priceLists = [...(state.allPricelists || []), ...(state.pricelists || [])];
+  return (state.invoiceItems || []).some(item => {
+    const priceList = priceLists.find(candidate => String(candidate.id) === String(item.priceListId || ''));
+    return isPrintOnlyPriceList(priceList);
+  });
+}
+
+function syncInvoicePersistenceActions() {
+  const printOnly = isPrintOnlyInvoiceMode();
+  const saveBtn = document.getElementById('btn-save-order');
+  const draftBtn = document.getElementById('btn-draft-order');
+  const notice = document.getElementById('invoice-print-only-notice');
+  [saveBtn, draftBtn].forEach(button => {
+    if (!button || button.style.display === 'none' || isSavingOrder) return;
+    button.disabled = printOnly;
+    button.title = printOnly ? 'Bảng giá này chỉ được phép in, chưa được Kế toán cho phép lưu.' : '';
+  });
+  if (notice) notice.style.display = printOnly ? 'block' : 'none';
+}
+
 function isManualInvoicePriceMode() {
   return getSelectedInvoicePriceListId() === 'retail';
 }
@@ -187,9 +209,14 @@ function isUsingCustomerDefaultPriceList(customer) {
 function canPersistCurrentInvoicePricing() {
   if (isExplicitInvoicePriceListOverride()) {
     const selected = getSelectedInvoicePriceList();
+    const isApprovedRestrictedList = requiresOrderSaveApproval(selected)
+      && selected?.isPrintOnly === false;
     return Boolean(
       selected
-      && normalizePriceListType(selected.type, selected.customerId) === PRICE_LIST_TYPES.GENERAL
+      && (
+        normalizePriceListType(selected.type, selected.customerId) === PRICE_LIST_TYPES.GENERAL
+        || isApprovedRestrictedList
+      )
       && !selected.customerId
       && !selected.customerGroupId
       && canUserViewPriceList(state.currentUser, selected)
@@ -380,6 +407,7 @@ export function renderInvoiceTable() {
   if (!tableBody) return;
   
   populateQuickCustomerManagerDropdown();
+  syncInvoicePersistenceActions();
 
   const manualPriceMode = isManualInvoicePriceMode();
   const showLineDiscount = activeInvoicePriceListSupportsDiscount();
@@ -828,6 +856,7 @@ export function compileActiveOrder() {
   let address = 'N/A';
   let custId = null;
   let agencyBrand = 'Nano10*';
+  let customerManagerId = '';
   
   if (state.isQuickCustomerMode) {
     const qName = document.getElementById('quick-cust-name').value.trim();
@@ -843,6 +872,7 @@ export function compileActiveOrder() {
     if (qBrand && qBrand.value && qBrand.value !== 'Tất cả') {
       agencyBrand = qBrand.value;
     }
+    customerManagerId = document.getElementById('quick-cust-manager')?.value || '';
   } else if (state.activeCustomerId) {
     const cust = state.customers.find(c => c.id === state.activeCustomerId);
     if (cust) {
@@ -850,6 +880,7 @@ export function compileActiveOrder() {
       customerName = cust.name;
       phone = cust.phone || 'N/A';
       address = cust.address || 'N/A';
+      customerManagerId = cust.managedBy || cust.managed_by || '';
       if (cust.assignedBrand && cust.assignedBrand !== 'Tất cả') {
         agencyBrand = cust.assignedBrand;
       }
@@ -1010,6 +1041,7 @@ export function compileActiveOrder() {
     priceListOverride: isExplicitInvoicePriceListOverride(),
     priceListNameSnapshot: state.pricelists.find(priceList => priceList.id === pricelistId)?.name || '',
     priceSelectedBy: state.currentUser ? state.currentUser.username : 'admin',
+    customerManagerId,
     createdBy: state.currentUser ? state.currentUser.username : 'admin'
   };
 
@@ -1017,6 +1049,10 @@ export function compileActiveOrder() {
 }
 
 export async function saveActiveOrder(status = 'settled') {
+  if (isPrintOnlyInvoiceMode()) {
+    showToast('Bảng giá này chỉ dùng để in và chưa được Kế toán cho phép lưu. Không thể lưu nháp, chốt đơn hoặc phát sinh công nợ.', 'warning');
+    return null;
+  }
   if (isSavingOrder) {
     console.warn("Lưu đơn hàng đang được thực hiện...");
     return null;
@@ -1535,8 +1571,6 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   if (firstItem) {
     brandName = firstItem.brand || (firstItem.product && firstItem.product.brand) || 'N/A';
   }
-  document.getElementById('print-order-brand').innerText = brandName;
-
   // 1. Tìm cấu hình hãng sơn tương ứng trong danh sách state.brands
   let brandConfig = state.brands ? state.brands.find(b => b.name.toLowerCase() === brandName.toLowerCase()) : null;
   if (!brandConfig && state.brands) {
@@ -1640,6 +1674,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   const addressEl = document.getElementById('print-customer-address');
   const phoneEl = document.getElementById('print-customer-phone');
   const groupEl = document.getElementById('print-customer-group');
+  const managerEl = document.getElementById('print-customer-manager');
   const creatorEl = document.getElementById('print-creator-name');
   const warehouseEl = document.getElementById('print-warehouse-name');
   const warehouseRowEl = document.getElementById('print-warehouse-row');
@@ -1652,8 +1687,19 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   if (warehouseRowEl) warehouseRowEl.style.display = type === 'retail' ? 'none' : '';
   if (reasonEl) reasonEl.innerText = 'Xuất bán hàng';
 
+  const orderCustomer = order.customerId
+    ? state.customers.find(c => c.id === order.customerId)
+    : null;
+  const managerId = order.customerManagerId
+    || order.managedBy
+    || orderCustomer?.managedBy
+    || orderCustomer?.managed_by
+    || '';
+  const managerName = getUserDisplayName(managerId, managerId || 'N/A', state.users);
+  if (managerEl) managerEl.innerText = managerName;
+
   if (order.customerId) {
-    const cust = state.customers.find(c => c.id === order.customerId);
+    const cust = orderCustomer;
     if (cust) {
       if (addressEl) addressEl.innerText = cust.address || 'N/A';
       if (phoneEl) phoneEl.innerText = formatPhoneNumber(cust.phone) || 'N/A';
@@ -2224,6 +2270,7 @@ export function setupInvoiceCreator() {
       invoicePlSelect.dataset.explicitOverride = String(
         Boolean(invoicePlSelect.value) && invoicePlSelect.value !== 'retail'
       );
+      syncInvoicePersistenceActions();
       applyActivePriceListToInvoice();
     });
   }

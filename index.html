@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260803-amend-advance1">
+  <link rel="stylesheet" href="style.css?v=20260805-history-status-multi1">
 </head>
 <body>
 
@@ -1155,6 +1155,9 @@
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                  <div id="invoice-print-only-notice" style="display: none; padding: 0.65rem 0.75rem; border-radius: 7px; color: #92400e; background: #fef3c7; border: 1px solid #f59e0b; font-size: 0.8rem; font-weight: 600; line-height: 1.35;">
+                    Bảng giá này chỉ dùng để in và chưa được Kế toán cho phép lưu. Đơn này không thể lưu hoặc phát sinh công nợ.
+                  </div>
                   <button class="btn btn-primary" id="btn-save-order" style="width: 100%;">
                     <i data-lucide="credit-card"></i> Thanh toán
                   </button>
@@ -1239,14 +1242,11 @@
               <select class="form-control" id="history-brand-filter" style="width: 170px; height: 42px; border-radius: 8px; cursor: pointer;">
                 <option value="all">Tất cả nhãn sơn</option>
               </select>
-              <select class="form-control" id="history-status-filter" style="width: 170px; height: 42px; border-radius: 8px; cursor: pointer;">
-                <option value="all">Tất cả trạng thái</option>
-                <option value="settled">Đã chốt</option>
-                <option value="partially_returned">Trả một phần</option>
-                <option value="returned">Đã trả toàn bộ</option>
-                <option value="draft">Đơn nháp</option>
-                <option value="cancelled">Đã hủy</option>
-              </select>
+              <div class="history-status-multi-filter" id="history-status-filter" role="group" aria-label="Lọc trạng thái đơn hàng">
+                <label><input type="checkbox" class="history-status-filter-check" value="settled" checked><span>Đã chốt</span></label>
+                <label><input type="checkbox" class="history-status-filter-check" value="draft" checked><span>Nháp</span></label>
+                <label><input type="checkbox" class="history-status-filter-check" value="cancelled" checked><span>Đã hủy</span></label>
+              </div>
             </div>
 
             <!-- Bộ lọc nhân viên lên đơn (Tích hợp tìm kiếm) -->
@@ -2825,6 +2825,10 @@
             <input type="checkbox" id="pl-available-for-sales">
             <span>Cho phép nhân viên kinh doanh xem và sử dụng</span>
           </label>
+          <label class="toggle-row">
+            <input type="checkbox" id="pl-allow-order-save" checked>
+            <span>Kế toán cho phép kinh doanh lưu đơn và phát sinh công nợ</span>
+          </label>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-pricelist">Hủy bỏ</button>
@@ -2879,7 +2883,7 @@
       <p id="print-warehouse-row" style="margin: 0; margin-top: 2px;">- <strong>Xuất tại kho (ngăn lô):</strong> <span id="print-warehouse-name">CÔNG TY CỔ PHẦN ABS JAPAN</span></p>
       <div style="display: flex; justify-content: space-between; margin-top: 2px;">
         <span>- <strong>Nhân viên bán hàng:</strong> <span id="print-creator-name">admin</span></span>
-        <span><strong>Hãng sơn:</strong> <span id="print-order-brand" style="text-transform: uppercase; font-weight: bold;">N/A</span></span>
+        <span><strong>Kinh Doanh QL:</strong> <span id="print-customer-manager" style="font-weight: bold;">N/A</span></span>
       </div>
       <p style="display: none;">- <strong>Ghi chú:</strong> <span id="print-invoice-notes">N/A</span></p>
     </div>
@@ -4065,6 +4069,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260803-amend-advance1"></script>
+  <script type="module" src="js/main.js?v=20260805-history-status-multi1"></script>
 </body>
 </html>

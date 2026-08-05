@@ -1,14 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260803-amend-advance1';
-import { renderAll } from '../main.js?v=20260803-amend-advance1';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260803-amend-advance1';
-import { openHistoryOrderExportModal } from './customers.js?v=20260803-amend-advance1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260805-history-status-multi1';
+import { renderAll } from '../main.js?v=20260805-history-status-multi1';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260805-history-status-multi1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260805-history-status-multi1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260803-amend-advance1';
+} from '../domain/order-financials.js?v=20260805-history-status-multi1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
+import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
 import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js';
@@ -237,9 +238,13 @@ export function setupHistoryPanel() {
     document.getElementById('history-filter-to').addEventListener('input', onFilterChange);
   }
 
-  ['history-company-filter', 'history-brand-filter', 'history-status-filter'].forEach(id => {
+  ['history-company-filter', 'history-brand-filter'].forEach(id => {
     const select = document.getElementById(id);
     if (select) select.addEventListener('change', onFilterChange);
+  });
+
+  document.querySelectorAll('.history-status-filter-check').forEach(checkbox => {
+    checkbox.addEventListener('change', onFilterChange);
   });
   
   const creatorFilter = document.getElementById('history-creator-filter');
@@ -470,7 +475,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
   const filterToInput = document.getElementById('history-filter-to');
   const companyFilterSelect = document.getElementById('history-company-filter');
   const brandFilterSelect = document.getElementById('history-brand-filter');
-  const statusFilterSelect = document.getElementById('history-status-filter');
   const creatorFilterSelect = document.getElementById('history-creator-filter');
   
   const dateMode = dateModeSelect ? dateModeSelect.value : 'all';
@@ -481,11 +485,12 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
   const filterTo = filterToInput ? filterToInput.value : '';
   const selectedCompany = companyFilterSelect ? companyFilterSelect.value : 'all';
   const selectedBrand = brandFilterSelect ? brandFilterSelect.value : 'all';
-  const selectedStatus = statusFilterSelect ? statusFilterSelect.value : 'all';
+  const selectedStatuses = [...document.querySelectorAll('.history-status-filter-check:checked')]
+    .map(checkbox => checkbox.value);
   const selectedCreator = creatorFilterSelect ? creatorFilterSelect.value : '';
   const filterKey = JSON.stringify({
     searchVal, dateMode, filterDate, filterMonth, filterYear, filterFrom, filterTo,
-    selectedCompany, selectedBrand, selectedStatus, selectedCreator,
+    selectedCompany, selectedBrand, selectedStatuses, selectedCreator,
     currentUserId: state.currentUser?.id || state.currentUser?.authUserId || state.currentUser?.username || '',
     currentUserRole: state.currentUser?.role || ''
   });
@@ -533,14 +538,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
     if (!orderMatchesHistoryCompany(o, selectedCompany)) return false;
     if (!orderMatchesHistoryBrand(o, selectedBrand)) return false;
-    if (selectedStatus !== 'all') {
-      const orderStatus = String(o.status || 'settled').toLowerCase();
-      const matchesSettled = selectedStatus === 'settled' &&
-        ['settled', 'completed', 'complete', 'confirmed'].includes(orderStatus);
-      const matchesCancelled = selectedStatus === 'cancelled' &&
-        ['cancelled', 'canceled'].includes(orderStatus);
-      if (!matchesSettled && !matchesCancelled && orderStatus !== selectedStatus) return false;
-    }
+    if (!matchesHistoryOrderStatuses(o.status, selectedStatuses)) return false;
     
     // 3. Lọc theo nhân viên quản lý đại lý (Tìm kiếm tương đối)
     if (selectedCreator) {
