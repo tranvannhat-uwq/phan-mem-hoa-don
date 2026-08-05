@@ -27,6 +27,11 @@ Run these files in order on a staging clone first:
 19. `0019_order_amendment_and_customer_advance.sql`
 20. `0020_customer_debt_adjustment_credit.sql`
 21. `0021_enable_scoped_realtime.sql`
+22. `0022_dot_color_surcharge.sql`
+23. `0023_authoritative_color_surcharges.sql`
+24. `0024_sale_managed_customer_debt_history.sql`
+25. `0025_global_price_list_order_override.sql`
+26. `0026_sale_managed_customer_order_history.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -138,3 +143,8 @@ change still requires a reason and appends both debt-ledger and audit records.
 Migration `0021` registers the active order, customer, cashbook and catalog tables
 with Supabase Realtime. It changes publication metadata only, preserves every
 business row and continues to rely on the existing RLS policies for event access.
+
+Migration `0026` lets a Sale read finalized order history for a dealer already
+inside that Sale's managed or assigned customer scope. It keeps price-list
+authorization, draft ownership, finalized-order immutability and all mutation
+permissions unchanged.

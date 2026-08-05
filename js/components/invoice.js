@@ -1474,7 +1474,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       titleEl.innerText = 'PHIẾU XUẤT KHO';
       titleEl.style.fontSize = '17.6pt'; // Giảm 20% từ 22pt
     } else if (type === 'retail') {
-      titleEl.innerText = 'HÓA ĐƠN BÁN LẺ';
+      titleEl.innerText = 'HÓA ĐƠN';
       titleEl.style.fontSize = '22pt';
     } else {
       titleEl.innerText = 'HÓA ĐƠN BÁN HÀNG';
@@ -1612,7 +1612,10 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   if (companyEmailEl) companyEmailEl.innerText = config.email;
 
   const companyLargeEl = document.getElementById('print-company-name-large');
-  if (companyLargeEl) companyLargeEl.innerText = config.companyName;
+  if (companyLargeEl) {
+    companyLargeEl.innerText = config.companyName;
+    companyLargeEl.style.display = type === 'retail' ? 'none' : '';
+  }
 
   const sellerNameEl = document.getElementById('print-seller-name');
   if (sellerNameEl) sellerNameEl.innerText = config.companyName;
@@ -1639,12 +1642,14 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   const groupEl = document.getElementById('print-customer-group');
   const creatorEl = document.getElementById('print-creator-name');
   const warehouseEl = document.getElementById('print-warehouse-name');
+  const warehouseRowEl = document.getElementById('print-warehouse-row');
   const reasonEl = document.getElementById('print-invoice-reason');
 
   const creatorName = getUserDisplayName(order.createdBy, 'Không xác định', state.users);
 
   if (creatorEl) creatorEl.innerText = creatorName || 'admin';
   if (warehouseEl) warehouseEl.innerText = config.companyName;
+  if (warehouseRowEl) warehouseRowEl.style.display = type === 'retail' ? 'none' : '';
   if (reasonEl) reasonEl.innerText = 'Xuất bán hàng';
 
   if (order.customerId) {

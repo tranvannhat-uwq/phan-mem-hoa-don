@@ -76,6 +76,15 @@ function orderWasCreatedByUser(order, user) {
     || String(order.createdBy) === String(user.authUserId || user.auth_user_id || user.id || '');
 }
 
+function orderIsVisibleToSale(order, user, lookups) {
+  if (orderWasCreatedByUser(order, user)) return true;
+  if (order?.customerId === null || order?.customerId === undefined || order?.customerId === '') return false;
+
+  // Customers are already restricted by customers_select RLS. An exact ID
+  // match therefore means this dealer is in the Sale's managed/assigned scope.
+  return lookups.customerById.has(String(order.customerId));
+}
+
 function updateHistorySummary(orders, lookups) {
   const beforeDiscountEl = document.getElementById('history-total-before-discount');
   const discountEl = document.getElementById('history-total-discount');
@@ -513,7 +522,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     const filtered = (state.savedOrders || []).filter(o => {
     // 1. Phân quyền hiển thị đơn của Sale
     if (state.currentUser && state.currentUser.role === 'sale') {
-      if (!orderWasCreatedByUser(o, state.currentUser)) return false;
+      if (!orderIsVisibleToSale(o, state.currentUser, lookups)) return false;
     }
     
     // 2. Lọc theo tìm kiếm từ khóa
