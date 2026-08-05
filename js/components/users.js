@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260805-history-status-multi1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260805-history-status-multi1';
-import { renderAll, switchTab } from '../main.js?v=20260805-history-status-multi1';
-import { populateManagedByDropdown } from './customers.js?v=20260805-history-status-multi1';
-import { exportBackupToExcel } from '../services/backup.js?v=20260805-history-status-multi1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260805-zero-price-gift2';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260805-zero-price-gift2';
+import { renderAll, switchTab } from '../main.js?v=20260805-zero-price-gift2';
+import { populateManagedByDropdown } from './customers.js?v=20260805-zero-price-gift2';
+import { exportBackupToExcel } from '../services/backup.js?v=20260805-zero-price-gift2';
 import {
   LOGIN_ERROR,
   classifySupabaseError,

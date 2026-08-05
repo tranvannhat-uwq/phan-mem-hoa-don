@@ -19,7 +19,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260805-history-status-multi1';
+} from './supabase.js?v=20260805-zero-price-gift2';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

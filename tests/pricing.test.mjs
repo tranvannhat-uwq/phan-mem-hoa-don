@@ -7,6 +7,7 @@ import {
   filterPriceListsForUser,
   canUserViewPriceList,
   isPrivilegedPricingRole,
+  isUsableResolvedPrice,
   parseVndInteger
 } from '../js/domain/pricing.js';
 import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../js/domain/invoice-discount.js';
@@ -75,6 +76,18 @@ const overridden = resolvePriceForList({
 assert.equal(overridden.status, 'direct');
 assert.equal(overridden.price, 1950000);
 assert.equal(overridden.source, 'group');
+
+const freeGift = resolvePriceForList({
+  productId: 'gift-sku',
+  priceListId: 'standard',
+  priceLists,
+  priceListItems: [{ priceListId: 'standard', productId: 'gift-sku', price: 0 }]
+});
+assert.equal(freeGift.status, 'direct');
+assert.equal(freeGift.price, 0);
+assert.equal(isUsableResolvedPrice(freeGift), true);
+assert.equal(isUsableResolvedPrice({ status: 'missing', price: null }), false);
+assert.equal(isUsableResolvedPrice({ status: 'direct', price: -1 }), false);
 
 const variantPrices = [
   { priceListId: 'bg03', productId: 'ct-d1-lon', price: 390000 },

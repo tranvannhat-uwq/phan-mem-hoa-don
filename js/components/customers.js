@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260805-history-status-multi1';
-import { renderAll } from '../main.js?v=20260805-history-status-multi1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260805-history-status-multi1';
-import { addCashbookTransaction } from './so_quy.js?v=20260805-history-status-multi1';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260805-history-status-multi1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260805-zero-price-gift2';
+import { renderAll } from '../main.js?v=20260805-zero-price-gift2';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260805-zero-price-gift2';
+import { addCashbookTransaction } from './so_quy.js?v=20260805-zero-price-gift2';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260805-zero-price-gift2';
 import { collectCustomerDebt } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';

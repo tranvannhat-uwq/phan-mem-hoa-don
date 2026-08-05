@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-history-status-multi1';
-import { renderAll, switchTab } from '../main.js?v=20260805-history-status-multi1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-zero-price-gift2';
+import { renderAll, switchTab } from '../main.js?v=20260805-zero-price-gift2';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260805-history-status-multi1';
-import { addCashbookTransaction } from './so_quy.js?v=20260805-history-status-multi1';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList } from '../domain/pricing.js';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260805-history-status-multi1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260805-zero-price-gift2';
+import { addCashbookTransaction } from './so_quy.js?v=20260805-zero-price-gift2';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList, isUsableResolvedPrice } from '../domain/pricing.js?v=20260805-zero-price-gift2';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260805-zero-price-gift2';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -256,7 +256,7 @@ function addVariantToInvoice(variant) {
   }
 
   const resolvedPrice = resolveProductPrice(variant);
-  if (resolvedPrice.status === 'missing' || Number(resolvedPrice.price) <= 0) {
+  if (!isUsableResolvedPrice(resolvedPrice)) {
     showToast(`SKU "${variant.code}" chưa có giá trong bảng giá đang áp dụng.`, 'warning');
     return false;
   }
@@ -312,7 +312,7 @@ function openVariantPicker(family, preferredVariantId = '') {
 
   options.innerHTML = family.variants.map(variant => {
     const price = resolveProductPrice(variant);
-    const hasPrice = price.status !== 'missing' && Number(price.price) > 0;
+    const hasPrice = isUsableResolvedPrice(price);
     return `
       <button
         type="button"
@@ -367,7 +367,7 @@ export function applyActivePriceListToInvoice() {
       item.priceListName = '';
       return;
     }
-    if (resolved.status !== 'missing' && Number(resolved.price) > 0) {
+    if (isUsableResolvedPrice(resolved)) {
       item.price = Number(resolved.price);
       item.unitPrice = Number(resolved.price);
       item.listPrice = Number(resolved.price);
@@ -669,9 +669,9 @@ function recalculateItemPriceWithColorMarkup(index) {
   const p = item.product;
   
   // Lấy đơn giá gốc theo quy cách đóng gói được chọn
-  let basePrice = item.unitPrice || item.listPrice || item.price || 0;
+  let basePrice = item.unitPrice ?? item.listPrice ?? item.price ?? 0;
   if (p.packageType || p.baseProductId || p.parentProductId) {
-    basePrice = item.unitPrice || item.listPrice || 0;
+    basePrice = item.unitPrice ?? item.listPrice ?? 0;
   } else if (item.package === 'Bo') basePrice = p.priceLon || p.priceThung || p.price || 0;
   else if (item.package === 'Thung') basePrice = p.priceThung || p.price || 0;
   else if (item.package === 'Lon') basePrice = p.priceLon || 0;
@@ -843,9 +843,10 @@ export function compileActiveOrder() {
     showToast('Vui lòng chọn ít nhất một sản phẩm vào hóa đơn!', 'danger');
     return null;
   }
-  const missingPriceItem = state.invoiceItems.find(item =>
-    item.priceSource === 'missing' || !Number.isFinite(Number(item.unitPrice || item.price)) || Number(item.unitPrice || item.price) <= 0
-  );
+  const missingPriceItem = state.invoiceItems.find(item => {
+    const unitPrice = item.unitPrice ?? item.price;
+    return item.priceSource === 'missing' || !Number.isFinite(Number(unitPrice)) || Number(unitPrice) < 0;
+  });
   if (missingPriceItem) {
     showToast(`Sản phẩm "${missingPriceItem.product?.code || ''}" chưa có giá hợp lệ. Không thể chốt đơn.`, 'danger');
     return null;
@@ -997,8 +998,8 @@ export function compileActiveOrder() {
       quantity: item.quantity,
       discountPercent: item.discountPercent,
       price: item.price,
-      unitPrice: item.unitPrice || item.price,
-      listPrice: item.listPrice || item.price,
+      unitPrice: item.unitPrice ?? item.price,
+      listPrice: item.listPrice ?? item.price,
       priceListId: item.priceListId || pricelistId || '',
       priceListNameSnapshot: item.priceListName || state.pricelists.find(priceList => priceList.id === item.priceListId)?.name || '',
       priceSource: item.priceSource || 'manual',

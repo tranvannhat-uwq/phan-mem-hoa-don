@@ -2,8 +2,8 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-history-status-multi1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260805-zero-price-gift2';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-zero-price-gift2';
 import { collectAllPages } from '../domain/pagination.js';
 
 export let supabaseClient = null;
@@ -2611,13 +2611,13 @@ export async function dbSaveOrder(order) {
           unit_snapshot: item.packageWeightUnit || item.unit || item.package || item.packageType || '',
           price_list_name_snapshot: item.priceListNameSnapshot || order.priceListNameSnapshot || '',
           quantity: parseFloat(item.quantity || 0),
-          unit_price: parseFloat(item.unitPrice || item.price || 0),
-          final_unit_price: parseFloat(item.finalUnitPrice || item.salePrice || item.price || 0),
+          unit_price: parseFloat(item.unitPrice ?? item.price ?? 0),
+          final_unit_price: parseFloat(item.finalUnitPrice ?? item.salePrice ?? item.price ?? 0),
           price_list_id: item.priceListId || order.pricelistId || null,
           price_source: item.priceSource || '',
           price_selected_by: item.priceSelectedBy || order.priceSelectedBy || null,
-          list_price: parseFloat(item.price || item.listPrice || 0),
-          sale_price: parseFloat(item.salePrice || item.finalPrice || item.price || 0),
+          list_price: parseFloat(item.listPrice ?? item.price ?? 0),
+          sale_price: parseFloat(item.salePrice ?? item.finalPrice ?? item.price ?? 0),
           discount_percent: parseFloat(item.discountPercent || item.discount || 0),
           discount_amount: parseFloat(item.discountAmount || 0),
           line_total: parseFloat(item.total || item.lineTotal || ((item.quantity || 0) * (item.price || 0) * (1 - (item.discountPercent || 0) / 100))),
@@ -3538,10 +3538,10 @@ function buildOrderCommand(order) {
       discountType: item.discountType || 'percent',
       discountValue: Number(item.discountValue ?? item.discountPercent ?? 0),
       discountPercent: Number(item.discountPercent || 0),
-      price: Number(item.price || item.unitPrice || 0),
-      unitPrice: Number(item.unitPrice || item.price || 0),
-      listPrice: Number(item.listPrice || item.price || 0),
-      finalUnitPrice: Number(item.finalUnitPrice || item.price || 0),
+      price: Number(item.price ?? item.unitPrice ?? 0),
+      unitPrice: Number(item.unitPrice ?? item.price ?? 0),
+      listPrice: Number(item.listPrice ?? item.price ?? 0),
+      finalUnitPrice: Number(item.finalUnitPrice ?? item.price ?? 0),
       priceListId: item.priceListId || order.pricelistId || null,
       productId: item.productId || item.variantId,
       colorCode: item.colorCode || '',
@@ -3610,10 +3610,10 @@ export async function dbConfirmOrder(order) {
           discountType: item.discountType || 'percent',
           discountValue: Number(item.discountValue ?? item.discountPercent ?? 0),
           discountPercent: Number(item.discountPercent || 0),
-          price: Number(item.price || item.unitPrice || 0),
-          unitPrice: Number(item.unitPrice || item.price || 0),
-          listPrice: Number(item.listPrice || item.price || 0),
-          finalUnitPrice: Number(item.finalUnitPrice || item.price || 0),
+          price: Number(item.price ?? item.unitPrice ?? 0),
+          unitPrice: Number(item.unitPrice ?? item.price ?? 0),
+          listPrice: Number(item.listPrice ?? item.price ?? 0),
+          finalUnitPrice: Number(item.finalUnitPrice ?? item.price ?? 0),
           priceListId: item.priceListId || order.pricelistId || null,
           productId: item.productId || item.variantId,
           colorCode: item.colorCode || '',

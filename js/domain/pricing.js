@@ -141,6 +141,14 @@ function directSource(priceList) {
   return 'standard';
 }
 
+// Giá 0 là một mức giá được nhập chủ động (hàng tặng/cấp miễn phí).
+// Chỉ trạng thái missing, giá âm hoặc giá không phải số mới là không hợp lệ.
+export function isUsableResolvedPrice(resolvedPrice) {
+  if (!resolvedPrice || resolvedPrice.status === 'missing') return false;
+  const price = Number(resolvedPrice.price);
+  return Number.isFinite(price) && price >= 0;
+}
+
 export function resolvePriceForList({
   productId,
   priceListId,

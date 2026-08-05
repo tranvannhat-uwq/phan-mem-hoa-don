@@ -55,7 +55,7 @@
     });
     window.addEventListener('load', async () => {
       const { state } = await import('../js/state.js');
-      const { renderInvoiceTable, setupInvoiceCreator } = await import('../js/components/invoice.js?v=20260805-pricing-approval1');
+      const { renderInvoiceTable, setupInvoiceCreator } = await import('../js/components/invoice.js?v=20260805-zero-price-gift2');
 
     state.currentUser = { id: 'admin-test', username: 'admin-test', displayName: 'Admin Test', role: 'admin' };
     state.products = [
@@ -109,6 +109,23 @@
         unitName: 'kg',
         isActive: true,
         isLegacy: false
+      },
+      {
+        id: 'gift-lon',
+        code: 'QUA-TANG-01',
+        variantCode: 'QUA-TANG-01',
+        baseCode: 'QUA-TANG-01',
+        productGroupId: 'pg-gift-01',
+        name: 'Quà tặng giá 0 đồng',
+        brand: 'COVA NANO',
+        packageType: 'Lon',
+        packagingName: 'Lon',
+        packageWeight: 1,
+        weightOrVolume: 1,
+        packageWeightUnit: 'kg',
+        unitName: 'kg',
+        isActive: true,
+        isLegacy: false
       }
     ];
     state.pricelists = [
@@ -122,6 +139,7 @@
       { id: 'price-lon', priceListId: 'general', productId: 'ct-d1-lon', variantId: 'ct-d1-lon', price: 350000 },
       { id: 'price-thung', priceListId: 'general', productId: 'ct-d1-thung', variantId: 'ct-d1-thung', price: 1150000 },
       { id: 'price-single', priceListId: 'general', productId: 'single-lon', variantId: 'single-lon', price: 200000 }
+      ,{ id: 'price-gift', priceListId: 'general', productId: 'gift-lon', variantId: 'gift-lon', price: 0 }
     ];
     state.finishedGoodsStock = [
       { productCode: 'CT-Đ1-LON', brand: 'COVA NANO', packageType: 'Lon', quantity: 12 },
