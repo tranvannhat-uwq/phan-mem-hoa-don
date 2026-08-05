@@ -29,3 +29,13 @@ test('sales invoice prints the managed business name instead of the paint brand 
   assert.match(invoice, /const managerName = getUserDisplayName\(managerId, managerId \|\| 'N\/A', state\.users\)/);
   assert.match(invoice, /if \(managerEl\) managerEl\.innerText = managerName/);
 });
+
+test('warehouse slip enlarges recipient name and places product name before item code', () => {
+  const warehouseFlow = invoice.slice(
+    invoice.indexOf("if (type === 'warehouse')", invoice.indexOf("const table = document.getElementById('print-invoice-table')")),
+    invoice.indexOf('} else {', invoice.indexOf("if (type === 'warehouse')", invoice.indexOf("const table = document.getElementById('print-invoice-table')")))
+  );
+  assert.match(invoice, /customerNameEl\.style\.fontSize = type === 'warehouse' \? 'calc\(1em \+ 4px\)' : ''/);
+  assert.match(warehouseFlow, /<th style="width: 30%;">Tên sản phẩm<\/th>[\s\S]*<th style="width: 14%;">Mã hàng<\/th>/);
+  assert.match(warehouseFlow, /<td>\$\{item\.productName\}<\/td>[\s\S]*<td style="font-weight: bold; font-size: 14pt;">\$\{variantCode\}<\/td>/);
+});

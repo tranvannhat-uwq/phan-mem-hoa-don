@@ -5,7 +5,7 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20260805-zero-price-gift2';
+} from '../services/supabase.js?v=20260805-warehouse-print1';
 
 let pendingPurchaseKey = '';
 const pendingSupplierPaymentKeys = new Map();

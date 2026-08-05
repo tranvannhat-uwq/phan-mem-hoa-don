@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName, getManagerDisplayName, getProvinceNameByCode } from '../utils.js';
-import { switchTab } from '../main.js?v=20260805-zero-price-gift2';
+import { switchTab } from '../main.js?v=20260805-warehouse-print1';
 import { openProductModal } from './products.js';
-import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260805-zero-price-gift2';
+import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260805-warehouse-print1';
 
 let revenueChartInstance = null;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);

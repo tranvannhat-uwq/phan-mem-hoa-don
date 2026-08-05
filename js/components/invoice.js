@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-zero-price-gift2';
-import { renderAll, switchTab } from '../main.js?v=20260805-zero-price-gift2';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-warehouse-print1';
+import { renderAll, switchTab } from '../main.js?v=20260805-warehouse-print1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260805-zero-price-gift2';
-import { addCashbookTransaction } from './so_quy.js?v=20260805-zero-price-gift2';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList, isUsableResolvedPrice } from '../domain/pricing.js?v=20260805-zero-price-gift2';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260805-zero-price-gift2';
+import { generateUniqueCustomerCode } from './customers.js?v=20260805-warehouse-print1';
+import { addCashbookTransaction } from './so_quy.js?v=20260805-warehouse-print1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList, isUsableResolvedPrice } from '../domain/pricing.js?v=20260805-warehouse-print1';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260805-warehouse-print1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -1547,7 +1547,11 @@ export async function renderAndPrintOrder(order, type = 'retail') {
 
   document.getElementById('print-invoice-id').innerText = getOrderDisplayCode(order);
   document.getElementById('print-invoice-date').innerText = formatDateTime(order.date);
-  document.getElementById('print-customer-name').innerText = order.customerName;
+  const customerNameEl = document.getElementById('print-customer-name');
+  if (customerNameEl) {
+    customerNameEl.innerText = order.customerName;
+    customerNameEl.style.fontSize = type === 'warehouse' ? 'calc(1em + 4px)' : '';
+  }
   
   // Tổng hợp ghi chú đơn hàng và ghi chú mặc định của khách hàng
   let combinedNotes = order.notes || '';
@@ -1746,8 +1750,8 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       <thead>
         <tr>
           <th style="width: 5%;">STT</th>
-          <th style="width: 14%;">Mã hàng</th>
           <th style="width: 30%;">Tên sản phẩm</th>
+          <th style="width: 14%;">Mã hàng</th>
           <th style="width: 10%; text-align: center;">Mã màu</th>
           <th style="width: 10%; text-align: center;">Khối lượng</th>
           <th style="width: 6%; text-align: center;">SL</th>
@@ -1762,8 +1766,8 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           return `
             <tr>
               <td style="text-align: center;">${idx + 1}</td>
-              <td style="font-weight: bold; font-size: 14pt;">${variantCode}</td>
               <td>${item.productName}</td>
+              <td style="font-weight: bold; font-size: 14pt;">${variantCode}</td>
               <td style="text-align: center; font-weight: bold; font-size: 14pt;">${item.colorCode || ''}</td>
               <td style="text-align: center;">${specification}</td>
               <td style="text-align: center; font-weight: bold; font-size: 14pt;">${item.quantity}</td>

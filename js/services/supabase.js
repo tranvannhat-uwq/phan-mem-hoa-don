@@ -2,8 +2,8 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260805-zero-price-gift2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-zero-price-gift2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260805-warehouse-print1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-warehouse-print1';
 import { collectAllPages } from '../domain/pagination.js';
 
 export let supabaseClient = null;
