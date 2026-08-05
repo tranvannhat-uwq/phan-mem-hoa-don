@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260805-warehouse-print1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactions, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260805-warehouse-print1';
 import { renderAll } from '../main.js?v=20260805-warehouse-print1';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260805-warehouse-print1';
 import { addCashbookTransaction } from './so_quy.js?v=20260805-warehouse-print1';
@@ -1842,6 +1842,12 @@ export function setupCustomerManagement() {
   if (closeDetailBtn) closeDetailBtn.addEventListener('click', closeCustomerDetailModal);
   if (closeDetailFooterBtn) closeDetailFooterBtn.addEventListener('click', closeCustomerDetailModal);
 
+  const closeDebtSourceModal = () => {
+    document.getElementById('customer-debt-source-modal')?.classList.remove('active');
+  };
+  document.getElementById('btn-close-customer-debt-source')?.addEventListener('click', closeDebtSourceModal);
+  document.getElementById('btn-close-customer-debt-source-footer')?.addEventListener('click', closeDebtSourceModal);
+
   const openOrderExportBtn = document.getElementById('btn-open-customer-order-export');
   const closeOrderExportBtn = document.getElementById('btn-close-customer-order-export-modal');
   const cancelOrderExportBtn = document.getElementById('btn-cancel-customer-order-export');
@@ -2697,6 +2703,128 @@ async function exportCustomerOrderHistoryExcel() {
   }
 }
 
+function getCustomerDebtSource(historyEntry = {}) {
+  const orderId = historyEntry.orderId || historyEntry.order_id;
+  if (orderId) return { kind: 'order', id: String(orderId) };
+  const cashbookId = historyEntry.cashbookTransactionId || historyEntry.cashbook_transaction_id;
+  if (cashbookId) return { kind: 'cashbook', id: String(cashbookId) };
+  const salesReturnId = historyEntry.salesReturnId || historyEntry.sales_return_id;
+  if (salesReturnId) return { kind: 'return', id: String(salesReturnId) };
+  return null;
+}
+
+function getCustomerDebtSourceDisplayCode(source) {
+  const code = String(source?.id || '');
+  if (code.length <= 14) return code;
+  const parts = code.split('-').filter(Boolean);
+  if (parts.length >= 2) return `${parts[0]}…${parts.at(-1)}`;
+  return `${code.slice(0, 7)}…${code.slice(-5)}`;
+}
+
+function debtSourceMeta(label, value) {
+  return `<div style="padding:0.7rem; border:1px solid var(--border-color); border-radius:7px; background:rgba(255,255,255,0.02);"><div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">${escapeCustomerHtml(label)}</div><div style="font-weight:600; margin-top:3px;">${escapeCustomerHtml(value || '-')}</div></div>`;
+}
+
+function getCachedCashbookTransactions() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+async function openCustomerDebtSourceDetail(source, historyEntry, customer) {
+  if (!source) return;
+  const modal = document.getElementById('customer-debt-source-modal');
+  const loading = document.getElementById('customer-debt-source-loading');
+  const content = document.getElementById('customer-debt-source-content');
+  const orderSection = document.getElementById('customer-debt-source-order');
+  const cashbookSection = document.getElementById('customer-debt-source-cashbook');
+  if (!modal || !loading || !content || !orderSection || !cashbookSection) return;
+
+  modal.classList.add('active');
+  loading.style.display = 'block';
+  content.style.display = 'none';
+  orderSection.style.display = 'none';
+  cashbookSection.style.display = 'none';
+
+  try {
+    if (source.kind === 'order') {
+      let order = (state.savedOrders || []).find(item => String(item.id) === source.id);
+      if (!order) {
+        await dbRefreshOrderById(source.id);
+        order = (state.savedOrders || []).find(item => String(item.id) === source.id);
+      }
+      if (!order) throw new Error(`Không tìm thấy đơn hàng ${source.id} trong phạm vi được xem.`);
+
+      document.getElementById('customer-debt-source-title').innerText = `Chi tiết đơn hàng ${source.id}`;
+      document.getElementById('customer-debt-source-meta').innerHTML = [
+        debtSourceMeta('Mã đơn', order.id),
+        debtSourceMeta('Khách hàng', order.customerName || customer?.name),
+        debtSourceMeta('Thời gian', formatDateOnly(order.date)),
+        debtSourceMeta('Trạng thái', order.status === 'settled' ? 'Đã chốt' : order.status === 'cancelled' ? 'Đã hủy' : order.status || '-')
+      ].join('');
+
+      const items = Array.isArray(order.items) ? order.items : [];
+      document.getElementById('customer-debt-source-items').innerHTML = items.length
+        ? items.map(item => {
+            const quantity = Number(item.quantity || 0);
+            const price = Number(item.price ?? item.unitPrice ?? 0);
+            const discount = Number(item.discountPercent || 0);
+            const lineTotal = Number(item.lineTotal ?? Math.round(quantity * price * (1 - discount / 100)));
+            const specification = item.specificationSnapshot || item.packagingName || item.package || '-';
+            return `<tr><td>${escapeCustomerHtml(item.productCode || item.variantCode || item.product?.code || '-')}</td><td>${escapeCustomerHtml(item.productName || item.product?.name || '-')}</td><td>${escapeCustomerHtml(specification)}</td><td style="text-align:right;">${quantity.toLocaleString('vi-VN')}</td><td style="text-align:right;">${formatCurrency(price)}</td><td style="text-align:right;">${discount ? `${discount}%` : '-'}</td><td style="text-align:right; font-weight:600;">${formatCurrency(lineTotal)}</td></tr>`;
+          }).join('')
+        : '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Không có chi tiết sản phẩm.</td></tr>';
+      document.getElementById('customer-debt-source-totals').innerHTML = `
+        <div style="display:flex;justify-content:space-between;"><span>Tạm tính</span><strong>${formatCurrency(order.subtotal ?? order.totalMarket ?? 0)}</strong></div>
+        <div style="display:flex;justify-content:space-between;"><span>Giảm giá</span><strong>-${formatCurrency(order.discountAmount || 0)}</strong></div>
+        <div style="display:flex;justify-content:space-between; border-top:1px solid var(--border-color); padding-top:0.45rem;"><span>Khách phải trả</span><strong style="color:var(--color-primary);">${formatCurrency(order.totalPayable ?? order.amountDue ?? 0)}</strong></div>`;
+      document.getElementById('customer-debt-source-note').innerText = order.notes || historyEntry.note || '-';
+      orderSection.style.display = 'block';
+    } else if (source.kind === 'cashbook') {
+      let transactions = getCachedCashbookTransactions();
+      let transaction = transactions.find(item => String(item.cloudId || item.id) === source.id);
+      if (!transaction) {
+        const refreshed = await dbFetchCashbookTransactions();
+        transactions = Array.isArray(refreshed) ? refreshed : getCachedCashbookTransactions();
+        transaction = transactions.find(item => String(item.cloudId || item.id) === source.id);
+      }
+      if (!transaction) throw new Error(`Không tìm thấy phiếu thu/chi ${source.id} trong phạm vi được xem.`);
+
+      document.getElementById('customer-debt-source-title').innerText = `Chi tiết phiếu ${transaction.id}`;
+      document.getElementById('customer-debt-source-meta').innerHTML = [
+        debtSourceMeta('Mã phiếu', transaction.id),
+        debtSourceMeta('Loại', transaction.type === 'chi' ? 'Phiếu chi' : 'Phiếu thu'),
+        debtSourceMeta('Thời gian', formatDateOnly(transaction.date)),
+        debtSourceMeta('Trạng thái', transaction.status || '-')
+      ].join('');
+      cashbookSection.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;">${debtSourceMeta('Người nộp/nhận', transaction.partner)}${debtSourceMeta('Loại thu chi', transaction.category)}${debtSourceMeta('Phương thức', transaction.method === 'bank' ? 'Ngân hàng' : transaction.method === 'wallet' ? 'Ví điện tử' : 'Tiền mặt')}${debtSourceMeta('Giá trị', formatCurrency(transaction.value || 0))}</div>`;
+      document.getElementById('customer-debt-source-note').innerText = transaction.note || historyEntry.note || '-';
+      cashbookSection.style.display = 'block';
+    } else {
+      const salesReturn = (state.salesReturns || []).find(item => String(item.id) === source.id);
+      document.getElementById('customer-debt-source-title').innerText = `Chi tiết phiếu trả ${source.id}`;
+      document.getElementById('customer-debt-source-meta').innerHTML = [
+        debtSourceMeta('Mã phiếu trả', source.id),
+        debtSourceMeta('Khách hàng', customer?.name),
+        debtSourceMeta('Thời gian', formatDateOnly(salesReturn?.date || historyEntry.date)),
+        debtSourceMeta('Giá trị', formatCurrency(salesReturn?.totalRefund || historyEntry.amount || 0))
+      ].join('');
+      document.getElementById('customer-debt-source-note').innerText = salesReturn?.reason || historyEntry.note || '-';
+    }
+  } catch (error) {
+    document.getElementById('customer-debt-source-title').innerText = 'Không thể mở chứng từ';
+    document.getElementById('customer-debt-source-meta').innerHTML = `<div style="grid-column:1/-1; padding:1rem; color:var(--color-danger); text-align:center;">${escapeCustomerHtml(error.message || 'Không tìm thấy dữ liệu.')}</div>`;
+    document.getElementById('customer-debt-source-note').innerText = historyEntry.note || historyEntry.notes || '-';
+  } finally {
+    loading.style.display = 'none';
+    content.style.display = 'block';
+    safeCreateIcons();
+  }
+}
+
 export async function openCustomerDetailModal(index) {
   const modal = document.getElementById('customer-detail-modal');
   let cust = state.customers[index];
@@ -2706,7 +2834,7 @@ export async function openCustomerDetailModal(index) {
 
   const loadingHistoryBody = document.getElementById('detail-debt-history-body');
   if (loadingHistoryBody) {
-    loadingHistoryBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
+    loadingHistoryBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
   }
   const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id);
   if (refreshedCustomer) cust = refreshedCustomer;
@@ -2795,7 +2923,7 @@ export async function openCustomerDetailModal(index) {
     if (sortedHistory.length === 0) {
       historyBody.innerHTML = `
         <tr>
-          <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
             Chưa có lịch sử giao dịch công nợ nào cho đại lý này.
           </td>
         </tr>
@@ -2806,6 +2934,11 @@ export async function openCustomerDetailModal(index) {
         let amountText = '';
         let debtBefore = 0;
         const noteText = h.note || h.notes || '-';
+        const source = getCustomerDebtSource(h);
+        const sourceIcon = source?.kind === 'cashbook' ? 'receipt-text' : source?.kind === 'return' ? 'rotate-ccw' : 'file-text';
+        const sourceCell = source
+          ? `<button type="button" class="customer-debt-source-link" data-source-kind="${escapeCustomerHtml(source.kind)}" data-source-id="${escapeCustomerHtml(source.id)}" data-history-id="${escapeCustomerHtml(h.id || '')}" title="Mở chứng từ ${escapeCustomerHtml(source.id)}"><i data-lucide="${sourceIcon}" aria-hidden="true"></i><span>${escapeCustomerHtml(getCustomerDebtSourceDisplayCode(source))}</span></button>`
+          : '<span style="color:var(--text-muted);">-</span>';
         
         const debtChange = Number.isFinite(Number(h.debtChange)) ? Number(h.debtChange) : null;
         if (h.type === 'payment') {
@@ -2837,23 +2970,42 @@ export async function openCustomerDetailModal(index) {
           debtBefore = h.debtBefore ?? (h.debtAfter - effectiveChange);
         }
         
+        const transactionDate = new Date(h.date);
+        const formattedDate = new Intl.DateTimeFormat('vi-VN', {
+          year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(transactionDate);
         const formattedTime = new Intl.DateTimeFormat('vi-VN', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit'
-        }).format(new Date(h.date));
+          hour: '2-digit', minute: '2-digit'
+        }).format(transactionDate);
         
         return `
           <tr>
-            <td style="font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
+            <td class="customer-debt-time-cell"><strong>${formattedDate}</strong><span>${formattedTime}</span></td>
+            <td class="customer-debt-source-cell">${sourceCell}</td>
             <td style="text-align: center;">${typeBadge}</td>
             <td style="text-align: right;">${formatCurrency(debtBefore)}</td>
             <td style="text-align: right;">${amountText}</td>
             <td style="text-align: right; font-weight: 600;">${formatCurrency(h.debtAfter)}</td>
-            <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${noteText}">${noteText}</td>
+            <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeCustomerHtml(noteText)}">${escapeCustomerHtml(noteText)}</td>
           </tr>
         `;
 
       }).join('');
+
+      historyBody.querySelectorAll('.customer-debt-source-link').forEach(button => {
+        button.addEventListener('click', async () => {
+          const sourceKind = button.getAttribute('data-source-kind');
+          const sourceId = button.getAttribute('data-source-id');
+          const historyId = button.getAttribute('data-history-id');
+          const historyEntry = sortedHistory.find(entry => historyId && String(entry.id || '') === historyId)
+            || sortedHistory.find(entry => {
+              const candidate = getCustomerDebtSource(entry);
+              return candidate?.kind === sourceKind && candidate?.id === sourceId;
+            });
+          if (!historyEntry) return;
+          await openCustomerDebtSourceDetail({ kind: sourceKind, id: sourceId }, historyEntry, cust);
+        });
+      });
     }
   }
 

@@ -3799,6 +3799,37 @@ export async function dbSetCashbookStarred(cashbookId, starred) {
   return false;
 }
 
+export async function dbUpdateManualCashbookTransaction(cashbookId, input) {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Sổ quỹ chỉ được sửa khi đã kết nối và xác thực với Cloud.', 'danger');
+    return false;
+  }
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được sửa phiếu Sổ quỹ.', 'danger');
+    return false;
+  }
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_update_manual_cashbook_transaction', {
+      p_cashbook_id: cashbookId,
+      p_input: {
+        transactionDate: input.transactionDate,
+        category: input.category || '',
+        partner: input.partner || '',
+        value: Number(input.value || 0),
+        method: input.method || 'cash',
+        accounting: input.accounting !== false,
+        note: input.note || ''
+      }
+    });
+    if (error) throw error;
+    return data || { success: true };
+  } catch (err) {
+    console.error('RPC update manual cashbook error:', err);
+    showToast(err.message || 'Không thể sửa phiếu Sổ quỹ. Dữ liệu chưa thay đổi.', 'danger');
+    return false;
+  }
+}
+
 export async function dbCancelOrder(orderId, reason) {
   if (isCloudActive && supabaseClient) {
     try {

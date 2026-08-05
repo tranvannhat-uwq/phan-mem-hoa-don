@@ -55,6 +55,15 @@ export function getColorPercentFromCode(colorCode) {
   return 0; // Mặc định 0%
 }
 
+// Tính đơn giá sau phụ thu màu từ giá gốc, không cộng dồn khi tính lại.
+export function calculateColorMarkedUpPrice(basePrice, colorPercent) {
+  const normalizedBasePrice = Number(basePrice);
+  const normalizedColorPercent = Number(colorPercent);
+  const safeBasePrice = Number.isFinite(normalizedBasePrice) ? Math.max(0, normalizedBasePrice) : 0;
+  const safeColorPercent = Number.isFinite(normalizedColorPercent) ? Math.max(0, normalizedColorPercent) : 0;
+  return Math.round(safeBasePrice * (1 + safeColorPercent / 100));
+}
+
 // Định dạng ngày giờ đầy đủ
 export function formatDateTime(dateStr) {
   const d = new Date(dateStr);

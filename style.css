@@ -5483,3 +5483,109 @@ body.customer-filter-drawer-open { overflow: hidden; }
   background: var(--color-primary);
   box-shadow: 0 2px 7px rgba(79, 70, 229, 0.22);
 }
+
+/* Customer debt history: compact source links without column overlap. */
+#customer-detail-modal .customer-detail-modal-content {
+  max-width: 980px !important;
+}
+
+.customer-debt-history-scroll {
+  max-height: 350px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.customer-debt-history-table {
+  width: 100%;
+  min-width: 760px;
+  margin-bottom: 0;
+  table-layout: fixed;
+  font-size: 0.82rem;
+}
+
+.customer-debt-history-table col:nth-child(1) { width: 12% !important; }
+.customer-debt-history-table col:nth-child(2) { width: 15% !important; }
+.customer-debt-history-table col:nth-child(3) { width: 11% !important; }
+.customer-debt-history-table col:nth-child(4),
+.customer-debt-history-table col:nth-child(5),
+.customer-debt-history-table col:nth-child(6) { width: 13% !important; }
+.customer-debt-history-table col:nth-child(7) { width: 23% !important; }
+
+.customer-debt-history-table th {
+  padding: 0.8rem 0.65rem;
+  vertical-align: middle;
+}
+
+.customer-debt-history-table td {
+  padding: 0.68rem 0.65rem;
+  vertical-align: middle;
+}
+
+.customer-debt-time-cell {
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.customer-debt-time-cell strong,
+.customer-debt-time-cell span {
+  display: block;
+}
+
+.customer-debt-time-cell span {
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 500;
+}
+
+.customer-debt-source-cell {
+  overflow: hidden;
+}
+
+.customer-debt-source-link {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 999px;
+  padding: 0.32rem 0.55rem;
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.customer-debt-source-link svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.customer-debt-source-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.customer-debt-source-link:hover {
+  border-color: rgba(16, 185, 129, 0.55);
+  background: rgba(16, 185, 129, 0.15);
+  transform: translateY(-1px);
+}
+
+.customer-debt-source-link:focus-visible {
+  outline: 2px solid rgba(16, 185, 129, 0.4);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .customer-debt-history-table {
+    min-width: 720px;
+  }
+}

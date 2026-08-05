@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
 import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-warehouse-print1';
 import { renderAll, switchTab } from '../main.js?v=20260805-warehouse-print1';
 import { populatePricelistsDropdowns } from './pricelists.js';
@@ -357,7 +357,7 @@ export function applyActivePriceListToInvoice() {
     plSelect.value = activePriceList.id;
   }
   
-  state.invoiceItems.forEach(item => {
+  state.invoiceItems.forEach((item, index) => {
     item.discountPercent = getActiveInvoiceDiscount(item.brand);
     if (item.priceSource === 'manual_override' && isManualInvoicePriceMode()) return;
     const resolved = resolveProductPrice(item.product);
@@ -368,12 +368,12 @@ export function applyActivePriceListToInvoice() {
       return;
     }
     if (isUsableResolvedPrice(resolved)) {
-      item.price = Number(resolved.price);
       item.unitPrice = Number(resolved.price);
       item.listPrice = Number(resolved.price);
       item.priceListId = resolved.priceListId;
       item.priceListName = resolved.priceListName;
       item.priceSource = resolved.source;
+      recalculateItemPriceWithColorMarkup(index);
     } else {
       item.priceSource = 'missing';
     }
@@ -444,7 +444,7 @@ export function renderInvoiceTable() {
 
     const effectiveUnitPrice = Math.round((item.price || 0) * (1 - (item.discountPercent || 0) / 100));
     const adjustmentCellHtml = manualPriceMode
-      ? `<input type="text" class="form-control-inline item-manual-price" value="${formatNumber(item.price || 0)}" style="width: 80px; text-align: right;" ${disabledAttr}>`
+      ? `<input type="text" class="form-control-inline item-manual-price" value="${formatNumber(item.unitPrice ?? item.listPrice ?? item.price ?? 0)}" title="Nhập đơn giá gốc; phụ thu màu được cộng tự động" style="width: 80px; text-align: right;" ${disabledAttr}>`
       : showLineDiscount
         ? `<span class="invoice-market-unit-price" title="Giá trước chiết khấu">${formatNumber(item.price || 0)}</span>`
         : `<span class="invoice-effective-unit-price" title="Đơn giá sau chiết khấu">${formatNumber(effectiveUnitPrice)}</span>`;
@@ -520,6 +520,20 @@ export function renderInvoiceTable() {
     if (totalCell) totalCell.innerText = formatCurrency(subTotal);
   };
 
+  const updateRowUnitPrice = (row, idx) => {
+    const item = state.invoiceItems[idx];
+    const manualPriceInput = row?.querySelector('.item-manual-price');
+    if (manualPriceInput) {
+      manualPriceInput.value = formatNumber(item.unitPrice ?? item.listPrice ?? item.price ?? 0);
+    }
+    const marketPrice = row?.querySelector('.invoice-market-unit-price');
+    if (marketPrice) marketPrice.innerText = formatNumber(item.price || 0);
+    const effectivePrice = row?.querySelector('.invoice-effective-unit-price');
+    if (effectivePrice) {
+      effectivePrice.innerText = formatNumber((item.price || 0) * (1 - (item.discountPercent || 0) / 100));
+    }
+  };
+
   // Gán sự kiện cho các ô nhập liệu trong bảng
   document.querySelectorAll('.item-color-code').forEach(input => {
     input.addEventListener('change', (e) => {
@@ -537,6 +551,7 @@ export function renderInvoiceTable() {
       
       // Tính lại đơn giá có bao gồm tiền màu cộng thêm
       recalculateItemPriceWithColorMarkup(idx);
+      updateRowUnitPrice(row, idx);
       updateRowSubtotal(row, idx);
       calculateInvoiceTotals();
     });
@@ -566,6 +581,7 @@ export function renderInvoiceTable() {
       e.target.value = disc; // Cập nhật lại giá trị hiển thị trên ô nhập
       state.invoiceItems[idx].discountPercent = disc;
       
+      updateRowUnitPrice(row, idx);
       updateRowSubtotal(row, idx);
       calculateInvoiceTotals();
     });
@@ -578,14 +594,14 @@ export function renderInvoiceTable() {
       const value = parseInt(String(e.target.value || '').replace(/\D/g, ''), 10) || 0;
       const price = Math.max(0, value);
       const item = state.invoiceItems[idx];
-      item.price = price;
       item.unitPrice = price;
       item.listPrice = price;
       item.discountPercent = 0;
       item.priceSource = 'manual_override';
       item.priceListId = null;
       item.priceListName = '';
-      e.target.value = formatNumber(price);
+      recalculateItemPriceWithColorMarkup(idx);
+      updateRowUnitPrice(row, idx);
 
       updateRowSubtotal(row, idx);
       calculateInvoiceTotals();
@@ -666,22 +682,23 @@ export function renderInvoiceTable() {
 
 function recalculateItemPriceWithColorMarkup(index) {
   const item = state.invoiceItems[index];
-  const p = item.product;
+  const p = item.product || {};
   
-  // Lấy đơn giá gốc theo quy cách đóng gói được chọn
-  let basePrice = item.unitPrice ?? item.listPrice ?? item.price ?? 0;
-  if (p.packageType || p.baseProductId || p.parentProductId) {
-    basePrice = item.unitPrice ?? item.listPrice ?? 0;
-  } else if (item.package === 'Bo') basePrice = p.priceLon || p.priceThung || p.price || 0;
-  else if (item.package === 'Thung') basePrice = p.priceThung || p.price || 0;
-  else if (item.package === 'Lon') basePrice = p.priceLon || 0;
-  else if (item.package === 'Hop') basePrice = p.priceHop || 0;
-  else if (item.package === 'Bao') basePrice = p.priceBao || 0;
-  else if (item.package === 'Tui') basePrice = p.priceTui || 0;
+  // unitPrice/listPrice luôn là giá gốc đang áp dụng. Giá catalog cũ chỉ là
+  // phương án dự phòng cho dữ liệu legacy chưa có snapshot giá gốc.
+  let basePrice = item.unitPrice ?? item.listPrice;
+  if (basePrice === null || basePrice === undefined || !Number.isFinite(Number(basePrice))) {
+    if (item.package === 'Bo') basePrice = p.priceLon || p.priceThung || p.price || 0;
+    else if (item.package === 'Thung') basePrice = p.priceThung || p.price || 0;
+    else if (item.package === 'Lon') basePrice = p.priceLon || 0;
+    else if (item.package === 'Hop') basePrice = p.priceHop || 0;
+    else if (item.package === 'Bao') basePrice = p.priceBao || 0;
+    else if (item.package === 'Tui') basePrice = p.priceTui || 0;
+    else basePrice = item.price ?? 0;
+  }
   
   // Cộng thêm phần trăm tiền màu nếu có và làm tròn số nguyên cho công nợ/tiền hàng chuẩn VND
-  const markupMultiplier = 1 + (item.colorPercent / 100);
-  item.price = Math.round(basePrice * markupMultiplier);
+  item.price = calculateColorMarkedUpPrice(basePrice, item.colorPercent);
 }
 
 export function parseDiscountOrFeeInput(inputId, typeId) {

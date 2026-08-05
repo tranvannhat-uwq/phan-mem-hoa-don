@@ -1,12 +1,46 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
 import { renderAll } from '../main.js?v=20260805-warehouse-print1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260805-warehouse-print1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260805-warehouse-print1';
 import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260805-warehouse-print1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
 let pendingReceiptIdempotencyKey = '';
+
+function escapeCashbookHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+}
+
+function getTransactionPartnerAddress(transaction = {}) {
+  const directAddress = transaction.partnerAddress || transaction.partner_address;
+  if (directAddress) return String(directAddress).trim();
+
+  const customer = transaction.customerId
+    ? (state.customers || []).find(item => String(item.id) === String(transaction.customerId))
+    : (transaction.type === 'thu' ? findCustomerByInput(transaction.partner) : null);
+  if (customer) return String(customer.address || customer.invoiceAddress || '').trim();
+
+  const supplier = transaction.supplierId
+    ? (state.suppliers || []).find(item => String(item.id) === String(transaction.supplierId))
+    : findSupplierByInput(transaction.partner);
+  return String(supplier?.address || '').trim();
+}
+
+function canEditCashbookTransaction(transaction = {}) {
+  return ['admin', 'accounting'].includes(state.currentUser?.role)
+    && !isCancelledStatus(transaction.status)
+    && ['manual_thu', 'manual_chi'].includes(String(transaction.transactionType || '').toLowerCase());
+}
+
+function toLocalDateTimeInput(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
 
 // Helper: load/save transactions from LocalStorage
 export function getCashbookTransactions() {
@@ -54,6 +88,18 @@ function isPaidStatus(status) {
 function isCancelledStatus(status) {
   const clean = normalizeText(status);
   return clean === 'cancelled' || clean === 'canceled' || clean.includes('hủy') || clean.includes('huy') || clean.includes('cancel');
+}
+
+function findCustomerByInput(input) {
+  const clean = normalizeText(input);
+  if (!clean) return null;
+  return (state.customers || []).find(customer => {
+    const name = normalizeText(customer.name);
+    const code = normalizeText(customer.code);
+    return clean === name
+      || (code && clean === code)
+      || (name && code && (clean === `${name} — ${code}` || clean === `${name} - ${code}`));
+  }) || null;
 }
 
 function findSupplierByInput(input) {
@@ -654,6 +700,62 @@ export function setupSoQuyPanel() {
   
   if (closeDetailBtn) closeDetailBtn.addEventListener('click', hideDetailModal);
   if (closeDetailFooterBtn) closeDetailFooterBtn.addEventListener('click', hideDetailModal);
+
+  const editModal = document.getElementById('so-quy-edit-modal');
+  const editForm = document.getElementById('so-quy-edit-form');
+  const hideEditModal = () => {
+    editModal?.classList.remove('active');
+    editForm?.reset();
+    const editId = document.getElementById('cashbook-edit-id');
+    if (editId) editId.value = '';
+  };
+  document.getElementById('btn-close-cashbook-edit')?.addEventListener('click', hideEditModal);
+  document.getElementById('btn-cancel-cashbook-edit')?.addEventListener('click', hideEditModal);
+
+  editForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const txId = document.getElementById('cashbook-edit-id')?.value || '';
+    const transaction = getCashbookTransactions().find(item => String(item.id) === String(txId));
+    if (!transaction || !canEditCashbookTransaction(transaction)) {
+      showToast('Phiếu này không thuộc nhóm phiếu nhập tay được phép sửa.', 'warning');
+      return;
+    }
+
+    const value = Number(document.getElementById('cashbook-edit-value')?.value || 0);
+    const localDate = document.getElementById('cashbook-edit-time')?.value || '';
+    const parsedDate = new Date(localDate);
+    if (!Number.isFinite(value) || value <= 0 || Number.isNaN(parsedDate.getTime())) {
+      showToast('Vui lòng nhập thời gian và giá trị phiếu hợp lệ.', 'danger');
+      return;
+    }
+
+    const saveButton = document.getElementById('btn-save-cashbook-edit');
+    if (saveButton) saveButton.disabled = true;
+    try {
+      const updated = await dbUpdateManualCashbookTransaction(getCanonicalCashbookId(transaction), {
+        transactionDate: parsedDate.toISOString(),
+        category: document.getElementById('cashbook-edit-category')?.value.trim() || '',
+        partner: document.getElementById('cashbook-edit-partner')?.value.trim() || '',
+        value,
+        method: document.getElementById('cashbook-edit-method')?.value || 'cash',
+        accounting: document.getElementById('cashbook-edit-accounting')?.checked === true,
+        note: document.getElementById('cashbook-edit-note')?.value.trim() || ''
+      });
+      if (!updated) return;
+
+      const refreshed = await dbFetchCashbookTransactions();
+      if (!refreshed) {
+        showToast('Phiếu đã sửa trên Cloud nhưng giao diện chưa tải lại được. Vui lòng tải lại trang.', 'warning');
+      } else {
+        showToast(`Đã cập nhật phiếu ${transaction.id}.`, 'success');
+      }
+      hideEditModal();
+      hideDetailModal();
+      renderAll();
+    } finally {
+      if (saveButton) saveButton.disabled = false;
+    }
+  });
 }
 
 // External helper to add automated transactions from Sales / Payments
@@ -1046,7 +1148,7 @@ export function renderSoQuyTable() {
   if (filteredTransactions.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không có giao dịch sổ quỹ nào phù hợp với bộ lọc hiện tại
         </td>
       </tr>
@@ -1056,6 +1158,7 @@ export function renderSoQuyTable() {
 
   tableBody.innerHTML = filteredTransactions.map(t => {
     const isCancelled = isCancelledStatus(t.status);
+    const partnerAddress = getTransactionPartnerAddress(t);
     const valText = t.type === 'thu' ? formatCurrency(t.value) : `-${formatCurrency(t.value)}`;
     const valStyle = isCancelled 
       ? 'color: var(--text-muted); text-decoration: line-through;' 
@@ -1080,14 +1183,17 @@ export function renderSoQuyTable() {
           ${formatDateTime(t.date)}
         </td>
         <td>
-          <div style="font-weight: 500;">${t.category}</div>
+          <div style="font-weight: 500;">${escapeCashbookHtml(t.category)}</div>
           <span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;">
             ${t.method === 'cash' ? 'Tiền mặt' : (t.method === 'bank' ? 'Ngân hàng' : 'Ví điện tử')}
           </span>
         </td>
         <td>
-          <div style="font-weight: 500;">${t.partner}</div>
-          ${t.note ? `<div style="font-size: 0.75rem; color: var(--text-muted); word-break: break-all; margin-top: 0.15rem;">HD: ${t.note}</div>` : ''}
+          <div style="font-weight: 500;">${escapeCashbookHtml(t.partner)}</div>
+          ${t.note ? `<div style="font-size: 0.75rem; color: var(--text-muted); word-break: break-all; margin-top: 0.15rem;">HD: ${escapeCashbookHtml(t.note)}</div>` : ''}
+        </td>
+        <td style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.4;">
+          ${partnerAddress ? escapeCashbookHtml(partnerAddress) : '<span style="color: var(--text-muted);">-</span>'}
         </td>
         <td style="text-align: right; ${valStyle}">
           ${valText}
@@ -1129,6 +1235,27 @@ export function renderSoQuyTable() {
   safeCreateIcons();
 }
 
+function openCashbookEditModal(transaction) {
+  if (!canEditCashbookTransaction(transaction)) {
+    showToast('Chỉ phiếu nhập tay còn hiệu lực mới được phép sửa.', 'warning');
+    return;
+  }
+  const editModal = document.getElementById('so-quy-edit-modal');
+  if (!editModal) return;
+
+  document.getElementById('cashbook-edit-id').value = transaction.id;
+  document.getElementById('cashbook-edit-code').value = transaction.id;
+  document.getElementById('cashbook-edit-type').value = transaction.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi';
+  document.getElementById('cashbook-edit-time').value = toLocalDateTimeInput(transaction.date);
+  document.getElementById('cashbook-edit-category').value = transaction.category || '';
+  document.getElementById('cashbook-edit-partner').value = transaction.partner || '';
+  document.getElementById('cashbook-edit-value').value = Number(transaction.value || 0);
+  document.getElementById('cashbook-edit-method').value = transaction.method || 'cash';
+  document.getElementById('cashbook-edit-accounting').checked = transaction.accounting !== false;
+  document.getElementById('cashbook-edit-note').value = transaction.note || '';
+  editModal.classList.add('active');
+}
+
 // Display details of a single transaction
 function showTransactionDetails(txId) {
   const txs = getCashbookTransactions();
@@ -1149,6 +1276,7 @@ function showTransactionDetails(txId) {
     partnerLbl.innerText = t.type === 'thu' ? 'Người nộp' : 'Người nhận';
   }
   document.getElementById('so-quy-detail-partner').innerText = t.partner;
+  document.getElementById('so-quy-detail-address').innerText = getTransactionPartnerAddress(t) || '-';
   document.getElementById('so-quy-detail-method').innerText = t.method === 'cash' ? 'Tiền mặt' : (t.method === 'bank' ? 'Ngân hàng' : 'Ví điện tử');
   document.getElementById('so-quy-detail-accounting').innerText = t.accounting ? 'Có' : 'Không';
   document.getElementById('so-quy-detail-creator').innerText = t.creator || 'Hệ thống';
@@ -1165,6 +1293,19 @@ function showTransactionDetails(txId) {
     valEl.style.color = isCancelledStatus(t.status) 
       ? 'var(--text-muted)' 
       : (t.type === 'thu' ? '#0070d2' : 'var(--color-danger)');
+  }
+
+  const editBtn = document.getElementById('btn-edit-cashbook-transaction');
+  if (editBtn) {
+    const newEditBtn = editBtn.cloneNode(true);
+    editBtn.parentNode.replaceChild(newEditBtn, editBtn);
+    newEditBtn.style.display = canEditCashbookTransaction(t) ? 'inline-flex' : 'none';
+    if (canEditCashbookTransaction(t)) {
+      newEditBtn.addEventListener('click', () => {
+        detailModal.classList.remove('active');
+        openCashbookEditModal(t);
+      });
+    }
   }
 
   // Handle Hủy phiếu (Cancel transaction) button
@@ -1228,7 +1369,7 @@ function showTransactionDetails(txId) {
 // Excel Export Report using SheetJS (XLSX)
 function exportSoQuyToExcel(filteredTxs) {
   const sheetData = [
-    ["Mã phiếu", "Thời gian", "Loại phiếu", "Loại thu chi", "Người nộp/nhận", "Phương thức thanh toán", "Giá trị (đ)", "Hạch toán kết quả KD", "Trạng thái", "Người tạo", "Ghi chú"]
+    ["Mã phiếu", "Thời gian", "Loại phiếu", "Loại thu chi", "Người nộp/nhận", "Địa chỉ", "Phương thức thanh toán", "Giá trị (đ)", "Hạch toán kết quả KD", "Trạng thái", "Người tạo", "Ghi chú"]
   ];
   
   filteredTxs.forEach(t => {
@@ -1238,6 +1379,7 @@ function exportSoQuyToExcel(filteredTxs) {
       t.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi',
       t.category,
       t.partner,
+      getTransactionPartnerAddress(t),
       t.method === 'cash' ? 'Tiền mặt' : (t.method === 'bank' ? 'Ngân hàng' : 'Ví điện tử'),
       t.value,
       t.accounting ? 'Có' : 'Không',
@@ -1257,6 +1399,7 @@ function exportSoQuyToExcel(filteredTxs) {
     { wch: 12 }, // Type
     { wch: 25 }, // Category
     { wch: 35 }, // Partner
+    { wch: 40 }, // Address
     { wch: 18 }, // Method
     { wch: 15 }, // Value
     { wch: 15 }, // Accounting

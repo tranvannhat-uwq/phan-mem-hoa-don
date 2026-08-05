@@ -164,3 +164,8 @@ Migration `0029` adds an Admin/Accounting-only RPC for editing an order's note
 as an audited annotation. It updates only `orders.notes` plus audit metadata and
 does not cancel, replace or recalculate the order; customer debt, payments,
 returns, cashbook and commission ledgers remain untouched.
+
+Migration `0030` adds an Admin/Accounting-only audited RPC for editing standalone
+manual cashbook vouchers. It rejects cancelled entries and every voucher linked
+to customer debt, orders, returns, supplier purchases or reversal records, so
+those financial workflows remain immutable and continue to use cancellation.

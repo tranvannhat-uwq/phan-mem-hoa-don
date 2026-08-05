@@ -1487,6 +1487,7 @@
                       <th style="width: 140px; text-align: center;">Thời gian</th>
                       <th>Loại thu chi</th>
                       <th style="width: 250px;">Người nộp/nhận</th>
+                      <th style="min-width: 220px;">Địa chỉ</th>
                       <th style="width: 130px; text-align: right;">Giá trị</th>
                     </tr>
                   </thead>
@@ -2547,7 +2548,7 @@
 
   <!-- Customer Details & Debt History Modal -->
   <div class="modal-overlay" id="customer-detail-modal">
-    <div class="modal-content" style="max-width: 800px; width: 95%;">
+    <div class="modal-content customer-detail-modal-content" style="max-width: 980px; width: 96%;">
       <div class="modal-header">
         <h3 class="modal-title" id="customer-detail-modal-title">Thông tin & Lịch sử công nợ đại lý</h3>
         <button class="modal-close" id="btn-close-customer-detail-modal">
@@ -2639,19 +2640,21 @@
             Lịch sử biến động công nợ
           </h4>
           
-          <div class="table-container" style="max-height: 350px; overflow-y: scroll; scrollbar-gutter: stable; border-radius: 8px;">
-            <table class="table" style="font-size: 0.85rem; margin-bottom: 0; table-layout: fixed; width: 100%;">
+          <div class="table-container customer-debt-history-scroll">
+            <table class="table customer-debt-history-table">
               <colgroup>
-                <col style="width: 20%;">  <!-- Thời gian -->
-                <col style="width: 12%;">  <!-- Loại -->
-                <col style="width: 15%;">  <!-- Nợ trước GD -->
-                <col style="width: 15%;">  <!-- Giá trị GD -->
-                <col style="width: 15%;">  <!-- Nợ sau GD -->
-                <col style="width: 23%;">  <!-- Ghi chú -->
+                <col style="width: 17%;">  <!-- Thời gian -->
+                <col style="width: 14%;">  <!-- Mã chứng từ -->
+                <col style="width: 10%;">  <!-- Loại -->
+                <col style="width: 13%;">  <!-- Nợ trước GD -->
+                <col style="width: 13%;">  <!-- Giá trị GD -->
+                <col style="width: 13%;">  <!-- Nợ sau GD -->
+                <col style="width: 20%;">  <!-- Ghi chú -->
               </colgroup>
               <thead>
                 <tr>
                   <th>Thời gian</th>
+                  <th>Mã chứng từ</th>
                   <th style="text-align: center;">Loại</th>
                   <th style="text-align: right;">Nợ trước GD</th>
                   <th style="text-align: right;">Giá trị GD</th>
@@ -2673,6 +2676,38 @@
           <i data-lucide="download" style="width: 16px; height: 16px;"></i> Xu?t Excel
         </button>
         <button type="button" class="btn btn-secondary" id="btn-close-customer-detail-modal-footer" style="min-width: 100px;">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chi tiết chứng từ nguồn từ lịch sử công nợ -->
+  <div class="modal-overlay" id="customer-debt-source-modal">
+    <div class="modal-content" style="max-width: 900px; width: 95%;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="customer-debt-source-title">Chi tiết chứng từ</h3>
+        <button type="button" class="modal-close" id="btn-close-customer-debt-source"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
+        <div id="customer-debt-source-loading" style="display: none; padding: 2rem; text-align: center; color: var(--text-muted);">Đang tải chi tiết...</div>
+        <div id="customer-debt-source-content">
+          <div id="customer-debt-source-meta" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;"></div>
+          <div id="customer-debt-source-order" style="display: none;">
+            <div class="table-responsive">
+              <table class="table" style="font-size: 0.82rem; width: 100%;">
+                <thead><tr><th>Mã SP</th><th>Tên sản phẩm</th><th>Quy cách</th><th style="text-align:right;">SL</th><th style="text-align:right;">Đơn giá</th><th style="text-align:right;">CK</th><th style="text-align:right;">Thành tiền</th></tr></thead>
+                <tbody id="customer-debt-source-items"></tbody>
+              </table>
+            </div>
+            <div id="customer-debt-source-totals" style="margin-left: auto; max-width: 380px; display: grid; gap: 0.4rem; margin-top: 1rem;"></div>
+          </div>
+          <div id="customer-debt-source-cashbook" style="display: none;"></div>
+          <div style="margin-top: 1rem; padding: 0.75rem; border-radius: 7px; background: var(--bg-secondary);">
+            <strong>Ghi chú:</strong> <span id="customer-debt-source-note">-</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-close-customer-debt-source-footer">Đóng</button>
       </div>
     </div>
   </div>
@@ -3762,6 +3797,10 @@
           <span class="detail-item-value" id="so-quy-detail-partner">-</span>
         </div>
         <div class="detail-item-row">
+          <span class="detail-item-label">Địa chỉ</span>
+          <span class="detail-item-value" id="so-quy-detail-address">-</span>
+        </div>
+        <div class="detail-item-row">
           <span class="detail-item-label">Phương thức thanh toán</span>
           <span class="detail-item-value" id="so-quy-detail-method">-</span>
         </div>
@@ -3786,11 +3825,76 @@
         </div>
       </div>
       <div class="modal-footer" style="border-top: 1px solid var(--border-color); padding-top: 1rem; display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 1rem;">
-        <button type="button" class="btn btn-danger btn-sm" id="btn-cancel-transaction" style="display: flex; align-items: center; gap: 0.35rem;">
-          <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Hủy phiếu
-        </button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-edit-cashbook-transaction" style="display: none; align-items: center; gap: 0.35rem;">
+            <i data-lucide="pencil" style="width: 14px; height: 14px;"></i> Sửa phiếu
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" id="btn-cancel-transaction" style="display: flex; align-items: center; gap: 0.35rem;">
+            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Hủy phiếu
+          </button>
+        </div>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-close-detail-modal-footer" onclick="document.getElementById('so-quy-detail-modal').classList.remove('active')" style="min-width: 80px;">Đóng</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Sửa phiếu Sổ quỹ nhập tay -->
+  <div class="modal-overlay" id="so-quy-edit-modal">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Sửa phiếu Sổ quỹ</h3>
+        <button type="button" class="modal-close" id="btn-close-cashbook-edit">&times;</button>
+      </div>
+      <form id="so-quy-edit-form">
+        <input type="hidden" id="cashbook-edit-id">
+        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 68vh; overflow-y: auto; padding-right: 5px;">
+          <div class="form-group">
+            <label class="form-label">Mã phiếu</label>
+            <input type="text" class="form-control" id="cashbook-edit-code" readonly style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Loại phiếu</label>
+            <input type="text" class="form-control" id="cashbook-edit-type" readonly style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-time">Thời gian</label>
+            <input type="datetime-local" class="form-control" id="cashbook-edit-time" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-category">Loại thu chi</label>
+            <input type="text" class="form-control" id="cashbook-edit-category" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-partner">Người nộp/nhận</label>
+            <input type="text" class="form-control" id="cashbook-edit-partner" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-value">Giá trị (đ)</label>
+            <input type="number" class="form-control" id="cashbook-edit-value" min="1" step="1" required style="width: 100%;">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-method">Phương thức thanh toán</label>
+            <select class="form-control" id="cashbook-edit-method" required style="width: 100%;">
+              <option value="cash">Tiền mặt</option>
+              <option value="bank">Ngân hàng</option>
+              <option value="wallet">Ví điện tử</option>
+            </select>
+          </div>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="cashbook-edit-accounting" style="width: 16px; height: 16px;">
+            <span>Hạch toán kết quả kinh doanh</span>
+          </label>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-note">Ghi chú</label>
+            <textarea class="form-control" id="cashbook-edit-note" rows="3" style="width: 100%;"></textarea>
+          </div>
+          <small style="color: var(--text-muted); line-height: 1.45;">Chỉ phiếu nhập tay độc lập được phép sửa. Phiếu liên kết công nợ, đơn hàng, trả hàng hoặc nhà cung cấp phải dùng quy trình nghiệp vụ tương ứng.</small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-cashbook-edit">Hủy</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-cashbook-edit">Lưu thay đổi</button>
+        </div>
+      </form>
     </div>
   </div>
 
