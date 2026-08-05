@@ -2805,6 +2805,7 @@ export async function openCustomerDetailModal(index) {
         let typeBadge = '';
         let amountText = '';
         let debtBefore = 0;
+        const noteText = h.note || h.notes || '-';
         
         const debtChange = Number.isFinite(Number(h.debtChange)) ? Number(h.debtChange) : null;
         if (h.type === 'payment') {
@@ -2821,9 +2822,12 @@ export async function openCustomerDetailModal(index) {
           amountText = `<span style="color: #d97706; font-weight: 600;">+${formatCurrency(Math.abs(restored))}</span>`;
           debtBefore = h.debtBefore ?? (h.debtAfter - restored);
         } else if (h.type === 'order_cancel') {
-          typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.12); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 600; white-space: nowrap;">Hủy đơn</span>`;
+          const isAmendmentReversal = String(noteText).toLocaleLowerCase('vi-VN').includes('sửa đơn');
+          typeBadge = isAmendmentReversal
+            ? `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.12); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 600; white-space: nowrap;">Đảo bản cũ</span>`
+            : `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.12); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 600; white-space: nowrap;">Hủy đơn</span>`;
           const reversedDebt = debtChange ?? -Math.abs(Number(h.amount || 0));
-          amountText = `<span style="color: #dc2626; font-weight: 600;">-${formatCurrency(Math.abs(reversedDebt))}</span>`;
+          amountText = `<span style="color: ${isAmendmentReversal ? '#d97706' : '#dc2626'}; font-weight: 600;">-${formatCurrency(Math.abs(reversedDebt))}</span>`;
           debtBefore = h.debtBefore ?? (h.debtAfter - reversedDebt);
         } else {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: 600; white-space: nowrap;">Điều chỉnh</span>`;
@@ -2838,7 +2842,6 @@ export async function openCustomerDetailModal(index) {
           hour: '2-digit', minute: '2-digit', second: '2-digit'
         }).format(new Date(h.date));
         
-        const noteText = h.note || h.notes || '-';
         return `
           <tr>
             <td style="font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>

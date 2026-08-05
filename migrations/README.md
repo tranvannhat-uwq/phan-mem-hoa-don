@@ -159,3 +159,8 @@ effects while leaving invoice preview and printing available.
 Migration `0028` also marks the existing `TT 20/07/2026` list as print-only.
 Accounting (or Admin) can explicitly enable order saving from the price-list
 editor; this permission is independent from the existing Sale visibility toggle.
+
+Migration `0029` adds an Admin/Accounting-only RPC for editing an order's note
+as an audited annotation. It updates only `orders.notes` plus audit metadata and
+does not cancel, replace or recalculate the order; customer debt, payments,
+returns, cashbook and commission ledgers remain untouched.

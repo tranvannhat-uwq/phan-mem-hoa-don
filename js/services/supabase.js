@@ -3666,6 +3666,33 @@ export async function dbAmendOrder(originalOrderId, order, reason) {
   }
 }
 
+export async function dbUpdateOrderNotes(orderId, notes) {
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được sửa ghi chú của đơn đã lưu.', 'danger');
+    return false;
+  }
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Sửa ghi chú đơn cần kết nối Cloud để lưu nhật ký thay đổi.', 'danger');
+    return false;
+  }
+
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_update_order_notes', {
+      p_order_id: String(orderId || ''),
+      p_notes: String(notes || '')
+    });
+    if (error) throw error;
+    return data || { success: true, order_id: orderId, notes: String(notes || '') };
+  } catch (err) {
+    console.error('RPC update order notes error:', err);
+    const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_update_order_notes');
+    showToast(missingRpc
+      ? 'Chưa có chức năng sửa riêng ghi chú trên Supabase. Hãy chạy migration 0029.'
+      : 'Không thể cập nhật ghi chú đơn: ' + (err.message || 'Lỗi hệ thống'), 'danger');
+    return false;
+  }
+}
+
 export async function dbRecordCustomerPayment(customerId, amount, notes, paymentMethod = 'cash', idempotencyKey = '') {
   if (isCloudActive && supabaseClient) {
     try {

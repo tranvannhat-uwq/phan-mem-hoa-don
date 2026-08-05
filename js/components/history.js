@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState } from '../services/supabase.js?v=20260805-warehouse-print1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes } from '../services/supabase.js?v=20260805-warehouse-print1';
 import { renderAll } from '../main.js?v=20260805-warehouse-print1';
 import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260805-warehouse-print1';
 import { openHistoryOrderExportModal } from './customers.js?v=20260805-warehouse-print1';
@@ -19,6 +19,13 @@ let pendingSalesReturnKey = '';
 let historyFilterTimer = null;
 let historyRenderCache = null;
 let historyFinancialCache = null;
+let expandedHistoryOrderId = null;
+
+function escapeHistoryHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char]));
+}
 
 function scheduleHistoryFilter(onFilterChange) {
   if (historyFilterTimer) clearTimeout(historyFilterTimer);
@@ -131,6 +138,44 @@ function getHistoryOrderAmountBreakdown(order, lookups) {
     historyFinancialCache.breakdownByOrderId.set(orderId, getOrderFinancialBreakdown(order, orderReturns));
   }
   return historyFinancialCache.breakdownByOrderId.get(orderId);
+}
+
+function getHistoryOrderActionContext(order, lookups) {
+  const financeRole = ['admin', 'accounting'].includes(state.currentUser?.role);
+  const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
+  return {
+    financeRole,
+    activeOrderReturns,
+    canEditNotes: financeRole,
+    showDeleteBtn: order.status === 'draft',
+    showCancelBtn: order.status === 'settled' && financeRole,
+    showReturnBtn: ['settled', 'partially_returned'].includes(order.status) && financeRole,
+    showAmendBtn: order.status === 'settled' && financeRole && activeOrderReturns.length === 0
+  };
+}
+
+function getHistoryOrderPaymentSummary(order, amountBreakdown) {
+  const storedInvoiceDiscount = order.discountAmount ?? order.discount_amount;
+  const discountValue = Number(order.discountValue ?? order.discount_value ?? 0);
+  const discountType = String(order.discountType ?? order.discount_type ?? 'amount').toLowerCase();
+  const discountBase = Number(order.subtotal || 0) > 0
+    ? Number(order.subtotal)
+    : Number(amountBreakdown.totalBeforeDiscount || 0);
+  const derivedInvoiceDiscount = discountType === 'percent'
+    ? Math.round(discountBase * Math.max(0, discountValue) / 100)
+    : Math.max(0, discountValue);
+  const invoiceDiscount = Number(storedInvoiceDiscount ?? derivedInvoiceDiscount);
+  const paidAmount = Number(order.paidAmount ?? order.paid_amount ?? 0);
+  return {
+    totalGoods: Number(amountBreakdown.totalBeforeDiscount || 0),
+    invoiceDiscount: Number.isFinite(invoiceDiscount) ? Math.max(0, invoiceDiscount) : 0,
+    customerPayable: Number(amountBreakdown.totalAfterDiscount || 0),
+    paidAmount: Number.isFinite(paidAmount) ? Math.max(0, paidAmount) : 0
+  };
+}
+
+function historyOrderDetailId(orderId) {
+  return `history-order-detail-${String(orderId || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }
 
 function populateHistoryCompanyAndBrandFilters() {
@@ -615,6 +660,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
   }
 
   if (sorted.length === 0) {
+    expandedHistoryOrderId = null;
     state.historyFilteredOrderIds = [];
     container.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
@@ -638,6 +684,10 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
   const startIndex = (state.historyPage - 1) * ITEMS_PER_PAGE;
   const paginatedItems = sorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const visibleOrderIds = new Set(paginatedItems.map(order => String(order.id)));
+  if (state.historyViewMode !== 'details' || !visibleOrderIds.has(String(expandedHistoryOrderId || ''))) {
+    expandedHistoryOrderId = null;
+  }
 
   let ordersContentHtml = '';
 
@@ -646,7 +696,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     const tableRows = paginatedItems.map((order, idx) => {
       const indexNumber = startIndex + idx + 1;
       const amountBreakdown = getHistoryOrderAmountBreakdown(order, lookups);
+      const paymentSummary = getHistoryOrderPaymentSummary(order, amountBreakdown);
       const displayOrderCode = getOrderDisplayCode(order);
+      const orderId = String(order.id);
+      const detailId = historyOrderDetailId(orderId);
+      const isExpanded = expandedHistoryOrderId === orderId;
 
       let statusBadge = '';
       if (['cancelled', 'canceled'].includes(String(order.status || '').toLowerCase())) {
@@ -661,14 +715,10 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
         statusBadge = `<span style="background: var(--color-primary-light); color: var(--color-primary); font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px;">Đã chốt</span>`;
       }
 
-      const showDeleteBtn = order.status === 'draft';
-      const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
-      const showReturnBtn = ['settled', 'partially_returned'].includes(order.status)
-        && ['admin', 'accounting'].includes(state.currentUser?.role);
-      const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
-      const showAmendBtn = order.status === 'settled'
-        && ['admin', 'accounting'].includes(state.currentUser?.role)
-        && activeOrderReturns.length === 0;
+      const {
+        financeRole, activeOrderReturns, canEditNotes, showDeleteBtn,
+        showCancelBtn, showReturnBtn, showAmendBtn
+      } = getHistoryOrderActionContext(order, lookups);
 
       const cust = getHistoryCustomer(order, lookups);
       let plName = 'Nhập tay';
@@ -685,22 +735,23 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       }
 
       return `
-        <tr>
-          <td style="text-align: center;"><input type="checkbox" class="history-export-checkbox" data-id="${order.id}" ${selectedHistoryOrderIdsForExport.has(String(order.id)) ? 'checked' : ''}></td>
+        <tr class="history-order-row${isExpanded ? ' is-expanded' : ''}" data-order-id="${escapeHistoryHtml(orderId)}"
+            tabindex="0" role="button" aria-expanded="${isExpanded}" aria-controls="${detailId}">
+          <td style="text-align: center;"><input type="checkbox" class="history-export-checkbox" data-id="${escapeHistoryHtml(orderId)}" aria-label="Chọn đơn ${escapeHistoryHtml(displayOrderCode)}" ${selectedHistoryOrderIdsForExport.has(orderId) ? 'checked' : ''}></td>
           <td style="text-align: center; font-weight: 600; color: var(--text-muted);">${indexNumber}</td>
           <td>
-            <div title="${order.id}" style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; margin-bottom: 2px;">${displayOrderCode}</div>
+            <div title="${escapeHistoryHtml(orderId)}" style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; margin-bottom: 2px;">${escapeHistoryHtml(displayOrderCode)}</div>
             <div>${statusBadge}</div>
           </td>
           <td style="white-space: nowrap; color: var(--text-secondary); font-size: 0.8rem;">
             ${formatDateTime(order.date)}
           </td>
           <td>
-            <div style="font-weight: 600; color: var(--text-primary);">${order.customerName}</div>
+            <div style="font-weight: 600; color: var(--text-primary);">${escapeHistoryHtml(order.customerName)}</div>
             <div style="font-size: 0.78rem; color: var(--text-muted);">Nợ hiện tại: <span style="color: var(--color-danger); font-weight: 600;">${debtText}</span></div>
           </td>
           <td>
-            <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${plName}</span>
+            <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${escapeHistoryHtml(plName)}</span>
           </td>
           <td style="text-align: right;">
             <div class="history-money-cell">${formatNumber(amountBreakdown.totalBeforeDiscount)}</div>
@@ -711,51 +762,78 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
           <td style="text-align: right;">
             <div class="history-money-cell history-money-total">${formatNumber(amountBreakdown.totalAfterDiscount)}</div>
           </td>
-          <td style="text-align: center;">
-            <div class="history-table-actions">
-              <button class="history-action-btn history-action-print history-print-btn" data-id="${order.id}" title="In đơn">
-                <i data-lucide="printer"></i> In
-              </button>
-              <button class="history-action-btn history-action-copy history-copy-btn" data-id="${order.id}" title="Sao chép thành đơn mới">
-                <i data-lucide="copy"></i> Chép
-              </button>
-              ${order.status === 'draft' ? `
-                <button class="history-action-btn history-action-edit history-edit-btn" data-id="${order.id}" title="Sửa đơn">
-                  <i data-lucide="edit"></i> Sửa
-                </button>
-              ` : `
-                <button class="history-action-btn history-action-view history-view-btn" data-id="${order.id}" title="Xem chi tiết">
-                  <i data-lucide="eye"></i> Xem
-                </button>
-                ${showAmendBtn ? `
-                  <button class="history-action-btn history-action-edit history-edit-btn" data-id="${order.id}" title="Sửa đơn đã chốt">
-                    <i data-lucide="edit"></i> Sửa
-                  </button>
-                ` : ''}
-                ${showReturnBtn ? `
-                  <button class="history-action-btn history-action-return history-return-btn" data-id="${order.id}" title="Trả hàng">
-                    <i data-lucide="rotate-ccw"></i> Trả
-                  </button>
-                ` : ''}
-                ${showCancelBtn ? `
-                  <button class="history-action-btn history-action-delete history-cancel-btn" data-id="${order.id}" title="Hủy đơn và đảo giao dịch">
-                    <i data-lucide="ban"></i> Hủy
-                  </button>
-                ` : ''}
-                ${['admin', 'accounting'].includes(state.currentUser?.role) ? activeOrderReturns.map(item => `
-                  <button class="history-action-btn history-return-print-btn" data-return-id="${item.id}" title="In phiếu trả ${item.id}">
-                    <i data-lucide="file-text"></i> ${item.id}
-                  </button>
-                  <button class="history-action-btn history-action-delete history-return-cancel-btn" data-return-id="${item.id}" title="Hủy phiếu trả ${item.id}">
-                    <i data-lucide="ban"></i>
-                  </button>
-                `).join('') : ''}
-              `}
-              ${showDeleteBtn ? `
-                <button class="history-action-btn history-action-delete history-delete-btn" data-id="${order.id}" title="Xóa đơn hàng">
-                  <i data-lucide="x"></i>
-                </button>
-              ` : ''}
+          <td class="history-row-toggle-cell" style="text-align: center;">
+            <button type="button" class="history-row-toggle" data-id="${escapeHistoryHtml(orderId)}"
+                    aria-label="${isExpanded ? 'Thu gọn' : 'Mở chi tiết'} đơn ${escapeHistoryHtml(displayOrderCode)}" tabindex="-1">
+              <i data-lucide="chevron-down"></i>
+            </button>
+          </td>
+        </tr>
+        <tr id="${detailId}" class="history-expanded-row${isExpanded ? ' is-expanded' : ''}" aria-hidden="${!isExpanded}">
+          <td colspan="10">
+            <div class="history-expanded-motion">
+              <div class="history-expanded-motion-inner">
+                <section class="history-expanded-panel" aria-label="Chi tiết thao tác đơn ${escapeHistoryHtml(displayOrderCode)}" ${isExpanded ? '' : 'inert'}>
+                  <div class="history-expanded-notes">
+                    <label for="history-order-notes-${escapeHistoryHtml(orderId)}">Ghi chú</label>
+                    <textarea id="history-order-notes-${escapeHistoryHtml(orderId)}" class="form-control history-order-notes-input"
+                              data-id="${escapeHistoryHtml(orderId)}" rows="4" placeholder="Nhập ghi chú cho đơn hàng này..."
+                              ${canEditNotes ? '' : 'readonly'}>${escapeHistoryHtml(order.notes || '')}</textarea>
+                  </div>
+                  <dl class="history-expanded-payment">
+                    <div><dt>Tổng tiền hàng</dt><dd>${formatCurrency(paymentSummary.totalGoods)}</dd></div>
+                    <div><dt>Giảm giá hóa đơn</dt><dd>${formatCurrency(paymentSummary.invoiceDiscount)}</dd></div>
+                    <div class="history-expanded-payable"><dt>Khách cần trả</dt><dd>${formatCurrency(paymentSummary.customerPayable)}</dd></div>
+                    <div><dt>Khách đã trả</dt><dd>${formatCurrency(paymentSummary.paidAmount)}</dd></div>
+                  </dl>
+                  <div class="history-expanded-actions" aria-label="Thao tác đơn hàng">
+                    ${canEditNotes ? `
+                      <button class="history-detail-action history-action-edit history-notes-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                        <i data-lucide="save"></i> Lưu ghi chú
+                      </button>
+                    ` : ''}
+                    ${order.status !== 'draft' ? `
+                      <button class="history-detail-action history-action-view history-view-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                        <i data-lucide="eye"></i> Xem
+                      </button>
+                    ` : ''}
+                    ${(order.status === 'draft' || showAmendBtn) ? `
+                      <button class="history-detail-action history-action-edit history-edit-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                        <i data-lucide="edit"></i> Chỉnh sửa
+                      </button>
+                    ` : ''}
+                    <button class="history-detail-action history-action-copy history-copy-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                      <i data-lucide="copy"></i> Sao chép
+                    </button>
+                    <button class="history-detail-action history-action-print history-print-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                      <i data-lucide="printer"></i> In
+                    </button>
+                    ${showReturnBtn ? `
+                      <button class="history-detail-action history-action-return history-return-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                        <i data-lucide="rotate-ccw"></i> Trả hàng
+                      </button>
+                    ` : ''}
+                    ${showCancelBtn ? `
+                      <button class="history-detail-action history-action-delete history-cancel-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                        <i data-lucide="ban"></i> Hủy
+                      </button>
+                    ` : ''}
+                    ${financeRole ? activeOrderReturns.map(item => `
+                      <button class="history-detail-action history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" type="button" title="In phiếu trả ${escapeHistoryHtml(item.id)}">
+                        <i data-lucide="file-text"></i> In ${escapeHistoryHtml(item.id)}
+                      </button>
+                      <button class="history-detail-action history-action-delete history-return-cancel-btn" data-return-id="${escapeHistoryHtml(item.id)}" type="button" title="Hủy phiếu trả ${escapeHistoryHtml(item.id)}">
+                        <i data-lucide="ban"></i> Hủy phiếu trả
+                      </button>
+                    `).join('') : ''}
+                    ${showDeleteBtn ? `
+                      <button class="history-detail-action history-action-delete history-delete-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                        <i data-lucide="trash-2"></i> Xóa
+                      </button>
+                    ` : ''}
+                  </div>
+                </section>
+              </div>
             </div>
           </td>
         </tr>
@@ -860,6 +938,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <div class="flex items-center gap-1"><i data-lucide="users" style="width:13px;height:13px;"></i> <span>Kinh doanh quản lý: ${managerName}</span></div>
               <div class="flex items-center gap-1"><i data-lucide="tags" style="width:13px;height:13px;"></i> <span>Bảng giá: <strong style="color: var(--color-warning);">${plName}</strong></span></div>
               <div class="flex items-center gap-1"><i data-lucide="credit-card" style="width:13px;height:13px;"></i> <span>Công nợ hiện tại: <strong style="color: var(--color-danger);">${debtText}</strong></span></div>
+              <div class="flex items-start gap-1"><i data-lucide="notebook-pen" style="width:13px;height:13px;margin-top:2px;"></i> <span>Ghi chú đơn: <strong>${escapeHistoryHtml(order.notes || 'Không có')}</strong></span></div>
             </div>
             
             <div class="order-details-summary" style="font-size: 0.85rem; background: rgba(255,255,255,0.02); border-radius: 6px; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); margin-bottom: 1rem; max-height: 120px; overflow-y: auto;">
@@ -889,6 +968,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-copy-btn" data-id="${order.id}" title="Sao chép thành đơn mới">
                 <i data-lucide="copy" style="width: 13px; height: 13px;"></i> Sao chép
               </button>
+              ${['admin', 'accounting'].includes(state.currentUser?.role) ? `
+                <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-notes-btn" data-id="${order.id}" title="Sửa riêng ghi chú, không thay đổi đơn hoặc công nợ">
+                  <i data-lucide="notebook-pen" style="width: 13px; height: 13px;"></i> Ghi chú
+                </button>
+              ` : ''}
               
               ${order.status === 'draft' ? `
                 <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}">
@@ -963,8 +1047,60 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     });
   }
 
+  const syncExpandedOrderDom = (nextOrderId) => {
+    expandedHistoryOrderId = nextOrderId;
+    container.querySelectorAll('.history-order-row').forEach(row => {
+      const expanded = String(row.dataset.orderId) === String(nextOrderId || '');
+      row.classList.toggle('is-expanded', expanded);
+      row.setAttribute('aria-expanded', String(expanded));
+      const toggle = row.querySelector('.history-row-toggle');
+      if (toggle) {
+        const order = paginatedItems.find(item => String(item.id) === String(row.dataset.orderId));
+        toggle.setAttribute('aria-label', `${expanded ? 'Thu gọn' : 'Mở chi tiết'} đơn ${order ? getOrderDisplayCode(order) : ''}`.trim());
+      }
+      const detailRow = document.getElementById(row.getAttribute('aria-controls'));
+      if (detailRow) {
+        detailRow.classList.toggle('is-expanded', expanded);
+        detailRow.setAttribute('aria-hidden', String(!expanded));
+        const panel = detailRow.querySelector('.history-expanded-panel');
+        if (panel) panel.inert = !expanded;
+      }
+    });
+  };
+
+  const toggleHistoryOrder = (orderId) => {
+    const normalizedId = String(orderId || '');
+    syncExpandedOrderDom(expandedHistoryOrderId === normalizedId ? null : normalizedId);
+  };
+
+  const rowInteractiveSelector = 'input, button, textarea, select, a, label, [role="link"]';
+  container.querySelectorAll('.history-order-row').forEach(row => {
+    row.addEventListener('click', event => {
+      if (event.target.closest(rowInteractiveSelector)) return;
+      toggleHistoryOrder(row.dataset.orderId);
+    });
+    row.addEventListener('keydown', event => {
+      if (event.target !== row || !['Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      toggleHistoryOrder(row.dataset.orderId);
+    });
+  });
+
+  container.querySelectorAll('.history-row-toggle').forEach(button => {
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleHistoryOrder(button.dataset.id);
+    });
+  });
+
+  container.querySelectorAll('.history-expanded-panel button, .history-expanded-panel textarea').forEach(element => {
+    element.addEventListener('click', event => event.stopPropagation());
+  });
+
   // Gán sự kiện click cho các nút hành động trong lịch sử
   document.querySelectorAll('.history-export-checkbox').forEach(box => {
+    box.addEventListener('click', event => event.stopPropagation());
     box.addEventListener('change', () => {
       const id = String(box.getAttribute('data-id'));
       if (box.checked) selectedHistoryOrderIdsForExport.add(id);
@@ -1045,6 +1181,39 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     });
   });
 
+  document.querySelectorAll('.history-notes-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = e.currentTarget.getAttribute('data-id');
+      const order = state.savedOrders.find(item => String(item.id) === String(id));
+      if (!order) return;
+
+      const expandedPanel = e.currentTarget.closest('.history-expanded-panel');
+      const textarea = expandedPanel?.querySelector('.history-order-notes-input');
+      const nextNotes = textarea
+        ? textarea.value
+        : window.prompt(
+          `Sửa ghi chú riêng của đơn ${getOrderDisplayCode(order)} (để trống nếu muốn xóa):`,
+          order.notes || ''
+        );
+      if (nextNotes === null || nextNotes.trim() === String(order.notes || '').trim()) return;
+
+      e.currentTarget.disabled = true;
+      const result = await dbUpdateOrderNotes(order.id, nextNotes.trim());
+      if (!result) {
+        e.currentTarget.disabled = false;
+        return;
+      }
+
+      order.notes = result.notes ?? nextNotes.trim();
+      order.updatedAt = result.updated_at || new Date().toISOString();
+      localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+      renderHistoryOrders({ reuseFiltered: true });
+      showToast(`Đã cập nhật ghi chú đơn ${getOrderDisplayCode(order)}. Đơn và công nợ không thay đổi.`, 'success');
+    });
+  });
+
   document.querySelectorAll('.history-cancel-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const id = e.currentTarget.getAttribute('data-id');
@@ -1095,6 +1264,8 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
       document.getElementById('selected-customer-name-lbl').innerText = cust.name;
       document.getElementById('selected-customer-phone-lbl').innerText = cust.phone || 'N/A';
       document.getElementById('selected-customer-address-lbl').innerText = cust.address || 'N/A';
+      const customerNotesLbl = document.getElementById('selected-customer-notes-lbl');
+      if (customerNotesLbl) customerNotesLbl.innerText = cust.notes || 'Không có';
       document.getElementById('selected-customer-brand-lbl').innerText = cust.assignedBrand;
       
       const pl = state.pricelists.find(p => p.id === cust.pricelistId);

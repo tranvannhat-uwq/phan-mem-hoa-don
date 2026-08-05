@@ -2354,12 +2354,6 @@ function selectInvoiceCustomer(customer) {
   document.getElementById('invoice-customer-search').value = customer.name;
   document.getElementById('invoice-customer-search').setAttribute('disabled', 'true');
   
-  // Tự động điền ghi chú mặc định của khách hàng vào ô nhập ghi chú hóa đơn
-  const notesInput = document.getElementById('invoice-notes');
-  if (notesInput) {
-    notesInput.value = customer.notes || '';
-  }
-  
   const clearBtn = document.getElementById('btn-clear-invoice-customer');
   if (clearBtn) clearBtn.style.display = 'inline-flex';
   
@@ -2371,6 +2365,8 @@ function selectInvoiceCustomer(customer) {
     const provinceName = getProvinceNameByCode(customer.brandDiscounts && customer.brandDiscounts.province);
     const detailAddress = customer.address || 'N/A';
     document.getElementById('selected-customer-address-lbl').innerText = provinceName ? `[${provinceName}] ${detailAddress}` : detailAddress;
+    const customerNotesLbl = document.getElementById('selected-customer-notes-lbl');
+    if (customerNotesLbl) customerNotesLbl.innerText = customer.notes || 'Không có';
     document.getElementById('selected-customer-brand-lbl').innerText = customer.assignedBrand;
     
     const applicable = getApplicablePriceList(
