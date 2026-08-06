@@ -37,3 +37,27 @@ export function reduceCustomerDebtForReturn(balanceBefore, amount) {
 export function restoreCustomerDebtForCancelledReturn(balanceBefore, amount) {
   return chargeCustomerDebt(balanceBefore, amount);
 }
+
+/**
+ * The database ledger is authoritative. Older browser builds also cached an
+ * optimistic order entry whose id was the order id itself. Once the real
+ * ledger row arrives, discard that cached twin instead of showing both rows.
+ */
+export function mergeCustomerDebtHistory(existingHistory = [], ledgerHistory = []) {
+  const merged = new Map();
+
+  for (const item of Array.isArray(existingHistory) ? existingHistory : []) {
+    const key = String(item?.id || `legacy:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
+    merged.set(key, item);
+  }
+
+  for (const item of Array.isArray(ledgerHistory) ? ledgerHistory : []) {
+    const orderId = item?.orderId;
+    const isOrderCharge = item?.transactionType === 'order' || item?.type === 'charge';
+    if (orderId && isOrderCharge) merged.delete(String(orderId));
+    const key = String(item?.id || `ledger:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
+    merged.set(key, item);
+  }
+
+  return [...merged.values()];
+}

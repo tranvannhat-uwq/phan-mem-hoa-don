@@ -76,6 +76,27 @@ export function getStandardPriceList(priceLists, now = new Date()) {
   )[0] || null;
 }
 
+export function shouldOverrideWithGlobalCustomerPriceList({
+  priceList,
+  customer,
+  explicitlySelected = false
+}) {
+  if (!priceList) return false;
+  const isGlobal = normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.GENERAL
+    && !priceList.customerId
+    && !priceList.customerGroupId;
+  if (!isGlobal) return false;
+  if (explicitlySelected) return true;
+  if (!customer) return false;
+
+  const references = [customer.pricelistId, customer.defaultPriceListId]
+    .filter(Boolean)
+    .map(value => String(value).trim().toLowerCase());
+  return [priceList.id, priceList.code, priceList.name]
+    .filter(Boolean)
+    .some(value => references.includes(String(value).trim().toLowerCase()));
+}
+
 // Khách hàng cũ có thể lưu mã BG03 hoặc tên bảng giá thay vì UUID.
 // Luôn quy đổi theo cả ba định danh để không rơi về bảng giá chuẩn đầu tiên.
 function matchesPriceListReference(priceList, reference) {
@@ -92,10 +113,14 @@ export function getApplicablePriceList(customer, priceLists, requestedPriceListI
   if (customer) {
     // Bảng giá được gán trực tiếp trên hồ sơ khách hàng là lựa chọn chính thức.
     // Không để một bảng giá riêng cũ theo customerId ghi đè lên lựa chọn này.
+    // pricelistId is the field edited by the customer form. The duplicated
+    // default field is retained only as a compatibility fallback.
     const references = [customer.pricelistId, customer.defaultPriceListId].filter(Boolean);
-    const customerDefault = activeLists.find(priceList =>
-      references.some(reference => matchesPriceListReference(priceList, reference))
-    );
+    // Iterate references first. Iterating activeLists first would accidentally
+    // let display_order override the customer's explicit selection.
+    const customerDefault = references
+      .map(reference => activeLists.find(priceList => matchesPriceListReference(priceList, reference)))
+      .find(Boolean);
     if (customerDefault) return { priceList: customerDefault, selectionSource: 'customer_default' };
 
     const specific = activeLists.find(priceList =>

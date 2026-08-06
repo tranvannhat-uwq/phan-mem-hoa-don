@@ -13,8 +13,10 @@ test('order entry keeps an explicit global price-list choice separate from the c
   assert.match(invoice, /function isExplicitInvoicePriceListOverride\(\)/);
   assert.match(invoice, /select\?\.dataset\.explicitOverride === 'true'/);
   assert.match(invoice, /customerForPricing = isExplicitInvoicePriceListOverride\(\) && selectedId \? null : customer/);
-  assert.match(invoice, /priceListOverride: isExplicitInvoicePriceListOverride\(\)/);
-  assert.match(invoice, /normalizePriceListType\(selected\.type, selected\.customerId\) === PRICE_LIST_TYPES\.GENERAL/);
+  assert.match(invoice, /function shouldRequestAuthoritativePriceListOverride\(\)/);
+  assert.match(invoice, /priceListOverride: shouldRequestAuthoritativePriceListOverride\(\)/);
+  assert.match(invoice, /shouldOverrideWithGlobalCustomerPriceList\(\{/);
+  assert.match(invoice, /isPrintOnlyPriceList\(selected\)/);
   assert.match(invoice, /plSelect\.disabled = false/);
   assert.doesNotMatch(invoice, /isDraftPriceListOverrideEnabled/);
 });

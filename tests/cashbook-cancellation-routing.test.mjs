@@ -53,6 +53,6 @@ test('database classification is the primary atomic RPC for legacy receipts', ()
 test('cancelled receipts reload the authoritative ledger and expose the audit rows', () => {
   assert.match(supabase, /fetchFullTableData\(tableCustomerDebtTransactionsName\)/);
   assert.match(supabase, /payment_cancel:\s*'payment_cancel'/);
-  assert.match(supabase, /customer\.debtHistory = \[\.\.\.merged\.values\(\)\]/);
+  assert.match(supabase, /customer\.debtHistory = mergeCustomerDebtHistory\(/);
   assert.match(cashbookUi, /activeFilters\.statusCancelled = true/);
 });

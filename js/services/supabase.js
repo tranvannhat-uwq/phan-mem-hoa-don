@@ -2,9 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260805-warehouse-print1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-warehouse-print1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260805-authoritative-global1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-authoritative-global1';
 import { collectAllPages } from '../domain/pagination.js';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260805-authoritative-global1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -413,13 +414,10 @@ async function hydrateCustomerDebtHistory(customers) {
     byCustomer.get(key).push(mapCustomerDebtTransaction(row));
   });
   customers.forEach(customer => {
-    const merged = new Map();
-    parseDebtHistory(customer.debtHistory).forEach(item => {
-      const key = String(item?.id || `legacy:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
-      merged.set(key, item);
-    });
-    (byCustomer.get(String(customer.id)) || []).forEach(item => merged.set(String(item.id), item));
-    customer.debtHistory = [...merged.values()];
+    customer.debtHistory = mergeCustomerDebtHistory(
+      parseDebtHistory(customer.debtHistory),
+      byCustomer.get(String(customer.id)) || []
+    );
   });
   return customers;
 }
@@ -706,7 +704,7 @@ export async function fetchCloudData(options = {}) {
             createdAt: cust.created_at || null,
             updatedAt: cust.updated_at || null,
             notes: cust.notes || '',
-            pricelistId: cust.pricelist_id || '',
+            pricelistId: cust.pricelist_id || cust.default_price_list_id || '',
             defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
             customerGroupId: cust.customer_group_id || '',
             managedBy: cust.managed_by || '',
@@ -1888,7 +1886,9 @@ export async function dbDeleteProduct(code, brand) {
 
 // --- Thao tác CSDL chi tiết (Khách hàng) ---
 function resolveCustomerDefaultPriceListId(customer) {
-  const candidate = customer.defaultPriceListId || customer.pricelistId || '';
+  // The customer editor writes pricelistId. Keep the compatibility copy in
+  // default_price_list_id synchronized with that current business selection.
+  const candidate = customer.pricelistId || customer.defaultPriceListId || '';
   if (!candidate || candidate === 'custom' || candidate === 'retail') return null;
 
   const priceLists = state.pricelists || [];
@@ -2133,7 +2133,7 @@ export async function dbFetchCustomers() {
         lastOrderAt: cust.last_order_at || null,
         lastPaymentAt: cust.last_payment_at || null,
         notes: cust.notes || '',
-        pricelistId: cust.pricelist_id || '',
+        pricelistId: cust.pricelist_id || cust.default_price_list_id || '',
         defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
         managedBy: cust.managed_by || '',
         debtHistory: parseDebtHistory(cust.debt_history),
@@ -2204,7 +2204,7 @@ export async function dbFetchCustomerById(customerId) {
       lastOrderAt: cust.last_order_at || null,
       lastPaymentAt: cust.last_payment_at || null,
       notes: cust.notes || '',
-      pricelistId: cust.pricelist_id || '',
+      pricelistId: cust.pricelist_id || cust.default_price_list_id || '',
       defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
       managedBy: cust.managed_by || '',
       debtHistory: existing?.debtHistory || parseDebtHistory(cust.debt_history),
@@ -2300,13 +2300,10 @@ export async function dbRefreshCustomerFinancialState(customerId) {
     customer.lastPaymentAt = customerRow.last_payment_at || null;
     customer.updatedAt = customerRow.updated_at || null;
 
-    const merged = new Map();
-    parseDebtHistory(customer.debtHistory).forEach(item => {
-      const key = String(item?.id || `legacy:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
-      merged.set(key, item);
-    });
-    (ledgerRows || []).map(mapCustomerDebtTransaction).forEach(item => merged.set(String(item.id), item));
-    customer.debtHistory = [...merged.values()];
+    customer.debtHistory = mergeCustomerDebtHistory(
+      parseDebtHistory(customer.debtHistory),
+      (ledgerRows || []).map(mapCustomerDebtTransaction)
+    );
     localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
     return customer;
   } catch (error) {

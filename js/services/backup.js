@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { showToast } from '../utils.js';
-import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260805-warehouse-print1';
+import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260805-authoritative-global1';
+import { mapWithConcurrency } from '../domain/async-pool.js?v=20260805-authoritative-global1';
 import { 
   supabaseClient, 
   isCloudActive,
@@ -21,7 +22,7 @@ import {
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js?v=20260805-warehouse-print1';
+} from './supabase.js?v=20260805-authoritative-global1';
 
 async function deleteAllRows(tableName, key = 'id') {
   const { error } = await supabaseClient
@@ -168,6 +169,8 @@ async function legacyClearTestDataDisabled(onCompleteCallback) {
 export const clearAllSampleData = clearTestData;
 
 const PHASE6_BACKUP_VERSION = 'phase6-v1';
+const BACKUP_FETCH_CONCURRENCY = 3;
+let activeBackupExport = null;
 const PHASE6_BACKUP_TABLES = [
   { sheet: 'San_Pham', table: 'products' },
   { sheet: 'Khach_Hang', table: 'customers' },
@@ -176,7 +179,7 @@ const PHASE6_BACKUP_TABLES = [
   { sheet: 'Don_Hang_Nhap', table: 'draft_orders' },
   { sheet: 'Bang_Gia', table: 'pricelists' },
   { sheet: 'Chi_Tiet_Bang_Gia', table: 'price_list_items' },
-  { sheet: 'Hang_Son', table: 'brands' },
+  { sheet: 'Hang_Son', table: 'brands', cursor: 'name' },
   { sheet: 'Thanh_Toan', table: 'payments' },
   { sheet: 'So_Quy', table: 'cashbook_transactions' },
   { sheet: 'So_Du_Dau_Ky', table: 'starting_balances' },
@@ -192,22 +195,80 @@ const PHASE6_BACKUP_TABLES = [
   { sheet: 'Nhat_Ky_Audit', table: 'audit_logs' }
 ];
 
-async function fetchBackupTableRows(tableName) {
+async function fetchBackupTableRows(spec, onPage) {
   const rows = [];
   const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabaseClient
-      .from(tableName)
+  const cursorColumn = spec.cursor || 'id';
+  let cursorValue = null;
+  for (;;) {
+    let query = supabaseClient
+      .from(spec.table)
       .select('*')
-      .range(from, from + pageSize - 1);
-    if (error) throw new Error(`${tableName}: ${error.message || error}`);
+      .order(cursorColumn, { ascending: true })
+      .limit(pageSize);
+    if (cursorValue !== null) query = query.gt(cursorColumn, cursorValue);
+
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    if (controller && typeof query.abortSignal === 'function') query = query.abortSignal(controller.signal);
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 30000) : null;
+    let data;
+    let error;
+    try {
+      ({ data, error } = await query);
+    } catch (requestError) {
+      data = null;
+      error = requestError;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+    if (error) {
+      const timedOut = error.name === 'AbortError' || /abort|timeout/i.test(error.message || '');
+      throw new Error(`${spec.table}: ${timedOut ? 'quá 30 giây khi tải một trang dữ liệu' : (error.message || error)}`);
+    }
     rows.push(...(data || []));
+    if (typeof onPage === 'function') onPage(rows.length);
     if (!data || data.length < pageSize) break;
+    const nextCursor = data[data.length - 1]?.[cursorColumn];
+    if (nextCursor == null || String(nextCursor) === String(cursorValue)) {
+      throw new Error(`${spec.table}: không thể tiếp tục phân trang theo ${cursorColumn}`);
+    }
+    cursorValue = nextCursor;
   }
   return rows;
 }
 
-export async function exportBackupToExcel() {
+function updateBackupExportButtons(message = '', busy = false) {
+  if (typeof document === 'undefined') return;
+  const buttons = [
+    document.getElementById('btn-export-backup'),
+    document.getElementById('btn-backup-reminder-download')
+  ].filter(Boolean);
+
+  buttons.forEach(button => {
+    if (busy) {
+      if (!button.dataset.backupOriginalHtml) button.dataset.backupOriginalHtml = button.innerHTML;
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = message;
+      return;
+    }
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    if (button.dataset.backupOriginalHtml) {
+      button.innerHTML = button.dataset.backupOriginalHtml;
+      delete button.dataset.backupOriginalHtml;
+    }
+  });
+}
+
+function nextBrowserPaint() {
+  return new Promise(resolve => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
+}
+
+async function performBackupExport() {
   if (!isCloudActive || !supabaseClient) {
     showToast('Không thể xuất dữ liệu vì chưa kết nối Supabase.', 'warning');
     return false;
@@ -219,16 +280,35 @@ export async function exportBackupToExcel() {
 
   try {
     showToast('Đang đọc dữ liệu Cloud theo từng trang...', 'info');
+    updateBackupExportButtons(`Đang sao lưu 0/${PHASE6_BACKUP_TABLES.length}...`, true);
     const workbook = XLSX.utils.book_new();
     const manifest = [];
-    for (const spec of PHASE6_BACKUP_TABLES) {
-      const rows = await fetchBackupTableRows(spec.table);
+    let completedTables = 0;
+    const tableRows = await mapWithConcurrency(
+      PHASE6_BACKUP_TABLES,
+      spec => fetchBackupTableRows(spec, rowCount => {
+        updateBackupExportButtons(
+          `Đang sao lưu ${completedTables}/${PHASE6_BACKUP_TABLES.length}: ${spec.sheet} (${rowCount.toLocaleString('vi-VN')} dòng)...`,
+          true
+        );
+      }),
+      {
+        limit: BACKUP_FETCH_CONCURRENCY,
+        onProgress: ({ completed, total }) => {
+          completedTables = completed;
+          updateBackupExportButtons(`Đang sao lưu ${completed}/${total}...`, true);
+        }
+      }
+    );
+
+    PHASE6_BACKUP_TABLES.forEach((spec, index) => {
+      const rows = tableRows[index];
       manifest.push({ sheet: spec.sheet, table_name: spec.table, row_count: rows.length });
       const worksheet = rows.length > 0
         ? XLSX.utils.json_to_sheet(serializeBackupRows(rows))
         : XLSX.utils.aoa_to_sheet([['__empty_table__']]);
       XLSX.utils.book_append_sheet(workbook, worksheet, spec.sheet);
-    }
+    });
 
     const metadata = [{
       schema_version: PHASE6_BACKUP_VERSION,
@@ -242,6 +322,8 @@ export async function exportBackupToExcel() {
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(manifest), '_Manifest');
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    updateBackupExportButtons('Đang tạo file Excel...', true);
+    await nextBrowserPaint();
     XLSX.writeFile(workbook, `weblendon_phase6_${timestamp}.xlsx`);
     localStorage.setItem('weblendon_last_backup_date', new Date().toLocaleDateString('vi-VN'));
     showToast('Đã xuất bản dữ liệu có version và manifest thành công.', 'success');
@@ -250,7 +332,17 @@ export async function exportBackupToExcel() {
     console.error('Phase 6 backup export failed:', error);
     showToast(`Không thể xuất bản dữ liệu: ${error.message || error}`, 'danger');
     return false;
+  } finally {
+    updateBackupExportButtons('', false);
   }
+}
+
+export function exportBackupToExcel() {
+  if (activeBackupExport) return activeBackupExport;
+  activeBackupExport = performBackupExport().finally(() => {
+    activeBackupExport = null;
+  });
+  return activeBackupExport;
 }
 
 function findDuplicateBackupKeys(rows) {

@@ -8,7 +8,8 @@ import {
   canUserViewPriceList,
   isPrivilegedPricingRole,
   isUsableResolvedPrice,
-  parseVndInteger
+  parseVndInteger,
+  shouldOverrideWithGlobalCustomerPriceList
 } from '../js/domain/pricing.js';
 import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../js/domain/invoice-discount.js';
 
@@ -120,6 +121,20 @@ const applicable = getApplicablePriceList(customer, priceLists);
 assert.equal(applicable.priceList.id, 'bg03');
 assert.equal(applicable.selectionSource, 'customer_default');
 
+// pricelist_id is the customer-form selection. The duplicated default field
+// can be stale on upgraded rows, so it is only a compatibility fallback.
+const migratedCustomerWithConflictingPriceLists = {
+  id: 'migrated-customer',
+  defaultPriceListId: 'standard',
+  pricelistId: 'bg03'
+};
+const canonicalApplicable = getApplicablePriceList(
+  migratedCustomerWithConflictingPriceLists,
+  priceLists
+);
+assert.equal(canonicalApplicable.priceList.id, 'bg03');
+assert.equal(canonicalApplicable.selectionSource, 'customer_default');
+
 const privatePrice = resolveCustomerProductPrice({
   productId: 'ba46-lon',
   customer,
@@ -155,5 +170,18 @@ assert.equal(parseVndInteger('1.950.000'), 1950000);
 assert.equal(parseVndInteger('2,116,000 ₫'), 2116000);
 assert.equal(parseVndInteger('-1.000'), -1000);
 assert.equal(parseVndInteger(''), null);
+
+assert.equal(shouldOverrideWithGlobalCustomerPriceList({
+  priceList: { id: 'bg03', name: 'Bảng giá 03', type: PRICE_LIST_TYPES.GENERAL },
+  customer: { pricelistId: 'bg03', defaultPriceListId: 'bg01' }
+}), true);
+assert.equal(shouldOverrideWithGlobalCustomerPriceList({
+  priceList: { id: 'group03', name: 'Bảng giá nhóm', type: PRICE_LIST_TYPES.CUSTOMER_GROUP, customerGroupId: 'g1' },
+  customer: { pricelistId: 'group03' }
+}), false);
+assert.equal(shouldOverrideWithGlobalCustomerPriceList({
+  priceList: { id: 'private03', name: 'Giá riêng', type: PRICE_LIST_TYPES.DEALER_PRIVATE, customerId: 'tung' },
+  customer: { pricelistId: 'private03' }
+}), false);
 
 console.log('pricing.test.mjs: all assertions passed');

@@ -34,6 +34,9 @@ Run these files in order on a staging clone first:
 26. `0026_sale_managed_customer_order_history.sql`
 27. `0027_market_price_lists_are_print_only.sql`
 28. `0028_tt_20072026_requires_accounting_approval.sql`
+29. `0029_order_notes_annotation.sql`
+30. `0030_cashbook_manual_transaction_edit.sql`
+31. `0031_customer_pricelist_priority_alignment.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -169,3 +172,8 @@ Migration `0030` adds an Admin/Accounting-only audited RPC for editing standalon
 manual cashbook vouchers. It rejects cancelled entries and every voucher linked
 to customer debt, orders, returns, supplier purchases or reversal records, so
 those financial workflows remain immutable and continue to use cancellation.
+
+Migration `0031` aligns authoritative order pricing with the price list selected
+in the customer editor. It gives `customers.pricelist_id` priority over the
+duplicated compatibility field while preserving active-date checks, role-based
+price-list authorization, database price lookup and browser-price rejection.

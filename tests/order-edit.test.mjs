@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   normalizeOrderItemsForEditing,
   reorderOrderItems,
   resolveOrderCustomerForEditing
 } from '../js/domain/order-edit.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const invoiceSource = fs.readFileSync(path.join(root, 'js/components/invoice.js'), 'utf8');
 
 test('guest drafts remain guest orders when reopened or copied', () => {
   const context = resolveOrderCustomerForEditing({
@@ -111,4 +117,15 @@ test('invalid item moves leave the current order array untouched', () => {
   assert.equal(reorderOrderItems(source, 0, 0), source);
   assert.equal(reorderOrderItems(source, -1, 1), source);
   assert.equal(reorderOrderItems(source, 0, 5), source);
+});
+
+test('editable historical orders refresh current prices while read-only orders keep snapshots', () => {
+  const listener = invoiceSource.slice(
+    invoiceSource.indexOf("document.addEventListener('loadDraftOrder'"),
+    invoiceSource.indexOf("document.addEventListener('loadDraftOrder'") + 900
+  );
+
+  assert.match(listener, /if \(isReadOnly\)[\s\S]*renderInvoiceTable\(\)[\s\S]*return;/);
+  assert.match(listener, /applyActivePriceListToInvoice\(\)/);
+  assert.ok(listener.indexOf('return;') < listener.indexOf('applyActivePriceListToInvoice();'));
 });

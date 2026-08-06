@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260805-warehouse-print1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260805-warehouse-print1';
-import { renderAll, switchTab } from '../main.js?v=20260805-warehouse-print1';
-import { populateManagedByDropdown } from './customers.js?v=20260805-warehouse-print1';
-import { exportBackupToExcel } from '../services/backup.js?v=20260805-warehouse-print1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260805-authoritative-global1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260805-authoritative-global1';
+import { renderAll, switchTab } from '../main.js?v=20260805-authoritative-global1';
+import { populateManagedByDropdown } from './customers.js?v=20260805-authoritative-global1';
+import { exportBackupToExcel } from '../services/backup.js?v=20260805-authoritative-global1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -430,7 +430,7 @@ export async function handleLogin(e) {
     const rememberedEmail = usernameInput.includes('@') ? '' : (localStorage.getItem(rememberedEmailKey) || '');
     const candidates = usernameInput.includes('@')
       ? [usernameInput]
-      : [...new Set([rememberedEmail, `${usernameInput}@lendon.com`, `${usernameInput}@weblendon.com`, `${usernameInput}@gmail.com`].filter(Boolean))];
+      : [...new Set([rememberedEmail, `${usernameInput}@lendon.com`, `${usernameInput}@gmail.com`].filter(Boolean))];
     let authUser = null;
     let loginError = null;
     for (const email of candidates) {

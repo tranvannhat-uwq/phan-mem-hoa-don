@@ -41,6 +41,9 @@ test('customer debt history is loaded on demand and successful login email is re
   assert.match(customers, /await dbRefreshCustomerFinancialState\(cust\.id\)/);
   assert.match(users, /billing_system_login_email:/);
   assert.match(users, /new Set\(\[rememberedEmail/);
+  assert.match(users, /`\$\{usernameInput\}@lendon\.com`/);
+  assert.match(users, /`\$\{usernameInput\}@gmail\.com`/);
+  assert.doesNotMatch(users, /@weblendon\.com/);
 });
 
 test('order history reuses filtered pages and indexes related records', () => {

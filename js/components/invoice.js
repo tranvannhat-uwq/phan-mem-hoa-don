@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-warehouse-print1';
-import { renderAll, switchTab } from '../main.js?v=20260805-warehouse-print1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, fetchCloudData } from '../services/supabase.js?v=20260805-authoritative-global1';
+import { renderAll, switchTab } from '../main.js?v=20260805-authoritative-global1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260805-warehouse-print1';
-import { addCashbookTransaction } from './so_quy.js?v=20260805-warehouse-print1';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList, isUsableResolvedPrice } from '../domain/pricing.js?v=20260805-warehouse-print1';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260805-warehouse-print1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260805-authoritative-global1';
+import { addCashbookTransaction } from './so_quy.js?v=20260805-authoritative-global1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260805-authoritative-global1';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260805-authoritative-global1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -225,6 +225,19 @@ function canPersistCurrentInvoicePricing() {
   if (!state.activeCustomerId || state.isQuickCustomerMode) return true;
   const customer = state.customers.find(item => item.id === state.activeCustomerId);
   return isUsingCustomerDefaultPriceList(customer);
+}
+
+function shouldRequestAuthoritativePriceListOverride() {
+  const selected = getSelectedInvoicePriceList();
+  if (!selected || isPrintOnlyPriceList(selected)) return false;
+  const customer = state.activeCustomerId
+    ? state.customers.find(item => item.id === state.activeCustomerId)
+    : null;
+  return shouldOverrideWithGlobalCustomerPriceList({
+    priceList: selected,
+    customer,
+    explicitlySelected: isExplicitInvoicePriceListOverride()
+  });
 }
 
 function getInvoiceProductFamilies() {
@@ -1056,7 +1069,7 @@ export function compileActiveOrder() {
     amountDue,
     totalPayable,
     pricelistId,
-    priceListOverride: isExplicitInvoicePriceListOverride(),
+    priceListOverride: shouldRequestAuthoritativePriceListOverride(),
     priceListNameSnapshot: state.pricelists.find(priceList => priceList.id === pricelistId)?.name || '',
     priceSelectedBy: state.currentUser ? state.currentUser.username : 'admin',
     customerManagerId,
@@ -1249,15 +1262,6 @@ export async function saveActiveOrder(status = 'settled') {
               cust.totalTransaction = Math.round((cust.totalTransaction || 0) + persistedOrder.totalPayable);
               cust.netRevenue = Math.round((cust.netRevenue || 0) + persistedOrder.totalPayable);
               cust.lastOrderAt = persistedOrder.date || new Date().toISOString();
-              if (!cust.debtHistory) cust.debtHistory = [];
-              cust.debtHistory.push({
-                id: persistedOrder.id,
-                date: persistedOrder.date,
-                type: 'charge',
-                amount: debtAmount,
-                notes: `Mua hàng (Hóa đơn ${persistedOrder.id})`,
-                debtAfter: cust.debt
-              });
             }
             localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
           }
@@ -2429,7 +2433,17 @@ function selectInvoiceCustomer(customer) {
 // Lắng nghe sự kiện để đồng bộ render bảng khi load đơn nháp từ module history
 document.addEventListener('loadDraftOrder', (e) => {
   const { order, isReadOnly } = e.detail;
-  renderInvoiceTable();
+  if (isReadOnly) {
+    // A finalized read-only order keeps its immutable historical snapshots.
+    renderInvoiceTable();
+    return;
+  }
+
+  // Editable drafts/copies/amendments must be recalculated from the currently
+  // applicable database price list. Otherwise the lines and source badge keep
+  // stale prices from the previously viewed order while confirmation resolves
+  // the customer's current price list on the server.
+  applyActivePriceListToInvoice();
 });
 
 // Tải danh sách nhân viên quản lý chữ đỏ cho Thêm nhanh khách mới

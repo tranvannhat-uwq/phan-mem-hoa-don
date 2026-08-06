@@ -36,7 +36,8 @@ const migrationNames = [
   '0027_market_price_lists_are_print_only.sql',
   '0028_tt_20072026_requires_accounting_approval.sql',
   '0029_order_notes_annotation.sql',
-  '0030_cashbook_manual_transaction_edit.sql'
+  '0030_cashbook_manual_transaction_edit.sql',
+  '0031_customer_pricelist_priority_alignment.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
