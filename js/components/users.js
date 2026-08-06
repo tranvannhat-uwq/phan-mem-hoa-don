@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260805-authoritative-global1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260805-authoritative-global1';
-import { renderAll, switchTab } from '../main.js?v=20260805-authoritative-global1';
-import { populateManagedByDropdown } from './customers.js?v=20260805-authoritative-global1';
-import { exportBackupToExcel } from '../services/backup.js?v=20260805-authoritative-global1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260806-admin-user1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260806-admin-user1';
+import { renderAll, switchTab } from '../main.js?v=20260806-admin-user1';
+import { populateManagedByDropdown } from './customers.js?v=20260806-admin-user1';
+import { exportBackupToExcel } from '../services/backup.js?v=20260806-admin-user1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -110,11 +110,11 @@ export function openUserModal(userId = '') {
     title.innerText = 'Thêm tài khoản mới';
     document.getElementById('user-edit-id').value = '';
     usernameInput.removeAttribute('disabled');
-    passwordInput.removeAttribute('required');
+    passwordInput.setAttribute('required', '');
     passwordHelp.style.display = 'block';
     
     if (isExternalSelect) isExternalSelect.value = 'false';
-    passwordInput.disabled = true;
+    passwordInput.disabled = false;
     if (roleSelect) roleSelect.disabled = false;
     if (compSelect) compSelect.value = 'ABS_NORTH';
   } else {
@@ -218,6 +218,7 @@ export async function saveUser() {
   }
   const displayName = document.getElementById('user-displayname').value.trim();
   const role = document.getElementById('user-role').value;
+  const initialPassword = document.getElementById('user-password')?.value || '';
   
   if (!username || !displayName) {
     showToast('Tên đăng nhập và Tên hiển thị là bắt buộc!', 'danger');
@@ -231,8 +232,8 @@ export async function saveUser() {
       showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
       return;
     }
-    if (!isExternal) {
-      showToast('Tạo tài khoản đăng nhập trong Supabase Auth trước; profile sẽ tự sinh với role Sale.', 'warning');
+    if (!isExternal && initialPassword.length < 8) {
+      showToast('Mật khẩu khởi tạo phải có ít nhất 8 ký tự.', 'warning');
       return;
     }
     
@@ -266,7 +267,7 @@ export async function saveUser() {
     };
   }
   
-  const saved = await dbSaveUser(user);
+  const saved = await dbSaveUser(user, { initialPassword });
   if (saved) {
     // Profile/role chỉ lấy từ database; không lưu bản sao quyền trong browser.
     const idx = state.users.findIndex(u => u.id === user.id);
@@ -727,9 +728,11 @@ export function setupUserManagement() {
         }
       } else {
         if (passwordInput) {
-          passwordInput.removeAttribute('required');
+          const isNew = !document.getElementById('user-edit-id')?.value;
+          if (isNew) passwordInput.setAttribute('required', '');
+          else passwordInput.removeAttribute('required');
           passwordInput.value = '';
-          passwordInput.disabled = true;
+          passwordInput.disabled = !isNew;
         }
         if (roleSelect) roleSelect.disabled = false;
       }

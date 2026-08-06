@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260805-authoritative-global1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260805-authoritative-global1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260806-admin-user1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260806-admin-user1';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260805-authoritative-global1';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260806-admin-user1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -2686,20 +2686,44 @@ export async function dbDeleteAllOrders() {
 }
 
 // --- Thao tác CSDL chi tiết (Người dùng & Auth) ---
-export async function authRegisterOrUpdateUser(user, isNew) {
+async function getEdgeFunctionError(error, fallback) {
+  try {
+    const payload = await error?.context?.json?.();
+    return payload?.error || payload?.message || error?.message || fallback;
+  } catch (_) {
+    return error?.message || fallback;
+  }
+}
+
+export async function authRegisterOrUpdateUser(user, isNew, initialPassword = '') {
   if (!isCloudActive || !supabaseClient) return false;
   if (isNew && !user.isExternal) {
-    showToast('Hãy tạo tài khoản trong Supabase Auth trước. Website không tự tạo tài khoản hoặc tự gán role.', 'warning');
-    return false;
+    const { data, error } = await supabaseClient.functions.invoke('admin-create-user', {
+      body: {
+        email: user.username,
+        password: initialPassword,
+        displayName: user.displayName,
+        role: user.role,
+        companyId: user.companyId || 'ABS_NORTH'
+      }
+    });
+    if (error) {
+      throw new Error(await getEdgeFunctionError(error, 'Không thể tạo tài khoản đăng nhập.'));
+    }
+    if (!data?.user?.id || !data?.profile?.id) {
+      throw new Error('Supabase không trả về tài khoản vừa tạo.');
+    }
+    user.id = data.profile.id;
+    user.authUserId = data.user.id;
   }
   return true;
 }
 
-export async function dbSaveUser(user) {
+export async function dbSaveUser(user, { initialPassword = '' } = {}) {
   if (isCloudActive && supabaseClient) {
     try {
       const isNew = !state.users.some(existing => existing.id === user.id);
-      if (!(await authRegisterOrUpdateUser(user, isNew))) return false;
+      if (!(await authRegisterOrUpdateUser(user, isNew, initialPassword))) return false;
       const dbRow = {
         id: user.id,
         auth_user_id: user.authUserId || (/^[0-9a-f-]{36}$/i.test(String(user.id)) ? user.id : null),
