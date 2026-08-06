@@ -39,6 +39,67 @@ export function restoreCustomerDebtForCancelledReturn(balanceBefore, amount) {
 }
 
 /**
+ * Resolve the immutable balance snapshot created when an order was posted.
+ * Ledger row ids are not order ids (for example `dtx-ord-...`), so callers
+ * must match the dedicated orderId field. The id fallback only supports old
+ * browser-cached history entries created before the ledger was authoritative.
+ */
+export function getOrderDebtSnapshot(order = {}, customer = {}, ledgerSnapshot = null) {
+  const orderId = String(order.id || '');
+  const history = Array.isArray(customer?.debtHistory) ? customer.debtHistory : [];
+  const historyEntry = history.find(entry =>
+    String(entry?.orderId || '') === orderId
+    && (entry?.transactionType === 'order' || entry?.type === 'charge')
+  ) || history.find(entry =>
+    String(entry?.id || '') === orderId
+    && (entry?.transactionType === 'order' || entry?.type === 'charge')
+  );
+  const source = ledgerSnapshot || historyEntry;
+  if (!source) return null;
+
+  const debtBefore = Number(source.debtBefore ?? source.balance_before);
+  const debtAfter = Number(source.debtAfter ?? source.balance_after);
+  if (!Number.isFinite(debtBefore) || !Number.isFinite(debtAfter)) return null;
+  return { debtBefore: toDebtAmount(debtBefore), debtAfter: toDebtAmount(debtAfter) };
+}
+
+/**
+ * Return the ids of order-charge rows and their exact cancellation/amendment
+ * reversals. They remain in the ledger for audit, but the customer history UI
+ * may hide these zero-net pairs by default.
+ */
+export function getNeutralizedOrderDebtEntryIds(history = []) {
+  const entries = Array.isArray(history) ? history : [];
+  const byId = new Map(entries
+    .filter(entry => entry?.id)
+    .map(entry => [String(entry.id), entry]));
+  const hiddenIds = new Set();
+
+  for (const reversal of entries) {
+    const isOrderReversal = reversal?.transactionType === 'order_cancel' || reversal?.type === 'order_cancel';
+    const originalId = reversal?.reversalOfId ?? reversal?.reversal_of_id;
+    if (!isOrderReversal || !originalId) continue;
+
+    const original = byId.get(String(originalId));
+    const isOrderCharge = original?.transactionType === 'order' || original?.type === 'charge';
+    if (!isOrderCharge) continue;
+
+    const originalOrderId = original?.orderId ?? original?.order_id;
+    const reversalOrderId = reversal?.orderId ?? reversal?.order_id;
+    if (originalOrderId && reversalOrderId && String(originalOrderId) !== String(reversalOrderId)) continue;
+
+    const originalChange = Number(original?.debtChange ?? original?.debt_change);
+    const reversalChange = Number(reversal?.debtChange ?? reversal?.debt_change);
+    if (!Number.isFinite(originalChange) || !Number.isFinite(reversalChange)) continue;
+    if (toDebtAmount(originalChange + reversalChange) !== 0) continue;
+
+    hiddenIds.add(String(original.id));
+    hiddenIds.add(String(reversal.id));
+  }
+  return hiddenIds;
+}
+
+/**
  * The database ledger is authoritative. Older browser builds also cached an
  * optimistic order entry whose id was the order id itself. Once the real
  * ledger row arrives, discard that cached twin instead of showing both rows.

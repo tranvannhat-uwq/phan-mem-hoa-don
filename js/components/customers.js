@@ -5,7 +5,7 @@ import { renderAll } from '../main.js?v=20260806-admin-user1';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260806-admin-user1';
 import { addCashbookTransaction } from './so_quy.js?v=20260806-admin-user1';
 import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260806-admin-user1';
-import { collectCustomerDebt } from '../domain/customer-debt.js';
+import { collectCustomerDebt, getNeutralizedOrderDebtEntryIds } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
@@ -2832,6 +2832,12 @@ export async function openCustomerDetailModal(index) {
 
   modal.classList.add('active');
 
+  const technicalHistoryToggle = document.getElementById('customer-debt-show-technical');
+  if (technicalHistoryToggle) {
+    technicalHistoryToggle.checked = false;
+    technicalHistoryToggle.disabled = true;
+  }
+
   const loadingHistoryBody = document.getElementById('detail-debt-history-body');
   if (loadingHistoryBody) {
     loadingHistoryBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
@@ -2916,6 +2922,7 @@ export async function openCustomerDetailModal(index) {
   const historyBody = document.getElementById('detail-debt-history-body');
   if (historyBody) {
     const history = cust.debtHistory || [];
+    const neutralizedEntryIds = getNeutralizedOrderDebtEntryIds(history);
     
     // Sắp xếp theo ngày giờ mới nhất lên trên
     const sortedHistory = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -2929,7 +2936,11 @@ export async function openCustomerDetailModal(index) {
         </tr>
       `;
     } else {
-      historyBody.innerHTML = sortedHistory.map(h => {
+      const hiddenOrderCount = Math.floor(neutralizedEntryIds.size / 2);
+      const compactNotice = hiddenOrderCount > 0
+        ? `<tr class="customer-debt-compact-notice"><td colspan="7" style="text-align:center; padding:0.65rem; color:var(--text-muted); background:var(--bg-secondary);">Đã ẩn ${hiddenOrderCount} đơn đã hủy hoặc bản cũ đã được thay thế. Bật “Hiện bút toán đã triệt tiêu” để kiểm tra.</td></tr>`
+        : '';
+      historyBody.innerHTML = compactNotice + sortedHistory.map(h => {
         let typeBadge = '';
         let amountText = '';
         let debtBefore = 0;
@@ -2978,8 +2989,9 @@ export async function openCustomerDetailModal(index) {
           hour: '2-digit', minute: '2-digit'
         }).format(transactionDate);
         
+        const isNeutralized = neutralizedEntryIds.has(String(h.id || ''));
         return `
-          <tr>
+          <tr${isNeutralized ? ' class="customer-debt-neutralized-row" style="display:none;"' : ''}>
             <td class="customer-debt-time-cell"><strong>${formattedDate}</strong><span>${formattedTime}</span></td>
             <td class="customer-debt-source-cell">${sourceCell}</td>
             <td style="text-align: center;">${typeBadge}</td>
@@ -3006,6 +3018,18 @@ export async function openCustomerDetailModal(index) {
           await openCustomerDebtSourceDetail({ kind: sourceKind, id: sourceId }, historyEntry, cust);
         });
       });
+
+      if (technicalHistoryToggle) {
+        technicalHistoryToggle.disabled = neutralizedEntryIds.size === 0;
+        technicalHistoryToggle.onchange = () => {
+          const showTechnical = technicalHistoryToggle.checked;
+          historyBody.querySelectorAll('.customer-debt-neutralized-row').forEach(row => {
+            row.style.display = showTechnical ? '' : 'none';
+          });
+          const notice = historyBody.querySelector('.customer-debt-compact-notice');
+          if (notice) notice.style.display = showTechnical ? 'none' : '';
+        };
+      }
     }
   }
 

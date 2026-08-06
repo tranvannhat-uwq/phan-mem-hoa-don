@@ -3938,6 +3938,33 @@ export async function dbAdjustCustomerDebt(customerId, newDebt, description, _cr
 
 // --- BỘ LỌC VÀ PHÂN TRANG HIỆU NĂNG CAO (SERVER-SIDE PAGINATION & LAZY LOADING) ---
 
+// Read only the ledger snapshot needed by the sales-invoice printout. This is
+// intentionally scoped to one order and does not refresh or mutate other pages.
+export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
+  if (!isCloudActive || !supabaseClient || !orderId || !customerId) return null;
+  try {
+    const { data, error } = await supabaseClient
+      .from(tableCustomerDebtTransactionsName)
+      .select('order_id,customer_id,transaction_type,balance_before,balance_after,transaction_date')
+      .eq('order_id', orderId)
+      .eq('customer_id', customerId)
+      .eq('transaction_type', 'order')
+      .order('transaction_date', { ascending: true })
+      .limit(1);
+    if (error) throw error;
+    const row = data?.[0];
+    if (!row) return null;
+    return {
+      orderId: row.order_id,
+      debtBefore: Number(row.balance_before),
+      debtAfter: Number(row.balance_after)
+    };
+  } catch (error) {
+    console.warn('Could not load order debt snapshot for printing:', error);
+    return null;
+  }
+}
+
 // Phase 5 summaries and payroll are authoritative database calculations.
 export async function dbFetchPhase5Dashboard(filters = {}) {
   if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải báo cáo chính xác.');

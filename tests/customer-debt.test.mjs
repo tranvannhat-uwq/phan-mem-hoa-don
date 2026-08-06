@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {
   chargeCustomerDebt,
   collectCustomerDebt,
+  getNeutralizedOrderDebtEntryIds,
+  getOrderDebtSnapshot,
   getOrderOutstandingAmount,
   mergeCustomerDebtHistory,
   reduceCustomerDebtForReturn,
@@ -36,5 +38,22 @@ const mergedHistory = mergeCustomerDebtHistory([
   }
 ]);
 assert.deepEqual(mergedHistory.map(item => item.id), ['legacy-payment', 'dtx-ord-HD-001']);
+
+assert.deepEqual(getOrderDebtSnapshot({ id: 'HD-001' }, { debtHistory: mergedHistory }), {
+  debtBefore: 400,
+  debtAfter: 1840400
+}, 'Invoice debt uses the ledger orderId instead of mistaking the ledger id for an order id');
+
+assert.deepEqual(getOrderDebtSnapshot({ id: 'HD-002' }, { debtHistory: [] }, {
+  orderId: 'HD-002', debtBefore: -13898778, debtAfter: -407803
+}), { debtBefore: -13898778, debtAfter: -407803 }, 'A targeted cloud snapshot is accepted without mutating customer state');
+
+const compactedIds = getNeutralizedOrderDebtEntryIds([
+  { id: 'charge-old', orderId: 'HD-OLD', transactionType: 'order', debtChange: 13490975 },
+  { id: 'reverse-old', orderId: 'HD-OLD', transactionType: 'order_cancel', debtChange: -13490975, reversalOfId: 'charge-old' },
+  { id: 'charge-new', orderId: 'HD-NEW', transactionType: 'order', debtChange: 13490975 },
+  { id: 'unrelated-adjust', transactionType: 'adjust', debtChange: -1000 }
+]);
+assert.deepEqual([...compactedIds].sort(), ['charge-old', 'reverse-old']);
 
 console.log('customer-debt.test.mjs: all assertions passed');

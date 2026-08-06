@@ -2635,10 +2635,16 @@
 
         <!-- Debt History Section -->
         <div>
-          <h4 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
-            <i data-lucide="history" style="width: 18px; height: 18px; color: var(--color-secondary);"></i>
-            Lịch sử biến động công nợ
-          </h4>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem; flex-wrap:wrap;">
+            <h4 style="font-size: 1rem; font-weight: 600; margin: 0; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+              <i data-lucide="history" style="width: 18px; height: 18px; color: var(--color-secondary);"></i>
+              Lịch sử biến động công nợ
+            </h4>
+            <label style="display:flex; align-items:center; gap:0.4rem; color:var(--text-muted); font-size:0.82rem; cursor:pointer;">
+              <input type="checkbox" id="customer-debt-show-technical">
+              Hiện bút toán đã triệt tiêu
+            </label>
+          </div>
           
           <div class="table-container customer-debt-history-scroll">
             <table class="table customer-debt-history-table">
