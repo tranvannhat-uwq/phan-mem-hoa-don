@@ -35,7 +35,8 @@
     <section class="history-summary-bar">
       <div class="history-summary-item"><span>Tổng tiền hàng</span><strong id="history-total-before-discount">0</strong></div>
       <div class="history-summary-item"><span>Giảm giá</span><strong id="history-total-discount">0</strong></div>
-      <div class="history-summary-item"><span>Tổng sau giảm giá</span><strong id="history-total-after-discount">0</strong></div>
+      <div class="history-summary-item"><span>Thu khác</span><strong id="history-total-other-fee">0</strong></div>
+      <div class="history-summary-item"><span>Tổng thanh toán</span><strong id="history-total-payable">0</strong></div>
       <div id="history-total-settled-count"></div>
     </section>
     <div class="history-grid details-mode" id="history-orders-container"></div>
@@ -65,9 +66,10 @@
         createdBy: 'admin',
         date: '2026-07-01T08:00:00Z',
         status: 'settled',
-        items: [{ productName: 'SP A', package: 'Lon', quantity: 2, price: 100000, discountPercent: 10 }],
+        items: [{ productName: 'SP A', package: 'Lon', quantity: 1, price: 600000 }],
         discountType: 'amount',
-        discountValue: 20000
+        discountValue: 18000,
+        shippingFeeAmount: 56000
       },
       {
         id: 'HD-2',

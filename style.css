@@ -2072,6 +2072,10 @@ select option {
   color: #f59e0b;
 }
 
+.history-money-other-fee {
+  color: #2563eb;
+}
+
 .history-money-total {
   color: var(--color-primary);
   font-size: 0.95rem;
@@ -2079,7 +2083,7 @@ select option {
 
 .history-summary-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
   align-items: center;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
@@ -2114,6 +2118,10 @@ select option {
 
 .history-summary-item .history-summary-discount {
   color: #d97706;
+}
+
+.history-summary-item .history-summary-other-fee {
+  color: #2563eb;
 }
 
 .history-summary-item .history-summary-after {
@@ -2667,7 +2675,7 @@ select option {
   }
 
   .history-summary-bar {
-    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
 
   .history-summary-meta {

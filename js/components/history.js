@@ -96,22 +96,25 @@ function orderIsVisibleToSale(order, user, lookups) {
 function updateHistorySummary(orders, lookups) {
   const beforeDiscountEl = document.getElementById('history-total-before-discount');
   const discountEl = document.getElementById('history-total-discount');
-  const afterDiscountEl = document.getElementById('history-total-after-discount');
+  const otherFeeEl = document.getElementById('history-total-other-fee');
+  const payableEl = document.getElementById('history-total-payable');
   const countEl = document.getElementById('history-total-settled-count');
-  if (!beforeDiscountEl || !discountEl || !afterDiscountEl || !countEl) return;
+  if (!beforeDiscountEl || !discountEl || !otherFeeEl || !payableEl || !countEl) return;
 
   const settledOrders = (orders || []).filter(isOrderIncludedInFinancialSummary);
   const totals = settledOrders.reduce((summary, order) => {
     const breakdown = getHistoryOrderAmountBreakdown(order, lookups);
     summary.totalBeforeDiscount += breakdown.totalBeforeDiscount;
     summary.totalDiscountAmount += breakdown.totalDiscountAmount;
-    summary.totalAfterDiscount += breakdown.totalAfterDiscount;
+    summary.shippingFeeAmount += breakdown.shippingFeeAmount;
+    summary.totalPayment += breakdown.totalPayment;
     return summary;
-  }, { totalBeforeDiscount: 0, totalDiscountAmount: 0, totalAfterDiscount: 0 });
+  }, { totalBeforeDiscount: 0, totalDiscountAmount: 0, shippingFeeAmount: 0, totalPayment: 0 });
 
   beforeDiscountEl.innerText = formatNumber(totals.totalBeforeDiscount);
   discountEl.innerText = formatNumber(totals.totalDiscountAmount);
-  afterDiscountEl.innerText = formatNumber(totals.totalAfterDiscount);
+  otherFeeEl.innerText = formatNumber(totals.shippingFeeAmount);
+  payableEl.innerText = formatNumber(totals.totalPayment);
   countEl.innerText = `${settledOrders.length} / ${(orders || []).length} đơn hợp lệ`;
 }
 
@@ -169,7 +172,8 @@ function getHistoryOrderPaymentSummary(order, amountBreakdown) {
   return {
     totalGoods: Number(amountBreakdown.totalBeforeDiscount || 0),
     invoiceDiscount: Number.isFinite(invoiceDiscount) ? Math.max(0, invoiceDiscount) : 0,
-    customerPayable: Number(amountBreakdown.totalAfterDiscount || 0),
+    shippingFeeAmount: Number(amountBreakdown.shippingFeeAmount || 0),
+    customerPayable: Number(amountBreakdown.totalPayment || 0),
     paidAmount: Number.isFinite(paidAmount) ? Math.max(0, paidAmount) : 0
   };
 }
@@ -760,7 +764,10 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
             <div class="history-money-cell history-money-discount">${formatNumber(amountBreakdown.totalDiscountAmount)}</div>
           </td>
           <td style="text-align: right;">
-            <div class="history-money-cell history-money-total">${formatNumber(amountBreakdown.totalAfterDiscount)}</div>
+            <div class="history-money-cell history-money-other-fee">${formatNumber(amountBreakdown.shippingFeeAmount)}</div>
+          </td>
+          <td style="text-align: right;">
+            <div class="history-money-cell history-money-total">${formatNumber(amountBreakdown.totalPayment)}</div>
           </td>
           <td class="history-row-toggle-cell" style="text-align: center;">
             <button type="button" class="history-row-toggle" data-id="${escapeHistoryHtml(orderId)}"
@@ -770,7 +777,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
           </td>
         </tr>
         <tr id="${detailId}" class="history-expanded-row${isExpanded ? ' is-expanded' : ''}" aria-hidden="${!isExpanded}">
-          <td colspan="10">
+          <td colspan="11">
             <div class="history-expanded-motion">
               <div class="history-expanded-motion-inner">
                 <section class="history-expanded-panel" aria-label="Chi tiết thao tác đơn ${escapeHistoryHtml(displayOrderCode)}" ${isExpanded ? '' : 'inert'}>
@@ -783,6 +790,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                   <dl class="history-expanded-payment">
                     <div><dt>Tổng tiền hàng</dt><dd>${formatCurrency(paymentSummary.totalGoods)}</dd></div>
                     <div><dt>Giảm giá hóa đơn</dt><dd>${formatCurrency(paymentSummary.invoiceDiscount)}</dd></div>
+                    <div><dt>Thu khác</dt><dd>${formatCurrency(paymentSummary.shippingFeeAmount)}</dd></div>
                     <div class="history-expanded-payable"><dt>Khách cần trả</dt><dd>${formatCurrency(paymentSummary.customerPayable)}</dd></div>
                     <div><dt>Khách đã trả</dt><dd>${formatCurrency(paymentSummary.paidAmount)}</dd></div>
                   </dl>
@@ -842,7 +850,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
     ordersContentHtml = `
       <div class="table-responsive glass-panel" style="padding: 0.5rem; width: 100%; border-radius: 12px; grid-column: 1 / -1;">
-        <table class="table history-details-table" style="min-width: 1250px;">
+        <table class="table history-details-table" style="min-width: 1375px;">
           <thead>
             <tr>
               <th style="width: 42px; text-align: center;"><input type="checkbox" id="history-select-all-export" title="Chọn tất cả đơn trên trang"></th>
@@ -853,7 +861,8 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <th style="width: 120px;">Bảng giá</th>
               <th style="width: 140px; text-align: right;">Tổng tiền hàng</th>
               <th style="width: 125px; text-align: right;">Giảm giá</th>
-              <th style="width: 145px; text-align: right;">Tổng sau giảm giá</th>
+              <th style="width: 120px; text-align: right;">Thu khác</th>
+              <th style="width: 145px; text-align: right;">Tổng thanh toán</th>
               <th style="width: 140px; text-align: center;">Thao tác</th>
             </tr>
           </thead>
@@ -958,7 +967,8 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
             <div class="history-card-financials">
               <div><span>Tổng tiền hàng</span><strong>${formatNumber(amountBreakdown.totalBeforeDiscount)}</strong></div>
               <div><span>Giảm giá</span><strong class="history-money-discount">${formatNumber(amountBreakdown.totalDiscountAmount)}</strong></div>
-              <div><span>Tổng sau giảm giá</span><strong class="history-money-total">${formatNumber(amountBreakdown.totalAfterDiscount)}</strong></div>
+              <div><span>Thu khác</span><strong class="history-money-other-fee">${formatNumber(amountBreakdown.shippingFeeAmount)}</strong></div>
+              <div><span>Tổng thanh toán</span><strong class="history-money-total">${formatNumber(amountBreakdown.totalPayment)}</strong></div>
             </div>
             
             <div class="order-actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(75px, 1fr)); gap: 0.35rem;">

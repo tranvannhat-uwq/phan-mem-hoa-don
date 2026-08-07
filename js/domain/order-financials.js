@@ -153,26 +153,48 @@ export function getOrderFinancialBreakdown(order, salesReturns = []) {
   invoiceDiscount = Math.min(afterItemDiscount, Math.max(0, invoiceDiscount));
   let totalDiscountAmount = productDiscount + invoiceDiscount;
   let totalAfterDiscount = Math.max(0, totalBeforeDiscount - totalDiscountAmount);
+  const storedOtherFee = numberOrNull(order.otherFeeAmount) ?? numberOrNull(order.other_fee_amount);
+  const otherFeeValue = nonNegative(order.otherFeeValue ?? order.other_fee_value);
+  const otherFeeType = String(order.otherFeeType ?? order.other_fee_type ?? 'amount').toLowerCase();
+  let otherFeeAmount = storedOtherFee !== null
+    ? Math.round(nonNegative(storedOtherFee))
+    : Math.round(otherFeeType === 'percent' ? totalAfterDiscount * otherFeeValue / 100 : otherFeeValue);
+  let totalPayable = totalAfterDiscount + otherFeeAmount;
+  const storedShippingFee = numberOrNull(order.shippingFeeAmount) ?? numberOrNull(order.shipping_fee_amount);
+  const shippingFeeAmount = Math.round(nonNegative(
+    storedShippingFee ?? order.shippingFeeValue ?? order.shipping_fee_value
+  ));
 
-  const returnedAmount = Math.min(totalAfterDiscount, Math.round(activeReturnAmount(order, salesReturns)));
+  const returnedAmount = Math.min(totalPayable, Math.round(activeReturnAmount(order, salesReturns)));
   if (returnedAmount > 0) {
-    const remainingAfterDiscount = totalAfterDiscount - returnedAmount;
-    const remainingRatio = totalAfterDiscount > 0 ? remainingAfterDiscount / totalAfterDiscount : 0;
+    const remainingRatio = totalPayable > 0 ? (totalPayable - returnedAmount) / totalPayable : 0;
     totalBeforeDiscount = Math.round(totalBeforeDiscount * remainingRatio);
-    totalAfterDiscount = remainingAfterDiscount;
+    totalAfterDiscount = Math.round(totalAfterDiscount * remainingRatio);
+    otherFeeAmount = Math.round(otherFeeAmount * remainingRatio);
     totalDiscountAmount = Math.max(0, totalBeforeDiscount - totalAfterDiscount);
+    totalPayable = totalAfterDiscount + otherFeeAmount;
   }
 
-  if (String(order.status || '').toLowerCase() === 'returned' && totalAfterDiscount > 0 && returnedAmount === 0) {
+  if (String(order.status || '').toLowerCase() === 'returned' && totalPayable > 0 && returnedAmount === 0) {
     totalBeforeDiscount = 0;
     totalDiscountAmount = 0;
     totalAfterDiscount = 0;
+    otherFeeAmount = 0;
+    totalPayable = 0;
   }
+
+  // The invoice form calls shipping_fee_amount "Thu khác". It is persisted
+  // outside orders.total_payable and is added to the final customer payment.
+  const totalPayment = totalPayable + shippingFeeAmount;
 
   return {
     totalBeforeDiscount,
     totalDiscountAmount,
     totalAfterDiscount,
+    otherFeeAmount,
+    totalPayable,
+    shippingFeeAmount,
+    totalPayment,
     returnedAmount,
     isRevenueEligible: isOrderIncludedInFinancialSummary(order)
   };

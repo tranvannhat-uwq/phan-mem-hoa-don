@@ -16,7 +16,7 @@ test('details table renders one accessible expandable row pair per order', () =>
   assert.match(tableBranch, /class="history-order-row\$\{isExpanded/);
   assert.match(tableBranch, /tabindex="0" role="button" aria-expanded="\$\{isExpanded\}" aria-controls="\$\{detailId\}"/);
   assert.match(tableBranch, /class="history-expanded-row\$\{isExpanded/);
-  assert.match(tableBranch, /<td colspan="10">/);
+  assert.match(tableBranch, /<td colspan="11">/);
   assert.match(tableBranch, /class="history-row-toggle"/);
   assert.match(tableBranch, /data-lucide="chevron-down"/);
   assert.doesNotMatch(tableBranch.match(/<td class="history-row-toggle-cell"[\s\S]*?<\/td>/)?.[0] || '', /history-(?:print|copy|edit|view|return|cancel|delete)-btn/);
@@ -27,6 +27,7 @@ test('expanded panel uses real notes, payment fields and existing action handler
   assert.match(tableBranch, /escapeHistoryHtml\(order\.notes \|\| ''\)/);
   assert.match(tableBranch, /paymentSummary\.totalGoods/);
   assert.match(tableBranch, /paymentSummary\.invoiceDiscount/);
+  assert.match(tableBranch, /paymentSummary\.shippingFeeAmount/);
   assert.match(tableBranch, /paymentSummary\.customerPayable/);
   assert.match(tableBranch, /paymentSummary\.paidAmount/);
   for (const action of ['notes', 'view', 'edit', 'copy', 'print', 'return', 'cancel', 'delete']) {

@@ -9,6 +9,8 @@ function assertInvariant(result) {
     result.totalBeforeDiscount - result.totalDiscountAmount,
     result.totalAfterDiscount
   );
+  assert.equal(result.totalAfterDiscount + result.otherFeeAmount, result.totalPayable);
+  assert.equal(result.totalPayable + result.shippingFeeAmount, result.totalPayment);
 }
 
 const noDiscount = getOrderFinancialBreakdown({
@@ -81,6 +83,25 @@ assert.deepEqual(
   [150000, 30000, 120000]
 );
 
+const orderWithOtherCharge = getOrderFinancialBreakdown({
+  id: 'OTHER-CHARGE',
+  status: 'settled',
+  items: [{ quantity: 1, price: 600000 }],
+  discountAmount: 18000,
+  shipping_fee_amount: 56000,
+  totalPayable: 582000
+});
+assert.deepEqual(
+  [
+    orderWithOtherCharge.totalBeforeDiscount,
+    orderWithOtherCharge.totalDiscountAmount,
+    orderWithOtherCharge.totalAfterDiscount,
+    orderWithOtherCharge.shippingFeeAmount,
+    orderWithOtherCharge.totalPayment
+  ],
+  [600000, 18000, 582000, 56000, 638000]
+);
+
 const partialReturn = getOrderFinancialBreakdown({
   id: 'E',
   status: 'partially_returned',
@@ -110,7 +131,7 @@ assert.deepEqual(
   [0, 0, 0]
 );
 
-[noDiscount, lineAndAmountDiscount, percentDiscount, authoritativeCombinedDiscount, oldOrder, partialReturn, fullReturn].forEach(assertInvariant);
+[noDiscount, lineAndAmountDiscount, percentDiscount, authoritativeCombinedDiscount, oldOrder, orderWithOtherCharge, partialReturn, fullReturn].forEach(assertInvariant);
 assert.equal(isOrderIncludedInFinancialSummary({ status: 'settled' }), true);
 assert.equal(isOrderIncludedInFinancialSummary({ status: 'cancelled' }), false);
 assert.equal(isOrderIncludedInFinancialSummary({ status: 'draft' }), false);
