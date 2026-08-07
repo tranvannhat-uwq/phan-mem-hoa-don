@@ -22,7 +22,7 @@ test('stateful browser modules use one URL identity across the entire import gra
   });
 
   const versions = new Set(imports.map(item => item.version));
-  assert.deepEqual([...versions], ['20260806-admin-user1']);
+  assert.deepEqual([...versions], ['20260807-receipt-debt1']);
 
   for (const moduleName of ['main.js', 'services/supabase.js']) {
     const identities = new Set(imports

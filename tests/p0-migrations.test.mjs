@@ -37,7 +37,8 @@ const migrationNames = [
   '0028_tt_20072026_requires_accounting_approval.sql',
   '0029_order_notes_annotation.sql',
   '0030_cashbook_manual_transaction_edit.sql',
-  '0031_customer_pricelist_priority_alignment.sql'
+  '0031_customer_pricelist_priority_alignment.sql',
+  '0032_reconcile_legacy_customer_receipts.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 

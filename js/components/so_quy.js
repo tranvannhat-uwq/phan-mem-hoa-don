@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
-import { renderAll } from '../main.js?v=20260806-admin-user1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260806-admin-user1';
-import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260806-admin-user1';
+import { renderAll } from '../main.js?v=20260807-receipt-debt1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260807-receipt-debt1';
+import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260807-receipt-debt1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -100,6 +100,37 @@ function findCustomerByInput(input) {
       || (code && clean === code)
       || (name && code && (clean === `${name} — ${code}` || clean === `${name} - ${code}`));
   }) || null;
+}
+
+function getLegacyReceiptCustomer(transaction = {}) {
+  const transactionType = normalizeText(transaction.transactionType);
+  const supportedLegacyTypes = ['', 'manual_thu', 'thu nợ khách hàng', 'thu tiền khách hàng'];
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)
+      || transaction.type !== 'thu'
+      || isCancelledStatus(transaction.status)
+      || transaction.debtImpact
+      || !supportedLegacyTypes.includes(transactionType)) {
+    return null;
+  }
+  const category = normalizeText(`${transaction.category || ''} ${transaction.note || ''}`);
+  if (!category.includes('nợ')
+      && !category.includes('tiền hàng')
+      && !category.includes('tiền khách hàng')
+      && !category.includes('trả trước')) {
+    return null;
+  }
+  if (transaction.customerId) {
+    return (state.customers || []).find(customer => String(customer.id) === String(transaction.customerId)) || null;
+  }
+  const clean = normalizeText(transaction.partner);
+  const matches = (state.customers || []).filter(customer => {
+    const name = normalizeText(customer.name);
+    const code = normalizeText(customer.code);
+    return clean === name
+      || (code && clean === code)
+      || (name && code && (clean === `${name} — ${code}` || clean === `${name} - ${code}`));
+  });
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function findSupplierByInput(input) {
@@ -538,11 +569,21 @@ export function setupSoQuyPanel() {
           return;
         }
 
-        matchedCustomer.debt = newDebt;
-        matchedCustomer.lastPaymentAt = new Date().toISOString();
-        if (!paymentResult.already_recorded) {
-          if (!matchedCustomer.debtHistory) matchedCustomer.debtHistory = [];
-          matchedCustomer.debtHistory.push({
+        // Re-read the authoritative balance after the transaction. Realtime can
+        // replace the customer object while the RPC is in flight, so mutating
+        // matchedCustomer here may otherwise update a detached, stale object.
+        const refreshedCustomer = await dbRefreshCustomerFinancialState(matchedCustomer.id);
+        const currentCustomer = refreshedCustomer
+          || state.customers.find(customer => String(customer.id) === String(matchedCustomer.id))
+          || matchedCustomer;
+
+        if (!refreshedCustomer) {
+          currentCustomer.debt = newDebt;
+          currentCustomer.lastPaymentAt = new Date().toISOString();
+        }
+        if (!refreshedCustomer && !paymentResult.already_recorded) {
+          if (!currentCustomer.debtHistory) currentCustomer.debtHistory = [];
+          currentCustomer.debtHistory.push({
             id: paymentResult.ledger_id || `pay-${finalCode}`,
             date: new Date().toISOString(),
             type: 'payment',
@@ -553,7 +594,7 @@ export function setupSoQuyPanel() {
         }
         localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
 
-        newTx.customerId = matchedCustomer.id;
+        newTx.customerId = currentCustomer.id;
         newTx.cloudId = paymentResult.cashbook_id || null;
         newTx.debtImpact = true;
       } else {
@@ -1304,6 +1345,41 @@ function showTransactionDetails(txId) {
       newEditBtn.addEventListener('click', () => {
         detailModal.classList.remove('active');
         openCashbookEditModal(t);
+      });
+    }
+  }
+
+  const reconcileBtn = document.getElementById('btn-reconcile-customer-receipt');
+  if (reconcileBtn) {
+    const newReconcileBtn = reconcileBtn.cloneNode(true);
+    reconcileBtn.parentNode.replaceChild(newReconcileBtn, reconcileBtn);
+    const legacyCustomer = getLegacyReceiptCustomer(t);
+    newReconcileBtn.style.display = legacyCustomer ? 'inline-flex' : 'none';
+    if (legacyCustomer) {
+      newReconcileBtn.addEventListener('click', async () => {
+        const cashbookId = getCanonicalCashbookId(t);
+        if (!cashbookId) {
+          showToast('Không xác định được mã phiếu Cloud. Dữ liệu chưa thay đổi.', 'danger');
+          return;
+        }
+        if (!confirm(`Ghi phiếu ${t.id} vào công nợ của ${legacyCustomer.name}? Công nợ sẽ giảm ${formatCurrency(t.value)}.`)) return;
+
+        newReconcileBtn.disabled = true;
+        try {
+          const result = await dbReconcileLegacyCustomerReceipt(cashbookId, legacyCustomer.id);
+          if (!result) return;
+          await Promise.all([
+            dbRefreshCustomerFinancialState(legacyCustomer.id),
+            dbFetchCashbookTransactions()
+          ]);
+          detailModal.classList.remove('active');
+          renderAll();
+          showToast(result.already_reconciled
+            ? 'Phiếu thu này đã có trong lịch sử công nợ.'
+            : `Đã ghi phiếu ${t.id} vào lịch sử và cập nhật công nợ ${legacyCustomer.name}.`, 'success');
+        } finally {
+          newReconcileBtn.disabled = false;
+        }
       });
     }
   }

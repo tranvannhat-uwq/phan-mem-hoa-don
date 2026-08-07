@@ -145,6 +145,11 @@ in a way that supports the signed balance convention from `0019`. Admin and
 Accounting may set either a receivable or advance-credit balance, but every
 change still requires a reason and appends both debt-ledger and audit records.
 
+Migration `0032` repairs a legacy receipt that was saved only as a manual
+cashbook row. Admin/Accounting explicitly selects the voucher and its uniquely
+matched customer; the RPC atomically adds the missing payment and debt-ledger
+rows, updates the balance, audits the repair and is safe to retry.
+
 Migration `0021` registers the active order, customer, cashbook and catalog tables
 with Supabase Realtime. It changes publication metadata only, preserves every
 business row and continues to rely on the existing RLS policies for event access.

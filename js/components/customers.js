@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactions, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260806-admin-user1';
-import { renderAll } from '../main.js?v=20260806-admin-user1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260806-admin-user1';
-import { addCashbookTransaction } from './so_quy.js?v=20260806-admin-user1';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260806-admin-user1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactions, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260807-receipt-debt1';
+import { renderAll } from '../main.js?v=20260807-receipt-debt1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260807-receipt-debt1';
+import { addCashbookTransaction } from './so_quy.js?v=20260807-receipt-debt1';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260807-receipt-debt1';
 import { collectCustomerDebt, getNeutralizedOrderDebtEntryIds } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
@@ -1423,21 +1423,31 @@ export async function handlePayDebtSubmit(e) {
   }
 
   const rpcDebt = Number(paymentResult.new_debt);
-  cust.debt = Number.isFinite(rpcDebt)
+  const fallbackDebt = Number.isFinite(rpcDebt)
     ? rpcDebt
     : collectCustomerDebt(debtBefore, amountPaid);
-  cust.lastPaymentAt = new Date().toISOString();
+  // The customer UPDATE and ledger INSERT can reach Realtime before this await
+  // resumes. Refresh by id so the UI never writes the receipt result into an
+  // object that Realtime has already replaced in state.customers.
+  const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id);
+  const currentCustomer = refreshedCustomer
+    || state.customers.find(customer => String(customer.id) === String(cust.id))
+    || cust;
+  if (!refreshedCustomer) {
+    currentCustomer.debt = fallbackDebt;
+    currentCustomer.lastPaymentAt = new Date().toISOString();
+  }
   
   // Idempotent retry must not duplicate the local display cache.
-  if (!paymentResult.already_recorded) {
-    if (!cust.debtHistory) cust.debtHistory = [];
-    cust.debtHistory.push({
+  if (!refreshedCustomer && !paymentResult.already_recorded) {
+    if (!currentCustomer.debtHistory) currentCustomer.debtHistory = [];
+    currentCustomer.debtHistory.push({
       id: paymentResult.ledger_id || `pay-${pendingCustomerPaymentKey}`,
       date: new Date().toISOString(),
       type: 'payment',
       amount: amountPaid,
       notes: notes,
-      debtAfter: cust.debt
+      debtAfter: currentCustomer.debt
     });
   }
   
@@ -1445,7 +1455,7 @@ export async function handlePayDebtSubmit(e) {
   addCashbookTransaction({
       type: 'thu',
       category: 'Thu tiền khách hàng / Trả trước',
-      partner: cust.name,
+      partner: currentCustomer.name,
       value: amountPaid,
       method: 'cash',
       accounting: true,
@@ -1453,16 +1463,16 @@ export async function handlePayDebtSubmit(e) {
       creator: currentUserDisp,
       id: paymentResult.cashbook_id || '',
       cloudId: paymentResult.cashbook_id || null,
-      customerId: cust.id,
+      customerId: currentCustomer.id,
       debtImpact: true,
       syncToCloud: false
     });
     closePayDebtModal();
     renderAll();
-    const balanceMessage = cust.debt < 0
-      ? ` Khách đang có ${formatCurrency(Math.abs(cust.debt))} tiền trả trước.`
-      : ` Công nợ còn lại ${formatCurrency(cust.debt)}.`;
-    showToast(`Đã nhận ${formatCurrency(amountPaid)} từ khách hàng ${cust.name}.${balanceMessage}`, 'success');
+    const balanceMessage = currentCustomer.debt < 0
+      ? ` Khách đang có ${formatCurrency(Math.abs(currentCustomer.debt))} tiền trả trước.`
+      : ` Công nợ còn lại ${formatCurrency(currentCustomer.debt)}.`;
+    showToast(`Đã nhận ${formatCurrency(amountPaid)} từ khách hàng ${currentCustomer.name}.${balanceMessage}`, 'success');
 }
 
 export function openCustomerDebtAdjustModal() {

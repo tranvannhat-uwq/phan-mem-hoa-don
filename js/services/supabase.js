@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260806-admin-user1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260806-admin-user1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260807-receipt-debt1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260807-receipt-debt1';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260806-admin-user1';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260807-receipt-debt1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -3741,6 +3741,33 @@ export async function dbRecordCustomerPayment(customerId, amount, notes, payment
 
 export async function dbCancelCustomerPayment(cashbookId, _createdBy) {
   return dbCancelCashbookEntry(cashbookId, 'Hủy phiếu thu công nợ');
+}
+
+export async function dbReconcileLegacyCustomerReceipt(cashbookId, customerId) {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Đối soát phiếu thu cũ cần kết nối Cloud.', 'danger');
+    return false;
+  }
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
+    showToast('Chỉ Admin hoặc Kế toán được đối soát phiếu thu cũ.', 'danger');
+    return false;
+  }
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_reconcile_legacy_customer_receipt', {
+      p_cashbook_id: String(cashbookId || ''),
+      p_customer_id: String(customerId || '')
+    });
+    if (error) throw error;
+    return data || { success: true };
+  } catch (error) {
+    console.error('RPC reconcile legacy customer receipt error:', error);
+    const missingRpc = error?.code === 'PGRST202'
+      || String(error?.message || '').includes('rpc_reconcile_legacy_customer_receipt');
+    showToast(missingRpc
+      ? 'Máy chủ chưa có chức năng đối soát phiếu thu cũ. Hãy chạy migration 0032.'
+      : `Không thể đối soát phiếu thu: ${error.message || 'Lỗi hệ thống'}`, 'danger');
+    return false;
+  }
 }
 
 function getFinancialCancellationMessage(error, subject) {
