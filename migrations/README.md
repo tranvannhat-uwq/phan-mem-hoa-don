@@ -37,6 +37,8 @@ Run these files in order on a staging clone first:
 29. `0029_order_notes_annotation.sql`
 30. `0030_cashbook_manual_transaction_edit.sql`
 31. `0031_customer_pricelist_priority_alignment.sql`
+32. `0032_reconcile_legacy_customer_receipts.sql`
+33. `0033_dashboard_revenue_attribution.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -182,3 +184,8 @@ Migration `0031` aligns authoritative order pricing with the price list selected
 in the customer editor. It gives `customers.pricelist_id` priority over the
 duplicated compatibility field while preserving active-date checks, role-based
 price-list authorization, database price lookup and browser-price rejection.
+
+Migration `0033` corrects dashboard attribution without changing orders or
+financial ledgers. Company revenue is grouped from each order item's paint-brand
+company, while employee revenue and employee filtering use the salesperson who
+manages the customer instead of the user who entered or finalized the order.

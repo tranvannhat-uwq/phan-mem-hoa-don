@@ -1385,6 +1385,23 @@ select option {
   font-variant-numeric: tabular-nums;
 }
 
+/* Danh sách khách hàng cuộn trong một vùng riêng để hàng tên cột luôn hiện. */
+.customers-table-scroll {
+  position: relative;
+  max-height: clamp(320px, 65dvh, 720px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.customers-table-scroll .customers-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background-color: #f8fafc !important;
+  box-shadow: inset 0 -1px 0 var(--border-color);
+}
+
 /* Color Indicator Badges */
 .color-badge {
   display: inline-flex;
@@ -2643,6 +2660,129 @@ select option {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr);
   gap: 1.5rem;
   margin-top: 0.5rem;
+}
+
+/* Dashboard insight cards: ưu tiên trực quan, chỉ giữ bảng cho dữ liệu chi tiết. */
+.dashboard-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.dashboard-insight-card {
+  min-width: 0;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-insight-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.09);
+}
+
+.dashboard-insight-company { grid-column: span 4; }
+.dashboard-insight-brand { grid-column: span 8; }
+.dashboard-insight-salesperson,
+.dashboard-insight-customer { grid-column: span 6; }
+.dashboard-insight-festival {
+  grid-column: 1 / -1;
+  order: 3;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), rgba(255, 255, 255, 0.96));
+}
+.dashboard-insight-salesperson,
+.dashboard-insight-customer { order: 2; }
+
+.dashboard-insight-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.dashboard-insight-header > div { min-width: 0; }
+.dashboard-insight-header .panel-title { font-size: 0.98rem; }
+.dashboard-insight-header p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.dashboard-insight-badge,
+.dashboard-festival-total {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid rgba(16, 185, 129, 0.16);
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dashboard-festival-title { color: #d97706; }
+.dashboard-festival-total {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+.dashboard-breakdown-chart {
+  position: relative;
+  height: 290px;
+  min-height: 250px;
+}
+
+.dashboard-breakdown-chart-tall { height: 310px; }
+.dashboard-breakdown-chart-donut { height: 300px; }
+.dashboard-breakdown-chart canvas { display: none; }
+
+.dashboard-chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  border: 1px dashed rgba(148, 163, 184, 0.45);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.72);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.dashboard-festival-table {
+  max-height: 210px;
+  overflow: auto;
+}
+
+.dashboard-festival-table .table th,
+.dashboard-festival-table .table td { padding: 0.7rem 0.85rem; }
+
+@media (max-width: 1100px) {
+  .dashboard-insight-company,
+  .dashboard-insight-brand,
+  .dashboard-insight-salesperson,
+  .dashboard-insight-customer { grid-column: span 6; }
+}
+
+@media (max-width: 720px) {
+  .dashboard-insights-grid { grid-template-columns: 1fr; }
+  .dashboard-insight-company,
+  .dashboard-insight-brand,
+  .dashboard-insight-salesperson,
+  .dashboard-insight-customer,
+  .dashboard-insight-festival { grid-column: 1; }
+  .dashboard-insight-header { align-items: center; }
+  .dashboard-insight-header p { display: none; }
+  .dashboard-breakdown-chart,
+  .dashboard-breakdown-chart-tall,
+  .dashboard-breakdown-chart-donut { height: 280px; }
 }
 
 /* ========================================
