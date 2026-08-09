@@ -39,7 +39,12 @@ const migrationNames = [
   '0030_cashbook_manual_transaction_edit.sql',
   '0031_customer_pricelist_priority_alignment.sql',
   '0032_reconcile_legacy_customer_receipts.sql',
-  '0033_dashboard_revenue_attribution.sql'
+  '0033_dashboard_revenue_attribution.sql',
+  '0034_cashbook_customer_history_backfill.sql',
+  '0035_deterministic_sku_price_fallback.sql',
+  '0036_activity_log.sql',
+  '0037_draft_order_activity.sql',
+  '0038_activity_history_bridge.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 

@@ -7,6 +7,7 @@ import {
   filterPriceListsForUser,
   canUserViewPriceList,
   isPrivilegedPricingRole,
+  getStandardPriceList,
   isUsableResolvedPrice,
   parseVndInteger,
   shouldOverrideWithGlobalCustomerPriceList
@@ -165,6 +166,26 @@ const missing = resolvePriceForList({
 });
 assert.equal(missing.status, 'missing');
 assert.equal(missing.price, null);
+
+const siblingGeneralLists = [
+  { id: 'level-1', name: 'Bảng giá 01', type: PRICE_LIST_TYPES.GENERAL, isActive: true, displayOrder: 0 },
+  { id: 'canonical', name: 'Bảng giá chung', type: PRICE_LIST_TYPES.GENERAL, isActive: true, displayOrder: 99 },
+  { id: 'private', name: 'Giá riêng', type: PRICE_LIST_TYPES.DEALER_PRIVATE, customerId: 'dealer', isActive: true }
+];
+const canonicalOnlyPrice = [{ priceListId: 'canonical', productId: 'sku-x', price: 123000 }];
+assert.equal(getStandardPriceList(siblingGeneralLists).id, 'canonical');
+assert.equal(resolvePriceForList({
+  productId: 'sku-x',
+  priceListId: 'level-1',
+  priceLists: siblingGeneralLists,
+  priceListItems: canonicalOnlyPrice
+}).status, 'missing');
+assert.equal(resolvePriceForList({
+  productId: 'sku-x',
+  priceListId: 'private',
+  priceLists: siblingGeneralLists,
+  priceListItems: canonicalOnlyPrice
+}).price, 123000);
 
 assert.equal(parseVndInteger('1.950.000'), 1950000);
 assert.equal(parseVndInteger('2,116,000 ₫'), 2116000);

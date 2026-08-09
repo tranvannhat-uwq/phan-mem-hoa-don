@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260807-receipt-debt1">
+  <link rel="stylesheet" href="style.css?v=20260809-activity8">
 </head>
 <body>
 
@@ -145,6 +145,14 @@
       </nav>
 
       <div class="sidebar-actions">
+        <div class="activity-header-wrap">
+          <button type="button" id="btn-activity-log" class="activity-header-button" title="Lịch sử hoạt động" aria-label="Lịch sử hoạt động"><i data-lucide="bell"></i></button>
+          <div id="activity-dropdown" class="activity-dropdown">
+            <div class="activity-dropdown-head"><strong>Lịch sử hoạt động</strong><span>15 hoạt động gần nhất</span></div>
+            <div id="activity-dropdown-list" class="activity-dropdown-list"><div class="activity-empty">Đang tải...</div></div>
+            <button type="button" id="activity-view-all" class="activity-view-all">Xem tất cả hoạt động <i data-lucide="arrow-right"></i></button>
+          </div>
+        </div>
         <!-- Global Settings / User Profile Dropdown Button -->
         <div class="global-settings-dropdown" style="position: relative;">
           <button class="btn-settings-toggle" id="btn-settings-toggle" onclick="toggleSettingsDropdown(event)" style="background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" title="Cài đặt hệ thống">
@@ -1866,6 +1874,21 @@
         </div>
       </section>
 
+      <section id="activity-log-panel" class="panel">
+        <div class="glass-panel activity-page-card">
+          <div class="panel-header"><div><h2 class="panel-title"><i data-lucide="history"></i> Lịch sử hoạt động</h2><p class="activity-page-subtitle">Theo dõi các thay đổi quan trọng trên hệ thống</p></div></div>
+          <div class="activity-filters">
+            <input id="activity-search" class="form-control" type="search" placeholder="Tìm theo mã đơn, nhân viên, khách hàng...">
+            <select id="activity-actor-filter" class="form-control"><option value="all">Tất cả nhân viên</option></select>
+            <select id="activity-action-filter" class="form-control"><option value="all">Tất cả hành động</option><option value="create_order">Tạo mới</option><option value="update_order">Chỉnh sửa</option><option value="change_order_status">Đổi trạng thái</option><option value="confirm_payment">Thanh toán</option><option value="cancel_order">Hủy</option></select>
+            <select id="activity-module-filter" class="form-control"><option value="all">Tất cả module</option><option value="orders">Đơn hàng</option><option value="customers">Khách hàng</option><option value="employees">Nhân viên</option><option value="payments">Thanh toán</option><option value="returns">Trả hàng</option><option value="cashbook">Sổ quỹ</option><option value="suppliers">Nhà cung cấp</option><option value="purchases">Mua hàng</option><option value="products">Sản phẩm</option><option value="brands">Hãng sơn</option><option value="pricelists">Bảng giá</option></select>
+            <input id="activity-start-filter" class="form-control" type="date" title="Từ ngày"><input id="activity-end-filter" class="form-control" type="date" title="Đến ngày">
+          </div>
+          <div class="table-responsive"><table class="table activity-table"><thead><tr><th>Người thực hiện</th><th>Hoạt động</th><th>Module</th><th>Thời gian</th><th></th></tr></thead><tbody id="activity-log-body"><tr><td colspan="5" class="activity-empty">Đang tải lịch sử...</td></tr></tbody></table></div>
+          <div class="activity-pagination"><button id="activity-prev" class="btn btn-secondary btn-sm"><i data-lucide="chevron-left"></i> Trước</button><span id="activity-page-info">Trang 1/1</span><button id="activity-next" class="btn btn-secondary btn-sm">Sau <i data-lucide="chevron-right"></i></button></div>
+        </div>
+      </section>
+
       <!-- Settings Panel -->
       <section id="settings-panel" class="panel">
         <div class="glass-panel" style="max-width: 650px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
@@ -2161,6 +2184,10 @@
       </section>
     </main>
   </div>
+
+  <!-- Debt History Modal -->
+  <div class="modal-overlay" id="activity-detail-modal"><div class="modal-content activity-detail-modal"><div class="modal-header"><h3 class="modal-title">Chi tiết hoạt động</h3><button type="button" class="modal-close" id="activity-detail-close"><i data-lucide="x"></i></button></div><div class="modal-body" id="activity-detail-body"></div></div></div>
+  <div class="modal-overlay" id="order-activity-modal"><div class="modal-content activity-detail-modal"><div class="modal-header"><h3 class="modal-title">Lịch sử hoạt động đơn hàng</h3><button type="button" class="modal-close" id="order-activity-close"><i data-lucide="x"></i></button></div><div class="modal-body" id="order-activity-body"></div></div></div>
 
   <!-- Debt History Modal -->
   <div class="modal-overlay" id="debt-history-modal">
@@ -4120,6 +4147,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260807-receipt-debt1"></script>
+  <script type="module" src="js/main.js?v=20260809-activity8"></script>
 </body>
 </html>

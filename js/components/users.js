@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260807-receipt-debt1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260807-receipt-debt1';
-import { renderAll, switchTab } from '../main.js?v=20260807-receipt-debt1';
-import { populateManagedByDropdown } from './customers.js?v=20260807-receipt-debt1';
-import { exportBackupToExcel } from '../services/backup.js?v=20260807-receipt-debt1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260809-activity8';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260809-activity8';
+import { renderAll, switchTab } from '../main.js?v=20260809-activity8';
+import { populateManagedByDropdown } from './customers.js?v=20260809-activity8';
+import { exportBackupToExcel } from '../services/backup.js?v=20260809-activity8';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -563,6 +563,8 @@ export function showLoginGate() {
 export function applyUserPermissions(user) {
   if (!user) return;
   const role = user.role;
+  const activityButton = document.getElementById('btn-activity-log');
+  if (activityButton) activityButton.closest('.activity-header-wrap').style.display = ['admin', 'accounting'].includes(role) ? 'block' : 'none';
 
   const invoiceDateGroup = document.getElementById('invoice-business-date-group');
   const invoiceDateInput = document.getElementById('invoice-business-date');

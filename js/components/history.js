@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes } from '../services/supabase.js?v=20260807-receipt-debt1';
-import { renderAll } from '../main.js?v=20260807-receipt-debt1';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260807-receipt-debt1';
-import { openHistoryOrderExportModal } from './customers.js?v=20260807-receipt-debt1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes } from '../services/supabase.js?v=20260809-activity8';
+import { renderAll } from '../main.js?v=20260809-activity8';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260809-activity8';
+import { openHistoryOrderExportModal } from './customers.js?v=20260809-activity8';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260807-receipt-debt1';
+} from '../domain/order-financials.js?v=20260809-activity8';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260807-receipt-debt1';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260809-activity8';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -816,6 +816,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                     <button class="history-detail-action history-action-print history-print-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                       <i data-lucide="printer"></i> In
                     </button>
+                    <button class="history-detail-action history-action-view history-activity-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                      <i data-lucide="history"></i> Lịch sử hoạt động
+                    </button>
                     ${showReturnBtn ? `
                       <button class="history-detail-action history-action-return history-return-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                         <i data-lucide="rotate-ccw"></i> Trả hàng
@@ -977,6 +980,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               </button>
               <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-copy-btn" data-id="${order.id}" title="Sao chép thành đơn mới">
                 <i data-lucide="copy" style="width: 13px; height: 13px;"></i> Sao chép
+              </button>
+              <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-activity-btn" data-id="${order.id}" title="Xem lịch sử hoạt động của đơn">
+                <i data-lucide="history" style="width: 13px; height: 13px;"></i> Hoạt động
               </button>
               ${['admin', 'accounting'].includes(state.currentUser?.role) ? `
                 <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-notes-btn" data-id="${order.id}" title="Sửa riêng ghi chú, không thay đổi đơn hoặc công nợ">
@@ -1183,6 +1189,10 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     });
   });
 
+  document.querySelectorAll('.history-activity-btn').forEach(btn => {
+    btn.addEventListener('click', () => globalThis.openOrderActivityModal?.(btn.dataset.id));
+  });
+
   document.querySelectorAll('.history-copy-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const id = e.currentTarget.getAttribute('data-id');
@@ -1210,7 +1220,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       if (nextNotes === null || nextNotes.trim() === String(order.notes || '').trim()) return;
 
       e.currentTarget.disabled = true;
-      const result = await dbUpdateOrderNotes(order.id, nextNotes.trim());
+      const result = await dbUpdateOrderNotes(order.id, nextNotes.trim(), order.status === 'draft');
       if (!result) {
         e.currentTarget.disabled = false;
         return;

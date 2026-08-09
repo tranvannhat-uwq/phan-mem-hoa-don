@@ -68,12 +68,18 @@ export function sortPriceLists(priceLists) {
 }
 
 export function getStandardPriceList(priceLists, now = new Date()) {
-  return sortPriceLists(
+  const generalLists = sortPriceLists(
     (priceLists || []).filter(priceList =>
       normalizePriceListType(priceList.type, priceList.customerId) === PRICE_LIST_TYPES.GENERAL &&
       isPriceListActive(priceList, now)
     )
-  )[0] || null;
+  );
+  return generalLists.find(priceList => {
+    const name = String(priceList.name || '').trim().toLocaleLowerCase('vi-VN');
+    const code = String(priceList.code || '').trim().toUpperCase();
+    return ['bảng giá chung', 'bang gia chung', 'giá chung', 'gia chung'].includes(name)
+      || ['BANG_GIA_CHUNG', 'BG_CHUNG', 'GIA_CHUNG'].includes(code);
+  }) || generalLists[0] || null;
 }
 
 export function shouldOverrideWithGlobalCustomerPriceList({
@@ -206,7 +212,10 @@ export function resolvePriceForList({
     current = current.parentPriceListId ? byId.get(current.parentPriceListId) : null;
   }
 
-  const standard = getStandardPriceList(activeLists, now);
+  const requestedIsGlobalGeneral = normalizePriceListType(requested.type, requested.customerId) === PRICE_LIST_TYPES.GENERAL
+    && !requested.customerId
+    && !requested.customerGroupId;
+  const standard = requestedIsGlobalGeneral ? null : getStandardPriceList(activeLists, now);
   if (standard && !visited.has(standard.id)) {
     const standardItem = findOverride(priceListItems, standard.id, productId);
     if (standardItem) {

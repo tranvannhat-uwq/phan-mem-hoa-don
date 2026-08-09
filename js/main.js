@@ -1,21 +1,22 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData } from './services/supabase.js?v=20260807-receipt-debt1';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260807-receipt-debt1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260807-receipt-debt1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260807-receipt-debt1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260807-receipt-debt1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260807-receipt-debt1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260807-receipt-debt1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260807-receipt-debt1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260807-receipt-debt1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260807-receipt-debt1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260807-receipt-debt1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260807-receipt-debt1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260807-receipt-debt1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260807-receipt-debt1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData } from './services/supabase.js?v=20260809-activity8';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260809-activity8';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260809-activity8';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260809-activity8';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260809-activity8';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260809-activity8';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260809-activity8';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260809-activity8';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260809-activity8';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260809-activity8';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260809-activity8';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260809-activity8';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260809-activity8';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260809-activity8';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260807-receipt-debt1';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260809-activity8';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260809-activity8';
 
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
 // chuyển tab, tránh dựng hàng nghìn dòng DOM ẩn trong mỗi lần cập nhật.
@@ -71,6 +72,9 @@ export function renderAll() {
       else renderDebtReport();
       break;
     }
+    case 'activity-log-panel':
+      renderActivityLog();
+      break;
     case 'dashboard-panel':
     default:
       updateDashboardStats();
@@ -127,6 +131,7 @@ export function switchTab(panelId) {
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
   else if (panelId === 'goods-panel') heading.innerText = 'Phiếu mua hàng';
   else if (panelId === 'reports-panel') heading.innerText = 'Báo cáo nghiệp vụ';
+  else if (panelId === 'activity-log-panel') heading.innerText = 'Lịch sử hoạt động';
   
   // Tự động làm mới dữ liệu và thống kê trên tất cả các tab khi chuyển đổi
   renderAll();
@@ -323,6 +328,7 @@ async function initApp() {
   setupBrandsPanel();
   setupGoodsPanel();
   setupReportsPanel();
+  setupActivityLog();
   setupBackupRestoreListeners(renderAll);
 
   let savedUrl = localStorage.getItem('billing_supabase_url');

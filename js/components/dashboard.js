@@ -1,13 +1,26 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260807-receipt-debt1';
+import { switchTab } from '../main.js?v=20260809-activity8';
 import { openProductModal } from './products.js';
-import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260807-receipt-debt1';
+import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260809-activity8';
+import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 
 let revenueChartInstance = null;
+let dashboardChartRequestId = 0;
 const dashboardBreakdownCharts = new Map();
 const DASHBOARD_CHART_COLORS = ['#10b981', '#6366f1', '#0ea5e9', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+
+function getRevenueChartAnimation() {
+  if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false;
+  return {
+    duration: 900,
+    easing: 'easeOutQuart',
+    delay: context => context.type === 'data' && context.mode === 'default'
+      ? Math.min(context.dataIndex * 35, 420)
+      : 0
+  };
+}
 
 const VN_TIMEZONE = 'Asia/Ho_Chi_Minh';
 const VALID_REVENUE_STATUSES = new Set(['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
@@ -58,10 +71,9 @@ function getVnDateParts(dateInput) {
   };
 }
 
-function getDashboardDateRange() {
+function getDashboardDateRange(timeRange = state.dashboardFilter.timeRange || 'month') {
   const nowParts = getVnDateParts(new Date());
   if (!nowParts) return null;
-  const timeRange = state.dashboardFilter.timeRange || 'month';
   if (timeRange === 'custom') {
     if (!state.dashboardFilter.startDate || !state.dashboardFilter.endDate) return null;
     return { start: state.dashboardFilter.startDate, end: state.dashboardFilter.endDate };
@@ -458,6 +470,11 @@ export function renderRevenueChart(orders) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: getRevenueChartAnimation(),
+      transitions: {
+        active: { animation: { duration: 180 } },
+        resize: { animation: { duration: 250 } }
+      },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#111827', titleColor: '#fff', bodyColor: '#fff', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 10, displayColors: false, callbacks: { label: context => `Doanh thu: ${formatCurrency(context.raw)}` } } },
       scales: { x: { grid: { color: 'rgba(0, 0, 0, 0.05)' }, ticks: { color: '#64748b', font: { family: "'Inter', sans-serif", size: 11 } } }, y: { grid: { color: 'rgba(0, 0, 0, 0.05)' }, ticks: { color: '#64748b', font: { family: "'Inter', sans-serif", size: 11 }, callback: value => value >= 1e6 ? `${(value / 1e6).toFixed(1)}M ₫` : value >= 1e3 ? `${(value / 1e3).toFixed(0)}k ₫` : `${value} ₫` } } }
     }
@@ -598,9 +615,81 @@ function renderDashboardBreakdownChart({
   dashboardBreakdownCharts.set(key, chart);
 }
 
+function renderServerRevenueChart(payload) {
+  const chartCanvas = document.getElementById('revenue-chart');
+  if (!chartCanvas || !globalThis.Chart) return;
+  const salesModeLabel = state.dashboardSalesMode === 'gross' ? 'Doanh số gốc' : 'Doanh số ròng';
+  const chartSeries = buildDashboardChartSeries(payload?.series || [], state.dashboardChartView, payload?.period || {});
+
+  if (revenueChartInstance) {
+    revenueChartInstance.data.labels = chartSeries.labels;
+    revenueChartInstance.data.datasets[0].label = salesModeLabel;
+    revenueChartInstance.data.datasets[0].data = chartSeries.dataPoints;
+    revenueChartInstance.update();
+    return;
+  }
+
+  const chartContext = chartCanvas.getContext('2d');
+  revenueChartInstance = new Chart(chartContext, {
+    type: 'line',
+    data: { labels: chartSeries.labels, datasets: [{ label: salesModeLabel, data: chartSeries.dataPoints, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.15)', borderWidth: 3, pointBackgroundColor: '#10b981', pointBorderColor: 'rgba(255,255,255,.8)', pointBorderWidth: 1, pointRadius: 4, pointHoverRadius: 6, tension: .35, fill: true }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: getRevenueChartAnimation(),
+      transitions: {
+        active: { animation: { duration: 180 } },
+        resize: { animation: { duration: 250 } }
+      },
+      interaction: { intersect: false, mode: 'index' },
+      plugins: { legend: { display: false }, tooltip: { displayColors: false } },
+      scales: { y: { beginAtZero: true, ticks: { callback: value => formatCurrency(value) } } }
+    }
+  });
+}
+
+function dashboardRequestFiltersForRange(timeRange) {
+  const range = getDashboardDateRange(timeRange);
+  const endExclusive = range?.end ? new Date(`${range.end}T00:00:00+07:00`) : null;
+  if (endExclusive) endExclusive.setDate(endExclusive.getDate() + 1);
+  return {
+    start: range?.start ? `${range.start}T00:00:00+07:00` : null,
+    end: endExclusive?.toISOString() || null,
+    company_id: state.dashboardFilter.companyId || 'all',
+    brand_id: state.dashboardFilter.brand || 'all',
+    salesperson_id: state.dashboardFilter.saleUser || 'all',
+    customer_id: state.dashboardFilter.customerId || 'all',
+    sales_mode: state.dashboardSalesMode || 'net'
+  };
+}
+
+async function updateRevenueChartForView(view, prefetchedPayload = null) {
+  const requestId = ++dashboardChartRequestId;
+  try {
+    const payload = prefetchedPayload || await dbFetchPhase5Dashboard(dashboardRequestFiltersForRange(view));
+    if (requestId !== dashboardChartRequestId || view !== state.dashboardChartView) return;
+    renderServerRevenueChart(payload);
+  } catch (error) {
+    console.error('Revenue chart RPC error:', error);
+    showToast('Không tải được dữ liệu biểu đồ doanh thu.', 'danger');
+  }
+}
+
 function renderServerDashboard(payload) {
   const summary = payload?.summary || {};
   const setText = (id, value) => { const element = document.getElementById(id); if (element) element.innerText = value; };
+  const periodLabel = state.dashboardFilter.timeRange === 'custom'
+    ? '(Tùy chỉnh)'
+    : state.dashboardFilter.timeRange === 'day'
+      ? '(Hôm nay)'
+      : state.dashboardFilter.timeRange === 'week'
+        ? '(Tuần này)'
+        : state.dashboardFilter.timeRange === 'year'
+          ? '(Năm nay)'
+          : '(Tháng này)';
+  const salesModeLabel = state.dashboardSalesMode === 'gross' ? 'Doanh số gốc' : 'Doanh số ròng';
+  setText('stat-revenue-label', `${salesModeLabel} ${periodLabel}`);
+  setText('stat-sold-products-label', `Sản phẩm đã bán ${periodLabel}`);
   setText('stat-total-revenue', formatCurrency(state.dashboardSalesMode === 'gross' ? summary.gross_sales : summary.net_sales));
   setText('stat-total-orders', summary.order_count || 0);
   setText('stat-total-debt', formatCurrency(summary.current_debt));
@@ -620,16 +709,6 @@ function renderServerDashboard(payload) {
     recentBody.innerHTML = payload.recent_orders?.length ? payload.recent_orders.map(order => `<tr><td style="font-weight:600">${escapeHtml(order.id)}</td><td>${new Date(order.order_date).toLocaleDateString('vi-VN')}</td><td>${escapeHtml(order.customer_name)}</td><td style="text-align:right">${formatCurrency(order.net_revenue)}</td><td style="text-align:center"><button class="btn btn-secondary btn-sm dash-view-order-btn" data-id="${escapeHtml(order.id)}"><i data-lucide="eye"></i></button></td></tr>`).join('')
       : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem">Không có đơn hàng phù hợp</td></tr>';
   }
-  const chartCanvas = document.getElementById('revenue-chart');
-  if (chartCanvas && globalThis.Chart) {
-    if (revenueChartInstance) revenueChartInstance.destroy();
-    const chartContext = chartCanvas.getContext('2d');
-    revenueChartInstance = new Chart(chartContext, {
-      type: 'line',
-      data: { labels: (payload.series || []).map(point => point.date), datasets: [{ label: 'Doanh thu', data: (payload.series || []).map(point => Number(point.amount || 0)), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.15)', tension: .3, fill: true }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: value => formatCurrency(value) } } } }
-    });
-  }
   document.querySelectorAll('.dash-view-order-btn').forEach(button => button.addEventListener('click', () => {
     switchTab('history-panel');
     const search = document.getElementById('order-search-input');
@@ -640,20 +719,12 @@ function renderServerDashboard(payload) {
 
 export async function updateDashboardStats() {
   populateDashboardFilters();
-  const range = getDashboardDateRange();
-  const endExclusive = range?.end ? new Date(`${range.end}T00:00:00+07:00`) : null;
-  if (endExclusive) endExclusive.setDate(endExclusive.getDate() + 1);
   try {
-    const payload = await dbFetchPhase5Dashboard({
-      start: range?.start ? `${range.start}T00:00:00+07:00` : null,
-      end: endExclusive?.toISOString() || null,
-      company_id: state.dashboardFilter.companyId || 'all',
-      brand_id: state.dashboardFilter.brand || 'all',
-      salesperson_id: state.dashboardFilter.saleUser || 'all',
-      customer_id: state.dashboardFilter.customerId || 'all',
-      sales_mode: state.dashboardSalesMode || 'net'
-    });
+    const payload = await dbFetchPhase5Dashboard(dashboardRequestFiltersForRange(state.dashboardFilter.timeRange || 'month'));
     renderServerDashboard(payload);
+    const canReusePayload = state.dashboardFilter.timeRange !== 'custom'
+      && state.dashboardChartView === state.dashboardFilter.timeRange;
+    await updateRevenueChartForView(state.dashboardChartView, canReusePayload ? payload : null);
   } catch (error) {
     console.error('Phase 5 dashboard RPC error:', error);
     ['stat-total-revenue', 'stat-total-orders', 'stat-total-debt', 'stat-total-sold-products'].forEach(id => {
@@ -946,8 +1017,7 @@ export function setupDashboardFilters() {
       const view = btn.getAttribute('data-view');
       state.dashboardChartView = view;
       updateChartViewActiveButton(view);
-      
-      updateDashboardStats();
+      updateRevenueChartForView(view);
     });
   });
 }

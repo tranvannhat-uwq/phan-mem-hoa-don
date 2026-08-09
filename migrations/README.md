@@ -39,6 +39,8 @@ Run these files in order on a staging clone first:
 31. `0031_customer_pricelist_priority_alignment.sql`
 32. `0032_reconcile_legacy_customer_receipts.sql`
 33. `0033_dashboard_revenue_attribution.sql`
+34. `0034_cashbook_customer_history_backfill.sql`
+35. `0035_deterministic_sku_price_fallback.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -189,3 +191,30 @@ Migration `0033` corrects dashboard attribution without changing orders or
 financial ledgers. Company revenue is grouped from each order item's paint-brand
 company, while employee revenue and employee filtering use the salesperson who
 manages the customer instead of the user who entered or finalized the order.
+
+Migration `0034` reconciles standalone receipt vouchers whose partner uniquely
+and exactly matches one active customer. It atomically links each voucher,
+creates the missing payment and debt-ledger rows, reduces customer debt, and
+records an audit summary. Orders and revenue are unchanged, and retries cannot
+create duplicate payment or ledger rows.
+
+Migration `0035` makes SKU price inheritance deterministic. Global/general
+price lists remain independent business levels; private, group and sales lists
+follow their explicit parent and then the canonical `Bảng giá chung` fallback.
+It changes no stored price, product, order or customer row.
+
+Migration `0036` adds a separate append-only, authenticated Activity Log. It
+groups field changes per transaction and target, records the actor only from
+`auth.uid()`, exposes paginated/filterable read RPCs, and adds no inventory,
+warehouse, stock or production modules. Existing `audit_logs` and business data
+are preserved unchanged.
+
+Migration `0037` adds the missing draft-order Activity Log trigger and a narrow
+RPC that updates notes in `draft_orders` instead of querying finalized orders.
+It also lets authorized users read the activity timeline of their accessible
+drafts without changing order totals, prices, debt or existing rows.
+
+Migration `0038` makes the pre-existing, profile-attributed `audit_logs` history
+visible in the new Activity Log read model. It deduplicates same-save legacy
+rows, ignores unattributed/system activity, and never changes business rows or
+the original audit trail.

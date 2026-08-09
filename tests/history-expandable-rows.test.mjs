@@ -33,7 +33,7 @@ test('expanded panel uses real notes, payment fields and existing action handler
   for (const action of ['notes', 'view', 'edit', 'copy', 'print', 'return', 'cancel', 'delete']) {
     assert.match(tableBranch, new RegExp(`history-${action}-btn`));
   }
-  assert.match(history, /dbUpdateOrderNotes\(order\.id, nextNotes\.trim\(\)\)/);
+  assert.match(history, /dbUpdateOrderNotes\(order\.id, nextNotes\.trim\(\), order\.status === 'draft'\)/);
   assert.doesNotMatch(tableBranch, /on(?:click|change|input)=/);
 });
 

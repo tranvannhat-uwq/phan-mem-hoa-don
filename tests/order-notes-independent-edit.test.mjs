@@ -21,8 +21,8 @@ test('history edits notes outside the finalized-order amendment flow', () => {
   const history = read('js/components/history.js');
   const service = read('js/services/supabase.js');
   assert.match(history, /history-notes-btn/);
-  assert.match(history, /dbUpdateOrderNotes\(order\.id, nextNotes\.trim\(\)\)/);
-  assert.match(service, /supabaseClient\.rpc\('rpc_update_order_notes'/);
+  assert.match(history, /dbUpdateOrderNotes\(order\.id, nextNotes\.trim\(\), order\.status === 'draft'\)/);
+  assert.match(service, /isDraft \? 'rpc_update_draft_order_notes' : 'rpc_update_order_notes'/);
   assert.doesNotMatch(service.match(/export async function dbUpdateOrderNotes[\s\S]*?\n\}/)?.[0] || '', /rpc_amend_order|dbAmendOrder/);
 });
 

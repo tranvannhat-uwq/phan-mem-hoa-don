@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
-import { renderAll } from '../main.js?v=20260807-receipt-debt1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260807-receipt-debt1';
-import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260807-receipt-debt1';
+import { renderAll } from '../main.js?v=20260809-activity8';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260809-activity8';
+import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260809-activity8';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];

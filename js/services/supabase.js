@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260807-receipt-debt1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260807-receipt-debt1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260809-activity8';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260809-activity8';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260807-receipt-debt1';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260809-activity8';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -3650,7 +3650,14 @@ export async function dbConfirmOrder(order) {
       return data || { success: true };
     } catch (err) {
       console.error('RPC confirm order error:', err);
-      throw new Error('Không thể chốt đơn: ' + (err.message || 'Transaction thất bại'));
+      const message = String(err.message || 'Transaction thất bại');
+      const missingPrice = message.match(/SKU\s+([^\s]+)\s+has no effective database price/i);
+      if (missingPrice) {
+        const product = (state.products || []).find(item => String(item.id) === missingPrice[1]);
+        const skuLabel = product?.code || missingPrice[1];
+        throw new Error(`Không thể chốt đơn: SKU ${skuLabel} chưa có giá trong bảng giá đang áp dụng.`);
+      }
+      throw new Error('Không thể chốt đơn: ' + message);
     }
   }
   return true;
@@ -3687,7 +3694,7 @@ export async function dbAmendOrder(originalOrderId, order, reason) {
   }
 }
 
-export async function dbUpdateOrderNotes(orderId, notes) {
+export async function dbUpdateOrderNotes(orderId, notes, isDraft = false) {
   if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
     showToast('Chỉ Admin hoặc Kế toán được sửa ghi chú của đơn đã lưu.', 'danger');
     return false;
@@ -3698,17 +3705,18 @@ export async function dbUpdateOrderNotes(orderId, notes) {
   }
 
   try {
-    const { data, error } = await supabaseClient.rpc('rpc_update_order_notes', {
-      p_order_id: String(orderId || ''),
-      p_notes: String(notes || '')
-    });
+    const rpcName = isDraft ? 'rpc_update_draft_order_notes' : 'rpc_update_order_notes';
+    const parameters = isDraft
+      ? { p_draft_id: String(orderId || ''), p_notes: String(notes || '') }
+      : { p_order_id: String(orderId || ''), p_notes: String(notes || '') };
+    const { data, error } = await supabaseClient.rpc(rpcName, parameters);
     if (error) throw error;
     return data || { success: true, order_id: orderId, notes: String(notes || '') };
   } catch (err) {
     console.error('RPC update order notes error:', err);
-    const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_update_order_notes');
+    const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes(isDraft ? 'rpc_update_draft_order_notes' : 'rpc_update_order_notes');
     showToast(missingRpc
-      ? 'Chưa có chức năng sửa riêng ghi chú trên Supabase. Hãy chạy migration 0029.'
+      ? `Chưa có chức năng sửa ghi chú ${isDraft ? 'đơn nháp' : 'đơn đã chốt'} trên Supabase. Hãy chạy migration ${isDraft ? '0037' : '0029'}.`
       : 'Không thể cập nhật ghi chú đơn: ' + (err.message || 'Lỗi hệ thống'), 'danger');
     return false;
   }
@@ -3998,6 +4006,23 @@ export async function dbFetchPhase5Dashboard(filters = {}) {
   const { data, error } = await supabaseClient.rpc('rpc_get_phase5_dashboard', { p_filters: filters });
   if (error) throw error;
   return data;
+}
+
+export async function dbFetchActivityLogs(filters = {}) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải lịch sử hoạt động.');
+  const { data, error } = await supabaseClient.rpc('rpc_get_activity_logs', { p_filters: filters });
+  if (error) throw error;
+  return data || { rows: [], total: 0, limit: 25, offset: 0 };
+}
+
+export async function dbFetchOrderActivity(orderId, limit = 50) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải lịch sử đơn hàng.');
+  const { data, error } = await supabaseClient.rpc('rpc_get_order_activity', {
+    p_order_id: orderId,
+    p_limit: limit
+  });
+  if (error) throw error;
+  return data || [];
 }
 
 export async function dbFetchPhase5Report(input = {}) {

@@ -14,9 +14,9 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20260807-receipt-debt1';
-import { renderAll } from '../main.js?v=20260807-receipt-debt1';
-import { renderPurchasesPanel } from './purchases.js?v=20260807-receipt-debt1';
+} from '../services/supabase.js?v=20260809-activity8';
+import { renderAll } from '../main.js?v=20260809-activity8';
+import { renderPurchasesPanel } from './purchases.js?v=20260809-activity8';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---
 
