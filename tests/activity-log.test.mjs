@@ -88,6 +88,12 @@ test('customer financial activity fields use Vietnamese labels', () => {
   assert.match(ui, /net_revenue: 'Doanh thu thuần'/);
   assert.match(ui, /last_order_at: 'Thời gian đơn hàng gần nhất'/);
   assert.match(ui, /total_transaction: 'Tổng giao dịch'/);
+  assert.match(ui, /other_fee_value: 'Mức thu khác'/);
+  assert.match(ui, /other_fee_amount: 'Số tiền thu khác'/);
+  assert.match(ui, /shipping_support: 'Hỗ trợ vận chuyển'/);
+  assert.match(ui, /shipping_discount: 'Giảm phí vận chuyển'/);
+  assert.match(ui, /shipping_fee_value: 'Mức phí vận chuyển'/);
+  assert.match(ui, /parsed === false \|\| parsed === 'false'\) return 'Không'/);
 });
 
 test('draft activity keeps technical ids for navigation but displays readable order codes', () => {
