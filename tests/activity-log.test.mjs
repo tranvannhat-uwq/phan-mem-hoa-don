@@ -82,6 +82,14 @@ test('activity detail hides technical fields and scrolls inside a viewport-sized
   assert.match(read('style.css'), /activity-detail-modal \.modal-body[\s\S]*overflow-y: auto/);
 });
 
+test('customer financial activity fields use Vietnamese labels', () => {
+  const ui = read('js/components/activity-log.js');
+  assert.match(ui, /debt: 'Công nợ'/);
+  assert.match(ui, /net_revenue: 'Doanh thu thuần'/);
+  assert.match(ui, /last_order_at: 'Thời gian đơn hàng gần nhất'/);
+  assert.match(ui, /total_transaction: 'Tổng giao dịch'/);
+});
+
 test('draft activity keeps technical ids for navigation but displays readable order codes', () => {
   assert.match(component, /getOrderDisplayCode/);
   assert.match(component, /data-order-id="\$\{escapeHtml\(row\.order_id\)\}"/);

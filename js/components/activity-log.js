@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260810-customer-pricing4';
-import { switchTab } from '../main.js?v=20260810-customer-pricing4';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20260810-customer-pricing4';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260810-activity-vn1';
+import { switchTab } from '../main.js?v=20260810-activity-vn1';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20260810-activity-vn1';
 import { safeCreateIcons, showToast } from '../utils.js';
 
 const PAGE_SIZE = 25;
@@ -25,7 +25,7 @@ const ACTION_LABELS = {
   create_pricelist: 'Đã tạo bảng giá', update_pricelist: 'Đã chỉnh sửa bảng giá', delete_pricelist: 'Đã xóa bảng giá'
 };
 const MODULE_LABELS = { orders: 'Đơn hàng', customers: 'Khách hàng', employees: 'Nhân viên', payments: 'Thanh toán', returns: 'Trả hàng', cashbook: 'Sổ quỹ', suppliers: 'Nhà cung cấp', purchases: 'Mua hàng', products: 'Sản phẩm', brands: 'Hãng sơn', pricelists: 'Bảng giá' };
-const FIELD_LABELS = { status: 'Trạng thái', notes: 'Ghi chú', phone: 'Số điện thoại', phone2: 'Số điện thoại 2', address: 'Địa chỉ', customer_name: 'Tên khách hàng', customer_phone: 'Số điện thoại khách hàng', customer_address: 'Địa chỉ khách hàng', recipient_name: 'Người nhận', recipient_phone: 'Số điện thoại người nhận', shipping_address: 'Địa chỉ giao hàng', shipping_unit: 'Đơn vị vận chuyển', shipping_code: 'Mã vận đơn', name: 'Tên', quantity: 'Số lượng', items: 'Sản phẩm', subtotal: 'Tiền hàng', total_market: 'Tổng tiền hàng', total_payable: 'Tổng thanh toán', total_amount: 'Tổng tiền', paid_amount: 'Đã thanh toán', debt_amount: 'Công nợ', discount_amount: 'Giảm giá', discount_percent: 'Phần trăm giảm giá', discount_type: 'Hình thức giảm giá', shipping_fee: 'Phí vận chuyển', shipping_fee_amount: 'Phí vận chuyển', extra_fee: 'Thu khác', other_fee: 'Thu khác', payment_method: 'Phương thức thanh toán', payment_status: 'Trạng thái thanh toán', role: 'Vai trò', is_active: 'Trạng thái tài khoản', managed_by: 'Nhân viên phụ trách', pricelist_name: 'Bảng giá', price_list_name: 'Bảng giá', date: 'Ngày đơn hàng', order_date: 'Ngày đơn hàng' };
+const FIELD_LABELS = { status: 'Trạng thái', notes: 'Ghi chú', phone: 'Số điện thoại', phone2: 'Số điện thoại 2', address: 'Địa chỉ', customer_name: 'Tên khách hàng', customer_phone: 'Số điện thoại khách hàng', customer_address: 'Địa chỉ khách hàng', recipient_name: 'Người nhận', recipient_phone: 'Số điện thoại người nhận', shipping_address: 'Địa chỉ giao hàng', shipping_unit: 'Đơn vị vận chuyển', shipping_code: 'Mã vận đơn', name: 'Tên', quantity: 'Số lượng', items: 'Sản phẩm', subtotal: 'Tiền hàng', total_market: 'Tổng tiền hàng', total_payable: 'Tổng thanh toán', total_amount: 'Tổng tiền', paid_amount: 'Đã thanh toán', debt: 'Công nợ', debt_amount: 'Công nợ', net_revenue: 'Doanh thu thuần', last_order_at: 'Thời gian đơn hàng gần nhất', total_transaction: 'Tổng giao dịch', discount_amount: 'Giảm giá', discount_percent: 'Phần trăm giảm giá', discount_type: 'Hình thức giảm giá', shipping_fee: 'Phí vận chuyển', shipping_fee_amount: 'Phí vận chuyển', extra_fee: 'Thu khác', other_fee: 'Thu khác', payment_method: 'Phương thức thanh toán', payment_status: 'Trạng thái thanh toán', role: 'Vai trò', is_active: 'Trạng thái tài khoản', managed_by: 'Nhân viên phụ trách', pricelist_name: 'Bảng giá', price_list_name: 'Bảng giá', date: 'Ngày đơn hàng', order_date: 'Ngày đơn hàng' };
 const HIDDEN_ACTIVITY_FIELDS = new Set([
   'id', 'company_id', 'customer_id', 'product_id', 'variant_id', 'pricelist_id', 'price_list_id',
   'created_by', 'updated_by', 'deleted_by', 'cancelled_by', 'canceled_by', 'salesperson_id',
