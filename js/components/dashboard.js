@@ -1,9 +1,10 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260810-order-date1';
+import { switchTab } from '../main.js?v=20260810-login-employees1';
 import { openProductModal } from './products.js';
-import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260810-order-date1';
+import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260810-login-employees1';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
+import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
@@ -696,7 +697,7 @@ function renderServerDashboard(payload) {
   setText('stat-total-sold-products', summary.sold_quantity || 0);
   renderDashboardBreakdownChart({ key: 'company', canvasId: 'company-revenue-chart', emptyId: 'company-revenue-chart-empty', metaId: 'company-revenue-chart-meta', rows: payload.by_company, labelResolver: companyId => getCompanyNameById(companyId, state.companies), type: 'doughnut', limit: 6, metaLabel: 'công ty' });
   renderDashboardBreakdownChart({ key: 'brand', canvasId: 'brand-revenue-chart', emptyId: 'brand-revenue-chart-empty', metaId: 'brand-revenue-chart-meta', rows: payload.by_brand, labelResolver: brandId => (state.brands || []).find(brand => String(brand.id) === String(brandId))?.name || brandId, limit: 8, metaLabel: 'nhãn sơn' });
-  renderDashboardBreakdownChart({ key: 'salesperson', canvasId: 'salesperson-revenue-chart', emptyId: 'salesperson-revenue-chart-empty', metaId: 'salesperson-revenue-chart-meta', rows: payload.by_salesperson, labelResolver: userId => getUserDisplayName(userId, 'Chưa phân công', state.users), limit: 8, metaLabel: 'nhân viên' });
+  renderDashboardBreakdownChart({ key: 'salesperson', canvasId: 'salesperson-revenue-chart', emptyId: 'salesperson-revenue-chart-empty', metaId: 'salesperson-revenue-chart-meta', rows: filterLoginEmployeeRevenueRows(payload.by_salesperson, state.users), labelResolver: userId => getUserDisplayName(userId, 'Chưa phân công', state.users), limit: 8, metaLabel: 'nhân viên' });
   renderDashboardBreakdownChart({ key: 'customer', canvasId: 'customer-revenue-chart', emptyId: 'customer-revenue-chart-empty', metaId: 'customer-revenue-chart-meta', rows: payload.by_customer, labelResolver: (_customerId, row) => row.name || row.key, limit: 8, metaLabel: 'khách hàng' });
 
   const topProducts = document.getElementById('top-products-list');
@@ -833,7 +834,7 @@ function updateDashboardStatsLegacy() {
 
   renderDashboardBreakdownChart({
     key: 'salesperson', canvasId: 'salesperson-revenue-chart', emptyId: 'salesperson-revenue-chart-empty', metaId: 'salesperson-revenue-chart-meta',
-    rows: Object.entries(salespersonRevenueMap).map(([key, amount]) => ({ key, amount })),
+    rows: filterLoginEmployeeRevenueRows(Object.entries(salespersonRevenueMap).map(([key, amount]) => ({ key, amount })), state.users),
     labelResolver: userId => getUserDisplayName(userId, 'Chưa phân công', state.users), limit: 8, metaLabel: 'nhân viên'
   });
   renderDashboardBreakdownChart({

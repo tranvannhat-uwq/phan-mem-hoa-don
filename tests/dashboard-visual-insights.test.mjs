@@ -19,7 +19,7 @@ test('dashboard combines line, doughnut and horizontal ranking charts', () => {
 test('all visual breakdowns use the same filtered server payload as before', () => {
   assert.match(dashboard, /rows:\s*payload\.by_company/);
   assert.match(dashboard, /rows:\s*payload\.by_brand/);
-  assert.match(dashboard, /rows:\s*payload\.by_salesperson/);
+  assert.match(dashboard, /rows:\s*filterLoginEmployeeRevenueRows\(payload\.by_salesperson, state\.users\)/);
   assert.match(dashboard, /rows:\s*payload\.by_customer/);
   assert.match(dashboard, /await dbFetchPhase5Dashboard/);
 });

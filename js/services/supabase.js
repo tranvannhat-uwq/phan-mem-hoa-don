@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-order-date1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-order-date1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-login-employees1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-login-employees1';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-order-date1';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-login-employees1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
