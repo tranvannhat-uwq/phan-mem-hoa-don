@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-activity-vn2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-activity-vn2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-order-finalize1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-order-finalize1';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-activity-vn2';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-order-finalize1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -3704,6 +3704,45 @@ function buildOrderCommand(order) {
   };
 }
 
+async function recoverCommittedOrderAfterConfirmError(order) {
+  if (!order?.id || !supabaseClient) return null;
+  try {
+    const orderResult = await supabaseClient
+      .from(tableOrdersName)
+      .select('*')
+      .eq('id', order.id)
+      .eq('idempotency_key', order.idempotencyKey)
+      .limit(1);
+    if (orderResult.error) return null;
+    const row = orderResult.data?.[0];
+    if (!row || String(row.status || 'settled').toLowerCase() !== 'settled') return null;
+
+    let customerState = null;
+    if (row.customer_id) {
+      const customerResult = await supabaseClient
+        .from(tableCustomersName)
+        .select('debt,total_transaction,net_revenue,last_order_at')
+        .eq('id', row.customer_id)
+        .limit(1);
+      if (!customerResult.error && customerResult.data?.[0]) {
+        customerState = customerResult.data[0];
+      }
+    }
+
+    return {
+      success: true,
+      order: mapOrderRowForState(row, false),
+      already_finalized: true,
+      recovered_after_error: true,
+      new_debt: customerState?.debt,
+      customer_state: customerState
+    };
+  } catch (recoveryError) {
+    console.warn('Could not reconcile an uncertain order confirmation:', recoveryError);
+    return null;
+  }
+}
+
 export async function dbConfirmOrder(order) {
   const printOnlyList = findPrintOnlyOrderPriceList(order);
   if (printOnlyList) {
@@ -3784,6 +3823,14 @@ export async function dbConfirmOrder(order) {
       return data || { success: true };
     } catch (err) {
       console.error('RPC confirm order error:', err);
+      // The transaction may have committed even if the HTTP response was
+      // interrupted. Verify by the immutable order id before reporting an
+      // error or allowing a second finalization attempt.
+      const recovered = await recoverCommittedOrderAfterConfirmError(order);
+      if (recovered) {
+        console.warn(`Order ${order.id} was committed and recovered after an uncertain RPC response.`);
+        return recovered;
+      }
       const message = String(err.message || 'Transaction thất bại');
       const missingPrice = message.match(/SKU\s+([^\s]+)\s+has no effective database price/i);
       if (missingPrice) {

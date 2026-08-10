@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260810-activity-vn2';
+import { switchTab } from '../main.js?v=20260810-order-finalize1';
 import { openProductModal } from './products.js';
-import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260810-activity-vn2';
+import { fetchCloudData, dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260810-order-finalize1';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 
 let revenueChartInstance = null;

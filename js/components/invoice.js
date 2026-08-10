@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-activity-vn2';
-import { renderAll, switchTab } from '../main.js?v=20260810-activity-vn2';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-order-finalize1';
+import { renderAll, switchTab } from '../main.js?v=20260810-order-finalize1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260810-activity-vn2';
-import { addCashbookTransaction } from './so_quy.js?v=20260810-activity-vn2';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260810-activity-vn2';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260810-activity-vn2';
+import { generateUniqueCustomerCode } from './customers.js?v=20260810-order-finalize1';
+import { addCashbookTransaction } from './so_quy.js?v=20260810-order-finalize1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260810-order-finalize1';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260810-order-finalize1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -1122,6 +1122,7 @@ export async function saveActiveOrder(status = 'settled') {
 
   isSavingOrder = true;
   disableButtons();
+  let persistedOrderAfterCommit = null;
 
   try {
     let customerId = state.activeCustomerId || null;
@@ -1237,6 +1238,12 @@ export async function saveActiveOrder(status = 'settled') {
     if (saved) {
       // Finalized IDs, snapshots, prices and totals come back from the database.
       const persistedOrder = status === 'settled' && saved.order ? saved.order : order;
+      // From this point the database transaction has completed. Any later
+      // exception is a local refresh problem and must never be reported as a
+      // failed save, otherwise users may retry an order that is already final.
+      if (status === 'settled' && typeof saved === 'object') {
+        persistedOrderAfterCommit = persistedOrder;
+      }
       if (amendOrderId) {
         lastFinalizedOrder = persistedOrder;
         await fetchCloudData();
@@ -1246,21 +1253,27 @@ export async function saveActiveOrder(status = 'settled') {
         return persistedOrder;
       }
       if (status === 'draft') {
-        showToast(`Đã lưu đơn nháp ${persistedOrder.id} thành công!`, 'success');
+        // Show success only after local state and the screen are refreshed.
       } else {
-        showToast(`Đã chốt và lưu đơn hàng ${persistedOrder.id} thành công!`, 'success');
-        
         // Cập nhật state in-memory của khách hàng sau khi DB đã chốt thành công
         if (persistedOrder.customerId) {
           const cust = state.customers.find(c => c.id === persistedOrder.customerId);
           if (cust) {
-            const debtBefore = Number(cust.debt) || 0;
-            const debtAmount = getOrderOutstandingAmount(persistedOrder);
-            const rpcDebt = Number(saved.new_debt);
-            cust.debt = Number.isFinite(rpcDebt)
-              ? rpcDebt
-              : chargeCustomerDebt(debtBefore, debtAmount);
-            if (!saved.already_finalized) {
+            const recoveredCustomer = saved.customer_state;
+            if (recoveredCustomer) {
+              cust.debt = Number(recoveredCustomer.debt || 0);
+              cust.totalTransaction = Number(recoveredCustomer.total_transaction || 0);
+              cust.netRevenue = Number(recoveredCustomer.net_revenue || 0);
+              cust.lastOrderAt = recoveredCustomer.last_order_at || cust.lastOrderAt || '';
+            } else {
+              const debtBefore = Number(cust.debt) || 0;
+              const debtAmount = getOrderOutstandingAmount(persistedOrder);
+              const rpcDebt = Number(saved.new_debt);
+              cust.debt = Number.isFinite(rpcDebt)
+                ? rpcDebt
+                : chargeCustomerDebt(debtBefore, debtAmount);
+            }
+            if (!saved.already_finalized && !recoveredCustomer) {
               cust.totalTransaction = Math.round((cust.totalTransaction || 0) + persistedOrder.totalPayable);
               cust.netRevenue = Math.round((cust.netRevenue || 0) + persistedOrder.totalPayable);
               cust.lastOrderAt = persistedOrder.date || new Date().toISOString();
@@ -1281,6 +1294,12 @@ export async function saveActiveOrder(status = 'settled') {
 
       resetInvoiceBuilder();
       renderAll();
+
+      if (status === 'draft') {
+        showToast(`Đã lưu đơn nháp ${persistedOrder.id} thành công!`, 'success');
+      } else {
+        showToast(`Đã chốt và lưu đơn hàng ${persistedOrder.id} thành công!`, 'success');
+      }
       
       return persistedOrder;
     } else {
@@ -1288,6 +1307,12 @@ export async function saveActiveOrder(status = 'settled') {
       return null;
     }
   } catch (error) {
+    if (persistedOrderAfterCommit) {
+      console.error('Lỗi làm mới giao diện sau khi máy chủ đã lưu đơn:', error);
+      const completedAction = status === 'draft' ? 'lưu nháp' : 'chốt và lưu';
+      showToast(`Đơn ${persistedOrderAfterCommit.id} đã được ${completedAction} thành công trên máy chủ. Giao diện chưa tự làm mới; mở Lịch sử đơn để xem trạng thái chính xác.`, 'warning');
+      return persistedOrderAfterCommit;
+    }
     console.error("Lỗi khi lưu đơn hàng:", error);
     showToast('Có lỗi xảy ra khi lưu đơn hàng: ' + (error.message || 'Lỗi hệ thống'), 'danger');
     return null;

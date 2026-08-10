@@ -52,6 +52,32 @@ test('frontend submits business inputs and uses the canonical RPC response', () 
   assert.doesNotMatch(invoice, /`HD-\$\{Date\.now\(\)/);
 });
 
+test('a post-commit UI refresh error is never reported as a failed finalization', () => {
+  const saveFlow = invoice.slice(
+    invoice.indexOf('export async function saveActiveOrder'),
+    invoice.indexOf('export function resetInvoiceCustomer')
+  );
+  assert.match(saveFlow, /let persistedOrderAfterCommit = null/);
+  assert.match(saveFlow, /if \(status === 'settled' && typeof saved === 'object'\)[\s\S]*persistedOrderAfterCommit = persistedOrder/);
+  assert.match(saveFlow, /if \(persistedOrderAfterCommit\) \{/);
+  assert.match(saveFlow, /completedAction = status === 'draft' \? 'lưu nháp' : 'chốt và lưu'/);
+  assert.match(saveFlow, /return persistedOrderAfterCommit/);
+  assert.ok(
+    saveFlow.indexOf('resetInvoiceBuilder();') < saveFlow.indexOf('Đã chốt và lưu đơn hàng'),
+    'success must be shown only after the local UI refresh completes'
+  );
+});
+
+test('an uncertain RPC response is reconciled by the immutable order id', () => {
+  assert.match(service, /async function recoverCommittedOrderAfterConfirmError\(order\)/);
+  assert.match(service, /\.from\(tableOrdersName\)[\s\S]*\.eq\('id', order\.id\)[\s\S]*\.eq\('idempotency_key', order\.idempotencyKey\)/);
+  assert.match(service, /recovered_after_error: true/);
+  assert.match(service, /customer_state: customerState/);
+  assert.match(service, /const recovered = await recoverCommittedOrderAfterConfirmError\(order\)/);
+  assert.match(invoice, /const recoveredCustomer = saved\.customer_state/);
+  assert.match(invoice, /cust\.totalTransaction = Number\(recoveredCustomer\.total_transaction \|\| 0\)/);
+});
+
 test('phase 1 has no inventory or production coupling and blocks finalized deletes', () => {
   const forbidden = /public\.(?:finished_goods_stock|raw_materials|semi_finished|recipes|production_logs|inventory)/i;
   assert.doesNotMatch(migration, forbidden);
