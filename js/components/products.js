@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260810-customer-switch1';
-import { renderAll } from '../main.js?v=20260810-customer-switch1';
+import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260810-sale-pricing1';
+import { renderAll } from '../main.js?v=20260810-sale-pricing1';
 import {
   buildProductFamilies,
   getProductBaseCode,

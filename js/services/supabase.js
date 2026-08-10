@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-customer-switch1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-customer-switch1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-sale-pricing1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-sale-pricing1';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-customer-switch1';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-sale-pricing1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -412,6 +412,24 @@ async function fetchFullTableData(tableName) {
       .from(tableName)
       .select('*', { count: 'exact' })
       .range(offset, end), pageSize);
+}
+
+async function fetchPriceListItemsForIds(priceListIds) {
+  const uniqueIds = [...new Set((priceListIds || []).map(String).filter(Boolean))];
+  if (uniqueIds.length === 0) return [];
+
+  const rows = [];
+  const chunkSize = 100;
+  for (let start = 0; start < uniqueIds.length; start += chunkSize) {
+    const chunk = uniqueIds.slice(start, start + chunkSize);
+    const chunkRows = await collectAllPages((offset, end) => supabaseClient
+      .from(tablePriceListItemsName)
+      .select('*', { count: 'exact' })
+      .in('price_list_id', chunk)
+      .range(offset, end), 1000);
+    rows.push(...chunkRows);
+  }
+  return rows;
 }
 
 function mapAuthorizedPriceList(row) {
@@ -893,12 +911,20 @@ export async function fetchCloudData(options = {}) {
         if (plErr) throw plErr;
 
         const mappedPricelists = (plData || []).map(mapAuthorizedPriceList);
+        const visiblePricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
+        const visiblePriceListIds = new Set(visiblePricelists.map(priceList => priceList.id));
         // Build one complete authorized snapshot before touching shared state.
         // A price-list refresh is used by login and Realtime; publishing the
         // list before its item rows arrive makes prices briefly disappear.
-        const itemData = await fetchFullTableData(tablePriceListItemsName);
-        const visiblePricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
-        const visiblePriceListIds = new Set(visiblePricelists.map(priceList => priceList.id));
+        // Sale loads only the global lists explicitly enabled by Accounting.
+        // Customer-assigned exceptions are loaded on demand by
+        // dbLoadCustomerAssignedPricing after the exact dealer is selected.
+        // This avoids evaluating the customer-assignment RLS branch for every
+        // unrelated price row and prevents one slow item request from erasing
+        // the otherwise valid visible price-list snapshot.
+        const itemData = state.currentUser?.role === 'sale'
+          ? await fetchPriceListItemsForIds([...visiblePriceListIds])
+          : await fetchFullTableData(tablePriceListItemsName);
         const mappedPriceListItems = (itemData || []).map(mapAuthorizedPriceListItem);
 
         state.allPricelists = mappedPricelists;
