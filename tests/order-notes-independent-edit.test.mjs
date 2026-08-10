@@ -26,8 +26,8 @@ test('history edits notes outside the finalized-order amendment flow', () => {
   assert.doesNotMatch(service.match(/export async function dbUpdateOrderNotes[\s\S]*?\n\}/)?.[0] || '', /rpc_amend_order|dbAmendOrder/);
 });
 
-test('customer debt history distinguishes an amendment reversal from a real cancellation', () => {
+test('customer debt history does not expose amendment and cancellation bookkeeping labels', () => {
   const customers = read('js/components/customers.js');
-  assert.match(customers, /isAmendmentReversal[\s\S]*includes\('sửa đơn'\)/);
-  assert.match(customers, /isAmendmentReversal[\s\S]*Đảo bản cũ[\s\S]*Hủy đơn/);
+  assert.match(customers, /projectEffectiveCustomerDebtHistory/);
+  assert.doesNotMatch(customers, /Đảo bản cũ/);
 });

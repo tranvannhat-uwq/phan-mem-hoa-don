@@ -10,6 +10,51 @@ import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-
 export let supabaseClient = null;
 export let isCloudActive = false;
 
+const ORDER_CACHE_KEY = 'billing_system_orders';
+const ORDER_CACHE_MAX_ITEMS = 120;
+const ORDER_CACHE_MAX_JSON_CHARS = 750000;
+
+// Cloud is authoritative. This browser copy is only a bounded fallback cache and
+// must never make a successful Cloud write look like a failed business action.
+export function cacheOrdersLocally(orders = state.savedOrders) {
+  const source = Array.isArray(orders) ? orders : [];
+  const seen = new Set();
+  const byNewest = [...source].sort((left, right) =>
+    new Date(right?.date || right?.createdAt || 0) - new Date(left?.date || left?.createdAt || 0));
+  const prioritized = [
+    ...byNewest.filter(order => order?.status === 'draft'),
+    ...byNewest.filter(order => order?.status !== 'draft')
+  ].filter(order => {
+    const key = String(order?.id || '');
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, ORDER_CACHE_MAX_ITEMS);
+
+  try {
+    let snapshot = prioritized;
+    let payload = JSON.stringify(snapshot);
+    while (payload.length > ORDER_CACHE_MAX_JSON_CHARS && snapshot.length > 1) {
+      snapshot = snapshot.slice(0, Math.max(1, Math.floor(snapshot.length / 2)));
+      payload = JSON.stringify(snapshot);
+    }
+    if (payload.length > ORDER_CACHE_MAX_JSON_CHARS) payload = '[]';
+
+    try {
+      localStorage.setItem(ORDER_CACHE_KEY, payload);
+    } catch (error) {
+      // Replacing an oversized legacy value can fail while that value still
+      // occupies the quota. Remove only this disposable cache and retry once.
+      localStorage.removeItem(ORDER_CACHE_KEY);
+      localStorage.setItem(ORDER_CACHE_KEY, payload);
+    }
+    return true;
+  } catch (error) {
+    console.warn('Could not update the bounded order browser cache:', error?.message || error);
+    return false;
+  }
+}
+
 function removeStorageKeysByPrefix(storage, prefixes) {
   if (!storage) return;
   for (let i = storage.length - 1; i >= 0; i -= 1) {
@@ -119,7 +164,7 @@ export function loadLocalStorageBackup() {
     state.savedOrders = JSON.parse(storedOrders);
   } else {
     state.savedOrders = [];
-    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+    cacheOrdersLocally(state.savedOrders);
   }
 
   const storedCustomers = localStorage.getItem('billing_system_customers');
@@ -575,7 +620,8 @@ function mapCustomerDebtTransaction(row) {
     orderId: row.order_id || null,
     salesReturnId: row.sales_return_id || null,
     cashbookTransactionId: row.cashbook_transaction_id || null,
-    reversalOfId: row.reversal_of_id || null
+    reversalOfId: row.reversal_of_id || null,
+    amendsLedgerId: row.amends_ledger_id || null
   };
 }
 
@@ -623,6 +669,9 @@ function mapCashbookTransaction(t) {
     type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
     direction: t.direction || (t.type === 'chi' ? 'out' : 'in'),
     transactionType: t.transaction_type || null,
+    operationType: t.operation_type || null,
+    referenceType: t.reference_type || null,
+    referenceId: t.reference_id || null,
     category: t.category || t.transaction_type,
     partner: t.partner, value: parseFloat(t.value || 0),
     method: t.method || t.payment_method || 'cash', accounting: t.accounting,
@@ -633,6 +682,12 @@ function mapCashbookTransaction(t) {
     supplierId: t.supplier_id || (supplierMeta ? supplierMeta[1] : null),
     orderId: t.order_id || null, salesReturnId: t.sales_return_id || null,
     employeeId: t.employee_id || null, reversalOfId: t.reversal_of_id || null,
+    purchaseId: t.purchase_id || null, purchasePaymentId: t.purchase_payment_id || null,
+    collectorId: t.collector_id || null,
+    collectorName: t.collector_name || t.creator || '',
+    counterpartyType: t.counterparty_type || (t.customer_id ? 'customer' : (t.supplier_id ? 'supplier' : 'other')),
+    counterpartyId: t.counterparty_id || t.customer_id || t.supplier_id || null,
+    amendedAt: t.amended_at || null, amendmentCount: Number(t.amendment_count || 0),
     cancelledAt: t.cancelled_at || null, cancellationReason: t.cancellation_reason || ''
   };
 }
@@ -839,7 +894,7 @@ export async function fetchCloudData(options = {}) {
 
         const combined = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
         state.savedOrders = combined;
-        localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+        cacheOrdersLocally(state.savedOrders);
       } catch (ordErr) {
         console.warn("Could not load orders from Supabase, fallback to local:", ordErr.message);
         state.savedOrders = JSON.parse(localStorage.getItem('billing_system_orders') || '[]');
@@ -1083,6 +1138,9 @@ export async function fetchCloudData(options = {}) {
               type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
               direction: t.direction || (t.type === 'chi' ? 'out' : 'in'),
               transactionType: t.transaction_type || null,
+              operationType: t.operation_type || null,
+              referenceType: t.reference_type || null,
+              referenceId: t.reference_id || null,
               category: t.category || t.transaction_type,
               partner: t.partner,
               value: parseFloat(t.value || 0),
@@ -1098,6 +1156,14 @@ export async function fetchCloudData(options = {}) {
               orderId: t.order_id || null,
               salesReturnId: t.sales_return_id || null,
               employeeId: t.employee_id || null,
+              purchaseId: t.purchase_id || null,
+              purchasePaymentId: t.purchase_payment_id || null,
+              collectorId: t.collector_id || null,
+              collectorName: t.collector_name || t.creator || '',
+              counterpartyType: t.counterparty_type || (t.customer_id ? 'customer' : (t.supplier_id ? 'supplier' : 'other')),
+              counterpartyId: t.counterparty_id || t.customer_id || t.supplier_id || null,
+              amendedAt: t.amended_at || null,
+              amendmentCount: Number(t.amendment_count || 0),
               reversalOfId: t.reversal_of_id || null,
               cancelledAt: t.cancelled_at || null,
               cancellationReason: t.cancellation_reason || ''
@@ -2402,7 +2468,7 @@ export async function dbRefreshOrderById(orderId, { isDraft = false, deleted = f
   if (!isCloudActive || !supabaseClient || !orderId) return false;
   const removeFromState = () => {
     state.savedOrders = (state.savedOrders || []).filter(order => String(order.id) !== String(orderId));
-    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+    cacheOrdersLocally(state.savedOrders);
   };
 
   if (deleted) {
@@ -2427,7 +2493,7 @@ export async function dbRefreshOrderById(orderId, { isDraft = false, deleted = f
     state.savedOrders = (state.savedOrders || []).filter(order => String(order.id) !== String(orderId));
     state.savedOrders.push(mapped);
     state.savedOrders.sort((a, b) => new Date(b.date) - new Date(a.date));
-    localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+    cacheOrdersLocally(state.savedOrders);
     return mapped;
   } catch (error) {
     console.error('Error refreshing realtime order:', error);
@@ -4111,6 +4177,42 @@ export async function dbUpdateManualCashbookTransaction(cashbookId, input) {
   } catch (err) {
     console.error('RPC update manual cashbook error:', err);
     showToast(err.message || 'Không thể sửa phiếu Sổ quỹ. Dữ liệu chưa thay đổi.', 'danger');
+    return false;
+  }
+}
+
+export async function dbAmendCashbookTransaction(cashbookId, input) {
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Sổ quỹ chỉ được sửa khi đã kết nối và xác thực với Cloud.', 'danger');
+    return false;
+  }
+  if (!['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase())) {
+    showToast('Chỉ Admin hoặc Kế toán được sửa phiếu thu/chi.', 'danger');
+    return false;
+  }
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_amend_cashbook_transaction', {
+      p_cashbook_id: cashbookId,
+      p_input: {
+        transactionDate: input.transactionDate,
+        category: input.category || '',
+        partner: input.partner || '',
+        counterpartyType: input.counterpartyType || 'other',
+        counterpartyId: input.counterpartyId || '',
+        collectorId: input.collectorId || '',
+        collectorName: input.collectorName || '',
+        value: Number(input.value || 0),
+        method: input.method || 'cash',
+        accounting: input.accounting !== false,
+        note: input.note || '',
+        reason: input.reason || 'Sửa phiếu thu/chi'
+      }
+    });
+    if (error) throw error;
+    return data || { success: true };
+  } catch (err) {
+    console.error('RPC amend cashbook error:', err);
+    showToast(err.message || 'Không thể sửa phiếu thu/chi. Dữ liệu chưa thay đổi.', 'danger');
     return false;
   }
 }

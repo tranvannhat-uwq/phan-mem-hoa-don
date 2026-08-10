@@ -50,9 +50,14 @@ test('database classification is the primary atomic RPC for legacy receipts', ()
   assert.doesNotMatch(cashbookUi, /Number\(savedToCloud\.new_debt\)/);
 });
 
-test('cancelled receipts reload the authoritative ledger and expose the audit rows', () => {
+test('cancelled receipts reload audit data but cashbook shows only effective vouchers', () => {
   assert.match(supabase, /fetchFullTableData\(tableCustomerDebtTransactionsName\)/);
   assert.match(supabase, /payment_cancel:\s*'payment_cancel'/);
   assert.match(supabase, /customer\.debtHistory = mergeCustomerDebtHistory\(/);
-  assert.match(cashbookUi, /activeFilters\.statusCancelled = true/);
+  assert.equal(domain.isEffectiveCashbookTransaction({ id: 'PT-1', status: 'completed', transactionType: 'customer_payment' }), true);
+  assert.equal(domain.isEffectiveCashbookTransaction({ id: 'PT-1', status: 'cancelled', transactionType: 'customer_payment' }), false);
+  assert.equal(domain.isEffectiveCashbookTransaction({ id: 'VOID-PT-1', status: 'cancelled', transactionType: 'cashbook_reversal', reversalOfId: 'PT-1' }), false);
+  assert.equal(domain.isEffectiveCashbookTransaction({ id: 'VOID-OLD', status: 'completed' }), false);
+  assert.match(cashbookUi, /txs\.filter\(isEffectiveCashbookTransaction\)/);
+  assert.doesNotMatch(cashbookUi, /activeFilters\.statusCancelled/);
 });

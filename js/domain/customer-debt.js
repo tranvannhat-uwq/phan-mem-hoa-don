@@ -99,6 +99,114 @@ export function getNeutralizedOrderDebtEntryIds(history = []) {
   return hiddenIds;
 }
 
+const DEBT_CANCELLATION_TYPES = new Set(['payment_cancel', 'order_cancel', 'return_cancel']);
+const DEBT_AMENDMENT_TYPES = new Set(['payment_amend', 'payment_relink', 'sale_payment_amend', 'return_amend']);
+
+function debtTransactionType(entry = {}) {
+  return String(entry.transactionType ?? entry.transaction_type ?? entry.type ?? '').toLowerCase();
+}
+
+function debtRelationValue(entry = {}, camelKey, snakeKey) {
+  const value = entry?.[camelKey] ?? entry?.[snakeKey];
+  return value == null || value === '' ? '' : String(value);
+}
+
+/**
+ * Build the effective business history shown to users.
+ *
+ * The database ledger remains append-only for audit. Cancellation rows remove
+ * their whole source document from this projection, while amendment rows are
+ * folded into the original transaction so the UI shows one current voucher.
+ */
+export function projectEffectiveCustomerDebtHistory(history = []) {
+  const entries = (Array.isArray(history) ? history : []).filter(Boolean);
+  const byId = new Map(entries
+    .filter(entry => entry.id)
+    .map(entry => [String(entry.id), entry]));
+  const hiddenIds = new Set();
+
+  for (const cancellation of entries) {
+    const type = debtTransactionType(cancellation);
+    if (!DEBT_CANCELLATION_TYPES.has(type)) continue;
+    if (cancellation.id) hiddenIds.add(String(cancellation.id));
+
+    const originalId = debtRelationValue(cancellation, 'reversalOfId', 'reversal_of_id');
+    if (originalId) hiddenIds.add(originalId);
+
+    const cashbookId = debtRelationValue(cancellation, 'cashbookTransactionId', 'cashbook_transaction_id');
+    const orderId = debtRelationValue(cancellation, 'orderId', 'order_id');
+    const returnId = debtRelationValue(cancellation, 'salesReturnId', 'sales_return_id');
+    for (const candidate of entries) {
+      const sameDocument = (type === 'payment_cancel' && cashbookId
+          && debtRelationValue(candidate, 'cashbookTransactionId', 'cashbook_transaction_id') === cashbookId)
+        || (type === 'order_cancel' && orderId
+          && debtRelationValue(candidate, 'orderId', 'order_id') === orderId)
+        || (type === 'return_cancel' && returnId
+          && debtRelationValue(candidate, 'salesReturnId', 'sales_return_id') === returnId);
+      if (sameDocument && candidate.id) hiddenIds.add(String(candidate.id));
+    }
+  }
+
+  const projected = new Map(entries
+    .filter(entry => entry.id && !DEBT_AMENDMENT_TYPES.has(debtTransactionType(entry)))
+    .map(entry => [String(entry.id), { ...entry }]));
+  const amendments = entries
+    .filter(entry => DEBT_AMENDMENT_TYPES.has(debtTransactionType(entry)))
+    .sort((left, right) => new Date(left.date || 0) - new Date(right.date || 0));
+
+  for (const amendment of amendments) {
+    const amendmentId = amendment.id ? String(amendment.id) : '';
+    const amendmentWasCancelled = amendmentId && hiddenIds.has(amendmentId);
+    if (amendmentId) hiddenIds.add(amendmentId);
+    if (amendmentWasCancelled) continue;
+
+    const type = debtTransactionType(amendment);
+    let targetId = debtRelationValue(amendment, 'amendsLedgerId', 'amends_ledger_id')
+      || debtRelationValue(amendment, 'reversalOfId', 'reversal_of_id');
+    if (type === 'sale_payment_amend') {
+      const orderId = debtRelationValue(amendment, 'orderId', 'order_id');
+      const orderEntry = entries.find(entry =>
+        debtTransactionType(entry) === 'order'
+        && debtRelationValue(entry, 'orderId', 'order_id') === orderId);
+      if (orderEntry?.id) targetId = String(orderEntry.id);
+    }
+
+    if (targetId && hiddenIds.has(targetId)) continue;
+    const target = targetId ? projected.get(targetId) : null;
+    const amendmentChange = toDebtAmount(amendment.debtChange ?? amendment.debt_change);
+    if (target) {
+      const effectiveChange = toDebtAmount(target.debtChange ?? target.debt_change) + amendmentChange;
+      target.debtChange = effectiveChange;
+      target.amount = Math.abs(effectiveChange);
+      target.debtAfter = toDebtAmount(amendment.debtAfter ?? amendment.balance_after);
+      target.date = amendment.date || target.date;
+      if (effectiveChange === 0) hiddenIds.add(targetId);
+      continue;
+    }
+
+    // A relink into another customer references a ledger row owned by the old
+    // customer, so that original is intentionally absent from this history.
+    // Present the new customer's effective receipt/return, not an adjustment.
+    if (amendmentChange !== 0 && amendmentId) {
+      const effectiveType = type === 'return_amend' ? 'return' : (amendmentChange < 0 ? 'payment' : 'charge');
+      projected.set(amendmentId, {
+        ...amendment,
+        type: effectiveType,
+        transactionType: effectiveType === 'charge' ? 'order' : effectiveType,
+        amount: Math.abs(amendmentChange),
+        debtChange: amendmentChange
+      });
+      hiddenIds.delete(amendmentId);
+    }
+  }
+
+  return entries
+    .map(entry => entry.id ? projected.get(String(entry.id)) : entry)
+    .filter((entry, index, result) => entry
+      && !hiddenIds.has(String(entry.id || ''))
+      && result.indexOf(entry) === index);
+}
+
 /**
  * The database ledger is authoritative. Older browser builds also cached an
  * optimistic order entry whose id was the order id itself. Once the real

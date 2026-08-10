@@ -29,3 +29,24 @@ export function isCustomerDebtReceipt(transaction = {}) {
 export function getCanonicalCashbookId(transaction = {}) {
   return transaction.cloudId || transaction.cloud_id || transaction.id || '';
 }
+
+/**
+ * The operational cashbook shows only vouchers that still have financial
+ * effect. Cancelled sources and their append-only reversal rows remain in the
+ * database audit trail but are not separate business vouchers in the UI.
+ */
+export function isEffectiveCashbookTransaction(transaction = {}) {
+  const status = normalizeCashbookText(transaction.status);
+  const transactionType = normalizeCashbookText(
+    transaction.transactionType ?? transaction.transaction_type
+  );
+  const id = normalizeCashbookText(transaction.id);
+  const isCancelled = status === 'cancelled'
+    || status === 'canceled'
+    || status.includes('huy')
+    || status.includes('cancel');
+  const isReversal = Boolean(transaction.reversalOfId || transaction.reversal_of_id)
+    || transactionType.includes('reversal')
+    || id.startsWith('void-');
+  return !isCancelled && !isReversal;
+}

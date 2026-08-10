@@ -5,7 +5,7 @@ import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260810-sale-pricing-rpc1';
 import { addCashbookTransaction } from './so_quy.js?v=20260810-sale-pricing-rpc1';
 import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260810-sale-pricing-rpc1';
-import { collectCustomerDebt, getNeutralizedOrderDebtEntryIds } from '../domain/customer-debt.js';
+import { collectCustomerDebt, projectEffectiveCustomerDebtHistory } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
@@ -2882,12 +2882,6 @@ export async function openCustomerDetailModal(index) {
 
   modal.classList.add('active');
 
-  const technicalHistoryToggle = document.getElementById('customer-debt-show-technical');
-  if (technicalHistoryToggle) {
-    technicalHistoryToggle.checked = false;
-    technicalHistoryToggle.disabled = true;
-  }
-
   const loadingHistoryBody = document.getElementById('detail-debt-history-body');
   if (loadingHistoryBody) {
     loadingHistoryBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
@@ -2971,8 +2965,7 @@ export async function openCustomerDetailModal(index) {
   // Vẽ danh sách lịch sử biến động công nợ
   const historyBody = document.getElementById('detail-debt-history-body');
   if (historyBody) {
-    const history = cust.debtHistory || [];
-    const neutralizedEntryIds = getNeutralizedOrderDebtEntryIds(history);
+    const history = projectEffectiveCustomerDebtHistory(cust.debtHistory || []);
     
     // Sắp xếp theo ngày giờ mới nhất lên trên
     const sortedHistory = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -2986,11 +2979,7 @@ export async function openCustomerDetailModal(index) {
         </tr>
       `;
     } else {
-      const hiddenOrderCount = Math.floor(neutralizedEntryIds.size / 2);
-      const compactNotice = hiddenOrderCount > 0
-        ? `<tr class="customer-debt-compact-notice"><td colspan="7" style="text-align:center; padding:0.65rem; color:var(--text-muted); background:var(--bg-secondary);">Đã ẩn ${hiddenOrderCount} đơn đã hủy hoặc bản cũ đã được thay thế. Bật “Hiện bút toán đã triệt tiêu” để kiểm tra.</td></tr>`
-        : '';
-      historyBody.innerHTML = compactNotice + sortedHistory.map(h => {
+      historyBody.innerHTML = sortedHistory.map(h => {
         let typeBadge = '';
         let amountText = '';
         let debtBefore = 0;
@@ -3010,19 +2999,11 @@ export async function openCustomerDetailModal(index) {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 600; white-space: nowrap;">Ghi nợ</span>`;
           amountText = `<span style="color: var(--color-danger); font-weight: 600;">+${formatCurrency(h.amount)}</span>`;
           debtBefore = h.debtBefore ?? (h.debtAfter - h.amount);
-        } else if (h.type === 'payment_cancel') {
-          typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 600; white-space: nowrap;">Hủy thu nợ</span>`;
-          const restored = debtChange ?? Math.abs(Number(h.amount || 0));
-          amountText = `<span style="color: #d97706; font-weight: 600;">+${formatCurrency(Math.abs(restored))}</span>`;
-          debtBefore = h.debtBefore ?? (h.debtAfter - restored);
-        } else if (h.type === 'order_cancel') {
-          const isAmendmentReversal = String(noteText).toLocaleLowerCase('vi-VN').includes('sửa đơn');
-          typeBadge = isAmendmentReversal
-            ? `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.12); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 600; white-space: nowrap;">Đảo bản cũ</span>`
-            : `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.12); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 600; white-space: nowrap;">Hủy đơn</span>`;
-          const reversedDebt = debtChange ?? -Math.abs(Number(h.amount || 0));
-          amountText = `<span style="color: ${isAmendmentReversal ? '#d97706' : '#dc2626'}; font-weight: 600;">-${formatCurrency(Math.abs(reversedDebt))}</span>`;
-          debtBefore = h.debtBefore ?? (h.debtAfter - reversedDebt);
+        } else if (h.type === 'return') {
+          typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(14, 165, 233, 0.15); color: #0284c7; border: 1px solid rgba(14, 165, 233, 0.3); font-weight: 600; white-space: nowrap;">Trả hàng</span>`;
+          const returnChange = debtChange ?? -Math.abs(Number(h.amount || 0));
+          amountText = `<span style="color: #0284c7; font-weight: 600;">-${formatCurrency(Math.abs(returnChange))}</span>`;
+          debtBefore = h.debtBefore ?? (h.debtAfter - returnChange);
         } else {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: 600; white-space: nowrap;">Điều chỉnh</span>`;
           const effectiveChange = debtChange ?? Number(h.amount || 0);
@@ -3039,9 +3020,8 @@ export async function openCustomerDetailModal(index) {
           hour: '2-digit', minute: '2-digit'
         }).format(transactionDate);
         
-        const isNeutralized = neutralizedEntryIds.has(String(h.id || ''));
         return `
-          <tr${isNeutralized ? ' class="customer-debt-neutralized-row" style="display:none;"' : ''}>
+          <tr>
             <td class="customer-debt-time-cell"><strong>${formattedDate}</strong><span>${formattedTime}</span></td>
             <td class="customer-debt-source-cell">${sourceCell}</td>
             <td style="text-align: center;">${typeBadge}</td>
@@ -3069,17 +3049,6 @@ export async function openCustomerDetailModal(index) {
         });
       });
 
-      if (technicalHistoryToggle) {
-        technicalHistoryToggle.disabled = neutralizedEntryIds.size === 0;
-        technicalHistoryToggle.onchange = () => {
-          const showTechnical = technicalHistoryToggle.checked;
-          historyBody.querySelectorAll('.customer-debt-neutralized-row').forEach(row => {
-            row.style.display = showTechnical ? '' : 'none';
-          });
-          const notice = historyBody.querySelector('.customer-debt-compact-notice');
-          if (notice) notice.style.display = showTechnical ? 'none' : '';
-        };
-      }
     }
   }
 

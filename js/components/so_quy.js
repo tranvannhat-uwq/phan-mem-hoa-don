@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
 import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
-import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260810-sale-pricing-rpc1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -30,9 +30,68 @@ function getTransactionPartnerAddress(transaction = {}) {
 }
 
 function canEditCashbookTransaction(transaction = {}) {
-  return ['admin', 'accounting'].includes(state.currentUser?.role)
+  const transactionType = String(transaction.transactionType || '').toLowerCase();
+  return ['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase())
     && !isCancelledStatus(transaction.status)
-    && ['manual_thu', 'manual_chi'].includes(String(transaction.transactionType || '').toLowerCase());
+    && !transaction.reversalOfId
+    && !transactionType.includes('reversal');
+}
+
+function getCashbookEditRoute(transaction = {}) {
+  const transactionType = String(transaction.transactionType || '').toLowerCase();
+  const operationType = String(transaction.operationType || '').toLowerCase();
+  if (transactionType === 'sales_return_refund' || transaction.salesReturnId) return 'return_refund';
+  if (transactionType === 'supplier_payment' || transaction.purchasePaymentId) return 'supplier_payment';
+  if (transactionType === 'customer_payment' || transaction.debtImpact) return 'customer_receipt';
+  if (operationType === 'sale_receipt' || (transaction.type === 'thu' && transaction.orderId)) return 'sale_receipt';
+  return 'standalone';
+}
+
+function getCashbookCounterpartyType(transaction = {}) {
+  const route = getCashbookEditRoute(transaction);
+  if (route === 'supplier_payment') return 'supplier';
+  if (route === 'customer_receipt' || route === 'sale_receipt' || route === 'return_refund') return 'customer';
+  return transaction.counterpartyType || (transaction.customerId ? 'customer' : (transaction.supplierId ? 'supplier' : 'other'));
+}
+
+function populateCashbookCounterpartyOptions(type, selectedId = '', selectedLabel = '') {
+  const select = document.getElementById('cashbook-edit-counterparty');
+  const group = document.getElementById('cashbook-edit-counterparty-group');
+  const partnerInput = document.getElementById('cashbook-edit-partner');
+  if (!select || !group || !partnerInput) return;
+  const normalizedType = String(type || 'other');
+  const rows = normalizedType === 'customer'
+    ? (state.customers || []).filter(item => item.status !== 'inactive')
+    : normalizedType === 'supplier'
+      ? (state.suppliers || []).filter(item => item.isActive !== false)
+      : normalizedType === 'employee'
+        ? (state.users || []).filter(item => item.isActive !== false)
+        : [];
+  group.style.display = normalizedType === 'other' ? 'none' : 'block';
+  partnerInput.readOnly = normalizedType !== 'other';
+  select.required = normalizedType !== 'other';
+  select.innerHTML = rows.map(item => {
+    const id = item.id || item.authUserId || item.username || '';
+    const label = item.name || item.displayName || item.username || id;
+    const code = item.code ? ` — ${item.code}` : '';
+    return `<option value="${escapeCashbookHtml(id)}">${escapeCashbookHtml(label + code)}</option>`;
+  }).join('');
+  const hasSelectedId = selectedId
+    && rows.some(item => String(item.id || item.authUserId || item.username) === String(selectedId));
+  if (selectedId && !hasSelectedId && normalizedType !== 'other') {
+    const fallbackLabel = selectedLabel || `Đối tượng ${selectedId}`;
+    select.insertAdjacentHTML(
+      'afterbegin',
+      `<option value="${escapeCashbookHtml(selectedId)}">${escapeCashbookHtml(fallbackLabel)}</option>`
+    );
+  }
+  if (selectedId && [...select.options].some(option => option.value === String(selectedId))) {
+    select.value = String(selectedId);
+  }
+  const selected = select.options[select.selectedIndex];
+  if (normalizedType !== 'other' && selected) {
+    partnerInput.value = selected.textContent.split(' — ')[0];
+  }
 }
 
 function toLocalDateTimeInput(value) {
@@ -195,7 +254,6 @@ let activeFilters = {
   showChi: true,
   category: 'all',
   statusPaid: true,
-  statusCancelled: false,
   accounting: 'all',   // 'all', 'yes', 'no'
   creator: 'all',
   searchQuery: '',
@@ -290,16 +348,9 @@ export function setupSoQuyPanel() {
 
   // 5. Status
   const statusPaidCb = document.getElementById('so-quy-status-paid');
-  const statusCancelledCb = document.getElementById('so-quy-status-cancelled');
   if (statusPaidCb) {
     statusPaidCb.addEventListener('change', (e) => {
       activeFilters.statusPaid = e.target.checked;
-      renderSoQuyTable();
-    });
-  }
-  if (statusCancelledCb) {
-    statusCancelledCb.addEventListener('change', (e) => {
-      activeFilters.statusCancelled = e.target.checked;
       renderSoQuyTable();
     });
   }
@@ -752,13 +803,21 @@ export function setupSoQuyPanel() {
   };
   document.getElementById('btn-close-cashbook-edit')?.addEventListener('click', hideEditModal);
   document.getElementById('btn-cancel-cashbook-edit')?.addEventListener('click', hideEditModal);
+  document.getElementById('cashbook-edit-counterparty-type')?.addEventListener('change', event => {
+    populateCashbookCounterpartyOptions(event.target.value);
+  });
+  document.getElementById('cashbook-edit-counterparty')?.addEventListener('change', event => {
+    const selected = event.target.options[event.target.selectedIndex];
+    const partnerInput = document.getElementById('cashbook-edit-partner');
+    if (partnerInput && selected) partnerInput.value = selected.textContent.split(' — ')[0];
+  });
 
   editForm?.addEventListener('submit', async event => {
     event.preventDefault();
     const txId = document.getElementById('cashbook-edit-id')?.value || '';
     const transaction = getCashbookTransactions().find(item => String(item.id) === String(txId));
     if (!transaction || !canEditCashbookTransaction(transaction)) {
-      showToast('Phiếu này không thuộc nhóm phiếu nhập tay được phép sửa.', 'warning');
+      showToast('Phiếu đã hủy hoặc phiếu đảo không được phép sửa.', 'warning');
       return;
     }
 
@@ -773,14 +832,22 @@ export function setupSoQuyPanel() {
     const saveButton = document.getElementById('btn-save-cashbook-edit');
     if (saveButton) saveButton.disabled = true;
     try {
-      const updated = await dbUpdateManualCashbookTransaction(getCanonicalCashbookId(transaction), {
+      const counterpartyType = document.getElementById('cashbook-edit-counterparty-type')?.value || 'other';
+      const counterpartySelect = document.getElementById('cashbook-edit-counterparty');
+      const collectorSelect = document.getElementById('cashbook-edit-collector');
+      const updated = await dbAmendCashbookTransaction(getCanonicalCashbookId(transaction), {
         transactionDate: parsedDate.toISOString(),
         category: document.getElementById('cashbook-edit-category')?.value.trim() || '',
         partner: document.getElementById('cashbook-edit-partner')?.value.trim() || '',
+        counterpartyType,
+        counterpartyId: counterpartyType === 'other' ? '' : (counterpartySelect?.value || ''),
+        collectorId: collectorSelect?.value || '',
+        collectorName: collectorSelect?.options[collectorSelect.selectedIndex]?.textContent || '',
         value,
         method: document.getElementById('cashbook-edit-method')?.value || 'cash',
         accounting: document.getElementById('cashbook-edit-accounting')?.checked === true,
-        note: document.getElementById('cashbook-edit-note')?.value.trim() || ''
+        note: document.getElementById('cashbook-edit-note')?.value.trim() || '',
+        reason: `Sửa ${transaction.type === 'thu' ? 'phiếu thu' : 'phiếu chi'} ${transaction.id}`
       });
       if (!updated) return;
 
@@ -872,6 +939,7 @@ function getCurrentMonthRange() {
 // Retrieve currently filtered transactions for display/calculations
 function getProcessedData() {
   const txs = getCashbookTransactions();
+  const effectiveTxs = txs.filter(isEffectiveCashbookTransaction);
   const balances = getStartingBalances();
   
   // Define time range boundaries
@@ -906,7 +974,7 @@ function getProcessedData() {
   let preExpense = 0;
   
   if (rangeStart) {
-    txs.forEach(t => {
+    effectiveTxs.forEach(t => {
       // Must be settled, match account type, and occur BEFORE the rangeStart
       if (!isPaidStatus(t.status)) return;
       
@@ -923,7 +991,7 @@ function getProcessedData() {
   const calculatedStartBalance = baseStartVal + preIncome - preExpense;
 
   // 2. Filter transactions that are within the current date range
-  let filtered = txs.filter(t => {
+  let filtered = effectiveTxs.filter(t => {
     // Account type
     if (activeFilters.accountType !== 'all' && t.method !== activeFilters.accountType) return false;
     
@@ -943,7 +1011,6 @@ function getProcessedData() {
     
     // Status (Trạng thái)
     if (isPaidStatus(t.status) && !activeFilters.statusPaid) return false;
-    if (isCancelledStatus(t.status) && !activeFilters.statusCancelled) return false;
     
     // Business Accounting (Hạch toán KQKD)
     if (activeFilters.accounting === 'yes' && !t.accounting) return false;
@@ -1169,7 +1236,7 @@ export function renderSoQuyTable() {
 
   const allTxs = getCashbookTransactions();
   // Refresh dynamic dropdown options
-  refreshDynamicFilters(allTxs);
+  refreshDynamicFilters(allTxs.filter(isEffectiveCashbookTransaction));
 
   // Get processed transactions and statistics
   const { filteredTransactions, stats } = getProcessedData();
@@ -1198,15 +1265,14 @@ export function renderSoQuyTable() {
   }
 
   tableBody.innerHTML = filteredTransactions.map(t => {
-    const isCancelled = isCancelledStatus(t.status);
     const partnerAddress = getTransactionPartnerAddress(t);
     const valText = t.type === 'thu' ? formatCurrency(t.value) : `-${formatCurrency(t.value)}`;
-    const valStyle = isCancelled 
-      ? 'color: var(--text-muted); text-decoration: line-through;' 
-      : (t.type === 'thu' ? 'color: #0070d2; font-weight: 700;' : 'color: var(--color-danger); font-weight: 700;');
+    const valStyle = t.type === 'thu'
+      ? 'color: #0070d2; font-weight: 700;'
+      : 'color: var(--color-danger); font-weight: 700;';
 
     return `
-      <tr class="${isCancelled ? 'row-cancelled' : ''}" style="${isCancelled ? 'opacity: 0.6;' : ''}">
+      <tr>
         <td style="text-align: center; padding: 0.5rem 0.25rem;">
           <input type="checkbox" class="so-quy-row-checkbox" data-id="${t.id}" style="cursor: pointer; width: 14px; height: 14px;">
         </td>
@@ -1278,11 +1344,24 @@ export function renderSoQuyTable() {
 
 function openCashbookEditModal(transaction) {
   if (!canEditCashbookTransaction(transaction)) {
-    showToast('Chỉ phiếu nhập tay còn hiệu lực mới được phép sửa.', 'warning');
+    showToast('Phiếu đã hủy hoặc phiếu đảo không được phép sửa.', 'warning');
     return;
   }
   const editModal = document.getElementById('so-quy-edit-modal');
   if (!editModal) return;
+
+  const isReceipt = transaction.type === 'thu';
+  const route = getCashbookEditRoute(transaction);
+  const title = document.getElementById('cashbook-edit-title');
+  const categoryLabel = document.getElementById('cashbook-edit-category-label');
+  const collectorLabel = document.getElementById('cashbook-edit-collector-label');
+  const counterpartyTypeLabel = document.getElementById('cashbook-edit-counterparty-type-label');
+  const partnerLabel = document.getElementById('cashbook-edit-partner-label');
+  if (title) title.textContent = isReceipt ? 'Sửa phiếu thu' : 'Sửa phiếu chi';
+  if (categoryLabel) categoryLabel.textContent = isReceipt ? 'Loại thu' : 'Loại chi';
+  if (collectorLabel) collectorLabel.textContent = isReceipt ? 'Người thu' : 'Người chi';
+  if (counterpartyTypeLabel) counterpartyTypeLabel.textContent = isReceipt ? 'Đối tượng nộp' : 'Đối tượng nhận';
+  if (partnerLabel) partnerLabel.textContent = isReceipt ? 'Tên người nộp' : 'Tên người nhận';
 
   document.getElementById('cashbook-edit-id').value = transaction.id;
   document.getElementById('cashbook-edit-code').value = transaction.id;
@@ -1294,6 +1373,51 @@ function openCashbookEditModal(transaction) {
   document.getElementById('cashbook-edit-method').value = transaction.method || 'cash';
   document.getElementById('cashbook-edit-accounting').checked = transaction.accounting !== false;
   document.getElementById('cashbook-edit-note').value = transaction.note || '';
+
+  const collectorSelect = document.getElementById('cashbook-edit-collector');
+  if (collectorSelect) {
+    collectorSelect.innerHTML = (state.users || [])
+      .filter(user => user.isActive !== false)
+      .map(user => {
+        const id = user.id || user.authUserId || user.username || '';
+        const label = user.displayName || user.name || user.username || id;
+        return `<option value="${escapeCashbookHtml(id)}">${escapeCashbookHtml(label)}</option>`;
+      }).join('');
+    const collectorId = transaction.collectorId || state.currentUser?.id || state.currentUser?.authUserId || state.currentUser?.username;
+    if (collectorId && ![...collectorSelect.options].some(option => option.value === String(collectorId))) {
+      const collectorName = transaction.collectorName
+        || state.currentUser?.displayName
+        || state.currentUser?.name
+        || state.currentUser?.username
+        || `Nhân viên ${collectorId}`;
+      collectorSelect.insertAdjacentHTML(
+        'afterbegin',
+        `<option value="${escapeCashbookHtml(collectorId)}">${escapeCashbookHtml(collectorName)}</option>`
+      );
+    }
+    if (collectorId && [...collectorSelect.options].some(option => option.value === String(collectorId))) {
+      collectorSelect.value = String(collectorId);
+    }
+  }
+
+  const counterpartyType = getCashbookCounterpartyType(transaction);
+  const counterpartyTypeSelect = document.getElementById('cashbook-edit-counterparty-type');
+  if (counterpartyTypeSelect) {
+    counterpartyTypeSelect.value = counterpartyType;
+    counterpartyTypeSelect.disabled = route !== 'standalone';
+  }
+  populateCashbookCounterpartyOptions(
+    counterpartyType,
+    transaction.counterpartyId || transaction.customerId || transaction.supplierId || '',
+    transaction.partner || ''
+  );
+  const counterpartySelect = document.getElementById('cashbook-edit-counterparty');
+  if (counterpartySelect) {
+    counterpartySelect.disabled = route === 'return_refund'
+      || route === 'sale_receipt'
+      || (route === 'customer_receipt' && Boolean(transaction.orderId))
+      || (route === 'supplier_payment' && Boolean(transaction.purchaseId));
+  }
   editModal.classList.add('active');
 }
 
@@ -1323,6 +1447,11 @@ function showTransactionDetails(txId) {
   document.getElementById('so-quy-detail-creator').innerText = t.creator || 'Hệ thống';
   document.getElementById('so-quy-detail-note').innerText = t.note || 'Không có ghi chú';
   
+  const collectorLabel = document.getElementById('so-quy-detail-collector-label');
+  if (collectorLabel) collectorLabel.innerText = t.type === 'thu' ? 'Người thu' : 'Người chi';
+  const collectorValue = document.getElementById('so-quy-detail-collector');
+  if (collectorValue) collectorValue.innerText = t.collectorName || t.creator || 'Hệ thống';
+
   const statusEl = document.getElementById('so-quy-detail-status');
   if (statusEl) {
     statusEl.innerHTML = `<span class="badge-status ${isPaidStatus(t.status) ? 'badge-status-paid' : 'badge-status-cancelled'}">${t.status}</span>`;
@@ -1419,12 +1548,6 @@ function showTransactionDetails(txId) {
           }
           localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
 
-          // Reversal rows have cancelled status so they do not affect totals.
-          // Enable this audit filter after cancellation so both rows are visible.
-          activeFilters.statusCancelled = true;
-          const cancelledCheckbox = document.getElementById('so-quy-status-cancelled');
-          if (cancelledCheckbox) cancelledCheckbox.checked = true;
-          
           if (!customerRefreshed || !cashbookRefreshed) {
             showToast('Phiếu đã hủy trên Cloud nhưng giao diện chưa tải lại đầy đủ. Vui lòng tải lại trang.', 'warning');
           } else {

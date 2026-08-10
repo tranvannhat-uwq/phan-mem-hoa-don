@@ -1313,10 +1313,6 @@
                   <input type="checkbox" id="so-quy-status-paid" checked>
                   <span>Đã thanh toán</span>
                 </label>
-                <label class="custom-control">
-                  <input type="checkbox" id="so-quy-status-cancelled">
-                  <span>Đã hủy</span>
-                </label>
               </div>
             </div>
 
@@ -2617,10 +2613,6 @@
               <i data-lucide="history" style="width: 18px; height: 18px; color: var(--color-secondary);"></i>
               Lịch sử biến động công nợ
             </h4>
-            <label style="display:flex; align-items:center; gap:0.4rem; color:var(--text-muted); font-size:0.82rem; cursor:pointer;">
-              <input type="checkbox" id="customer-debt-show-technical">
-              Hiện bút toán đã triệt tiêu
-            </label>
           </div>
           
           <div class="table-container customer-debt-history-scroll">
@@ -3800,6 +3792,10 @@
           <span class="detail-item-label">Người tạo</span>
           <span class="detail-item-value" id="so-quy-detail-creator">-</span>
         </div>
+        <div class="detail-item-row">
+          <span class="detail-item-label" id="so-quy-detail-collector-label">Người thu/chi</span>
+          <span class="detail-item-value" id="so-quy-detail-collector">-</span>
+        </div>
         <div class="detail-item-row" style="flex-direction: column; align-items: flex-start; gap: 0.25rem; border-bottom: none;">
           <span class="detail-item-label">Ghi chú</span>
           <span class="detail-item-value" id="so-quy-detail-note" style="text-align: left; font-weight: normal; margin-top: 0.25rem; white-space: pre-wrap; width: 100%; padding: 0.5rem; border-radius: 6px; background-color: var(--bg-primary);">Không có ghi chú</span>
@@ -3825,11 +3821,11 @@
     </div>
   </div>
 
-  <!-- Sửa phiếu Sổ quỹ nhập tay -->
+  <!-- Sửa phiếu thu/chi -->
   <div class="modal-overlay" id="so-quy-edit-modal">
     <div class="modal-content" style="max-width: 520px;">
       <div class="modal-header">
-        <h3 class="modal-title">Sửa phiếu Sổ quỹ</h3>
+        <h3 class="modal-title" id="cashbook-edit-title">Sửa phiếu thu/chi</h3>
         <button type="button" class="modal-close" id="btn-close-cashbook-edit">&times;</button>
       </div>
       <form id="so-quy-edit-form">
@@ -3848,11 +3844,28 @@
             <input type="datetime-local" class="form-control" id="cashbook-edit-time" required style="width: 100%;">
           </div>
           <div class="form-group">
-            <label class="form-label" for="cashbook-edit-category">Loại thu chi</label>
+            <label class="form-label" for="cashbook-edit-category" id="cashbook-edit-category-label">Loại thu/chi</label>
             <input type="text" class="form-control" id="cashbook-edit-category" required style="width: 100%;">
           </div>
           <div class="form-group">
-            <label class="form-label" for="cashbook-edit-partner">Người nộp/nhận</label>
+            <label class="form-label" for="cashbook-edit-collector" id="cashbook-edit-collector-label">Người thu/chi</label>
+            <select class="form-control" id="cashbook-edit-collector" required style="width: 100%;"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-counterparty-type" id="cashbook-edit-counterparty-type-label">Đối tượng nộp/nhận</label>
+            <select class="form-control" id="cashbook-edit-counterparty-type" required style="width: 100%;">
+              <option value="customer">Khách hàng</option>
+              <option value="supplier">Nhà cung cấp</option>
+              <option value="employee">Nhân viên</option>
+              <option value="other">Đối tượng khác</option>
+            </select>
+          </div>
+          <div class="form-group" id="cashbook-edit-counterparty-group">
+            <label class="form-label" for="cashbook-edit-counterparty" id="cashbook-edit-counterparty-label">Chọn đối tượng</label>
+            <select class="form-control" id="cashbook-edit-counterparty" style="width: 100%;"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cashbook-edit-partner" id="cashbook-edit-partner-label">Tên người nộp/nhận</label>
             <input type="text" class="form-control" id="cashbook-edit-partner" required style="width: 100%;">
           </div>
           <div class="form-group">
@@ -3875,7 +3888,7 @@
             <label class="form-label" for="cashbook-edit-note">Ghi chú</label>
             <textarea class="form-control" id="cashbook-edit-note" rows="3" style="width: 100%;"></textarea>
           </div>
-          <small style="color: var(--text-muted); line-height: 1.45;">Chỉ phiếu nhập tay độc lập được phép sửa. Phiếu liên kết công nợ, đơn hàng, trả hàng hoặc nhà cung cấp phải dùng quy trình nghiệp vụ tương ứng.</small>
+          <small style="color: var(--text-muted); line-height: 1.45;">Phiếu thu và phiếu chi được sửa theo hai luồng riêng. Với phiếu liên kết, hệ thống tự ghi điều chỉnh công nợ và lưu đầy đủ lịch sử trước/sau.</small>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="btn-cancel-cashbook-edit">Hủy</button>

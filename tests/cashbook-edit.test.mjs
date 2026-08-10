@@ -19,10 +19,11 @@ test('cashbook table and export place address immediately after partner', () => 
 
 test('cashbook edit UI uses the reviewed Cloud RPC and authoritative refresh', () => {
   assert.match(html, /id="so-quy-edit-modal"/);
-  assert.match(cashbookUi, /\['manual_thu', 'manual_chi'\]/);
-  assert.match(cashbookUi, /dbUpdateManualCashbookTransaction\(getCanonicalCashbookId\(transaction\)/);
+  assert.match(html, /id="cashbook-edit-collector"/);
+  assert.match(html, /id="cashbook-edit-counterparty-type"/);
+  assert.match(cashbookUi, /dbAmendCashbookTransaction\(getCanonicalCashbookId\(transaction\)/);
   assert.match(cashbookUi, /await dbFetchCashbookTransactions\(\)/);
-  assert.match(service, /supabaseClient\.rpc\('rpc_update_manual_cashbook_transaction'/);
+  assert.match(service, /supabaseClient\.rpc\('rpc_amend_cashbook_transaction'/);
 });
 
 test('database edits only active standalone manual vouchers and audits every change', () => {

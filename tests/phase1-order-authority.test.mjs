@@ -58,13 +58,13 @@ test('frontend submits business inputs and uses the canonical RPC response', () 
   assert.doesNotMatch(invoice, /`HD-\$\{Date\.now\(\)/);
 });
 
-test('a post-commit UI refresh error is never reported as a failed finalization', () => {
+test('a post-commit UI refresh error is never reported as a failed draft or finalization', () => {
   const saveFlow = invoice.slice(
     invoice.indexOf('export async function saveActiveOrder'),
     invoice.indexOf('export function resetInvoiceCustomer')
   );
   assert.match(saveFlow, /let persistedOrderAfterCommit = null/);
-  assert.match(saveFlow, /if \(status === 'settled' && typeof saved === 'object'\)[\s\S]*persistedOrderAfterCommit = persistedOrder/);
+  assert.match(saveFlow, /if \(isCloudActive && \(status === 'draft' \|\| \(status === 'settled' && typeof saved === 'object'\)\)\)[\s\S]*persistedOrderAfterCommit = persistedOrder/);
   assert.match(saveFlow, /if \(persistedOrderAfterCommit\) \{/);
   assert.match(saveFlow, /completedAction = status === 'draft' \? 'lưu nháp' : 'chốt và lưu'/);
   assert.match(saveFlow, /return persistedOrderAfterCommit/);
@@ -72,6 +72,15 @@ test('a post-commit UI refresh error is never reported as a failed finalization'
     saveFlow.indexOf('resetInvoiceBuilder();') < saveFlow.indexOf('Đã chốt và lưu đơn hàng'),
     'success must be shown only after the local UI refresh completes'
   );
+});
+
+test('order browser cache is bounded and quota failures cannot fail Cloud saves', () => {
+  assert.match(service, /const ORDER_CACHE_MAX_ITEMS = 120/);
+  assert.match(service, /const ORDER_CACHE_MAX_JSON_CHARS = 750000/);
+  assert.match(service, /export function cacheOrdersLocally/);
+  assert.match(service, /localStorage\.removeItem\(ORDER_CACHE_KEY\)[\s\S]*localStorage\.setItem\(ORDER_CACHE_KEY, payload\)/);
+  assert.match(invoice, /cacheOrdersLocally\(state\.savedOrders\)/);
+  assert.doesNotMatch(invoice, /localStorage\.setItem\('billing_system_orders'/);
 });
 
 test('an uncertain RPC response is reconciled by the immutable order id', () => {

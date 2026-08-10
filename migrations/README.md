@@ -46,6 +46,10 @@ Run these files in order on a staging clone first:
 38. `0038_activity_history_bridge.sql`
 39. `0039_admin_maintenance_mode.sql`
 40. `0040_customer_assigned_price_list_exception.sql`
+41. `0041_customer_assigned_pricing_rpc.sql`
+42. `0042_order_business_date_clock_skew.sql`
+43. `0043_sale_pricing_snapshot_rpc.sql`
+44. `0044_cashbook_voucher_amendment.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -239,3 +243,16 @@ active global price lists explicitly enabled by Accounting and their price
 rows, avoiding the expensive customer-assignment RLS predicate on every matrix
 row. Dealer-specific exceptions remain isolated behind the exact-customer RPC;
 no price, product, customer or order data is changed.
+
+Migration `0044` separates the operational collector/counterparty from the
+immutable creator identity and adds one Admin/Accounting-only amendment RPC for
+active receipt and payment vouchers. Receipt/payment direction remains fixed.
+Manual vouchers update directly; customer receipts and supplier payments append
+debt adjustments; return refunds rebalance cash and debt without changing the
+return total. Every route runs atomically and writes a before/after audit row.
+
+Migration `0045` separates amendment lineage (`amends_ledger_id`) from true
+financial reversal lineage (`reversal_of_id`). It migrates any 0044 amendment
+rows without changing balances, preserves the one-cancellation-per-entry
+constraint, and replaces the voucher amendment RPC to prevent duplicate-key
+errors on repeated edits.

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, cacheOrdersLocally } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
 import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
 import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260810-sale-pricing-rpc1';
 import { openHistoryOrderExportModal } from './customers.js?v=20260810-sale-pricing-rpc1';
@@ -434,7 +434,7 @@ export async function cancelOrderById(id) {
   const customersRefreshed = order.customerId
     ? await dbRefreshCustomerFinancialState(order.customerId)
     : true;
-  localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+  cacheOrdersLocally(state.savedOrders);
   renderAll();
   if (customersRefreshed) {
     showToast(`Đã hủy đơn ${order.id} và ghi giao dịch đảo.`, 'success');
@@ -1228,7 +1228,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
       order.notes = result.notes ?? nextNotes.trim();
       order.updatedAt = result.updated_at || new Date().toISOString();
-      localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+      cacheOrdersLocally(state.savedOrders);
       renderHistoryOrders({ reuseFiltered: true });
       showToast(`Đã cập nhật ghi chú đơn ${getOrderDisplayCode(order)}. Đơn và công nợ không thay đổi.`, 'success');
     });
@@ -1677,7 +1677,7 @@ export async function processSalesReturnSubmit(e) {
   order.returnedAmount = Number(returnResult.order_returned_amount || 0);
   order.netRevenue = Number(returnResult.order_net_revenue || 0);
   localStorage.setItem('billing_system_sales_returns', JSON.stringify(state.salesReturns));
-  localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+  cacheOrdersLocally(state.savedOrders);
 
   // 4. Update Customer Debt, Total Return & Net Revenue
   if (order.customerId) {
@@ -1759,7 +1759,7 @@ export async function cancelSalesReturn(returnId) {
     order.netRevenue = Number(cancelResult.order_net_revenue || 0);
   }
   localStorage.setItem('billing_system_sales_returns', JSON.stringify(state.salesReturns));
-  localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+  cacheOrdersLocally(state.savedOrders);
   localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
   renderAll();
   showToast(`Đã hủy phiếu trả hàng ${returnId} thành công!`, 'warning');

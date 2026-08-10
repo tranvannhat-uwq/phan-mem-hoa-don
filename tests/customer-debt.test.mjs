@@ -6,6 +6,7 @@ import {
   getOrderDebtSnapshot,
   getOrderOutstandingAmount,
   mergeCustomerDebtHistory,
+  projectEffectiveCustomerDebtHistory,
   reduceCustomerDebtForReturn,
   restoreCustomerDebtForCancelledReturn
 } from '../js/domain/customer-debt.js';
@@ -55,5 +56,35 @@ const compactedIds = getNeutralizedOrderDebtEntryIds([
   { id: 'unrelated-adjust', transactionType: 'adjust', debtChange: -1000 }
 ]);
 assert.deepEqual([...compactedIds].sort(), ['charge-old', 'reverse-old']);
+
+const effectiveHistory = projectEffectiveCustomerDebtHistory([
+  { id: 'payment-edited', type: 'payment', transactionType: 'payment', cashbookTransactionId: 'PT-EDIT', amount: 5000000, debtChange: -5000000, debtBefore: 9000000, debtAfter: 4000000, date: '2026-08-01T00:00:00Z' },
+  { id: 'payment-edit-delta', transactionType: 'payment_amend', cashbookTransactionId: 'PT-EDIT', amount: 1000000, debtChange: -1000000, debtAfter: 3000000, reversalOfId: 'payment-edited', date: '2026-08-02T00:00:00Z' },
+  { id: 'payment-cancelled', type: 'payment', transactionType: 'payment', cashbookTransactionId: 'PT-CANCEL', amount: 2000000, debtChange: -2000000 },
+  { id: 'payment-cancel-row', transactionType: 'payment_cancel', cashbookTransactionId: 'PT-CANCEL', debtChange: 2000000, reversalOfId: 'payment-cancelled' },
+  { id: 'order-old', type: 'charge', transactionType: 'order', orderId: 'HD-OLD', amount: 4000000, debtChange: 4000000 },
+  { id: 'order-old-cancel', transactionType: 'order_cancel', orderId: 'HD-OLD', debtChange: -4000000, reversalOfId: 'order-old' },
+  { id: 'order-new', type: 'charge', transactionType: 'order', orderId: 'HD-NEW', amount: 4500000, debtChange: 4500000 },
+  { id: 'return-edited', type: 'return', transactionType: 'return', salesReturnId: 'RET-1', amount: 1000000, debtChange: -1000000 },
+  { id: 'return-edit-delta', transactionType: 'return_amend', salesReturnId: 'RET-1', amount: 250000, debtChange: 250000, reversalOfId: 'return-edited' },
+  { id: 'order-sale', type: 'charge', transactionType: 'order', orderId: 'HD-SALE', amount: 3000000, debtChange: 3000000 },
+  { id: 'sale-receipt-edit', transactionType: 'sale_payment_amend', orderId: 'HD-SALE', debtChange: -500000 },
+  { id: 'payment-moved-old', type: 'payment', transactionType: 'payment', cashbookTransactionId: 'PT-MOVED-OLD', amount: 5000000, debtChange: -5000000 },
+  { id: 'payment-move-old-delta', transactionType: 'payment_relink', cashbookTransactionId: 'PT-MOVED-OLD', debtChange: 5000000, reversalOfId: 'payment-moved-old' },
+  { id: 'relinked-new-customer', transactionType: 'payment_relink', cashbookTransactionId: 'PT-MOVED', debtChange: -6000000, reversalOfId: 'payment-owned-by-old-customer' }
+]);
+assert.deepEqual(effectiveHistory.map(entry => entry.id), [
+  'payment-edited', 'order-new', 'return-edited', 'order-sale', 'relinked-new-customer'
+]);
+assert.deepEqual(
+  effectiveHistory.map(entry => [entry.id, entry.type, entry.debtChange, entry.amount]),
+  [
+    ['payment-edited', 'payment', -6000000, 6000000],
+    ['order-new', 'charge', 4500000, 4500000],
+    ['return-edited', 'return', -750000, 750000],
+    ['order-sale', 'charge', 2500000, 2500000],
+    ['relinked-new-customer', 'payment', -6000000, 6000000]
+  ]
+);
 
 console.log('customer-debt.test.mjs: all assertions passed');

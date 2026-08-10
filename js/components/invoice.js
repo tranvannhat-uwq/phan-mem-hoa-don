@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
 import { renderAll, switchTab } from '../main.js?v=20260810-sale-pricing-rpc1';
 import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js?v=20260810-sale-pricing-rpc1';
@@ -1250,7 +1250,7 @@ export async function saveActiveOrder(status = 'settled') {
       // From this point the database transaction has completed. Any later
       // exception is a local refresh problem and must never be reported as a
       // failed save, otherwise users may retry an order that is already final.
-      if (status === 'settled' && typeof saved === 'object') {
+      if (isCloudActive && (status === 'draft' || (status === 'settled' && typeof saved === 'object'))) {
         persistedOrderAfterCommit = persistedOrder;
       }
       if (amendOrderId) {
@@ -1298,7 +1298,7 @@ export async function saveActiveOrder(status = 'settled') {
       }
       state.savedOrders = state.savedOrders.filter(o => o.id !== persistedOrder.id);
       state.savedOrders.unshift(persistedOrder);
-      localStorage.setItem('billing_system_orders', JSON.stringify(state.savedOrders));
+      cacheOrdersLocally(state.savedOrders);
       if (status === 'settled') lastFinalizedOrder = persistedOrder;
 
       resetInvoiceBuilder();

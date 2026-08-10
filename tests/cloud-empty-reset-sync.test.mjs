@@ -20,6 +20,6 @@ test('a successful empty customer response clears browser state and cache', () =
 });
 
 test('successful empty order and cashbook responses also replace their caches', () => {
-  assert.match(service, /state\.savedOrders = combined;[\s\S]*billing_system_orders/);
+  assert.match(service, /state\.savedOrders = combined;[\s\S]*cacheOrdersLocally\(state\.savedOrders\)/);
   assert.match(service, /const cloudTxs = \(txData \|\| \[\]\)\.map[\s\S]*billing_system_cashbook_transactions/);
 });
