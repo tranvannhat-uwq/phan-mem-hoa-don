@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-customer-pricing3';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-customer-pricing3';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-customer-pricing4';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-customer-pricing4';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-customer-pricing3';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-customer-pricing4';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -461,20 +461,35 @@ export async function dbLoadCustomerAssignedPricing(customer) {
 
   try {
     let row = null;
-    for (const reference of references) {
-      for (const column of ['id', 'code', 'name']) {
-        const { data, error } = await supabaseClient
-          .from(tablePricelistsName)
-          .select('*')
-          .eq(column, reference)
-          .limit(1);
-        if (error) throw error;
-        if (data?.[0]) {
-          row = data[0];
-          break;
+    let itemRows = null;
+    const rpcResult = await supabaseClient.rpc('rpc_get_customer_assigned_pricing', {
+      p_customer_id: customer.id
+    });
+
+    if (!rpcResult.error && rpcResult.data?.price_list) {
+      row = rpcResult.data.price_list;
+      itemRows = Array.isArray(rpcResult.data.items) ? rpcResult.data.items : [];
+    } else {
+      const rpcMissing = ['42883', 'PGRST202'].includes(rpcResult.error?.code);
+      if (rpcResult.error && !rpcMissing) throw rpcResult.error;
+
+      // Compatibility path while 0041 is being rolled out. It remains limited
+      // by the existing customer-aware RLS policies from migration 0040.
+      for (const reference of references) {
+        for (const column of ['id', 'code', 'name']) {
+          const { data, error } = await supabaseClient
+            .from(tablePricelistsName)
+            .select('*')
+            .eq(column, reference)
+            .limit(1);
+          if (error) throw error;
+          if (data?.[0]) {
+            row = data[0];
+            break;
+          }
         }
+        if (row) break;
       }
-      if (row) break;
     }
     if (!row) return { loaded: false, reason: 'not_authorized' };
 
@@ -483,11 +498,13 @@ export async function dbLoadCustomerAssignedPricing(customer) {
       return { loaded: false, reason: 'not_authorized' };
     }
 
-    const itemRows = await collectAllPages((offset, end) => supabaseClient
-      .from(tablePriceListItemsName)
-      .select('*', { count: 'exact' })
-      .eq('price_list_id', priceList.id)
-      .range(offset, end), 1000);
+    if (itemRows === null) {
+      itemRows = await collectAllPages((offset, end) => supabaseClient
+        .from(tablePriceListItemsName)
+        .select('*', { count: 'exact' })
+        .eq('price_list_id', priceList.id)
+        .range(offset, end), 1000);
+    }
     const items = (itemRows || []).map(mapAuthorizedPriceListItem);
 
     state.allPricelists = [

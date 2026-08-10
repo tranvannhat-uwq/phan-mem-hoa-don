@@ -43,3 +43,17 @@ test('browser permits the exception only when the current order customer referen
   assert.match(invoice, /selectionSource: 'missing_customer_default'/);
   assert.match(invoice, /applicable\.selectionSource === 'customer_default'/);
 });
+
+test('scoped pricing RPC bypasses table visibility without broadening the assignment', () => {
+  const migration = read('migrations/0041_customer_assigned_pricing_rpc.sql');
+  const service = read('js/services/supabase.js');
+  assert.match(migration, /rpc_get_customer_assigned_pricing/);
+  assert.match(migration, /public\.can_access_customer\(p_customer_id\)/);
+  assert.match(migration, /ARRAY\[customer\.pricelist_id, customer\.default_price_list_id\]/);
+  assert.match(migration, /public\.can_use_price_list_for_customer\(customer\.id, price_list\.id\)/);
+  assert.match(migration, /WHERE item\.price_list_id = selected_list\.id/);
+  assert.match(migration, /SECURITY DEFINER/);
+  assert.doesNotMatch(migration, /GRANT\s+SELECT/i);
+  assert.match(service, /rpc\('rpc_get_customer_assigned_pricing'/);
+  assert.match(service, /\['42883', 'PGRST202'\]/);
+});

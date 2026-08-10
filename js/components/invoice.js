@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-customer-pricing3';
-import { renderAll, switchTab } from '../main.js?v=20260810-customer-pricing3';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-customer-pricing4';
+import { renderAll, switchTab } from '../main.js?v=20260810-customer-pricing4';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260810-customer-pricing3';
-import { addCashbookTransaction } from './so_quy.js?v=20260810-customer-pricing3';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260810-customer-pricing3';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260810-customer-pricing3';
+import { generateUniqueCustomerCode } from './customers.js?v=20260810-customer-pricing4';
+import { addCashbookTransaction } from './so_quy.js?v=20260810-customer-pricing4';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260810-customer-pricing4';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260810-customer-pricing4';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -2397,7 +2397,7 @@ async function selectInvoiceCustomer(customer) {
       applicablePricing = { priceList: null, selectionSource: 'missing_customer_default' };
     }
     if (!applicablePricing.priceList && state.currentUser?.role === 'sale') {
-      showToast('Máy chủ chưa cấp quyền đọc bảng giá đã gắn cho đại lý này. Admin cần áp dụng bản cập nhật quyền bảng giá 0040.', 'danger');
+      showToast('Máy chủ chưa trả được bảng giá đã gắn cho đại lý này. Admin cần áp dụng bản cập nhật 0041.', 'danger');
     }
   }
   
