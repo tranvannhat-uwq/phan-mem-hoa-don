@@ -352,6 +352,13 @@ BEGIN
   SELECT pg_get_functiondef('public.rpc_confirm_order(jsonb)'::regprocedure)
   INTO current_definition;
 
+  -- Re-running 0040 is safe. A previous successful run already contains both
+  -- customer-scoped anchors, so there is nothing left to replace.
+  IF current_definition LIKE '%public.can_use_price_list_for_customer(customer_id, item->>''priceListId'')%'
+     AND current_definition LIKE '%public.p40_resolve_sku_price_for_customer(selected_list_id, product_row.id, customer_id)%' THEN
+    RETURN;
+  END IF;
+
   patched_definition := replace(
     current_definition,
     'NOT public.can_use_price_list(item->>''priceListId'')',
@@ -363,10 +370,9 @@ BEGIN
     'FROM public.p40_resolve_sku_price_for_customer(selected_list_id, product_row.id, customer_id)'
   );
 
-  IF patched_definition = current_definition
-     OR patched_definition NOT LIKE '%public.can_use_price_list_for_customer(customer_id, item->>''priceListId'')%'
+  IF patched_definition NOT LIKE '%public.can_use_price_list_for_customer(customer_id, item->>''priceListId'')%'
      OR patched_definition NOT LIKE '%public.p40_resolve_sku_price_for_customer(selected_list_id, product_row.id, customer_id)%' THEN
-    RAISE EXCEPTION 'Migration 0040 stopped: authoritative order pricing anchors were not patched';
+    RAISE EXCEPTION 'Migration 0040 stopped: this rpc_confirm_order version has unsupported pricing anchors';
   END IF;
   EXECUTE patched_definition;
 END

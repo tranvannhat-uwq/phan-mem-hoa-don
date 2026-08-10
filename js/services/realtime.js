@@ -19,7 +19,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260809-activity8';
+} from './supabase.js?v=20260810-customer-pricing3';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

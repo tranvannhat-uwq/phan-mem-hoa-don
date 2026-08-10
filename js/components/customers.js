@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactions, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260809-activity8';
-import { renderAll } from '../main.js?v=20260809-activity8';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260809-activity8';
-import { addCashbookTransaction } from './so_quy.js?v=20260809-activity8';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260809-activity8';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactions, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260810-customer-pricing3';
+import { renderAll } from '../main.js?v=20260810-customer-pricing3';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260810-customer-pricing3';
+import { addCashbookTransaction } from './so_quy.js?v=20260810-customer-pricing3';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260810-customer-pricing3';
 import { collectCustomerDebt, getNeutralizedOrderDebtEntryIds } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
@@ -1187,6 +1187,41 @@ export function closeCustomerModal() {
   if (modal) modal.classList.remove('active');
 }
 
+function clearCustomerFieldError(field) {
+  if (!field) return;
+  field.classList.remove('customer-field-invalid');
+  field.closest('.searchable-select-wrapper')
+    ?.querySelector('.searchable-select-trigger')
+    ?.classList.remove('customer-field-invalid');
+}
+
+function validateCustomerForm() {
+  const requiredFields = [
+    ['cust-code', 'Vui lòng nhập mã khách hàng.'],
+    ['cust-name', 'Vui lòng nhập tên khách hàng.'],
+    ['cust-phone', 'Vui lòng nhập số điện thoại.'],
+    ['cust-province', 'Vui lòng chọn Tỉnh/Thành phố.'],
+    ['cust-pricelist', 'Vui lòng chọn bảng giá mặc định áp dụng.']
+  ];
+  requiredFields.forEach(([id]) => clearCustomerFieldError(document.getElementById(id)));
+  const invalidEntry = requiredFields.find(([id]) => {
+    const field = document.getElementById(id);
+    return !field || !String(field.value || '').trim();
+  });
+  if (!invalidEntry) return true;
+
+  const [invalidId, message] = invalidEntry;
+  const field = document.getElementById(invalidId);
+  const visibleControl = field?.closest('.searchable-select-wrapper')
+    ?.querySelector('.searchable-select-trigger') || field;
+  visibleControl?.classList.add('customer-field-invalid');
+  visibleControl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (visibleControl && !visibleControl.hasAttribute('tabindex')) visibleControl.setAttribute('tabindex', '-1');
+  visibleControl?.focus({ preventScroll: true });
+  showToast(message, 'warning');
+  return false;
+}
+
 export async function saveCustomer() {
   const index = parseInt(document.getElementById('customer-edit-index').value);
   const editId = document.getElementById('customer-edit-id').value;
@@ -1196,6 +1231,7 @@ export async function saveCustomer() {
     closeCustomerModal();
     return;
   }
+  if (!validateCustomerForm()) return;
   
   const code = document.getElementById('cust-code').value.trim().toUpperCase();
   const name = document.getElementById('cust-name').value.trim();
@@ -1785,6 +1821,10 @@ export function setupCustomerManagement() {
     customerForm.addEventListener('submit', (e) => {
       e.preventDefault();
       saveCustomer();
+    });
+    ['cust-code', 'cust-name', 'cust-phone', 'cust-province', 'cust-pricelist'].forEach(id => {
+      const field = document.getElementById(id);
+      field?.addEventListener(field.tagName === 'SELECT' ? 'change' : 'input', () => clearCustomerFieldError(field));
     });
   }
 

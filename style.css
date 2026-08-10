@@ -5812,3 +5812,9 @@ body.customer-filter-drawer-open { overflow: hidden; }
 .maintenance-status.is-enabled {
   color: #f87171;
 }
+
+.customer-field-invalid,
+.searchable-select-trigger.customer-field-invalid {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14) !important;
+}

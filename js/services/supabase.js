@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260809-activity8';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260809-activity8';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-customer-pricing3';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-customer-pricing3';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260809-activity8';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-customer-pricing3';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -414,6 +414,100 @@ async function fetchFullTableData(tableName) {
       .range(offset, end), pageSize);
 }
 
+function mapAuthorizedPriceList(row) {
+  return {
+    id: row.id,
+    code: row.code || '',
+    name: row.name,
+    type: normalizePriceListType(row.price_list_type || row.type, row.customer_id),
+    customerId: row.customer_id || null,
+    customerGroupId: row.customer_group_id || null,
+    parentPriceListId: row.parent_price_list_id || null,
+    effectiveFrom: row.effective_from || '',
+    effectiveTo: row.effective_to || '',
+    isActive: row.is_active !== false,
+    isAvailableForSales: row.is_available_for_sales === true,
+    isPrintOnly: row.is_print_only === true ? true : (row.is_print_only === false ? false : undefined),
+    displayOrder: Number(row.display_order || 0),
+    createdAt: row.created_at || '',
+    updatedAt: row.updated_at || '',
+    brandDiscounts: typeof row.brand_discounts === 'string' ? JSON.parse(row.brand_discounts) : (row.brand_discounts || {})
+  };
+}
+
+function mapAuthorizedPriceListItem(row) {
+  return {
+    id: row.id || `${row.price_list_id}:${row.product_id}`,
+    priceListId: row.price_list_id,
+    productId: row.variant_id || row.product_id,
+    variantId: row.variant_id || row.product_id,
+    price: parseFloat(row.price || 0),
+    isOverride: row.is_override !== false,
+    sourceType: row.source_type || 'manual',
+    createdAt: row.created_at || '',
+    updatedAt: row.updated_at || '',
+    updatedBy: row.updated_by || ''
+  };
+}
+
+// Retry only the exact list saved on the selected customer. RLS remains the
+// authoritative permission and still hides it from unrelated customers.
+export async function dbLoadCustomerAssignedPricing(customer) {
+  if (!isCloudActive || !supabaseClient || !customer) return { loaded: false, reason: 'offline' };
+  const references = [...new Set([customer.pricelistId, customer.defaultPriceListId]
+    .map(value => String(value || '').trim())
+    .filter(value => value && !['custom', 'retail'].includes(value)))];
+  if (references.length === 0) return { loaded: false, reason: 'unassigned' };
+
+  try {
+    let row = null;
+    for (const reference of references) {
+      for (const column of ['id', 'code', 'name']) {
+        const { data, error } = await supabaseClient
+          .from(tablePricelistsName)
+          .select('*')
+          .eq(column, reference)
+          .limit(1);
+        if (error) throw error;
+        if (data?.[0]) {
+          row = data[0];
+          break;
+        }
+      }
+      if (row) break;
+    }
+    if (!row) return { loaded: false, reason: 'not_authorized' };
+
+    const priceList = mapAuthorizedPriceList(row);
+    if (!canUserUsePriceListForCustomer(state.currentUser, priceList, customer)) {
+      return { loaded: false, reason: 'not_authorized' };
+    }
+
+    const itemRows = await collectAllPages((offset, end) => supabaseClient
+      .from(tablePriceListItemsName)
+      .select('*', { count: 'exact' })
+      .eq('price_list_id', priceList.id)
+      .range(offset, end), 1000);
+    const items = (itemRows || []).map(mapAuthorizedPriceListItem);
+
+    state.allPricelists = [
+      ...(state.allPricelists || []).filter(item => item.id !== priceList.id),
+      priceList
+    ];
+    state.allPriceListItems = [
+      ...(state.allPriceListItems || []).filter(item => item.priceListId !== priceList.id),
+      ...items
+    ];
+    state.pricelists = filterPriceListsForUser(state.allPricelists, state.currentUser);
+    const visibleIds = new Set(state.pricelists.map(item => item.id));
+    state.priceListItems = state.allPriceListItems.filter(item => visibleIds.has(item.priceListId));
+    return { loaded: true, priceList };
+  } catch (error) {
+    console.warn('Could not load the selected customer assigned pricing:', error.message);
+    return { loaded: false, reason: 'request_failed', error };
+  }
+}
+
 function parseDebtHistory(value) {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string' || !value.trim()) return [];
@@ -781,42 +875,14 @@ export async function fetchCloudData(options = {}) {
 
         if (plErr) throw plErr;
 
-        const mappedPricelists = (plData || []).map(pl => ({
-            id: pl.id,
-            code: pl.code || '',
-            name: pl.name,
-            type: normalizePriceListType(pl.price_list_type || pl.type, pl.customer_id),
-            customerId: pl.customer_id || null,
-            customerGroupId: pl.customer_group_id || null,
-            parentPriceListId: pl.parent_price_list_id || null,
-            effectiveFrom: pl.effective_from || '',
-            effectiveTo: pl.effective_to || '',
-            isActive: pl.is_active !== false,
-            isAvailableForSales: pl.is_available_for_sales === true,
-            isPrintOnly: pl.is_print_only === true ? true : (pl.is_print_only === false ? false : undefined),
-            displayOrder: Number(pl.display_order || 0),
-            createdAt: pl.created_at || '',
-            updatedAt: pl.updated_at || '',
-            brandDiscounts: typeof pl.brand_discounts === 'string' ? JSON.parse(pl.brand_discounts) : (pl.brand_discounts || {})
-          }));
+        const mappedPricelists = (plData || []).map(mapAuthorizedPriceList);
         // Build one complete authorized snapshot before touching shared state.
         // A price-list refresh is used by login and Realtime; publishing the
         // list before its item rows arrive makes prices briefly disappear.
         const itemData = await fetchFullTableData(tablePriceListItemsName);
         const visiblePricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
         const visiblePriceListIds = new Set(visiblePricelists.map(priceList => priceList.id));
-        const mappedPriceListItems = (itemData || []).map(item => ({
-            id: item.id || `${item.price_list_id}:${item.product_id}`,
-            priceListId: item.price_list_id,
-            productId: item.variant_id || item.product_id,
-            variantId: item.variant_id || item.product_id,
-            price: parseFloat(item.price || 0),
-            isOverride: item.is_override !== false,
-            sourceType: item.source_type || 'manual',
-            createdAt: item.created_at || '',
-            updatedAt: item.updated_at || '',
-            updatedBy: item.updated_by || ''
-          }));
+        const mappedPriceListItems = (itemData || []).map(mapAuthorizedPriceListItem);
 
         state.allPricelists = mappedPricelists;
         state.pricelists = visiblePricelists;

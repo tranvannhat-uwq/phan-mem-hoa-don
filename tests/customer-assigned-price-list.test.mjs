@@ -21,6 +21,9 @@ test('order confirmation, history and drafts keep the customer context in price 
   assert.match(migration, /CREATE POLICY orders_select/);
   assert.match(migration, /CREATE POLICY drafts_insert/);
   assert.match(migration, /CREATE POLICY drafts_update/);
+  assert.match(migration, /Re-running 0040 is safe/);
+  assert.match(migration, /IF current_definition LIKE '%public\.can_use_price_list_for_customer/);
+  assert.match(migration, /AND current_definition LIKE '%public\.p40_resolve_sku_price_for_customer/);
 });
 
 test('browser permits the exception only when the current order customer references that list', () => {
@@ -33,4 +36,10 @@ test('browser permits the exception only when the current order customer referen
   assert.match(invoice, /canUserUsePriceListForCustomer\(state\.currentUser, priceList, orderCustomer\)/);
   assert.match(pricelists, /data-customer-assigned="true"/);
   assert.equal((service.match(/canUserUsePriceListForCustomer\(state\.currentUser, priceList, orderCustomer\)/g) || []).length, 2);
+  assert.match(service, /export async function dbLoadCustomerAssignedPricing\(customer\)/);
+  assert.match(service, /\.eq\('price_list_id', priceList\.id\)/);
+  assert.match(invoice, /await dbLoadCustomerAssignedPricing\(customer\)/);
+  assert.match(invoice, /applicablePricing\.selectionSource !== 'customer_default'/);
+  assert.match(invoice, /selectionSource: 'missing_customer_default'/);
+  assert.match(invoice, /applicable\.selectionSource === 'customer_default'/);
 });

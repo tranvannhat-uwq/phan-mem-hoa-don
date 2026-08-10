@@ -5,9 +5,10 @@ import { readFile } from 'node:fs/promises';
 const invoiceSource = await readFile(new URL('../js/components/invoice.js', import.meta.url), 'utf8');
 const historySource = await readFile(new URL('../js/components/history.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const normalizedInvoiceSource = invoiceSource.replace('async function selectInvoiceCustomer', 'function selectInvoiceCustomer');
 
 test('customer selection does not overwrite the current order note', () => {
-  const selectCustomerBody = invoiceSource.match(
+  const selectCustomerBody = normalizedInvoiceSource.match(
     /function selectInvoiceCustomer\(customer\) \{([\s\S]*?)\n\}\n\n\/\/ Lắng nghe sự kiện/
   )?.[1];
 

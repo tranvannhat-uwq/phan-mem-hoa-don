@@ -1,22 +1,22 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260809-activity8';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260809-activity8';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260809-activity8';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260809-activity8';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260809-activity8';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260809-activity8';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260809-activity8';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260809-activity8';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260809-activity8';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260809-activity8';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260809-activity8';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260809-activity8';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260809-activity8';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260809-activity8';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260810-customer-pricing3';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260810-customer-pricing3';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260810-customer-pricing3';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260810-customer-pricing3';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260810-customer-pricing3';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260810-customer-pricing3';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260810-customer-pricing3';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260810-customer-pricing3';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260810-customer-pricing3';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260810-customer-pricing3';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260810-customer-pricing3';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260810-customer-pricing3';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260810-customer-pricing3';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260810-customer-pricing3';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260809-activity8';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260809-activity8';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260810-customer-pricing3';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260810-customer-pricing3';
 
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
 // chuyển tab, tránh dựng hàng nghìn dòng DOM ẩn trong mỗi lần cập nhật.

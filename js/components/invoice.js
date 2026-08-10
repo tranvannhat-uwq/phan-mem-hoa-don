@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, fetchCloudData } from '../services/supabase.js?v=20260809-activity8';
-import { renderAll, switchTab } from '../main.js?v=20260809-activity8';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-customer-pricing3';
+import { renderAll, switchTab } from '../main.js?v=20260810-customer-pricing3';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260809-activity8';
-import { addCashbookTransaction } from './so_quy.js?v=20260809-activity8';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260809-activity8';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260809-activity8';
+import { generateUniqueCustomerCode } from './customers.js?v=20260810-customer-pricing3';
+import { addCashbookTransaction } from './so_quy.js?v=20260810-customer-pricing3';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260810-customer-pricing3';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260810-customer-pricing3';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -2354,11 +2354,11 @@ function setupInvoiceCustomerSearch() {
     suggestions.style.display = 'block';
 
     document.querySelectorAll('.select-cust-suggestion').forEach(item => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', async () => {
         const id = item.getAttribute('data-id');
         const customer = state.customers.find(c => c.id === id);
         if (customer) {
-          selectInvoiceCustomer(customer);
+          await selectInvoiceCustomer(customer);
         }
         suggestions.style.display = 'none';
       });
@@ -2374,9 +2374,32 @@ function setupInvoiceCustomerSearch() {
   setupPrintTypeModal();
 }
 
-function selectInvoiceCustomer(customer) {
+async function selectInvoiceCustomer(customer) {
   state.activeCustomerId = customer.id;
   state.activeCustomerBrand = customer.assignedBrand;
+
+  const assignedReference = customer.pricelistId || customer.defaultPriceListId || '';
+  let applicablePricing = getApplicablePriceList(
+    customer,
+    state.allPricelists.length ? state.allPricelists : state.pricelists
+  );
+  const hasDatabaseAssignedPriceList = assignedReference && !['custom', 'retail'].includes(assignedReference);
+  if (hasDatabaseAssignedPriceList && applicablePricing.selectionSource !== 'customer_default') {
+    const retry = await dbLoadCustomerAssignedPricing(customer);
+    applicablePricing = getApplicablePriceList(
+      customer,
+      state.allPricelists.length ? state.allPricelists : state.pricelists
+    );
+    if (!retry.loaded || applicablePricing.selectionSource !== 'customer_default') {
+      // Never disguise the global fallback as the price list assigned to this
+      // dealer. An unresolved assignment must fail closed until its exact list
+      // is authorized and loaded.
+      applicablePricing = { priceList: null, selectionSource: 'missing_customer_default' };
+    }
+    if (!applicablePricing.priceList && state.currentUser?.role === 'sale') {
+      showToast('Máy chủ chưa cấp quyền đọc bảng giá đã gắn cho đại lý này. Admin cần áp dụng bản cập nhật quyền bảng giá 0040.', 'danger');
+    }
+  }
   
   document.getElementById('invoice-customer-id').value = customer.id;
   document.getElementById('invoice-customer-search').value = customer.name;
@@ -2397,10 +2420,7 @@ function selectInvoiceCustomer(customer) {
     if (customerNotesLbl) customerNotesLbl.innerText = customer.notes || 'Không có';
     document.getElementById('selected-customer-brand-lbl').innerText = customer.assignedBrand;
     
-    const applicable = getApplicablePriceList(
-      customer,
-      state.allPricelists.length ? state.allPricelists : state.pricelists
-    );
+    const applicable = applicablePricing;
     const pl = applicable.priceList;
     const plName = pl
       ? (isDealerPrivatePriceList(pl) ? (state.currentUser?.role === 'sale' ? 'Theo danh sách được cấp' : `Giá riêng đại lý - ${pl.name}`) : pl.name)
@@ -2419,12 +2439,11 @@ function selectInvoiceCustomer(customer) {
   // Tự động gán bảng giá mặc định của đại lý
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
-    const applicable = getApplicablePriceList(
-      customer,
-      state.allPricelists.length ? state.allPricelists : state.pricelists
-    );
+    const applicable = applicablePricing;
     plSelect.querySelectorAll('option[data-customer-assigned="true"]').forEach(option => option.remove());
-    if (applicable.priceList && ![...plSelect.options].some(option => option.value === applicable.priceList.id)) {
+    if (applicable.selectionSource === 'customer_default'
+        && applicable.priceList
+        && ![...plSelect.options].some(option => option.value === applicable.priceList.id)) {
       const assignedOption = document.createElement('option');
       assignedOption.value = applicable.priceList.id;
       assignedOption.textContent = `${applicable.priceList.name} (theo đại lý)`;
@@ -2443,7 +2462,9 @@ function selectInvoiceCustomer(customer) {
   }
   
   applyActivePriceListToInvoice();
-  showToast(`Đã chọn khách hàng "${customer.name}". Tự động áp chiết khấu theo bảng giá.`);
+  if (applicablePricing.priceList) {
+    showToast(`Đã chọn khách hàng "${customer.name}". Tự động áp chiết khấu theo bảng giá.`);
+  }
 }
 
 // Lắng nghe sự kiện để đồng bộ render bảng khi load đơn nháp từ module history

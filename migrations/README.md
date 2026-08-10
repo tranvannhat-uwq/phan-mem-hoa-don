@@ -41,6 +41,11 @@ Run these files in order on a staging clone first:
 33. `0033_dashboard_revenue_attribution.sql`
 34. `0034_cashbook_customer_history_backfill.sql`
 35. `0035_deterministic_sku_price_fallback.sql`
+36. `0036_activity_log.sql`
+37. `0037_draft_order_activity.sql`
+38. `0038_activity_history_bridge.sql`
+39. `0039_admin_maintenance_mode.sql`
+40. `0040_customer_assigned_price_list_exception.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -218,3 +223,13 @@ Migration `0038` makes the pre-existing, profile-attributed `audit_logs` history
 visible in the new Activity Log read model. It deduplicates same-save legacy
 rows, ignores unattributed/system activity, and never changes business rows or
 the original audit trail.
+
+Migration `0039` adds an Admin-only maintenance switch. While enabled, other
+roles are blocked from the application without changing their business data or
+permissions after maintenance is turned off.
+
+Migration `0040` lets a Sale use a price list disabled for general sales only
+when that exact list was already saved on an active customer inside the Sale's
+customer scope. The list remains unavailable for every other customer, and the
+same customer-scoped check protects drafts, order history and authoritative
+order confirmation.
