@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-sale-pricing1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-sale-pricing1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-sale-pricing-rpc1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-sale-pricing-rpc1';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-sale-pricing1';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-sale-pricing-rpc1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -904,11 +904,28 @@ export async function fetchCloudData(options = {}) {
         state.currentUser?.authUserId || state.currentUser?.auth_user_id || state.currentUser?.id || ''
       );
       try {
-        const { data: plData, error: plErr } = await supabaseClient
-          .from(tablePricelistsName)
-          .select('*');
+        let plData = null;
+        let itemData = null;
+        if (state.currentUser?.role === 'sale') {
+          const { data: snapshot, error: snapshotError } = await supabaseClient
+            .rpc('rpc_get_sale_pricing_snapshot');
+          if (!snapshotError) {
+            plData = Array.isArray(snapshot?.price_lists) ? snapshot.price_lists : [];
+            itemData = Array.isArray(snapshot?.items) ? snapshot.items : [];
+          } else if (!['42883', 'PGRST202'].includes(snapshotError.code)) {
+            throw snapshotError;
+          }
+        }
 
-        if (plErr) throw plErr;
+        // Compatibility path while migration 0043 is being deployed, and the
+        // unchanged direct-table path for Admin/Accounting price management.
+        if (plData === null) {
+          const { data, error } = await supabaseClient
+            .from(tablePricelistsName)
+            .select('*');
+          if (error) throw error;
+          plData = data || [];
+        }
 
         const mappedPricelists = (plData || []).map(mapAuthorizedPriceList);
         const visiblePricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
@@ -922,9 +939,11 @@ export async function fetchCloudData(options = {}) {
         // This avoids evaluating the customer-assignment RLS branch for every
         // unrelated price row and prevents one slow item request from erasing
         // the otherwise valid visible price-list snapshot.
-        const itemData = state.currentUser?.role === 'sale'
-          ? await fetchPriceListItemsForIds([...visiblePriceListIds])
-          : await fetchFullTableData(tablePriceListItemsName);
+        if (itemData === null) {
+          itemData = state.currentUser?.role === 'sale'
+            ? await fetchPriceListItemsForIds([...visiblePriceListIds])
+            : await fetchFullTableData(tablePriceListItemsName);
+        }
         const mappedPriceListItems = (itemData || []).map(mapAuthorizedPriceListItem);
 
         state.allPricelists = mappedPricelists;

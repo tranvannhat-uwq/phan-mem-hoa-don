@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260810-sale-pricing1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260810-sale-pricing1';
-import { renderAll, switchTab } from '../main.js?v=20260810-sale-pricing1';
-import { populateManagedByDropdown } from './customers.js?v=20260810-sale-pricing1';
-import { exportBackupToExcel } from '../services/backup.js?v=20260810-sale-pricing1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260810-sale-pricing-rpc1';
+import { renderAll, switchTab } from '../main.js?v=20260810-sale-pricing-rpc1';
+import { populateManagedByDropdown } from './customers.js?v=20260810-sale-pricing-rpc1';
+import { exportBackupToExcel } from '../services/backup.js?v=20260810-sale-pricing-rpc1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,

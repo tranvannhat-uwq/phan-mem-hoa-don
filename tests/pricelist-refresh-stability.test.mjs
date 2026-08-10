@@ -14,7 +14,7 @@ const end = service.indexOf('const fetchUsers = async () =>', start);
 const refreshFlow = service.slice(start, end);
 
 test('pricing refresh publishes lists and item rows as one complete snapshot', () => {
-  const itemFetch = refreshFlow.indexOf("const itemData = state.currentUser?.role === 'sale'");
+  const itemFetch = refreshFlow.indexOf('const mappedPriceListItems = (itemData || []).map');
   const listCommit = refreshFlow.indexOf('state.allPricelists = mappedPricelists');
   const itemCommit = refreshFlow.indexOf('state.allPriceListItems = mappedPriceListItems');
 

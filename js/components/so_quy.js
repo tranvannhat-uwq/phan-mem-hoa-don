@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
-import { renderAll } from '../main.js?v=20260810-sale-pricing1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260810-sale-pricing1';
-import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260810-sale-pricing1';
+import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbUpdateManualCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { getCanonicalCashbookId } from '../domain/cashbook.js?v=20260810-sale-pricing-rpc1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];

@@ -233,3 +233,9 @@ when that exact list was already saved on an active customer inside the Sale's
 customer scope. The list remains unavailable for every other customer, and the
 same customer-scoped check protects drafts, order history and authoritative
 order confirmation.
+
+Migration `0043` adds a read-only Sale pricing snapshot RPC. It returns only
+active global price lists explicitly enabled by Accounting and their price
+rows, avoiding the expensive customer-assignment RLS predicate on every matrix
+row. Dealer-specific exceptions remain isolated behind the exact-customer RPC;
+no price, product, customer or order data is changed.
