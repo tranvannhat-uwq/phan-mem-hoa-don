@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes } from '../services/supabase.js?v=20260810-login-employees1';
-import { renderAll } from '../main.js?v=20260810-login-employees1';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260810-login-employees1';
-import { openHistoryOrderExportModal } from './customers.js?v=20260810-login-employees1';
+import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes } from '../services/supabase.js?v=20260810-customer-switch1';
+import { renderAll } from '../main.js?v=20260810-customer-switch1';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260810-customer-switch1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260810-customer-switch1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260810-login-employees1';
+} from '../domain/order-financials.js?v=20260810-customer-switch1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260810-login-employees1';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260810-customer-switch1';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -1280,6 +1280,10 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
       state.activeCustomerBrand = cust.assignedBrand;
       document.getElementById('invoice-customer-id').value = cust.id;
       document.getElementById('invoice-customer-search').value = cust.name;
+      document.getElementById('invoice-customer-search').dataset.selectedCustomerName = cust.name;
+      document.getElementById('invoice-customer-search').disabled = isReadOnly;
+      const clearCustomerButton = document.getElementById('btn-clear-invoice-customer');
+      if (clearCustomerButton) clearCustomerButton.style.display = isReadOnly ? 'none' : 'inline-flex';
       document.getElementById('invoice-customer-info-card').style.display = 'block';
       document.getElementById('selected-customer-name-lbl').innerText = cust.name;
       document.getElementById('selected-customer-phone-lbl').innerText = cust.phone || 'N/A';
@@ -1306,12 +1310,13 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
     const customerSearchInput = document.getElementById('invoice-customer-search');
     if (customerSearchInput) {
       customerSearchInput.value = customerContext.customerName;
-      customerSearchInput.removeAttribute('disabled');
+      customerSearchInput.disabled = isReadOnly;
+      customerSearchInput.removeAttribute('data-selected-customer-name');
     }
     const customerInfoCard = document.getElementById('invoice-customer-info-card');
     if (customerInfoCard) customerInfoCard.style.display = 'none';
     const clearCustomerButton = document.getElementById('btn-clear-invoice-customer');
-    if (clearCustomerButton) clearCustomerButton.style.display = 'inline-flex';
+    if (clearCustomerButton) clearCustomerButton.style.display = isReadOnly ? 'none' : 'inline-flex';
   }
   
   // Tải các mặt hàng

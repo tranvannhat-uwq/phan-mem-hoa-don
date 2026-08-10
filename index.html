@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260810-login-employees1">
+  <link rel="stylesheet" href="style.css?v=20260810-customer-switch1">
 </head>
 <body>
 
@@ -893,8 +893,8 @@
           <div class="glass-panel summary-card">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
               <h2 class="summary-heading" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: inline-flex; align-items: center; gap: 0.5rem;"><i data-lucide="receipt"></i> Tổng quan đơn hàng</h2>
-              <button class="btn btn-secondary btn-circle btn-sm" id="btn-reset-order" title="Làm mới đơn" style="width: 28px; height: 28px;">
-                <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
+              <button class="btn btn-secondary btn-sm" id="btn-reset-order" title="Làm mới toàn bộ đơn hàng" style="height: 32px; padding: 0 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap;">
+                <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i> Làm Mới Đơn
               </button>
             </div>
             
@@ -904,9 +904,14 @@
                 <div class="form-group" style="position: relative; margin-bottom: 0.75rem;" id="invoice-customer-search-group">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
                     <label class="form-label" style="margin-bottom: 0;">Tìm khách hàng (Tên hoặc SĐT) *</label>
-                    <button type="button" class="btn btn-secondary btn-circle btn-sm" id="btn-quick-customer-toggle" title="Thêm khách hàng mới (Thêm nhanh)" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0;">
-                      <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
-                    </button>
+                    <div style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                      <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-invoice-customer" title="Bỏ khách hiện tại và chọn khách khác" style="height: 26px; padding: 0 0.55rem; display: none; align-items: center; gap: 0.3rem; white-space: nowrap; font-size: 0.75rem;">
+                        <i data-lucide="refresh-cw" style="width: 13px; height: 13px;"></i> Chọn khách khác
+                      </button>
+                      <button type="button" class="btn btn-secondary btn-circle btn-sm" id="btn-quick-customer-toggle" title="Thêm khách hàng mới (Thêm nhanh)" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0;">
+                        <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+                      </button>
+                    </div>
                   </div>
                   <div class="custom-input-group">
                     <i data-lucide="user" style="margin-left: 0.75rem; color: var(--text-muted); width: 18px;"></i>
@@ -4156,6 +4161,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260810-login-employees1"></script>
+  <script type="module" src="js/main.js?v=20260810-customer-switch1"></script>
 </body>
 </html>

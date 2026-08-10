@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-login-employees1';
-import { renderAll, switchTab } from '../main.js?v=20260810-login-employees1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData } from '../services/supabase.js?v=20260810-customer-switch1';
+import { renderAll, switchTab } from '../main.js?v=20260810-customer-switch1';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260810-login-employees1';
-import { addCashbookTransaction } from './so_quy.js?v=20260810-login-employees1';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260810-login-employees1';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260810-login-employees1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260810-customer-switch1';
+import { addCashbookTransaction } from './so_quy.js?v=20260810-customer-switch1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260810-customer-switch1';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260810-customer-switch1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -1375,6 +1375,38 @@ export function resetInvoiceCustomer() {
   applyActivePriceListToInvoice();
 }
 
+export function prepareInvoiceCustomerReselection(searchValue = '', shouldFocus = true) {
+  state.activeCustomerId = '';
+  state.activeCustomerBrand = 'Tất cả';
+
+  const idInput = document.getElementById('invoice-customer-id');
+  if (idInput) idInput.value = '';
+
+  const searchInput = document.getElementById('invoice-customer-search');
+  if (searchInput) {
+    searchInput.value = searchValue;
+    searchInput.removeAttribute('disabled');
+    searchInput.removeAttribute('data-selected-customer-name');
+    if (shouldFocus) searchInput.focus();
+  }
+
+  const infoCard = document.getElementById('invoice-customer-info-card');
+  if (infoCard) infoCard.style.display = 'none';
+
+  const clearCustBtn = document.getElementById('btn-clear-invoice-customer');
+  if (clearCustBtn) clearCustBtn.style.display = 'none';
+
+  const plSelect = document.getElementById('invoice-pricelist-select');
+  if (plSelect) {
+    plSelect.querySelectorAll('option[data-customer-assigned="true"]').forEach(option => option.remove());
+    plSelect.value = '';
+    plSelect.dataset.explicitOverride = 'false';
+    plSelect.disabled = false;
+  }
+
+  applyActivePriceListToInvoice();
+}
+
 export function resetInvoiceBuilder() {
   clearPendingOrderIdempotencyKey();
   state.invoiceItems = [];
@@ -2350,6 +2382,8 @@ function setupInvoiceCustomerSearch() {
 
   if (!custSearchInput) return;
 
+  clearBtn?.addEventListener('click', () => prepareInvoiceCustomerReselection());
+
   // Lắng nghe sự kiện để tìm kiếm gợi ý khách hàng giống như tìm sản phẩm
   const suggestions = document.createElement('ul');
   suggestions.className = 'suggestions-list';
@@ -2359,6 +2393,12 @@ function setupInvoiceCustomerSearch() {
 
   custSearchInput.addEventListener('input', () => {
     if (state.isQuickCustomerMode) return; // Không cần gợi ý ở chế độ khách lẻ
+
+    const selectedName = custSearchInput.dataset.selectedCustomerName || '';
+    if (state.activeCustomerId && custSearchInput.value.trim() !== selectedName) {
+      const typedValue = custSearchInput.value;
+      prepareInvoiceCustomerReselection(typedValue, false);
+    }
     
     const val = custSearchInput.value.trim().toLowerCase();
     if (val === '') {
@@ -2437,7 +2477,8 @@ async function selectInvoiceCustomer(customer) {
   
   document.getElementById('invoice-customer-id').value = customer.id;
   document.getElementById('invoice-customer-search').value = customer.name;
-  document.getElementById('invoice-customer-search').setAttribute('disabled', 'true');
+  document.getElementById('invoice-customer-search').removeAttribute('disabled');
+  document.getElementById('invoice-customer-search').dataset.selectedCustomerName = customer.name;
   
   const clearBtn = document.getElementById('btn-clear-invoice-customer');
   if (clearBtn) clearBtn.style.display = 'inline-flex';
