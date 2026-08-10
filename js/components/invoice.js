@@ -5,7 +5,7 @@ import { renderAll, switchTab } from '../main.js?v=20260809-activity8';
 import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js?v=20260809-activity8';
 import { addCashbookTransaction } from './so_quy.js?v=20260809-activity8';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260809-activity8';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260809-activity8';
 import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260809-activity8';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js';
@@ -959,11 +959,13 @@ export function compileActiveOrder() {
   const plSelect = document.getElementById('invoice-pricelist-select');
   const pricelistId = plSelect ? plSelect.value : 'retail';
   if (state.currentUser?.role === 'sale') {
+    const orderCustomer = custId ? state.customers.find(customer => customer.id === custId) : null;
+    const authorizedPriceLists = [...(state.allPricelists || []), ...(state.pricelists || [])];
     const selectedPriceListIds = new Set(state.invoiceItems.map(item => item.priceListId).filter(Boolean));
     if (pricelistId && pricelistId !== 'retail') selectedPriceListIds.add(pricelistId);
     const forbiddenId = [...selectedPriceListIds].find(id => {
-      const priceList = state.pricelists.find(item => item.id === id);
-      return !priceList || !canUserViewPriceList(state.currentUser, priceList);
+      const priceList = authorizedPriceLists.find(item => item.id === id);
+      return !priceList || !canUserUsePriceListForCustomer(state.currentUser, priceList, orderCustomer);
     });
     if (forbiddenId) {
       showToast('403: Bảng giá không được cấp quyền cho kinh doanh.', 'danger');
@@ -1327,6 +1329,7 @@ export function resetInvoiceCustomer() {
   
   const plSelect = document.getElementById('invoice-pricelist-select');
   if (plSelect) {
+    plSelect.querySelectorAll('option[data-customer-assigned="true"]').forEach(option => option.remove());
     plSelect.value = '';
     plSelect.dataset.explicitOverride = 'false';
     plSelect.disabled = false;
@@ -2296,8 +2299,9 @@ export function setupInvoiceCreator() {
   const invoicePlSelect = document.getElementById('invoice-pricelist-select');
   if (invoicePlSelect) {
     invoicePlSelect.addEventListener('change', () => {
+      const isCustomerAssigned = invoicePlSelect.selectedOptions[0]?.dataset.customerAssigned === 'true';
       invoicePlSelect.dataset.explicitOverride = String(
-        Boolean(invoicePlSelect.value) && invoicePlSelect.value !== 'retail'
+        Boolean(invoicePlSelect.value) && invoicePlSelect.value !== 'retail' && !isCustomerAssigned
       );
       syncInvoicePersistenceActions();
       applyActivePriceListToInvoice();
@@ -2419,6 +2423,15 @@ function selectInvoiceCustomer(customer) {
       customer,
       state.allPricelists.length ? state.allPricelists : state.pricelists
     );
+    plSelect.querySelectorAll('option[data-customer-assigned="true"]').forEach(option => option.remove());
+    if (applicable.priceList && ![...plSelect.options].some(option => option.value === applicable.priceList.id)) {
+      const assignedOption = document.createElement('option');
+      assignedOption.value = applicable.priceList.id;
+      assignedOption.textContent = `${applicable.priceList.name} (theo đại lý)`;
+      assignedOption.dataset.customerAssigned = 'true';
+      const retailOption = [...plSelect.options].find(option => option.value === 'retail');
+      plSelect.insertBefore(assignedOption, retailOption || null);
+    }
     plSelect.value = applicable.priceList?.id || '';
     plSelect.dataset.explicitOverride = 'false';
     plSelect.disabled = false;

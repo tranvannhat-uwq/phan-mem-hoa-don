@@ -40,6 +40,17 @@ export function canUserViewPriceList(user, priceList, now = new Date()) {
   return !isDealerPrivatePriceList(priceList);
 }
 
+export function canUserUsePriceListForCustomer(user, priceList, customer, now = new Date()) {
+  if (canUserViewPriceList(user, priceList, now)) return true;
+  if (user?.role !== 'sale' || !customer || !isPriceListActive(priceList, now)) return false;
+  const references = [customer.pricelistId, customer.defaultPriceListId]
+    .filter(Boolean)
+    .map(value => String(value).trim().toLowerCase());
+  return [priceList.id, priceList.code, priceList.name]
+    .filter(Boolean)
+    .some(value => references.includes(String(value).trim().toLowerCase()));
+}
+
 export function filterPriceListsForUser(priceLists, user, now = new Date()) {
   return sortPriceLists((priceLists || []).filter(priceList => canUserViewPriceList(user, priceList, now)));
 }

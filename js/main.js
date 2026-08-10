@@ -1,13 +1,13 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData } from './services/supabase.js?v=20260809-activity8';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260809-activity8';
 import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260809-activity8';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260809-activity8';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260809-activity8';
 import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260809-activity8';
 import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260809-activity8';
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260809-activity8';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState } from './components/users.js?v=20260809-activity8';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260809-activity8';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260809-activity8';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260809-activity8';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260809-activity8';
@@ -135,6 +135,65 @@ export function switchTab(panelId) {
   
   // Tự động làm mới dữ liệu và thống kê trên tất cả các tab khi chuyển đổi
   renderAll();
+  if (panelId === 'settings-panel') void refreshMaintenanceSettings();
+}
+
+async function refreshMaintenanceSettings() {
+  const section = document.getElementById('maintenance-mode-section');
+  const statusLabel = document.getElementById('maintenance-status-label');
+  const toggleButton = document.getElementById('btn-toggle-maintenance');
+  const messageInput = document.getElementById('maintenance-message');
+  if (!section || state.currentUser?.role !== 'admin') {
+    if (section) section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  try {
+    const status = await getMaintenanceStatus();
+    if (status.available === false) {
+      section.dataset.enabled = 'false';
+      statusLabel.textContent = 'Chưa cài bản cập nhật bảo trì trên Cloud.';
+      statusLabel.className = 'maintenance-status is-enabled';
+      toggleButton.disabled = true;
+      return;
+    }
+    toggleButton.disabled = false;
+    section.dataset.enabled = status.enabled ? 'true' : 'false';
+    statusLabel.textContent = status.enabled ? 'Đang bật — nhân viên bị chặn truy cập' : 'Đang tắt — mọi tài khoản truy cập bình thường';
+    statusLabel.className = status.enabled ? 'maintenance-status is-enabled' : 'maintenance-status';
+    toggleButton.textContent = status.enabled ? 'Tắt chế độ bảo trì' : 'Bật chế độ bảo trì';
+    toggleButton.className = status.enabled ? 'btn btn-secondary' : 'btn btn-danger';
+    if (messageInput && status.message) messageInput.value = status.message;
+  } catch (error) {
+    statusLabel.textContent = 'Không thể tải trạng thái bảo trì.';
+    console.warn('Could not load maintenance status:', error);
+  }
+}
+
+function setupMaintenanceSettings() {
+  const button = document.getElementById('btn-toggle-maintenance');
+  const section = document.getElementById('maintenance-mode-section');
+  const messageInput = document.getElementById('maintenance-message');
+  if (!button || !section) return;
+  button.addEventListener('click', async () => {
+    if (state.currentUser?.role !== 'admin') return;
+    const enabling = section.dataset.enabled !== 'true';
+    const question = enabling
+      ? 'Bật chế độ bảo trì? Các phiên nhân viên đang mở sẽ bị đưa về màn hình đăng nhập.'
+      : 'Tắt chế độ bảo trì để nhân viên truy cập lại?';
+    if (!confirm(question)) return;
+    button.disabled = true;
+    try {
+      await setMaintenanceMode(enabling, messageInput?.value || '');
+      await refreshMaintenanceSettings();
+      showToast(enabling ? 'Đã bật chế độ bảo trì.' : 'Đã tắt chế độ bảo trì.', 'success');
+    } catch (error) {
+      console.error('Maintenance toggle failed:', error);
+      showToast('Không thể thay đổi chế độ bảo trì. Vui lòng thử lại.', 'danger');
+    } finally {
+      button.disabled = false;
+    }
+  });
 }
 
 // Trình quản lý thanh điều hướng
@@ -324,6 +383,7 @@ async function initApp() {
   setupDashboardFilters();
   setupExcelImportAndTemplate();
   setupSupabaseSettings();
+  setupMaintenanceSettings();
   setupUserManagement();
   setupBrandsPanel();
   setupGoodsPanel();
@@ -391,6 +451,10 @@ async function initApp() {
           isExternal: profile.is_external === true,
           isActive: profile.is_active === true
         };
+        const maintenance = await getMaintenanceStatus();
+        if (maintenance.enabled && activeUser.role !== 'admin') {
+          throw new Error(maintenance.message || 'Hệ thống đang bảo trì. Chỉ admin có thể truy cập.');
+        }
       }
     } catch (err) {
       console.warn('Session recovery rejected');
@@ -422,6 +486,7 @@ async function initApp() {
       userDisplay.innerText = `${state.currentUser.displayName} (${state.currentUser.role === 'admin' ? 'Admin' : state.currentUser.role === 'accounting' ? 'Kế toán' : 'Sale'})`;
     }
     applyUserPermissions(state.currentUser);
+    startMaintenanceMonitor();
   } else {
     showLoginGate();
   }

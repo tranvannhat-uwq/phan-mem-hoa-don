@@ -8,6 +8,7 @@ export const LOGIN_ERROR = Object.freeze({
   ROLE_INVALID: 'ROLE_INVALID',
   PROFILE_ACCESS_DENIED: 'PROFILE_ACCESS_DENIED',
   PROFILE_DUPLICATE: 'PROFILE_DUPLICATE',
+  MAINTENANCE: 'MAINTENANCE',
   NETWORK: 'NETWORK',
   UNKNOWN: 'UNKNOWN'
 });
@@ -20,6 +21,7 @@ const USER_MESSAGES = Object.freeze({
   [LOGIN_ERROR.ROLE_INVALID]: 'Hồ sơ người dùng có vai trò không hợp lệ. Liên hệ quản trị viên.',
   [LOGIN_ERROR.PROFILE_ACCESS_DENIED]: 'Không đủ quyền truy cập hồ sơ người dùng.',
   [LOGIN_ERROR.PROFILE_DUPLICATE]: 'Dữ liệu hồ sơ người dùng không nhất quán. Liên hệ quản trị viên.',
+  [LOGIN_ERROR.MAINTENANCE]: 'Hệ thống đang bảo trì. Chỉ quản trị viên có thể truy cập lúc này.',
   [LOGIN_ERROR.NETWORK]: 'Không thể kết nối Supabase. Vui lòng kiểm tra mạng và thử lại.',
   [LOGIN_ERROR.UNKNOWN]: 'Không thể tải hồ sơ người dùng. Vui lòng thử lại.'
 });

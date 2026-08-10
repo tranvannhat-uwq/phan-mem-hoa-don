@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage } from '../services/supabase.js?v=20260809-activity8';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260809-activity8';
 import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260809-activity8';
 import { renderAll, switchTab } from '../main.js?v=20260809-activity8';
 import { populateManagedByDropdown } from './customers.js?v=20260809-activity8';
@@ -343,6 +343,43 @@ export function populateCustomerEmployeeFilter() {
 }
 
 let isLoggingIn = false;
+let maintenanceMonitor = null;
+
+function setMaintenanceNotice(message = '', visible = false) {
+  const notice = document.getElementById('login-maintenance-notice');
+  if (!notice) return;
+  notice.textContent = message || loginErrorMessage(LOGIN_ERROR.MAINTENANCE);
+  notice.style.display = visible ? 'block' : 'none';
+}
+
+export function stopMaintenanceMonitor() {
+  if (maintenanceMonitor) clearInterval(maintenanceMonitor);
+  maintenanceMonitor = null;
+}
+
+async function enforceMaintenanceForActiveEmployee() {
+  if (!state.currentUser || state.currentUser.role === 'admin') return;
+  try {
+    const status = await getMaintenanceStatus();
+    if (!status.enabled) return;
+    stopMaintenanceMonitor();
+    await stopRealtimeSync();
+    try { await supabaseClient?.auth.signOut(); } catch (_) { /* clear local session below */ }
+    clearAuthenticatedSessionState();
+    clearSupabaseAuthStorage();
+    showLoginGate();
+    setMaintenanceNotice(status.message, true);
+    showToast(status.message, 'warning');
+  } catch (error) {
+    console.warn('Maintenance status check failed; keeping the current session until the next check.', error);
+  }
+}
+
+export function startMaintenanceMonitor() {
+  stopMaintenanceMonitor();
+  if (!state.currentUser || state.currentUser.role === 'admin') return;
+  maintenanceMonitor = setInterval(() => void enforceMaintenanceForActiveEmployee(), 15000);
+}
 
 function createLoginFlowError(code) {
   const error = new Error(loginErrorMessage(code));
@@ -466,6 +503,12 @@ export async function handleLogin(e) {
       isExternal: profile.is_external === true,
       isActive: profile.is_active !== false
     };
+    const maintenance = await getMaintenanceStatus();
+    if (maintenance.enabled && user.role !== 'admin') {
+      const error = createLoginFlowError(LOGIN_ERROR.MAINTENANCE);
+      error.message = maintenance.message || error.message;
+      throw error;
+    }
     state.currentUser = user;
     const cloudLoad = await fetchCloudData({
       deferSecondary: true,
@@ -485,8 +528,10 @@ export async function handleLogin(e) {
       userDisplay.innerText = `${state.currentUser.displayName} (${roleLabel})`;
     }
     applyUserPermissions(state.currentUser);
+    setMaintenanceNotice('', false);
     renderAll();
     void startRealtimeSync(renderAll);
+    startMaintenanceMonitor();
     showToast(`Đăng nhập thành công! Chào mừng ${state.currentUser.displayName}!`, 'success');
 
     const loginUserId = String(state.currentUser.authUserId || state.currentUser.id || '');
@@ -509,13 +554,16 @@ export async function handleLogin(e) {
     if (authEstablished) clearSupabaseAuthStorage();
     const errorCode = err?.loginCode || classifySupabaseError(err);
     console.warn('Login flow rejected', { code: errorCode });
-    showToast(loginErrorMessage(errorCode), 'danger');
+    const userMessage = errorCode === LOGIN_ERROR.MAINTENANCE ? err.message : loginErrorMessage(errorCode);
+    setMaintenanceNotice(userMessage, errorCode === LOGIN_ERROR.MAINTENANCE);
+    showToast(userMessage, errorCode === LOGIN_ERROR.MAINTENANCE ? 'warning' : 'danger');
   } finally {
     resetFormState();
   }
 }
 
 export async function handleLogout() {
+  stopMaintenanceMonitor();
   if (state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'accounting')) {
     const todayStr = new Date().toLocaleDateString('vi-VN');
     const lastBackup = localStorage.getItem('weblendon_last_backup_date');

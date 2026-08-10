@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList } from '../domain/pricing.js?v=20260809-activity8';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260809-activity8';
 import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260809-activity8';
 import { collectAllPages } from '../domain/pagination.js';
 import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260809-activity8';
@@ -54,6 +54,53 @@ export let tableCommissionTransactionsName = 'commission_transactions';
 
 export function setCloudActive(active) {
   isCloudActive = active;
+}
+
+export async function getMaintenanceStatus() {
+  if (!isCloudActive || !supabaseClient) {
+    throw new Error('Không thể kiểm tra trạng thái bảo trì khi chưa kết nối Cloud.');
+  }
+  const { data, error } = await supabaseClient.rpc('rpc_get_maintenance_status');
+  if (error) {
+    const code = String(error.code || '').toUpperCase();
+    const message = String(error.message || '').toLowerCase();
+    const migrationMissing = ['PGRST202', '42883'].includes(code)
+      || (message.includes('rpc_get_maintenance_status') && message.includes('schema cache'));
+    if (migrationMissing) {
+      return {
+        enabled: false,
+        message: 'Chế độ bảo trì chưa được cài đặt trên Cloud.',
+        updatedAt: null,
+        updatedBy: null,
+        available: false
+      };
+    }
+    throw error;
+  }
+  return {
+    enabled: data?.enabled === true,
+    message: String(data?.message || 'Hệ thống đang bảo trì. Vui lòng quay lại sau.'),
+    updatedAt: data?.updated_at || null,
+    updatedBy: data?.updated_by || null,
+    available: true
+  };
+}
+
+export async function setMaintenanceMode(enabled, message = '') {
+  if (!isCloudActive || !supabaseClient) {
+    throw new Error('Cần kết nối Cloud để thay đổi chế độ bảo trì.');
+  }
+  const { data, error } = await supabaseClient.rpc('rpc_set_maintenance_mode', {
+    p_enabled: enabled === true,
+    p_message: String(message || '').trim()
+  });
+  if (error) throw error;
+  return {
+    enabled: data?.enabled === true,
+    message: String(data?.message || ''),
+    updatedAt: data?.updated_at || null,
+    updatedBy: data?.updated_by || null
+  };
 }
 
 // Tải dữ liệu dự phòng từ LocalStorage khi mất kết nối mạng
@@ -2513,13 +2560,15 @@ export async function dbSaveOrder(order) {
     return false;
   }
   if (state.currentUser?.role === 'sale') {
+    const orderCustomer = (state.customers || []).find(customer => customer.id === order.customerId) || null;
+    const authorizedPriceLists = [...(state.allPricelists || []), ...(state.pricelists || [])];
     const usedPriceListIds = new Set([
       order.pricelistId,
       ...(order.items || []).map(item => item.priceListId)
     ].filter(id => id && id !== 'retail'));
     const forbiddenId = [...usedPriceListIds].find(id => {
-      const priceList = state.pricelists.find(item => item.id === id);
-      return !priceList || !canUserViewPriceList(state.currentUser, priceList);
+      const priceList = authorizedPriceLists.find(item => item.id === id);
+      return !priceList || !canUserUsePriceListForCustomer(state.currentUser, priceList, orderCustomer);
     });
     if (forbiddenId) {
       const error = new Error(`403: Price list ${forbiddenId} is not available for sales`);
@@ -3579,13 +3628,15 @@ export async function dbConfirmOrder(order) {
     return false;
   }
   if (state.currentUser?.role === 'sale') {
+    const orderCustomer = (state.customers || []).find(customer => customer.id === order.customerId) || null;
+    const authorizedPriceLists = [...(state.allPricelists || []), ...(state.pricelists || [])];
     const usedPriceListIds = new Set([
       order.pricelistId,
       ...(order.items || []).map(item => item.priceListId)
     ].filter(id => id && id !== 'retail'));
     const forbiddenId = [...usedPriceListIds].find(id => {
-      const priceList = state.pricelists.find(item => item.id === id);
-      return !priceList || !canUserViewPriceList(state.currentUser, priceList);
+      const priceList = authorizedPriceLists.find(item => item.id === id);
+      return !priceList || !canUserUsePriceListForCustomer(state.currentUser, priceList, orderCustomer);
     });
     if (forbiddenId) {
       const error = new Error(`403: Price list ${forbiddenId} is not available for sales`);

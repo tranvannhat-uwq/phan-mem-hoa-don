@@ -6,6 +6,7 @@ import {
   resolveCustomerProductPrice,
   filterPriceListsForUser,
   canUserViewPriceList,
+  canUserUsePriceListForCustomer,
   isPrivilegedPricingRole,
   getStandardPriceList,
   isUsableResolvedPrice,
@@ -156,6 +157,8 @@ assert.equal(isPrivilegedPricingRole(saleUser), false);
 assert.equal(isPrivilegedPricingRole({ username: 'admin', role: 'admin' }), true);
 assert.equal(isPrivilegedPricingRole({ username: 'accounting', role: 'accounting' }), true);
 assert.equal(canUserViewPriceList(saleUser, priceLists.find(priceList => priceList.id === 'tung-private')), false);
+assert.equal(canUserUsePriceListForCustomer(saleUser, priceLists.find(priceList => priceList.id === 'bg03'), customer), true);
+assert.equal(canUserUsePriceListForCustomer(saleUser, priceLists.find(priceList => priceList.id === 'bg03'), { id: 'other', pricelistId: 'standard' }), false);
 assert.equal(canUserViewPriceList({ username: 'admin', role: 'admin' }, priceLists.find(priceList => priceList.id === 'tung-private')), true);
 
 const missing = resolvePriceForList({

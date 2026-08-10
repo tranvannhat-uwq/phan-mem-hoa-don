@@ -1892,6 +1892,14 @@
       <!-- Settings Panel -->
       <section id="settings-panel" class="panel">
         <div class="glass-panel" style="max-width: 650px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
+          <div id="maintenance-mode-section" data-enabled="false" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 12px; padding: 1rem; background: rgba(239, 68, 68, 0.06);">
+            <h2 class="panel-title" style="margin-bottom: 0.5rem;"><i data-lucide="shield-alert"></i> Chế độ bảo trì</h2>
+            <p id="maintenance-status-label" class="maintenance-status">Đang tải trạng thái...</p>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.55; margin: 0.75rem 0;">Khi bật, chỉ tài khoản Admin được sử dụng hệ thống. Nhân viên đang truy cập sẽ tự động bị đưa về màn hình đăng nhập.</p>
+            <label class="form-label" for="maintenance-message">Thông báo cho nhân viên</label>
+            <textarea id="maintenance-message" class="form-control" rows="2" maxlength="240" style="width: 100%; resize: vertical;">Hệ thống đang bảo trì. Vui lòng quay lại sau.</textarea>
+            <button type="button" class="btn btn-danger" id="btn-toggle-maintenance" style="margin-top: 0.85rem;">Bật chế độ bảo trì</button>
+          </div>
           <div>
             <h2 class="panel-title" style="margin-bottom: 0.5rem;"><i data-lucide="cloud-lightning"></i> Cấu hình kết nối đám mây (Supabase)</h2>
             <p style="color: var(--text-secondary); font-size: 0.85rem;">
@@ -3598,6 +3606,7 @@
         <p style="font-size: 0.85rem; color: var(--text-secondary); text-align: center; margin-bottom: 1.5rem;">Phần mềm Quản lý Bán hàng & Hóa đơn</p>
       </div>
       <form id="login-form" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div id="login-maintenance-notice" role="alert" style="display: none; padding: 0.8rem; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: #fbbf24; font-size: 0.85rem; line-height: 1.5; text-align: center;"></div>
         <div class="form-group">
           <label class="form-label" for="login-username">Tên đăng nhập</label>
           <input type="text" class="form-control" id="login-username" placeholder="Nhập tài khoản" required autocomplete="username" style="width: 100%;">

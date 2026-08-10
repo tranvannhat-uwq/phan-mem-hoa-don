@@ -5803,3 +5803,12 @@ body.customer-filter-drawer-open { overflow: hidden; }
     min-width: 720px;
   }
 }
+.maintenance-status {
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.maintenance-status.is-enabled {
+  color: #f87171;
+}

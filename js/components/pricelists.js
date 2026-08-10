@@ -14,6 +14,7 @@ import {
   isPrivilegedPricingRole,
   filterPriceListsForUser,
   isDealerPrivatePriceList,
+  getApplicablePriceList,
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
@@ -507,12 +508,26 @@ export function populatePricelistsDropdowns() {
   const invoiceSelect = document.getElementById('invoice-pricelist-select');
   if (invoiceSelect) {
     const current = invoiceSelect.value;
+    const activeCustomer = state.activeCustomerId
+      ? (state.customers || []).find(customer => customer.id === state.activeCustomerId)
+      : null;
+    const applicable = activeCustomer
+      ? getApplicablePriceList(
+          activeCustomer,
+          state.allPricelists?.length ? state.allPricelists : state.pricelists
+        ).priceList
+      : null;
+    const assignedOnly = applicable && !lists.some(priceList => priceList.id === applicable.id)
+      ? applicable
+      : null;
     invoiceSelect.innerHTML = `
       <option value="">Tự động theo khách hàng</option>
       ${lists.map(priceList => `<option value="${priceList.id}">${priceListDisplayName(priceList)}</option>`).join('')}
+      ${assignedOnly ? `<option value="${assignedOnly.id}" data-customer-assigned="true">${assignedOnly.name} (theo đại lý)</option>` : ''}
       <option value="retail">Nhập tay có xác nhận</option>
     `;
-    if ([...invoiceSelect.options].some(option => option.value === current)) invoiceSelect.value = current;
+    const desired = current || assignedOnly?.id || '';
+    if ([...invoiceSelect.options].some(option => option.value === desired)) invoiceSelect.value = desired;
   }
   const customerSelect = document.getElementById('cust-pricelist');
   if (customerSelect) {
