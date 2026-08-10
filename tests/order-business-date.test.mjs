@@ -53,3 +53,13 @@ test('database accepts historical dates only from privileged roles and preserves
   assert.match(service, /date: order\.date \|\| new Date\(\)\.toISOString\(\)/);
   assert.match(service, /date: order\.order_date \|\| order\.created_at/);
 });
+
+test('database compares the Vietnam business day and clamps same-day clock skew', () => {
+  const migration = fs.readFileSync(new URL('../migrations/0042_order_business_date_clock_skew.sql', import.meta.url), 'utf8');
+  const service = fs.readFileSync(new URL('../js/services/supabase.js', import.meta.url), 'utf8');
+  assert.match(migration, /business_date AT TIME ZONE ''Asia\/Bangkok''/);
+  assert.match(migration, /now\(\) AT TIME ZONE ''Asia\/Bangkok''/);
+  assert.match(migration, /IF business_date > now\(\) THEN[\s\S]*business_date := now\(\)/);
+  assert.match(migration, /Order date cannot be in the future/);
+  assert.match(service, /Ngày lên đơn không được lớn hơn ngày hiện tại/);
+});

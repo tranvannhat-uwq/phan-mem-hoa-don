@@ -47,7 +47,8 @@ const migrationNames = [
   '0038_activity_history_bridge.sql',
   '0039_admin_maintenance_mode.sql',
   '0040_customer_assigned_price_list_exception.sql',
-  '0041_customer_assigned_pricing_rpc.sql'
+  '0041_customer_assigned_pricing_rpc.sql',
+  '0042_order_business_date_clock_skew.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 

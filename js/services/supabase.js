@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-order-idempotency2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-order-idempotency2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-order-date1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-order-date1';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-order-idempotency2';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-order-date1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -3832,6 +3832,9 @@ export async function dbConfirmOrder(order) {
         return recovered;
       }
       const message = String(err.message || 'Transaction thất bại');
+      if (/Order date cannot be in the future/i.test(message)) {
+        throw new Error('Không thể chốt đơn: Ngày lên đơn không được lớn hơn ngày hiện tại.');
+      }
       const missingPrice = message.match(/SKU\s+([^\s]+)\s+has no effective database price/i);
       if (missingPrice) {
         const product = (state.products || []).find(item => String(item.id) === missingPrice[1]);
