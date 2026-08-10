@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260810-order-finalize1';
-import { renderAll } from '../main.js?v=20260810-order-finalize1';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260810-order-idempotency2';
+import { renderAll } from '../main.js?v=20260810-order-idempotency2';
 
 export function renderBrandsTable() {
   const tableBody = document.getElementById('brands-table-body');

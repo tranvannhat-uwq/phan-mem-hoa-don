@@ -18,6 +18,12 @@ test('finalization requires an idempotency UUID and serializes duplicate request
   assert.match(migration, /idempotency key was already used with a different payload/);
   assert.match(invoice, /crypto\?\.randomUUID|crypto\.randomUUID/);
   assert.match(invoice, /billing_pending_order_idempotency_key/);
+  assert.match(invoice, /billing_pending_order_id/);
+  assert.match(invoice, /function getPendingOrderIdentity\(\)/);
+  assert.match(invoice, /return \{ key, orderId \}/);
+  assert.match(invoice, /const orderId = editOrderId \|\| pendingOrderIdentity\.orderId/);
+  assert.match(invoice, /idempotencyKey: pendingOrderIdentity\.key/);
+  assert.match(invoice, /sessionStorage\.removeItem\(ORDER_PENDING_ID_STORAGE_KEY\)/);
 });
 
 test('order confirmation resolves database columns and local variables deterministically', () => {
