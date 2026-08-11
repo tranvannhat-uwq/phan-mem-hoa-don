@@ -3,7 +3,9 @@ import { updateDbStatusUI } from '../utils.js';
 import {
   applyBrandRealtimePayload,
   applyCashbookRealtimePayload,
+  applyCustomerRealtimePayload,
   applyCustomerDebtRealtimePayload,
+  applyOrderRealtimePayload,
   applyPricingRealtimePayload,
   applyProductRealtimePayload,
   applyStartingBalanceRealtimePayload,
@@ -25,7 +27,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260811-sale-nav-v4';
+} from './supabase.js?v=20260811-realtime-egress-v7';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;
@@ -69,11 +71,12 @@ async function flushRealtimeEvents() {
         if (id) orderChanges.set(`${event.isDraft ? 'draft' : 'order'}:${id}`, {
           id,
           isDraft: event.isDraft,
-          deleted: event.payload.eventType === 'DELETE'
+          deleted: event.payload.eventType === 'DELETE',
+          payload: event.payload
         });
       } else if (event.kind === 'customer') {
         const id = eventRecordId(event.payload);
-        if (id) customerChanges.set(String(id), event.payload.eventType);
+        if (id) customerChanges.set(String(id), event.payload);
       } else if (event.kind === 'customerFinancial') {
         applyCustomerDebtRealtimePayload(event.payload);
       } else if (event.kind === 'cashbook') {
@@ -102,13 +105,14 @@ async function flushRealtimeEvents() {
       }
     });
 
-    await Promise.all([...orderChanges.values()].map(change => dbRefreshOrderById(change.id, change)));
+    await Promise.all([...orderChanges.values()].map(change =>
+      applyOrderRealtimePayload(change.payload, { isDraft: change.isDraft })
+        ? Promise.resolve(true)
+        : dbRefreshOrderById(change.id, change)
+    ));
 
-    for (const [customerId, eventType] of customerChanges) {
-      if (eventType === 'DELETE') {
-        state.customers = (state.customers || []).filter(customer => String(customer.id) !== customerId);
-        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-      } else {
+    for (const [customerId, payload] of customerChanges) {
+      if (!applyCustomerRealtimePayload(payload)) {
         await dbFetchCustomerById(customerId);
       }
     }

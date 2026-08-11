@@ -1,12 +1,12 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260811-sale-nav-v4';
-import { renderAll, switchTab } from '../main.js?v=20260811-sale-nav-v4';
+import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260811-realtime-egress-v7';
+import { renderAll, switchTab } from '../main.js?v=20260811-realtime-egress-v7';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260811-sale-nav-v4';
-import { addCashbookTransaction } from './so_quy.js?v=20260811-sale-nav-v4';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260811-sale-nav-v4';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260811-sale-nav-v4';
+import { generateUniqueCustomerCode } from './customers.js?v=20260811-realtime-egress-v7';
+import { addCashbookTransaction } from './so_quy.js?v=20260811-realtime-egress-v7';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260811-realtime-egress-v7';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v7';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -19,6 +19,22 @@ let isSavingOrder = false;
 let selectedProductFamilyKey = '';
 const ORDER_IDEMPOTENCY_STORAGE_KEY = 'billing_pending_order_idempotency_key';
 const ORDER_PENDING_ID_STORAGE_KEY = 'billing_pending_order_id';
+
+function abbreviateSalesPosition(position = '') {
+  const raw = String(position || '').trim();
+  if (/^[A-ZĐ]{2,8}$/u.test(raw)) return raw;
+  const normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+  if (normalized.includes('giam doc') && normalized.includes('kinh doanh')) return 'GĐKD';
+  if (normalized.includes('truong phong') && normalized.includes('kinh doanh')) return 'TPKD';
+  if (normalized.includes('pho phong') && normalized.includes('kinh doanh')) return 'PPKD';
+  return 'NVKD';
+}
+
+function formatSalesManagerPrintLabel(managerId) {
+  const manager = getUserById(managerId, state.users);
+  const managerName = getUserDisplayName(managerId, managerId || 'N/A', state.users);
+  return `${abbreviateSalesPosition(manager?.position)}: ${managerName}`;
+}
 
 export function syncInvoiceBusinessDateControl(value = null, isReadOnly = false) {
   const group = document.getElementById('invoice-business-date-group');
@@ -1693,7 +1709,9 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     email: 'nhamaysonnano@gmail.com',
     addressMain: 'Tiên Kha - Phúc Thịnh - Hà Nội',
     addressFactory: 'TDP Cầu Giao - P.Phúc Thuận - T.Thái Nguyên',
-    addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh'
+    addressBusiness: '228 Hoàng Hữu Nam - P.Long Bình - Hồ Chí Minh',
+    invoiceWarehouseText: 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên',
+    salesPhone: ''
   };
 
   const config = brandConfig || defaultBrandConfig;
@@ -1782,16 +1800,17 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   const groupEl = document.getElementById('print-customer-group');
   const managerEl = document.getElementById('print-customer-manager');
   const creatorEl = document.getElementById('print-creator-name');
-  const warehouseEl = document.getElementById('print-warehouse-name');
+  const salesPhoneEl = document.getElementById('print-sales-phone');
+  const warehouseTextEl = document.getElementById('print-warehouse-text');
   const warehouseRowEl = document.getElementById('print-warehouse-row');
-  const reasonEl = document.getElementById('print-invoice-reason');
 
-  const creatorName = getUserDisplayName(order.createdBy, 'Không xác định', state.users);
+  const salespersonId = order.salespersonId || order.salesperson_id || order.createdBy;
+  const creatorName = getUserDisplayName(salespersonId, 'Không xác định', state.users);
 
   if (creatorEl) creatorEl.innerText = creatorName || 'admin';
-  if (warehouseEl) warehouseEl.innerText = config.companyName;
+  if (salesPhoneEl) salesPhoneEl.innerText = config.salesPhone || config.hotline || 'N/A';
+  if (warehouseTextEl) warehouseTextEl.innerText = config.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên';
   if (warehouseRowEl) warehouseRowEl.style.display = type === 'retail' ? 'none' : '';
-  if (reasonEl) reasonEl.innerText = 'Xuất bán hàng';
 
   const orderCustomer = order.customerId
     ? state.customers.find(c => c.id === order.customerId)
@@ -1801,8 +1820,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     || orderCustomer?.managedBy
     || orderCustomer?.managed_by
     || '';
-  const managerName = getUserDisplayName(managerId, managerId || 'N/A', state.users);
-  if (managerEl) managerEl.innerText = managerName;
+  if (managerEl) managerEl.innerText = formatSalesManagerPrintLabel(managerId);
 
   if (order.customerId) {
     const cust = orderCustomer;

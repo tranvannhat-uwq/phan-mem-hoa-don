@@ -53,10 +53,15 @@ test('routine refresh actions do not download every business table', () => {
 test('realtime applies row deltas and tab visibility does not trigger refetching', () => {
   for (const updater of [
     'applyCashbookRealtimePayload', 'applyCustomerDebtRealtimePayload', 'applyStartingBalanceRealtimePayload',
-    'applyProductRealtimePayload', 'applyPricingRealtimePayload', 'applyBrandRealtimePayload'
+    'applyProductRealtimePayload', 'applyPricingRealtimePayload', 'applyBrandRealtimePayload',
+    'applyOrderRealtimePayload', 'applyCustomerRealtimePayload'
   ]) {
     assert.match(realtime, new RegExp(`${updater}\\(`));
   }
+  assert.match(realtime, /applyOrderRealtimePayload\(change\.payload/);
+  assert.match(realtime, /applyCustomerRealtimePayload\(payload\)/);
+  assert.match(service, /export function applyOrderRealtimePayload/);
+  assert.match(service, /export function applyCustomerRealtimePayload/);
   assert.doesNotMatch(realtime, /refreshDomains\.add/);
   assert.doesNotMatch(realtime, /addEventListener\('visibilitychange'/);
   assert.match(realtime, /window\.addEventListener\('online'/);

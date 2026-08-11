@@ -27,6 +27,8 @@ test('non-sales receipt categories still reduce debt for the selected customer',
   for (const category of [
     'Thu Hộ trợ vận chuyển cho khách',
     'Thu Thư lương thị trường',
+    'Thu tiền thưởng tháng',
+    'Thu tiền thưởng Quý',
     'Thu tiền phạt',
     'Thu chênh lệch',
     'Khác'

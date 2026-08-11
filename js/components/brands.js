@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260811-sale-nav-v4';
-import { renderAll } from '../main.js?v=20260811-sale-nav-v4';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260811-realtime-egress-v7';
+import { renderAll } from '../main.js?v=20260811-realtime-egress-v7';
 
 export function renderBrandsTable() {
   const tableBody = document.getElementById('brands-table-body');
@@ -10,7 +10,7 @@ export function renderBrandsTable() {
   if (!state.brands || state.brands.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+        <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 2rem;">
           Không tìm thấy hãng sơn nào.
         </td>
       </tr>
@@ -34,6 +34,8 @@ export function renderBrandsTable() {
         <td>${b.addressMain}</td>
         <td>${b.addressFactory}</td>
         <td>${b.addressBusiness || '<span style="color: var(--text-muted); font-style: italic;">Không có (Ẩn ĐĐKD)</span>'}</td>
+        <td>${b.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên'}</td>
+        <td>${b.salesPhone || b.hotline || '<span style="color: var(--text-muted);">Chưa cấu hình</span>'}</td>
         <td class="admin-only" style="text-align: center;">
           <div style="display: inline-flex; gap: 0.5rem; justify-content: center;">
             <button class="btn btn-secondary btn-sm btn-circle edit-brand-btn" data-name="${b.name}" title="Sửa">
@@ -115,6 +117,8 @@ function openBrandModal(brandName = null) {
       document.getElementById('brand-address-main').value = brand.addressMain;
       document.getElementById('brand-address-factory').value = brand.addressFactory;
       document.getElementById('brand-address-business').value = brand.addressBusiness || '';
+      document.getElementById('brand-invoice-warehouse-text').value = brand.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên';
+      document.getElementById('brand-sales-phone').value = brand.salesPhone || '';
     }
   } else {
     title.innerText = 'Thêm hãng sơn mới';
@@ -122,6 +126,7 @@ function openBrandModal(brandName = null) {
     document.getElementById('brand-old-name').value = '';
     nameInput.removeAttribute('disabled');
     if (idDisplay) idDisplay.value = '(Tự động sinh mã ID khi lưu)';
+    document.getElementById('brand-invoice-warehouse-text').value = 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên';
   }
   
   modal.classList.add('active');
@@ -146,6 +151,8 @@ async function saveBrand() {
   const addressMain = document.getElementById('brand-address-main').value.trim();
   const addressFactory = document.getElementById('brand-address-factory').value.trim();
   const addressBusiness = document.getElementById('brand-address-business').value.trim() || null;
+  const invoiceWarehouseText = document.getElementById('brand-invoice-warehouse-text').value.trim() || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên';
+  const salesPhone = document.getElementById('brand-sales-phone').value.trim();
   
   if (!name || !companyName || !logoFilename || !hotline || !cskh || !email || !addressMain || !addressFactory) {
     showToast('Vui lòng nhập đầy đủ các trường bắt buộc (*)', 'danger');
@@ -166,7 +173,9 @@ async function saveBrand() {
     email,
     addressMain,
     addressFactory,
-    addressBusiness
+    addressBusiness,
+    invoiceWarehouseText,
+    salesPhone
   };
   
   // Nếu thêm mới hãng sơn, kiểm tra trùng tên hãng sơn

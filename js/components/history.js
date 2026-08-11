@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, cacheOrdersLocally } from '../services/supabase.js?v=20260811-sale-nav-v4';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20260811-sale-nav-v4';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260811-sale-nav-v4';
-import { openHistoryOrderExportModal } from './customers.js?v=20260811-sale-nav-v4';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, cacheOrdersLocally } from '../services/supabase.js?v=20260811-realtime-egress-v7';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20260811-realtime-egress-v7';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260811-realtime-egress-v7';
+import { openHistoryOrderExportModal } from './customers.js?v=20260811-realtime-egress-v7';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260811-sale-nav-v4';
+} from '../domain/order-financials.js?v=20260811-realtime-egress-v7';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260811-sale-nav-v4';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260811-realtime-egress-v7';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';

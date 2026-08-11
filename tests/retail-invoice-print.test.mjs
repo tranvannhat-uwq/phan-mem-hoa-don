@@ -24,10 +24,10 @@ test('retail invoice uses the shorter title and hides company and warehouse rows
 });
 
 test('sales invoice prints the managed business name instead of the paint brand label', () => {
-  assert.match(html, /<strong>Kinh Doanh QL:<\/strong>\s*<span id="print-customer-manager"/);
+  assert.match(html, /<span id="print-customer-manager"[^>]*>NVKD: N\/A<\/span>/);
   assert.doesNotMatch(html, /<strong>Hãng sơn:<\/strong>\s*<span id="print-order-brand"/);
-  assert.match(invoice, /const managerName = getUserDisplayName\(managerId, managerId \|\| 'N\/A', state\.users\)/);
-  assert.match(invoice, /if \(managerEl\) managerEl\.innerText = managerName/);
+  assert.match(invoice, /formatSalesManagerPrintLabel\(managerId\)/);
+  assert.match(invoice, /return `\$\{abbreviateSalesPosition\(manager\?\.position\)\}: \$\{managerName\}`/);
 });
 
 test('warehouse slip enlarges recipient name and places product name before item code', () => {

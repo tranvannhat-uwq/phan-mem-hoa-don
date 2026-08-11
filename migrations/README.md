@@ -262,3 +262,7 @@ categories, when the payer uniquely and exactly matches one active customer.
 It links only previously unlinked vouchers, creates the missing payment and
 debt-ledger rows, reduces the matching customer's debt exactly once, and leaves
 unmatched or already-linked transactions unchanged.
+
+Migration `0047` adds two optional, brand-scoped invoice-print settings: the
+warehouse text and sales phone. It initializes only missing warehouse text and
+does not change orders, prices, customer debt, payments, cashbook or inventory.

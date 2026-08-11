@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260811-sale-nav-v4';
-import { switchTab } from '../main.js?v=20260811-sale-nav-v4';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20260811-sale-nav-v4';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260811-realtime-egress-v7';
+import { switchTab } from '../main.js?v=20260811-realtime-egress-v7';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20260811-realtime-egress-v7';
 import { safeCreateIcons, showToast } from '../utils.js';
 
 const PAGE_SIZE = 25;

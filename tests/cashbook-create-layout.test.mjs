@@ -22,6 +22,8 @@ test('receipt and payment creation use the same wide grouped layout', () => {
 
 test('receipt categories include variance collection', () => {
   assert.match(html, /<option value="Thu chênh lệch">Thu chênh lệch<\/option>/);
+  assert.match(html, /<option value="Thu tiền thưởng tháng">Thu tiền thưởng tháng<\/option>/);
+  assert.match(html, /<option value="Thu tiền thưởng Quý">Thu tiền thưởng Quý<\/option>/);
 });
 
 test('creation layout stays responsive and preserves every form binding', () => {

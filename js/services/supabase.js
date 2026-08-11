@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-sale-nav-v4';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-sale-nav-v4';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v7';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v7';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-sale-nav-v4';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v7';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -819,10 +819,32 @@ function mapOrderRowForState(order, isDraft = false) {
     ),
     pricelistId: order.pricelist_id || 'retail',
     createdBy: order.created_by || 'admin',
+    salespersonId: order.salesperson_id || order.salespersonId || order.created_by || order.createdBy || 'admin',
     customerManagerId: order.customer_manager_id || order.customerManagerId || '',
     companyId: order.company_id || order.companyId || 'ABS_NORTH',
     status: isDraft ? 'draft' : (order.status || 'settled')
   };
+}
+
+// Realtime already carries the changed row. Applying it directly avoids a
+// second PostgREST download on every open browser after each order mutation.
+// Fall back to dbRefreshOrderById only when an installation sends an
+// incomplete payload.
+export function applyOrderRealtimePayload(payload = {}, { isDraft = false } = {}) {
+  const row = payload.new || payload.old || {};
+  const orderId = String(row.id || '');
+  if (!orderId) return false;
+
+  const remaining = (state.savedOrders || [])
+    .filter(order => String(order.id) !== orderId);
+  if (payload.eventType !== 'DELETE') {
+    if (!payload.new || !('items' in payload.new)) return false;
+    remaining.push(mapOrderRowForState(payload.new, isDraft));
+    remaining.sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
+  }
+  state.savedOrders = remaining;
+  cacheOrdersLocally(state.savedOrders);
+  return true;
 }
 
 function isMissingSchemaCacheRelationError(error, relationName) {
@@ -954,7 +976,9 @@ function mapBrandRow(row = {}) {
     email: row.email || '',
     addressMain: row.address_main || row.addressMain || '',
     addressFactory: row.address_factory || row.addressFactory || '',
-    addressBusiness: row.address_business || row.addressBusiness || null
+    addressBusiness: row.address_business || row.addressBusiness || null,
+    invoiceWarehouseText: row.invoice_warehouse_text || row.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên',
+    salesPhone: row.sales_phone || row.salesPhone || ''
   };
 }
 
@@ -1188,6 +1212,7 @@ export async function fetchCloudData(options = {}) {
             username: u.username,
             displayName: u.display_name,
             role: u.role || 'sale',
+            position: u.position || '',
             companyId: u.company_id || u.companyId || 'ABS_NORTH',
             isExternal: u.is_external || false,
             isActive: u.is_active !== false
@@ -1248,7 +1273,9 @@ export async function fetchCloudData(options = {}) {
               email: b.email || '',
               addressMain: b.address_main || b.addressMain || '',
               addressFactory: b.address_factory || b.addressFactory || '',
-              addressBusiness: b.address_business || b.addressBusiness || null
+              addressBusiness: b.address_business || b.addressBusiness || null,
+              invoiceWarehouseText: b.invoice_warehouse_text || b.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên',
+              salesPhone: b.sales_phone || b.salesPhone || ''
             });
           }
         });
@@ -1863,7 +1890,9 @@ async function legacyLocalUploadDisabled() {
         email: b.email || '',
         address_main: b.addressMain || '',
         address_factory: b.addressFactory || '',
-        address_business: b.addressBusiness || null
+        address_business: b.addressBusiness || null,
+        invoice_warehouse_text: b.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên',
+        sales_phone: b.salesPhone || ''
       }));
       
       const { error } = await supabaseClient
@@ -2607,6 +2636,69 @@ export async function dbFetchCustomerById(customerId) {
   }
 }
 
+// Customer UPDATE payloads contain the complete visible row. Merge only
+// fields present in the payload so older schemas remain compatible and local
+// debt-history hydration is preserved without another network request.
+export function applyCustomerRealtimePayload(payload = {}) {
+  const row = payload.new || payload.old || {};
+  const customerId = String(row.id || '');
+  if (!customerId) return false;
+
+  const existingIndex = (state.customers || [])
+    .findIndex(customer => String(customer.id) === customerId);
+  if (payload.eventType === 'DELETE') {
+    state.customers = (state.customers || [])
+      .filter(customer => String(customer.id) !== customerId);
+    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    return true;
+  }
+  if (!payload.new) return false;
+
+  const existing = existingIndex >= 0 ? state.customers[existingIndex] : {};
+  const fieldMap = {
+    code: 'code', name: 'name', phone: 'phone', phone2: 'phone2', email: 'email',
+    facebook: 'facebook', birthday: 'birthday', gender: 'gender', avatar_url: 'avatarUrl',
+    province: 'province', ward: 'ward', customer_group_id: 'customerGroupId',
+    company_name: 'companyName', tax_code: 'taxCode', invoice_address: 'invoiceAddress',
+    address: 'address', status: 'status', created_by: 'createdBy', assigned_brand: 'assignedBrand',
+    shipping_support: 'shippingSupport', imported_last_order_at_baseline: 'importedLastOrderAtBaseline',
+    imported_created_at_baseline: 'importedCreatedAtBaseline',
+    financial_baseline_imported_at: 'financialBaselineImportedAt', last_order_at: 'lastOrderAt',
+    last_payment_at: 'lastPaymentAt', notes: 'notes', managed_by: 'managedBy',
+    created_at: 'createdAt', updated_at: 'updatedAt', deleted_at: 'deletedAt'
+  };
+  const customer = { ...existing, id: row.id, debtHistory: existing.debtHistory || [] };
+  Object.entries(fieldMap).forEach(([databaseField, stateField]) => {
+    if (databaseField in row) customer[stateField] = row[databaseField] ?? '';
+  });
+  if ('brand_discounts' in row) {
+    customer.brandDiscounts = typeof row.brand_discounts === 'string'
+      ? JSON.parse(row.brand_discounts)
+      : (row.brand_discounts || {});
+  }
+  const numericFields = {
+    debt: 'debt', total_transaction: 'totalTransaction', total_return: 'totalReturn',
+    net_revenue: 'netRevenue', imported_debt_baseline: 'importedDebtBaseline',
+    imported_total_transaction_baseline: 'importedTotalTransactionBaseline',
+    imported_total_return_baseline: 'importedTotalReturnBaseline',
+    imported_net_revenue_baseline: 'importedNetRevenueBaseline'
+  };
+  Object.entries(numericFields).forEach(([databaseField, stateField]) => {
+    if (databaseField in row) customer[stateField] = Number(row[databaseField] || 0);
+  });
+  if ('pricelist_id' in row || 'default_price_list_id' in row) {
+    customer.pricelistId = row.pricelist_id || row.default_price_list_id || '';
+    customer.defaultPriceListId = row.default_price_list_id || row.pricelist_id || '';
+  }
+  if (!customer.assignedBrand) customer.assignedBrand = 'Tất cả';
+  if (!customer.status) customer.status = 'active';
+
+  if (existingIndex >= 0) state.customers[existingIndex] = customer;
+  else state.customers.push(customer);
+  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  return customer;
+}
+
 export async function dbRefreshOrderById(orderId, { isDraft = false, deleted = false } = {}) {
   if (!isCloudActive || !supabaseClient || !orderId) return false;
   const removeFromState = () => {
@@ -3274,7 +3366,9 @@ export async function dbSaveBrand(brand, oldName = null) {
         email: brand.email || '',
         address_main: brand.addressMain || '',
         address_factory: brand.addressFactory || '',
-        address_business: brand.addressBusiness || null
+        address_business: brand.addressBusiness || null,
+        invoice_warehouse_text: brand.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên',
+        sales_phone: brand.salesPhone || ''
       };
 
       // Xóa các dòng cũ trên Cloud trùng ID hoặc Tên (bất kể chữ hoa/thường)
