@@ -213,6 +213,10 @@ function isManualInvoicePriceMode() {
   return getSelectedInvoicePriceListId() === 'retail';
 }
 
+function canApproveManualInvoicePricing() {
+  return ['admin', 'accounting'].includes(state.currentUser?.role);
+}
+
 function isTradeTermsDiscountPriceList(priceList = getSelectedInvoicePriceList()) {
   const label = `${priceList?.name || ''} ${priceList?.code || ''}`.toLowerCase();
   return label.includes('tt 20/07/2026') || label.includes('tt 20-07-2026') || label.includes('tt 20.07.2026');
@@ -230,6 +234,9 @@ function isUsingCustomerDefaultPriceList(customer) {
 }
 
 function canPersistCurrentInvoicePricing() {
+  // Admin and Accounting may deliberately use the manual-price workflow for
+  // an existing customer. Sale keeps the existing customer price-list rules.
+  if (isManualInvoicePriceMode() && canApproveManualInvoicePricing()) return true;
   if (isExplicitInvoicePriceListOverride()) {
     const selected = getSelectedInvoicePriceList();
     const isApprovedRestrictedList = requiresOrderSaveApproval(selected)
@@ -1150,6 +1157,16 @@ export async function saveActiveOrder(status = 'settled') {
   let persistedOrderAfterCommit = null;
 
   try {
+    let manualPricingApproved = false;
+    if (isManualInvoicePriceMode() && canApproveManualInvoicePricing()) {
+      const actionLabel = status === 'draft' ? 'lưu đơn nháp' : 'chốt đơn';
+      manualPricingApproved = window.confirm(
+        `Xác nhận ${actionLabel} với đơn giá nhập tay?\n\n`
+        + 'Giá trị đơn hàng và công nợ (nếu chốt đơn) sẽ được tính theo các đơn giá này.'
+      );
+      if (!manualPricingApproved) return null;
+    }
+
     let customerId = state.activeCustomerId || null;
     
     // Xử lý tạo nhanh khách hàng mới nếu ở chế độ thêm nhanh
@@ -1232,6 +1249,8 @@ export async function saveActiveOrder(status = 'settled') {
       showToast('Chỉ Bảng giá chung được phép ghi đè bảng giá mặc định của khách hàng.', 'warning');
       return null;
     }
+
+    if (manualPricingApproved) order.manualPriceConfirmed = true;
     
     order.status = status;
 

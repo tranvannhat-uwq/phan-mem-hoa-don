@@ -266,3 +266,17 @@ unmatched or already-linked transactions unchanged.
 Migration `0047` adds two optional, brand-scoped invoice-print settings: the
 warehouse text and sales phone. It initializes only missing warehouse text and
 does not change orders, prices, customer debt, payments, cashbook or inventory.
+
+Migration `0048` lets Admin and Accounting save drafts and finalize orders with
+the explicit `Nhập tay có xác nhận` pricing mode. Finalization accepts browser
+prices only when that privileged actor sends the confirmation flag; Sale keeps
+the existing customer price-list rules and cannot opt into trusted manual prices.
+
+Migration `0049` initializes an empty canonical price-source record when `0048`
+uses confirmed manual prices. It prevents an unassigned-record error during
+finalization without changing totals, debt entries or standard price-list lookup.
+
+Migration `0050` makes cancellation of an amended customer receipt reverse its
+current effective voucher value instead of its original payment value. It also
+appends one guarded correction for voucher `PT-20260810-00000146`, changing
+customer `KH000003` debt from `20,587,100` to the confirmed `10,592,100` VND.

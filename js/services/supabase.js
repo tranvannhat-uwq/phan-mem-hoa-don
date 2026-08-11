@@ -4121,6 +4121,7 @@ function buildOrderCommand(order) {
     notes: order.notes || '',
     pricelistId: order.pricelistId || null,
     priceListOverride: order.priceListOverride === true,
+    manualPriceConfirmed: order.manualPriceConfirmed === true,
     discountType: order.discountType || 'amount',
     discountValue: Number(order.discountValue || 0),
     otherFeeType: order.otherFeeType || 'amount',
@@ -4145,7 +4146,9 @@ function buildOrderCommand(order) {
       unitPrice: Number(item.unitPrice ?? item.price ?? 0),
       listPrice: Number(item.listPrice ?? item.price ?? 0),
       finalUnitPrice: Number(item.finalUnitPrice ?? item.price ?? 0),
-      priceListId: item.priceListId || order.pricelistId || null,
+      priceListId: order.manualPriceConfirmed === true && order.pricelistId === 'retail'
+        ? null
+        : (item.priceListId || order.pricelistId || null),
       productId: item.productId || item.variantId,
       colorCode: item.colorCode || '',
       colorPercent: Number(item.colorPercent || 0),
@@ -4234,6 +4237,7 @@ export async function dbConfirmOrder(order) {
         notes: order.notes || '',
         pricelistId: order.pricelistId || null,
         priceListOverride: order.priceListOverride === true,
+        manualPriceConfirmed: order.manualPriceConfirmed === true,
         discountType: order.discountType || 'amount',
         discountValue: Number(order.discountValue || 0),
         otherFeeType: order.otherFeeType || 'amount',
@@ -4258,7 +4262,9 @@ export async function dbConfirmOrder(order) {
           unitPrice: Number(item.unitPrice ?? item.price ?? 0),
           listPrice: Number(item.listPrice ?? item.price ?? 0),
           finalUnitPrice: Number(item.finalUnitPrice ?? item.price ?? 0),
-          priceListId: item.priceListId || order.pricelistId || null,
+          priceListId: order.manualPriceConfirmed === true && order.pricelistId === 'retail'
+            ? null
+            : (item.priceListId || order.pricelistId || null),
           productId: item.productId || item.variantId,
           colorCode: item.colorCode || '',
           colorPercent: Number(item.colorPercent || 0),
