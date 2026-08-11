@@ -31,7 +31,7 @@ test('Phase 6 export is versioned, paginated and excludes inventory/production',
   assert.match(safeBackup, /\.limit\(pageSize\)/);
   assert.match(safeBackup, /customer_debt_transactions/);
   assert.match(safeBackup, /supplier_debt_transactions/);
-  assert.match(safeBackup, /audit_logs/);
+  assert.doesNotMatch(safeBackup, /audit_logs|Nhat_Ky_Audit/);
   assert.doesNotMatch(safeBackup, /finished_goods_stock|raw_materials|production_logs|recipes/);
 });
 

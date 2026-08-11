@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260811-realtime-egress-v10';
-import { renderAll } from '../main.js?v=20260811-realtime-egress-v10';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260811-realtime-egress-v10';
-import { addCashbookTransaction } from './so_quy.js?v=20260811-realtime-egress-v10';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260811-realtime-egress-v10';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260811-realtime-egress-v10';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260811-realtime-egress-v13';
+import { renderAll } from '../main.js?v=20260811-realtime-egress-v13';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260811-realtime-egress-v13';
+import { addCashbookTransaction } from './so_quy.js?v=20260811-realtime-egress-v13';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260811-realtime-egress-v13';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260811-realtime-egress-v13';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';

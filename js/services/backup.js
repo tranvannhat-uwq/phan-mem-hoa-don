@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast } from '../utils.js';
-import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260811-realtime-egress-v10';
-import { mapWithConcurrency } from '../domain/async-pool.js?v=20260811-realtime-egress-v10';
+import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260811-realtime-egress-v13';
+import { mapWithConcurrency } from '../domain/async-pool.js?v=20260811-realtime-egress-v13';
 import { 
   supabaseClient, 
   isCloudActive,
@@ -22,7 +22,7 @@ import {
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js?v=20260811-realtime-egress-v10';
+} from './supabase.js?v=20260811-realtime-egress-v13';
 
 async function deleteAllRows(tableName, key = 'id') {
   const { error } = await supabaseClient
@@ -191,8 +191,7 @@ const PHASE6_BACKUP_TABLES = [
   { sheet: 'Chi_Tiet_Phieu_Mua', table: 'purchase_items' },
   { sheet: 'Thanh_Toan_NCC', table: 'purchase_payments' },
   { sheet: 'Cong_No_NCC', table: 'supplier_debt_transactions' },
-  { sheet: 'Ho_So_Nhan_Vien', table: 'profiles' },
-  { sheet: 'Nhat_Ky_Audit', table: 'audit_logs' }
+  { sheet: 'Ho_So_Nhan_Vien', table: 'profiles' }
 ];
 
 async function fetchBackupTableRows(spec, onPage) {

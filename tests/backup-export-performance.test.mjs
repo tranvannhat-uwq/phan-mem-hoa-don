@@ -14,6 +14,7 @@ test('backup export uses bounded concurrency and preserves manifest sheet order'
   assert.match(backup, /\.order\(cursorColumn, \{ ascending: true \}\)/);
   assert.match(backup, /\.gt\(cursorColumn, cursorValue\)/);
   assert.doesNotMatch(backup, /\.range\(from, from \+ pageSize - 1\)/);
+  assert.doesNotMatch(backup, /Nhat_Ky_Audit|table:\s*['"]audit_logs['"]/);
 });
 
 test('backup export prevents duplicate runs and exposes visible progress', () => {

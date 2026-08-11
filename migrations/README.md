@@ -285,3 +285,9 @@ Migration `0051` adds a read-only, RLS-respecting cashbook window RPC. It return
 only vouchers in the requested date range plus three small opening-net totals
 for cash, bank and wallet, so the browser no longer downloads all older vouchers
 just to calculate the opening balance.
+
+Migration `0052` keeps only four days of audit and activity history. It compacts
+new rows to business-significant changes, records price-item changes that were
+previously missing, and removes older rows only from `audit_logs` and
+`activity_logs`. All audit and retention triggers fail safely so logging cannot
+block changes to orders, price lists, products, customers or cashbook entries.

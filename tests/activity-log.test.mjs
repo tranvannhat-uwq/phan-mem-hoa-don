@@ -49,6 +49,13 @@ test('activity UI has dropdown, page filters, detail diff and clickable orders',
   assert.match(html, /id="btn-activity-log"[^>]*>[\s\S]*?data-lucide="bell"/);
 });
 
+test('activity log initially requests only the 20 newest changes', () => {
+  assert.match(component, /const PAGE_SIZE = 20/);
+  assert.match(component, /dbFetchActivityLogs\(\{ limit: PAGE_SIZE, offset: 0 \}\)/);
+  assert.match(component, /activityPage = 1;\s*dropdown\.classList\.remove\('active'\);\s*switchTab\('activity-log-panel'\)/);
+  assert.match(service, /rows: \[\], total: 0, limit: 20, offset: 0/);
+});
+
 test('draft notes use the draft table and produce order activity', () => {
   assert.match(draftMigration, /AFTER INSERT OR UPDATE OR DELETE ON public\.draft_orders/);
   assert.match(draftMigration, /rpc_update_draft_order_notes/);

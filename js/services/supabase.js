@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v10';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v10';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v13';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v13';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v10';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v13';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -4763,7 +4763,7 @@ export async function dbFetchActivityLogs(filters = {}) {
   if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải lịch sử hoạt động.');
   const { data, error } = await supabaseClient.rpc('rpc_get_activity_logs', { p_filters: filters });
   if (error) throw error;
-  return data || { rows: [], total: 0, limit: 25, offset: 0 };
+  return data || { rows: [], total: 0, limit: 20, offset: 0 };
 }
 
 export async function dbFetchOrderActivity(orderId, limit = 50) {

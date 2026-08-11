@@ -1,10 +1,10 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260811-realtime-egress-v10';
-import { switchTab } from '../main.js?v=20260811-realtime-egress-v10';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20260811-realtime-egress-v10';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260811-realtime-egress-v13';
+import { switchTab } from '../main.js?v=20260811-realtime-egress-v13';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20260811-realtime-egress-v13';
 import { safeCreateIcons, showToast } from '../utils.js';
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 20;
 let activityPage = 1;
 let latestRows = [];
 
@@ -22,7 +22,8 @@ const ACTION_LABELS = {
   create_purchase: 'Đã tạo phiếu mua hàng', update_purchase: 'Đã chỉnh sửa phiếu mua hàng', cancel_purchase: 'Đã hủy phiếu mua hàng',
   create_product: 'Đã tạo sản phẩm', update_product: 'Đã chỉnh sửa sản phẩm', delete_product: 'Đã xóa sản phẩm',
   create_brand: 'Đã tạo hãng sơn', update_brand: 'Đã chỉnh sửa hãng sơn', delete_brand: 'Đã xóa hãng sơn',
-  create_pricelist: 'Đã tạo bảng giá', update_pricelist: 'Đã chỉnh sửa bảng giá', delete_pricelist: 'Đã xóa bảng giá'
+  create_pricelist: 'Đã tạo bảng giá', update_pricelist: 'Đã chỉnh sửa bảng giá', delete_pricelist: 'Đã xóa bảng giá',
+  create_price: 'Đã thêm giá sản phẩm', update_price: 'Đã sửa giá sản phẩm', delete_price: 'Đã xóa giá sản phẩm'
 };
 const MODULE_LABELS = { orders: 'Đơn hàng', customers: 'Khách hàng', employees: 'Nhân viên', payments: 'Thanh toán', returns: 'Trả hàng', cashbook: 'Sổ quỹ', suppliers: 'Nhà cung cấp', purchases: 'Mua hàng', products: 'Sản phẩm', brands: 'Hãng sơn', pricelists: 'Bảng giá' };
 const FIELD_LABELS = { status: 'Trạng thái', notes: 'Ghi chú', phone: 'Số điện thoại', phone2: 'Số điện thoại 2', address: 'Địa chỉ', customer_name: 'Tên khách hàng', customer_phone: 'Số điện thoại khách hàng', customer_address: 'Địa chỉ khách hàng', recipient_name: 'Người nhận', recipient_phone: 'Số điện thoại người nhận', shipping_address: 'Địa chỉ giao hàng', shipping_unit: 'Đơn vị vận chuyển', shipping_code: 'Mã vận đơn', name: 'Tên', quantity: 'Số lượng', items: 'Sản phẩm', subtotal: 'Tiền hàng', total_market: 'Tổng tiền hàng', total_payable: 'Tổng thanh toán', total_amount: 'Tổng tiền', paid_amount: 'Đã thanh toán', debt: 'Công nợ', debt_amount: 'Công nợ', net_revenue: 'Doanh thu thuần', last_order_at: 'Thời gian đơn hàng gần nhất', total_transaction: 'Tổng giao dịch', discount_value: 'Mức giảm giá', discount_amount: 'Giảm giá', discount_percent: 'Phần trăm giảm giá', discount_type: 'Hình thức giảm giá', shipping_support: 'Hỗ trợ vận chuyển', shipping_discount: 'Giảm phí vận chuyển', shipping_fee: 'Phí vận chuyển', shipping_fee_value: 'Mức phí vận chuyển', shipping_fee_amount: 'Phí vận chuyển', extra_fee: 'Thu khác', other_fee: 'Thu khác', other_fee_value: 'Mức thu khác', other_fee_amount: 'Số tiền thu khác', other_fee_type: 'Hình thức thu khác', payment_method: 'Phương thức thanh toán', payment_status: 'Trạng thái thanh toán', role: 'Vai trò', is_active: 'Trạng thái tài khoản', managed_by: 'Nhân viên phụ trách', pricelist_name: 'Bảng giá', price_list_name: 'Bảng giá', date: 'Ngày đơn hàng', order_date: 'Ngày đơn hàng' };
@@ -200,7 +201,7 @@ async function renderActivityDropdown() {
   if (!list || !canViewAll()) return;
   list.innerHTML = '<div class="activity-empty">Đang tải...</div>';
   try {
-    const result = await dbFetchActivityLogs({ limit: 15, offset: 0 });
+    const result = await dbFetchActivityLogs({ limit: PAGE_SIZE, offset: 0 });
     latestRows = [...(result.rows || []), ...latestRows.filter(old => !(result.rows || []).some(row => row.id === old.id))];
     list.innerHTML = result.rows?.length ? result.rows.map(row => {
       const changeCount = visibleChanges(row).length;
@@ -238,7 +239,11 @@ export function setupActivityLog() {
   const dropdown = document.getElementById('activity-dropdown');
   if (button) button.onclick = async event => { event.stopPropagation(); dropdown.classList.toggle('active'); if (dropdown.classList.contains('active')) await renderActivityDropdown(); };
   document.addEventListener('click', event => { if (!event.target.closest('.activity-header-wrap')) dropdown?.classList.remove('active'); });
-  document.getElementById('activity-view-all')?.addEventListener('click', () => { dropdown.classList.remove('active'); switchTab('activity-log-panel'); });
+  document.getElementById('activity-view-all')?.addEventListener('click', () => {
+    activityPage = 1;
+    dropdown.classList.remove('active');
+    switchTab('activity-log-panel');
+  });
   ['activity-search','activity-actor-filter','activity-module-filter','activity-action-filter','activity-start-filter','activity-end-filter'].forEach(id => document.getElementById(id)?.addEventListener(id === 'activity-search' ? 'input' : 'change', () => { activityPage = 1; renderActivityLog(); }));
   document.getElementById('activity-prev')?.addEventListener('click', () => { if (activityPage > 1) { activityPage--; renderActivityLog(); } });
   document.getElementById('activity-next')?.addEventListener('click', () => { activityPage++; renderActivityLog(); });
