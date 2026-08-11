@@ -5271,6 +5271,607 @@ select#invoice-pricelist-select:disabled {
   color: var(--color-danger);
 }
 
+.so-quy-transaction-row {
+  cursor: pointer;
+  transition: background-color 0.16s ease;
+}
+
+.so-quy-transaction-row:focus-visible {
+  outline: 2px solid #22c55e;
+  outline-offset: -2px;
+}
+
+.so-quy-transaction-row.is-expanded td {
+  background: #f0f7ff !important;
+  border-top: 2px solid #1687ef;
+}
+
+.so-quy-inline-detail-row > td,
+.so-quy-table .so-quy-inline-detail-row:hover > td {
+  padding: 0 !important;
+  background: #fff !important;
+  border: 2px solid #1687ef !important;
+  border-top: 0 !important;
+}
+
+.so-quy-inline-detail {
+  color: #1f2937;
+  background: #fff;
+}
+
+.so-quy-inline-tab {
+  width: max-content;
+  padding: 0.75rem 1.5rem 0.55rem;
+  color: #087bea;
+  font-weight: 700;
+  border-bottom: 2px solid #1687ef;
+}
+
+.so-quy-inline-heading,
+.so-quy-inline-meta,
+.so-quy-inline-grid,
+.so-quy-inline-wide-field,
+.so-quy-inline-note {
+  margin-inline: 1.5rem;
+}
+
+.so-quy-inline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.so-quy-inline-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  font-size: 1rem;
+}
+
+.so-quy-inline-title strong > span {
+  font-weight: 600;
+}
+
+.so-quy-accounting-badge {
+  display: inline-flex;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  color: #dc2626;
+  background: #fee2e2;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.so-quy-accounting-badge.is-accounting {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.so-quy-inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0;
+  padding: 0.8rem 0 1rem;
+  font-size: 0.82rem;
+}
+
+.so-quy-inline-meta > span {
+  padding: 0 0.85rem;
+  border-right: 1px solid var(--border-color);
+}
+
+.so-quy-inline-meta > span:first-child { padding-left: 0; }
+.so-quy-inline-meta > span:last-child { border-right: 0; }
+
+.so-quy-inline-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+  padding: 0.8rem 0 1rem;
+}
+
+.so-quy-inline-field,
+.so-quy-inline-wide-field {
+  min-width: 0;
+}
+
+.so-quy-inline-field > span,
+.so-quy-inline-wide-field > span {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.so-quy-inline-field > strong {
+  display: block;
+  min-height: 1.75rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border-color);
+  overflow-wrap: anywhere;
+}
+
+.so-quy-inline-amount.is-receipt { color: #087bea; }
+.so-quy-inline-amount.is-payment { color: var(--color-danger); }
+.so-quy-inline-amount.is-cancelled { color: var(--text-muted); text-decoration: line-through; }
+
+.so-quy-inline-wide-field {
+  padding: 0.4rem 0 0.9rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.so-quy-inline-wide-field > strong {
+  display: block;
+  color: #087bea;
+  overflow-wrap: anywhere;
+}
+
+.so-quy-inline-wide-field > small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--text-secondary);
+}
+
+.so-quy-inline-note {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 3.5rem;
+  padding: 0.8rem 0;
+  color: var(--text-secondary);
+}
+
+.so-quy-inline-note svg,
+.so-quy-inline-actions svg {
+  width: 16px;
+  height: 16px;
+}
+
+.so-quy-inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.so-quy-inline-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.so-quy-inline-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+@media (max-width: 1100px) {
+  .so-quy-inline-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .so-quy-inline-heading,
+  .so-quy-inline-meta,
+  .so-quy-inline-grid,
+  .so-quy-inline-wide-field,
+  .so-quy-inline-note { margin-inline: 0.9rem; }
+  .so-quy-inline-grid { grid-template-columns: 1fr; gap: 0.8rem; }
+  .so-quy-inline-actions { align-items: stretch; flex-direction: column; padding-inline: 0.9rem; }
+  .so-quy-inline-actions > div:last-child { justify-content: flex-end; }
+}
+
+/* Cashbook receipt/payment creation: wide, grouped and responsive. */
+.cashbook-create-modal-content {
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, 840px) !important;
+  max-width: 840px !important;
+  max-height: calc(100vh - 3rem);
+  overflow: hidden;
+}
+
+.cashbook-create-header {
+  position: relative;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  padding: 1.15rem 1.5rem;
+  overflow: hidden;
+}
+
+.cashbook-create-header::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #16a34a;
+}
+
+.cashbook-create-payment .cashbook-create-header::before {
+  background: #ef4444;
+}
+
+.cashbook-create-header p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.cashbook-create-form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.cashbook-create-body {
+  display: grid;
+  gap: 1rem;
+  min-height: 0;
+  padding: 1.1rem 1.5rem !important;
+  overflow-y: auto;
+  background: #f8fafc;
+}
+
+.cashbook-create-section {
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cashbook-create-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+
+.cashbook-create-section-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  color: #047857;
+  background: #d1fae5;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.cashbook-create-payment .cashbook-create-section-index {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.cashbook-create-section-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.cashbook-create-section-heading strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.cashbook-create-section-heading small,
+.cashbook-create-field-hint {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.cashbook-create-field-hint {
+  display: block;
+  margin-top: 0.28rem;
+}
+
+.cashbook-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.1rem;
+}
+
+.cashbook-create-grid .form-group {
+  min-width: 0;
+  margin: 0;
+}
+
+.cashbook-create-grid .form-control {
+  width: 100%;
+  min-height: 42px;
+}
+
+.cashbook-create-field-full {
+  grid-column: 1 / -1;
+}
+
+.cashbook-create-value-input {
+  color: #047857;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.cashbook-create-payment .cashbook-create-value-input {
+  color: #dc2626;
+}
+
+.cashbook-create-accounting-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #bbf7d0;
+  border-radius: 9px;
+  background: #f0fdf4;
+  cursor: pointer;
+}
+
+.cashbook-create-payment .cashbook-create-accounting-option {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.cashbook-create-accounting-option input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  accent-color: #16a34a;
+}
+
+.cashbook-create-payment .cashbook-create-accounting-option input {
+  accent-color: #ef4444;
+}
+
+.cashbook-create-accounting-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cashbook-create-accounting-option strong { font-size: 0.83rem; }
+.cashbook-create-accounting-option small { color: var(--text-muted); font-size: 0.72rem; }
+.cashbook-create-grid textarea { min-height: 78px; resize: vertical; }
+
+.cashbook-create-footer {
+  flex: 0 0 auto;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.9rem 1.5rem 1rem;
+  background: #fff;
+}
+
+.cashbook-create-footer .btn {
+  min-width: 120px;
+}
+
+.cashbook-create-receipt .cashbook-create-submit {
+  background: #16a34a !important;
+  border-color: #16a34a !important;
+  color: #fff !important;
+}
+
+.cashbook-create-payment .cashbook-create-submit {
+  background: #ef4444 !important;
+  border-color: #ef4444 !important;
+  color: #fff !important;
+}
+
+@media (max-width: 720px) {
+  .cashbook-create-modal-content {
+    width: 100% !important;
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+  .cashbook-create-header,
+  .cashbook-create-body,
+  .cashbook-create-footer { padding-inline: 1rem !important; }
+  .cashbook-create-grid { grid-template-columns: 1fr; }
+  .cashbook-create-field-full { grid-column: 1; }
+  .cashbook-create-footer .btn { flex: 1; min-width: 0; }
+}
+
+/* Cashbook edit: spacious grouped layout instead of a narrow single column. */
+.cashbook-edit-modal-content {
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, 940px) !important;
+  max-width: 940px !important;
+  max-height: calc(100vh - 3rem);
+  overflow: hidden;
+}
+
+.cashbook-edit-header {
+  flex: 0 0 auto;
+  align-items: flex-start;
+  padding: 1.15rem 1.5rem;
+}
+
+.cashbook-edit-header p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.cashbook-edit-form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.cashbook-edit-body {
+  display: grid;
+  gap: 1rem;
+  min-height: 0;
+  padding: 1.1rem 1.5rem !important;
+  overflow-y: auto;
+  background: #f8fafc;
+}
+
+.cashbook-edit-section {
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.cashbook-edit-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+
+.cashbook-edit-section-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  color: #047857;
+  background: #d1fae5;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.cashbook-edit-section-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.cashbook-edit-section-heading strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.cashbook-edit-section-heading small {
+  color: var(--text-muted);
+  font-size: 0.73rem;
+}
+
+.cashbook-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.1rem;
+}
+
+.cashbook-edit-grid .form-group {
+  min-width: 0;
+  margin: 0;
+}
+
+.cashbook-edit-grid .form-control {
+  width: 100%;
+  min-height: 42px;
+}
+
+.cashbook-edit-grid input[readonly] {
+  color: #475569;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.cashbook-edit-value-input {
+  color: #047857;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.cashbook-edit-accounting-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  grid-column: 1 / -1;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #dbeafe;
+  border-radius: 9px;
+  background: #f0f7ff;
+  cursor: pointer;
+}
+
+.cashbook-edit-accounting-option input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  accent-color: #16a34a;
+}
+
+.cashbook-edit-accounting-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cashbook-edit-accounting-option strong {
+  font-size: 0.83rem;
+}
+
+.cashbook-edit-accounting-option small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.cashbook-edit-note-group {
+  grid-column: 1 / -1;
+}
+
+.cashbook-edit-note-group textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.cashbook-edit-guidance {
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid #22c55e;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: #f0fdf4;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.cashbook-edit-footer {
+  flex: 0 0 auto;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.9rem 1.5rem 1rem;
+  background: #fff;
+}
+
+.cashbook-edit-footer .btn {
+  min-width: 110px;
+}
+
+@media (max-width: 720px) {
+  .cashbook-edit-modal-content {
+    width: 100% !important;
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+  .cashbook-edit-header,
+  .cashbook-edit-body,
+  .cashbook-edit-footer { padding-inline: 1rem !important; }
+  .cashbook-edit-grid { grid-template-columns: 1fr; }
+  .cashbook-edit-accounting-option,
+  .cashbook-edit-note-group { grid-column: 1; }
+  .cashbook-edit-footer .btn { flex: 1; min-width: 0; }
+}
+
 /* Modal details */
 .detail-item-row {
   display: flex;

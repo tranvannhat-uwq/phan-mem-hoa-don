@@ -25,7 +25,8 @@ test('cashbook exposes reconciliation only for a uniquely matched legacy receipt
   const html = read('index.html');
   const cashbook = read('js/components/so_quy.js');
   const service = read('js/services/supabase.js');
-  assert.match(html, /id="btn-reconcile-customer-receipt"/);
+  assert.doesNotMatch(html, /id="so-quy-detail-modal"/);
+  assert.match(cashbook, /js-cashbook-inline-reconcile/);
   assert.match(cashbook, /function getLegacyReceiptCustomer/);
   assert.match(cashbook, /return matches\.length === 1 \? matches\[0\] : null/);
   assert.match(cashbook, /await dbReconcileLegacyCustomerReceipt\(cashbookId, legacyCustomer\.id\)/);

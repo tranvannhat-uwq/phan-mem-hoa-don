@@ -7,6 +7,7 @@ import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domai
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
 let pendingReceiptIdempotencyKey = '';
+let expandedCashbookTransactionId = '';
 
 function escapeCashbookHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -784,18 +785,6 @@ export function setupSoQuyPanel() {
     });
   }
 
-  // 19. Detail modal closes
-  const detailModal = document.getElementById('so-quy-detail-modal');
-  const closeDetailBtn = document.getElementById('btn-close-detail-modal');
-  const closeDetailFooterBtn = document.getElementById('btn-close-detail-modal-footer');
-  
-  const hideDetailModal = () => {
-    if (detailModal) detailModal.classList.remove('active');
-  };
-  
-  if (closeDetailBtn) closeDetailBtn.addEventListener('click', hideDetailModal);
-  if (closeDetailFooterBtn) closeDetailFooterBtn.addEventListener('click', hideDetailModal);
-
   const editModal = document.getElementById('so-quy-edit-modal');
   const editForm = document.getElementById('so-quy-edit-form');
   const hideEditModal = () => {
@@ -861,7 +850,7 @@ export function setupSoQuyPanel() {
         showToast(`Đã cập nhật phiếu ${transaction.id}.`, 'success');
       }
       hideEditModal();
-      hideDetailModal();
+      expandedCashbookTransactionId = '';
       renderAll();
     } finally {
       if (saveButton) saveButton.disabled = false;
@@ -1232,6 +1221,73 @@ function refreshDynamicFilters(txs) {
   }
 }
 
+function getCashbookMethodLabel(method) {
+  if (method === 'cash') return 'Tiền mặt';
+  if (method === 'bank') return 'Ngân hàng';
+  return 'Ví điện tử';
+}
+
+function renderCashbookInlineDetail(t) {
+  const isReceipt = t.type === 'thu';
+  const isCancelled = isCancelledStatus(t.status);
+  const legacyCustomer = getLegacyReceiptCustomer(t);
+  const counterpartyType = t.customerId
+    ? 'Khách hàng'
+    : (t.supplierId ? 'Nhà cung cấp' : 'Đối tượng khác');
+  const amountClass = isCancelled ? 'is-cancelled' : (isReceipt ? 'is-receipt' : 'is-payment');
+  const accountingLabel = t.accounting ? 'Có hạch toán' : 'Không hạch toán';
+
+  return `
+    <tr class="so-quy-inline-detail-row" data-id="${escapeCashbookHtml(t.id)}">
+      <td colspan="8">
+        <section class="so-quy-inline-detail" aria-label="Chi tiết ${isReceipt ? 'phiếu thu' : 'phiếu chi'} ${escapeCashbookHtml(t.id)}">
+          <div class="so-quy-inline-tab">Thông tin</div>
+          <div class="so-quy-inline-heading">
+            <div class="so-quy-inline-title">
+              <strong>${isReceipt ? 'Phiếu thu' : 'Phiếu chi'} <span>${escapeCashbookHtml(t.id)}</span></strong>
+              <span class="badge-status ${isPaidStatus(t.status) ? 'badge-status-paid' : 'badge-status-cancelled'}">${escapeCashbookHtml(t.status)}</span>
+              <span class="so-quy-accounting-badge ${t.accounting ? 'is-accounting' : ''}">${accountingLabel}</span>
+            </div>
+          </div>
+          <div class="so-quy-inline-meta">
+            <span>Người tạo: <strong>${escapeCashbookHtml(t.creator || 'Hệ thống')}</strong></span>
+            <span>${isReceipt ? 'Người thu' : 'Người chi'}: <strong>${escapeCashbookHtml(t.collectorName || t.creator || 'Hệ thống')}</strong></span>
+            <span>Thời gian: <strong>${escapeCashbookHtml(formatDateTime(t.date))}</strong></span>
+          </div>
+          <div class="so-quy-inline-grid">
+            <div class="so-quy-inline-field">
+              <span>Số tiền</span>
+              <strong class="so-quy-inline-amount ${amountClass}">${isReceipt ? '+' : '-'} ${escapeCashbookHtml(formatCurrency(t.value))}</strong>
+            </div>
+            <div class="so-quy-inline-field"><span>Loại thu chi</span><strong>${escapeCashbookHtml(t.category || '-')}</strong></div>
+            <div class="so-quy-inline-field"><span>Đối tượng ${isReceipt ? 'nộp' : 'nhận'}</span><strong>${counterpartyType}</strong></div>
+            <div class="so-quy-inline-field"><span>Phương thức thanh toán</span><strong>${getCashbookMethodLabel(t.method)}</strong></div>
+          </div>
+          <div class="so-quy-inline-wide-field">
+            <span>${isReceipt ? 'Người nộp' : 'Người nhận'}</span>
+            <strong>${escapeCashbookHtml(t.partner || '-')}</strong>
+            <small>${escapeCashbookHtml(getTransactionPartnerAddress(t) || 'Chưa có địa chỉ')}</small>
+          </div>
+          <div class="so-quy-inline-note">
+            <i data-lucide="file-text"></i>
+            <span>${escapeCashbookHtml(t.note || 'Chưa có ghi chú')}</span>
+          </div>
+          <div class="so-quy-inline-actions">
+            <div>
+              ${!isCancelled ? `<button type="button" class="btn btn-danger btn-sm js-cashbook-inline-cancel"><i data-lucide="trash-2"></i> Hủy phiếu</button>` : ''}
+              ${legacyCustomer ? `<button type="button" class="btn btn-primary btn-sm js-cashbook-inline-reconcile"><i data-lucide="badge-check"></i> Ghi vào công nợ</button>` : ''}
+            </div>
+            <div>
+              ${canEditCashbookTransaction(t) ? `<button type="button" class="btn btn-primary btn-sm js-cashbook-inline-edit"><i data-lucide="pencil"></i> Chỉnh sửa</button>` : ''}
+              <button type="button" class="btn btn-secondary btn-sm js-cashbook-inline-close">Thu gọn</button>
+            </div>
+          </div>
+        </section>
+      </td>
+    </tr>
+  `;
+}
+
 // Render cashbook table and update stats in UI
 export function renderSoQuyTable() {
   const tableBody = document.getElementById('so-quy-table-body');
@@ -1257,6 +1313,7 @@ export function renderSoQuyTable() {
 
   // Render Table rows
   if (filteredTransactions.length === 0) {
+    expandedCashbookTransactionId = '';
     tableBody.innerHTML = `
       <tr>
         <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 3rem;">
@@ -1267,6 +1324,10 @@ export function renderSoQuyTable() {
     return;
   }
 
+  if (!filteredTransactions.some(t => String(t.id) === String(expandedCashbookTransactionId))) {
+    expandedCashbookTransactionId = '';
+  }
+
   tableBody.innerHTML = filteredTransactions.map(t => {
     const partnerAddress = getTransactionPartnerAddress(t);
     const valText = t.type === 'thu' ? formatCurrency(t.value) : `-${formatCurrency(t.value)}`;
@@ -1274,8 +1335,9 @@ export function renderSoQuyTable() {
       ? 'color: #0070d2; font-weight: 700;'
       : 'color: var(--color-danger); font-weight: 700;';
 
+    const isExpanded = String(t.id) === String(expandedCashbookTransactionId);
     return `
-      <tr>
+      <tr class="so-quy-transaction-row ${isExpanded ? 'is-expanded' : ''}" data-id="${escapeCashbookHtml(t.id)}" tabindex="0" role="button" aria-expanded="${isExpanded}">
         <td style="text-align: center; padding: 0.5rem 0.25rem;">
           <input type="checkbox" class="so-quy-row-checkbox" data-id="${t.id}" style="cursor: pointer; width: 14px; height: 14px;">
         </td>
@@ -1285,8 +1347,8 @@ export function renderSoQuyTable() {
           </button>
         </td>
         <td style="text-align: center;">
-          <span style="font-weight: 700; color: #0070d2; cursor: pointer; text-decoration: underline;" class="so-quy-tx-code" data-id="${t.id}">
-            ${t.id}
+          <span style="font-weight: 700; color: #0070d2; cursor: pointer; text-decoration: underline;" class="so-quy-tx-code">
+            ${escapeCashbookHtml(t.id)}
           </span>
         </td>
         <td style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">
@@ -1309,6 +1371,7 @@ export function renderSoQuyTable() {
           ${valText}
         </td>
       </tr>
+      ${isExpanded ? renderCashbookInlineDetail(t) : ''}
     `;
   }).join('');
 
@@ -1334,13 +1397,26 @@ export function renderSoQuyTable() {
     });
   });
 
-  // Wire up Detail Modal display event
-  tableBody.querySelectorAll('.so-quy-tx-code').forEach(el => {
-    el.addEventListener('click', () => {
-      const txId = el.getAttribute('data-id');
-      showTransactionDetails(txId);
+  // Expand/collapse one voucher directly below its table row.
+  tableBody.querySelectorAll('.so-quy-transaction-row').forEach(row => {
+    const toggleRow = () => {
+      const txId = row.getAttribute('data-id') || '';
+      expandedCashbookTransactionId = String(expandedCashbookTransactionId) === String(txId) ? '' : txId;
+      renderSoQuyTable();
+    };
+    row.addEventListener('click', event => {
+      if (event.target.closest('button, input, a, select, textarea')) return;
+      toggleRow();
+    });
+    row.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggleRow();
     });
   });
+
+  const expandedTransaction = filteredTransactions.find(t => String(t.id) === String(expandedCashbookTransactionId));
+  if (expandedTransaction) wireCashbookInlineDetailActions(expandedTransaction, tableBody);
 
   safeCreateIcons();
 }
@@ -1424,150 +1500,91 @@ function openCashbookEditModal(transaction) {
   editModal.classList.add('active');
 }
 
-// Display details of a single transaction
-function showTransactionDetails(txId) {
-  const txs = getCashbookTransactions();
-  const t = txs.find(tx => tx.id === txId);
-  if (!t) return;
+// Wire actions for the single inline voucher detail currently open.
+function wireCashbookInlineDetailActions(t, tableBody) {
+  const detailRow = Array.from(tableBody.querySelectorAll('.so-quy-inline-detail-row'))
+    .find(row => String(row.dataset.id) === String(t.id));
+  if (!detailRow) return;
 
-  const detailModal = document.getElementById('so-quy-detail-modal');
-  if (!detailModal) return;
+  detailRow.querySelector('.js-cashbook-inline-close')?.addEventListener('click', () => {
+    expandedCashbookTransactionId = '';
+    renderSoQuyTable();
+  });
 
-  // Set modal texts
-  document.getElementById('so-quy-detail-code').innerText = t.id;
-  document.getElementById('so-quy-detail-time').innerText = formatDateTime(t.date);
-  document.getElementById('so-quy-detail-type').innerText = t.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi';
-  document.getElementById('so-quy-detail-category').innerText = t.category;
-  
-  const partnerLbl = document.getElementById('so-quy-detail-partner-lbl');
-  if (partnerLbl) {
-    partnerLbl.innerText = t.type === 'thu' ? 'Người nộp' : 'Người nhận';
+  detailRow.querySelector('.js-cashbook-inline-edit')?.addEventListener('click', () => {
+    expandedCashbookTransactionId = '';
+    renderSoQuyTable();
+    openCashbookEditModal(t);
+  });
+
+  const reconcileBtn = detailRow.querySelector('.js-cashbook-inline-reconcile');
+  const legacyCustomer = getLegacyReceiptCustomer(t);
+  if (reconcileBtn && legacyCustomer) {
+    reconcileBtn.addEventListener('click', async () => {
+      const cashbookId = getCanonicalCashbookId(t);
+      if (!cashbookId) {
+        showToast('Không xác định được mã phiếu Cloud. Dữ liệu chưa thay đổi.', 'danger');
+        return;
+      }
+      if (!confirm(`Ghi phiếu ${t.id} vào công nợ của ${legacyCustomer.name}? Công nợ sẽ giảm ${formatCurrency(t.value)}.`)) return;
+
+      reconcileBtn.disabled = true;
+      try {
+        const result = await dbReconcileLegacyCustomerReceipt(cashbookId, legacyCustomer.id);
+        if (!result) return;
+        await Promise.all([
+          dbRefreshCustomerFinancialState(legacyCustomer.id),
+          dbFetchCashbookTransactions()
+        ]);
+        expandedCashbookTransactionId = '';
+        renderAll();
+        showToast(result.already_reconciled
+          ? 'Phiếu thu này đã có trong lịch sử công nợ.'
+          : `Đã ghi phiếu ${t.id} vào lịch sử và cập nhật công nợ ${legacyCustomer.name}.`, 'success');
+      } finally {
+        reconcileBtn.disabled = false;
+      }
+    });
   }
-  document.getElementById('so-quy-detail-partner').innerText = t.partner;
-  document.getElementById('so-quy-detail-address').innerText = getTransactionPartnerAddress(t) || '-';
-  document.getElementById('so-quy-detail-method').innerText = t.method === 'cash' ? 'Tiền mặt' : (t.method === 'bank' ? 'Ngân hàng' : 'Ví điện tử');
-  document.getElementById('so-quy-detail-accounting').innerText = t.accounting ? 'Có' : 'Không';
-  document.getElementById('so-quy-detail-creator').innerText = t.creator || 'Hệ thống';
-  document.getElementById('so-quy-detail-note').innerText = t.note || 'Không có ghi chú';
-  
-  const collectorLabel = document.getElementById('so-quy-detail-collector-label');
-  if (collectorLabel) collectorLabel.innerText = t.type === 'thu' ? 'Người thu' : 'Người chi';
-  const collectorValue = document.getElementById('so-quy-detail-collector');
-  if (collectorValue) collectorValue.innerText = t.collectorName || t.creator || 'Hệ thống';
 
-  const statusEl = document.getElementById('so-quy-detail-status');
-  if (statusEl) {
-    statusEl.innerHTML = `<span class="badge-status ${isPaidStatus(t.status) ? 'badge-status-paid' : 'badge-status-cancelled'}">${t.status}</span>`;
-  }
+  detailRow.querySelector('.js-cashbook-inline-cancel')?.addEventListener('click', async event => {
+    const cancelBtn = event.currentTarget;
+    if (!confirm(`Bạn có chắc chắn muốn hủy phiếu [${t.id}]? Số tiền giao dịch sẽ không còn được hạch toán vào Sổ quỹ và sẽ khôi phục lại công nợ đối tác nếu có.`)) return;
 
-  const valEl = document.getElementById('so-quy-detail-value');
-  if (valEl) {
-    valEl.innerText = (t.type === 'thu' ? '+' : '-') + ' ' + formatCurrency(t.value);
-    valEl.style.color = isCancelledStatus(t.status) 
-      ? 'var(--text-muted)' 
-      : (t.type === 'thu' ? '#0070d2' : 'var(--color-danger)');
-  }
-
-  const editBtn = document.getElementById('btn-edit-cashbook-transaction');
-  if (editBtn) {
-    const newEditBtn = editBtn.cloneNode(true);
-    editBtn.parentNode.replaceChild(newEditBtn, editBtn);
-    newEditBtn.style.display = canEditCashbookTransaction(t) ? 'inline-flex' : 'none';
-    if (canEditCashbookTransaction(t)) {
-      newEditBtn.addEventListener('click', () => {
-        detailModal.classList.remove('active');
-        openCashbookEditModal(t);
-      });
+    const cashbookId = getCanonicalCashbookId(t);
+    if (!cashbookId) {
+      showToast('Không xác định được mã phiếu Cloud. Dữ liệu chưa thay đổi.', 'danger');
+      return;
     }
-  }
 
-  const reconcileBtn = document.getElementById('btn-reconcile-customer-receipt');
-  if (reconcileBtn) {
-    const newReconcileBtn = reconcileBtn.cloneNode(true);
-    reconcileBtn.parentNode.replaceChild(newReconcileBtn, reconcileBtn);
-    const legacyCustomer = getLegacyReceiptCustomer(t);
-    newReconcileBtn.style.display = legacyCustomer ? 'inline-flex' : 'none';
-    if (legacyCustomer) {
-      newReconcileBtn.addEventListener('click', async () => {
-        const cashbookId = getCanonicalCashbookId(t);
-        if (!cashbookId) {
-          showToast('Không xác định được mã phiếu Cloud. Dữ liệu chưa thay đổi.', 'danger');
-          return;
-        }
-        if (!confirm(`Ghi phiếu ${t.id} vào công nợ của ${legacyCustomer.name}? Công nợ sẽ giảm ${formatCurrency(t.value)}.`)) return;
+    cancelBtn.disabled = true;
+    try {
+      const savedToCloud = await dbCancelCashbookEntry(cashbookId, `Hủy phiếu ${t.id}`);
+      if (!savedToCloud) return;
 
-        newReconcileBtn.disabled = true;
-        try {
-          const result = await dbReconcileLegacyCustomerReceipt(cashbookId, legacyCustomer.id);
-          if (!result) return;
-          await Promise.all([
-            dbRefreshCustomerFinancialState(legacyCustomer.id),
-            dbFetchCashbookTransactions()
-          ]);
-          detailModal.classList.remove('active');
-          renderAll();
-          showToast(result.already_reconciled
-            ? 'Phiếu thu này đã có trong lịch sử công nợ.'
-            : `Đã ghi phiếu ${t.id} vào lịch sử và cập nhật công nợ ${legacyCustomer.name}.`, 'success');
-        } finally {
-          newReconcileBtn.disabled = false;
-        }
-      });
+      const customerRefreshed = savedToCloud.customer_id
+        ? await dbRefreshCustomerFinancialState(savedToCloud.customer_id)
+        : true;
+      const cashbookRefreshed = await dbFetchCashbookTransactions();
+      const supplierDebt = Number(savedToCloud.supplier_debt);
+      if (savedToCloud.supplier_id && savedToCloud.supplier_debt != null && Number.isFinite(supplierDebt)) {
+        const supplier = state.suppliers.find(s => String(s.id) === String(savedToCloud.supplier_id));
+        if (supplier) supplier.debt = supplierDebt;
+      }
+      localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
+
+      if (!customerRefreshed || !cashbookRefreshed) {
+        showToast('Phiếu đã hủy trên Cloud nhưng giao diện chưa tải lại đầy đủ. Vui lòng tải lại trang.', 'warning');
+      } else {
+        showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
+      }
+      expandedCashbookTransactionId = '';
+      renderAll();
+    } finally {
+      cancelBtn.disabled = false;
     }
-  }
-
-  // Handle Hủy phiếu (Cancel transaction) button
-  const cancelBtn = document.getElementById('btn-cancel-transaction');
-  if (cancelBtn) {
-    if (isCancelledStatus(t.status)) {
-      cancelBtn.style.display = 'none';
-    } else {
-      cancelBtn.style.display = 'inline-flex';
-      // Remove old listeners to avoid multiple fires
-      const newCancelBtn = cancelBtn.cloneNode(true);
-      cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-      
-      newCancelBtn.addEventListener('click', async () => {
-        if (confirm(`Bạn có chắc chắn muốn hủy phiếu [${t.id}]? Số tiền giao dịch sẽ không còn được hạch toán vào Sổ quỹ và sẽ khôi phục lại công nợ đối tác nếu có.`)) {
-          const cashbookId = getCanonicalCashbookId(t);
-          if (!cashbookId) {
-            showToast('Không xác định được mã phiếu Cloud. Dữ liệu chưa thay đổi.', 'danger');
-            return;
-          }
-
-          const savedToCloud = await dbCancelCashbookEntry(cashbookId, `Hủy phiếu ${t.id}`);
-          if (!savedToCloud) return;
-
-          // The database ledger is authoritative. Do not convert an optional
-          // RPC field with Number(null), because that incorrectly becomes zero.
-          const customerRefreshed = savedToCloud.customer_id
-            ? await dbRefreshCustomerFinancialState(savedToCloud.customer_id)
-            : true;
-          const cashbookRefreshed = await dbFetchCashbookTransactions();
-          const supplierDebt = Number(savedToCloud.supplier_debt);
-          if (savedToCloud.supplier_id && savedToCloud.supplier_debt != null && Number.isFinite(supplierDebt)) {
-            const supplier = state.suppliers.find(s => String(s.id) === String(savedToCloud.supplier_id));
-            if (supplier) supplier.debt = supplierDebt;
-          }
-          localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
-
-          if (!customerRefreshed || !cashbookRefreshed) {
-            showToast('Phiếu đã hủy trên Cloud nhưng giao diện chưa tải lại đầy đủ. Vui lòng tải lại trang.', 'warning');
-          } else {
-            showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
-          }
-          detailModal.classList.remove('active');
-          renderAll();
-        }
-      });
-    }
-  }
-
-  // Open modal
-  detailModal.classList.add('active');
-  safeCreateIcons();
+  });
 }
-
 // Excel Export Report using SheetJS (XLSX)
 function exportSoQuyToExcel(filteredTxs) {
   const sheetData = [

@@ -10,6 +10,7 @@ const html = read('index.html');
 const cashbookUi = read('js/components/so_quy.js');
 const service = read('js/services/supabase.js');
 const migration = read('migrations/0030_cashbook_manual_transaction_edit.sql');
+const css = read('style.css');
 
 test('cashbook table and export place address immediately after partner', () => {
   assert.match(html, /Người nộp\/nhận<\/th>\s*<th[^>]*>Địa chỉ<\/th>/);
@@ -24,6 +25,16 @@ test('cashbook edit UI uses the reviewed Cloud RPC and authoritative refresh', (
   assert.match(cashbookUi, /dbAmendCashbookTransaction\(getCanonicalCashbookId\(transaction\)/);
   assert.match(cashbookUi, /await dbFetchCashbookTransactions\(\)/);
   assert.match(service, /supabaseClient\.rpc\('rpc_amend_cashbook_transaction'/);
+});
+
+test('cashbook edit modal uses a wide grouped responsive layout', () => {
+  assert.match(html, /class="modal-content cashbook-edit-modal-content"/);
+  assert.match(html, /Thông tin phiếu/);
+  assert.match(html, /Đối tượng giao dịch/);
+  assert.match(html, /Thanh toán & ghi chú/);
+  assert.match(css, /\.cashbook-edit-modal-content[\s\S]*max-width: 940px/);
+  assert.match(css, /\.cashbook-edit-grid[\s\S]*grid-template-columns: repeat\(2/);
+  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.cashbook-edit-grid \{ grid-template-columns: 1fr/);
 });
 
 test('database edits only active standalone manual vouchers and audits every change', () => {
