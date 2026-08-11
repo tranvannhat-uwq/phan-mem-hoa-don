@@ -256,3 +256,9 @@ financial reversal lineage (`reversal_of_id`). It migrates any 0044 amendment
 rows without changing balances, preserves the one-cancellation-per-entry
 constraint, and replaces the voucher amendment RPC to prevent duplicate-key
 errors on repeated edits.
+
+Migration `0046` reconciles later standalone receipts, including non-sales
+categories, when the payer uniquely and exactly matches one active customer.
+It links only previously unlinked vouchers, creates the missing payment and
+debt-ledger rows, reduces the matching customer's debt exactly once, and leaves
+unmatched or already-linked transactions unchanged.

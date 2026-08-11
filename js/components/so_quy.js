@@ -574,26 +574,29 @@ export function setupSoQuyPanel() {
         idempotencyKey: pendingReceiptIdempotencyKey
       };
       
+      const selectedOption = Array.from(
+        document.getElementById('receipt-payer-list')?.options || []
+      ).find(option => option.value === payer);
+      const selectedCustomerId = selectedOption?.dataset.customerId || '';
+      const customerMatches = state.customers.filter(c =>
+        String(c.name || '').trim().toLowerCase() === payer.toLowerCase()
+      );
+      let matchedCustomer = selectedCustomerId
+        ? state.customers.find(c => String(c.id) === selectedCustomerId)
+        : (customerMatches.length === 1 ? customerMatches[0] : null);
+
       const normalizedCategory = category.toLowerCase();
-      const affectsCustomerDebt = normalizedCategory.includes('nợ')
+      // Every receipt whose payer resolves to a customer is a customer receipt,
+      // regardless of its category (shipping support, penalties, other income,
+      // etc.). Free-text payers remain standalone cashbook receipts.
+      const affectsCustomerDebt = Boolean(matchedCustomer)
+        || normalizedCategory.includes('nợ')
         || normalizedCategory.includes('tiền hàng')
         || normalizedCategory.includes('tiền khách hàng')
         || normalizedCategory.includes('trả trước');
       let paymentResult = null;
-      let matchedCustomer = null;
 
       if (affectsCustomerDebt) {
-        const selectedOption = Array.from(
-          document.getElementById('receipt-payer-list')?.options || []
-        ).find(option => option.value === payer);
-        const selectedCustomerId = selectedOption?.dataset.customerId || '';
-        const customerMatches = state.customers.filter(c =>
-          String(c.name || '').trim().toLowerCase() === payer.toLowerCase()
-        );
-        matchedCustomer = selectedCustomerId
-          ? state.customers.find(c => String(c.id) === selectedCustomerId)
-          : (customerMatches.length === 1 ? customerMatches[0] : null);
-
         if (!matchedCustomer) {
           showToast('Phiếu thu công nợ phải chọn đúng một khách hàng trong danh sách!', 'danger');
           return;
