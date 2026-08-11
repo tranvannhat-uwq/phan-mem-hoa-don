@@ -33,8 +33,10 @@ test('warehouse text and salesperson phone are configurable for each brand', () 
   assert.match(migration, /ADD COLUMN IF NOT EXISTS sales_phone text/);
 });
 
-test('printed seller is the order closer and manager uses an abbreviated position', () => {
+test('printed seller stays the order closer while NVKD comes from the dealer manager', () => {
   assert.match(invoice, /order\.salespersonId \|\| order\.salesperson_id \|\| order\.createdBy/);
+  assert.match(invoice, /state\.customers\.find\(c => String\(c\.id\) === String\(order\.customerId\)\)/);
+  assert.match(invoice, /const managerId = orderCustomer\?\.managedBy[\s\S]*order\.customerManagerId/);
   assert.match(invoice, /salesPhoneEl\.innerText = config\.salesPhone \|\| config\.hotline/);
   assert.match(invoice, /warehouseTextEl\.innerText = config\.invoiceWarehouseText/);
   assert.match(invoice, /normalized\.includes\('truong phong'\)[\s\S]*return 'TPKD'/);

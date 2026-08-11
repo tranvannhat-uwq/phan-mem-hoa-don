@@ -1832,12 +1832,13 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   if (warehouseRowEl) warehouseRowEl.style.display = type === 'retail' ? 'none' : '';
 
   const orderCustomer = order.customerId
-    ? state.customers.find(c => c.id === order.customerId)
+    ? state.customers.find(c => String(c.id) === String(order.customerId))
     : null;
-  const managerId = order.customerManagerId
-    || order.managedBy
-    || orderCustomer?.managedBy
+  const managerId = orderCustomer?.managedBy
     || orderCustomer?.managed_by
+    || order.customerManagerId
+    || order.customer_manager_id
+    || order.managedBy
     || '';
   if (managerEl) managerEl.innerText = formatSalesManagerPrintLabel(managerId);
 
