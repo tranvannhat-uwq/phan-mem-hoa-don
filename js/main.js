@@ -1,22 +1,22 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260811-realtime-egress-v9';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260811-realtime-egress-v9';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260811-realtime-egress-v9';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260811-realtime-egress-v9';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260811-realtime-egress-v9';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260811-realtime-egress-v9';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260811-realtime-egress-v9';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260811-realtime-egress-v9';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260811-realtime-egress-v9';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260811-realtime-egress-v9';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260811-realtime-egress-v9';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260811-realtime-egress-v9';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260811-realtime-egress-v9';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260811-realtime-egress-v9';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260811-realtime-egress-v10';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260811-realtime-egress-v10';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260811-realtime-egress-v10';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260811-realtime-egress-v10';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260811-realtime-egress-v10';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260811-realtime-egress-v10';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260811-realtime-egress-v10';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260811-realtime-egress-v10';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260811-realtime-egress-v10';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260811-realtime-egress-v10';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260811-realtime-egress-v10';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260811-realtime-egress-v10';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260811-realtime-egress-v10';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260811-realtime-egress-v10';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260811-realtime-egress-v9';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260811-realtime-egress-v9';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260811-realtime-egress-v10';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260811-realtime-egress-v10';
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
   'invoice-panel': ['pricelists'],

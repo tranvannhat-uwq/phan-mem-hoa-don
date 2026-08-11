@@ -12,6 +12,22 @@ export function toDebtAmount(value) {
   return Number.isFinite(amount) ? Math.round(amount) : 0;
 }
 
+/**
+ * Balance snapshots are created in database posting order. A document may
+ * carry an older business date, so sorting by that date can make consecutive
+ * balanceBefore/balanceAfter values appear contradictory.
+ */
+export function getCustomerDebtPostingDate(entry = {}) {
+  return entry.postedAt
+    ?? entry.posted_at
+    ?? entry.createdAt
+    ?? entry.created_at
+    ?? entry.date
+    ?? entry.transactionDate
+    ?? entry.transaction_date
+    ?? '';
+}
+
 export function getOrderOutstandingAmount(order = {}) {
   const explicitAmountDue = Number(order.amountDue ?? order.debtAmount ?? order.debt_amount);
   if (Number.isFinite(explicitAmountDue)) return Math.max(0, Math.round(explicitAmountDue));
@@ -152,7 +168,7 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
     .map(entry => [String(entry.id), { ...entry }]));
   const amendments = entries
     .filter(entry => DEBT_AMENDMENT_TYPES.has(debtTransactionType(entry)))
-    .sort((left, right) => new Date(left.date || 0) - new Date(right.date || 0));
+    .sort((left, right) => new Date(getCustomerDebtPostingDate(left) || 0) - new Date(getCustomerDebtPostingDate(right) || 0));
 
   for (const amendment of amendments) {
     const amendmentId = amendment.id ? String(amendment.id) : '';
@@ -180,6 +196,7 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
       target.amount = Math.abs(effectiveChange);
       target.debtAfter = toDebtAmount(amendment.debtAfter ?? amendment.balance_after);
       target.date = amendment.date || target.date;
+      target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
       if (effectiveChange === 0) hiddenIds.add(targetId);
       continue;
     }
@@ -205,6 +222,45 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
     .filter((entry, index, result) => entry
       && !hiddenIds.has(String(entry.id || ''))
       && result.indexOf(entry) === index);
+}
+
+function getCustomerDebtEntryChange(entry = {}) {
+  const rawExplicit = entry.debtChange ?? entry.debt_change;
+  const explicit = Number(rawExplicit);
+  if (rawExplicit != null && rawExplicit !== '' && Number.isFinite(explicit)) return toDebtAmount(explicit);
+  const amount = Math.abs(toDebtAmount(entry.amount));
+  const type = debtTransactionType(entry);
+  if (type === 'payment' || type === 'return') return -amount;
+  if (type === 'order' || type === 'charge') return amount;
+  return toDebtAmount(entry.amount);
+}
+
+/**
+ * Create the effective user-facing ledger. Technical cancellations are
+ * removed and amendments are folded, so their stored snapshots cannot be
+ * displayed verbatim. Rebuild the visible before/after chain backwards from
+ * the authoritative customer balance to keep every adjacent row continuous.
+ */
+export function buildCustomerDebtDisplayHistory(history = [], currentDebt = 0) {
+  const chronological = projectEffectiveCustomerDebtHistory(history)
+    .map((entry, index) => ({ ...entry, __displayOrder: index }))
+    .sort((left, right) => {
+      const timeDelta = new Date(getCustomerDebtPostingDate(left) || 0)
+        - new Date(getCustomerDebtPostingDate(right) || 0);
+      return timeDelta || left.__displayOrder - right.__displayOrder;
+    });
+
+  let balanceAfter = toDebtAmount(currentDebt);
+  for (let index = chronological.length - 1; index >= 0; index -= 1) {
+    const entry = chronological[index];
+    const debtChange = getCustomerDebtEntryChange(entry);
+    entry.debtChange = debtChange;
+    entry.debtAfter = balanceAfter;
+    entry.debtBefore = balanceAfter - debtChange;
+    balanceAfter = entry.debtBefore;
+    delete entry.__displayOrder;
+  }
+  return chronological;
 }
 
 /**

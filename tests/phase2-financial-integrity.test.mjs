@@ -62,7 +62,7 @@ test('cancellations append reversal records and cannot be performed by Sale', ()
   assert.match(history, /await dbCancelOrder/);
   assert.match(history, /await dbRefreshCustomerFinancialState\(order\.customerId, \{ includeHistory: false \}\)/);
   assert.doesNotMatch(history, /Number\(result\.new_debt\)/);
-  assert.match(read('js/components/customers.js'), /projectEffectiveCustomerDebtHistory/);
+  assert.match(read('js/components/customers.js'), /buildCustomerDebtDisplayHistory/);
 });
 
 test('Phase 2 remains detached from inventory and production', () => {

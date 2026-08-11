@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260811-realtime-egress-v9';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260811-realtime-egress-v9';
-import { renderAll, switchTab } from '../main.js?v=20260811-realtime-egress-v9';
-import { populateManagedByDropdown } from './customers.js?v=20260811-realtime-egress-v9';
-import { exportBackupToExcel } from '../services/backup.js?v=20260811-realtime-egress-v9';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260811-realtime-egress-v10';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260811-realtime-egress-v10';
+import { renderAll, switchTab } from '../main.js?v=20260811-realtime-egress-v10';
+import { populateManagedByDropdown } from './customers.js?v=20260811-realtime-egress-v10';
+import { exportBackupToExcel } from '../services/backup.js?v=20260811-realtime-egress-v10';
 import {
   LOGIN_ERROR,
   classifySupabaseError,

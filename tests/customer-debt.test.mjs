@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {
+  buildCustomerDebtDisplayHistory,
   chargeCustomerDebt,
   collectCustomerDebt,
+  getCustomerDebtPostingDate,
   getNeutralizedOrderDebtEntryIds,
   getOrderDebtSnapshot,
   getOrderOutstandingAmount,
@@ -10,6 +12,27 @@ import {
   reduceCustomerDebtForReturn,
   restoreCustomerDebtForCancelledReturn
 } from '../js/domain/customer-debt.js';
+
+const backdatedPostingSequence = [
+  { id: 'import', type: 'adjust', debtChange: 1840000, date: '2026-08-05T15:38:00+07:00', postedAt: '2026-08-05T15:38:01+07:00', debtBefore: -51600, debtAfter: 1788400 },
+  { id: 'payment', type: 'payment', debtChange: -1788000, date: '2026-08-05T15:41:00+07:00', postedAt: '2026-08-05T15:41:01+07:00', debtBefore: 1788400, debtAfter: 400 },
+  { id: 'backdated-order', type: 'charge', debtChange: 1840000, date: '2026-08-05T07:12:00+07:00', postedAt: '2026-08-05T15:45:00+07:00', debtBefore: 400, debtAfter: 1840400 }
+];
+assert.equal(getCustomerDebtPostingDate(backdatedPostingSequence[2]), '2026-08-05T15:45:00+07:00');
+const backdatedDisplay = buildCustomerDebtDisplayHistory(backdatedPostingSequence, 1840400).reverse();
+assert.deepEqual(backdatedDisplay.map(item => item.id), ['backdated-order', 'payment', 'import']);
+assert.equal(backdatedDisplay[0].debtAfter, 1840400, 'Newest posted snapshot equals authoritative current debt');
+assert.equal(backdatedDisplay[0].debtBefore, backdatedDisplay[1].debtAfter, 'Posting order keeps adjacent balances continuous');
+assert.equal(backdatedDisplay[1].debtBefore, backdatedDisplay[2].debtAfter, 'Earlier adjacent balances remain continuous');
+
+const amendedDisplay = buildCustomerDebtDisplayHistory([
+  { id: 'payment-original', type: 'payment', transactionType: 'payment', amount: 5000000, debtChange: -5000000, postedAt: '2026-08-01T08:00:00Z' },
+  { id: 'order-between', type: 'charge', transactionType: 'order', amount: 3000000, debtChange: 3000000, postedAt: '2026-08-01T09:00:00Z' },
+  { id: 'payment-amend', transactionType: 'payment_amend', amount: 1000000, debtChange: -1000000, amendsLedgerId: 'payment-original', postedAt: '2026-08-01T10:00:00Z' }
+], 6000000).reverse();
+assert.deepEqual(amendedDisplay.map(item => item.id), ['payment-original', 'order-between']);
+assert.equal(amendedDisplay[0].debtAfter, 6000000);
+assert.equal(amendedDisplay[0].debtBefore, amendedDisplay[1].debtAfter, 'Folded amendments keep the visible balance chain continuous');
 
 assert.equal(getOrderOutstandingAmount({ totalPayable: 100000, shippingFeeAmount: 15000, paidAmount: 20000 }), 95000);
 assert.equal(getOrderOutstandingAmount({ amountDue: 240000, totalPayable: 100000 }), 240000);

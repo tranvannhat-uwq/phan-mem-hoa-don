@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode } from '../utils.js';
 import { dbFetchPhase5Report } from '../services/supabase.js';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260811-realtime-egress-v10';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
@@ -141,7 +142,8 @@ window.viewCustomerDebtHistory = function(customerId) {
 
   if (modalTitle) modalTitle.innerText = `Lịch sử biến động công nợ - ${cust.name} (${cust.code})`;
 
-  const history = cust.debtHistory || [];
+  const history = buildCustomerDebtDisplayHistory(cust.debtHistory || [], cust.debt)
+    .reverse();
   if (history.length === 0) {
     modalBody.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Khách hàng chưa phát sinh biến động công nợ</div>`;
   } else {
@@ -149,7 +151,7 @@ window.viewCustomerDebtHistory = function(customerId) {
       <table class="table" style="width: 100%;">
         <thead>
           <tr>
-            <th>Thời gian</th>
+            <th>Thời gian ghi sổ</th>
             <th>Loại biến động</th>
             <th style="text-align: right;">Ghi nợ / Phát sinh</th>
             <th style="text-align: right;">Số dư sau phát sinh</th>
@@ -157,7 +159,7 @@ window.viewCustomerDebtHistory = function(customerId) {
           </tr>
         </thead>
         <tbody>
-          ${history.slice().reverse().map(item => {
+          ${history.map(item => {
             const isCharge = item.type === 'charge' || item.type === 'order';
             const isPay = item.type === 'payment';
             const typeLabel = isCharge ? 'Phát sinh đơn hàng' : isPay ? 'Thu tiền nợ' : item.type === 'return' ? 'Khấu trừ trả hàng' : 'Điều chỉnh thủ công';
@@ -165,7 +167,7 @@ window.viewCustomerDebtHistory = function(customerId) {
 
             return `
               <tr>
-                <td>${formatDateTime(item.date)}</td>
+                <td>${formatDateTime(getCustomerDebtPostingDate(item))}</td>
                 <td><span style="font-weight: 600; color: ${colorClass};">${typeLabel}</span></td>
                 <td style="text-align: right; font-weight: 600; color: ${colorClass};">${isPay || item.type === 'return' ? '-' : '+'}${formatCurrency(item.amount)}</td>
                 <td style="text-align: right; font-weight: 700;">${formatCurrency(item.debtAfter)}</td>

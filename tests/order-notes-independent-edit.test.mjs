@@ -28,6 +28,6 @@ test('history edits notes outside the finalized-order amendment flow', () => {
 
 test('customer debt history does not expose amendment and cancellation bookkeeping labels', () => {
   const customers = read('js/components/customers.js');
-  assert.match(customers, /projectEffectiveCustomerDebtHistory/);
+  assert.match(customers, /buildCustomerDebtDisplayHistory/);
   assert.doesNotMatch(customers, /Đảo bản cũ/);
 });

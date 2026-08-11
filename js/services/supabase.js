@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v9';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v9';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v10';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v10';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v9';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v10';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -659,6 +659,9 @@ function mapCustomerDebtTransaction(row) {
     debtBefore: Number(row.balance_before || 0),
     debtAfter: Number(row.balance_after || 0),
     date: row.transaction_date || row.created_at,
+    transactionDate: row.transaction_date || row.created_at,
+    postedAt: row.created_at || row.transaction_date,
+    createdAt: row.created_at || row.transaction_date,
     note: row.description || '',
     notes: row.description || '',
     orderId: row.order_id || null,
@@ -683,7 +686,8 @@ export function applyCustomerDebtRealtimePayload(payload = {}) {
     history.push(mapCustomerDebtTransaction(payload.new));
     if (payload.new.balance_after != null) customer.debt = Number(payload.new.balance_after);
   }
-  customer.debtHistory = history.sort((a, b) => new Date(a.date) - new Date(b.date));
+  customer.debtHistory = history.sort((a, b) =>
+    new Date(getCustomerDebtPostingDate(a) || 0) - new Date(getCustomerDebtPostingDate(b) || 0));
   localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
   return true;
 }
@@ -715,7 +719,8 @@ async function fetchCustomerDebtRows(customerId) {
       .from(tableCustomerDebtTransactionsName)
       .select('*')
       .eq('customer_id', customerId)
-      .order('transaction_date', { ascending: true })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) throw error;
     rows.push(...(data || []));
