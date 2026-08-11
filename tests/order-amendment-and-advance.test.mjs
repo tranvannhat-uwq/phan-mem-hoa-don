@@ -30,7 +30,9 @@ test('history and invoice expose a dedicated finalized-order amendment path', ()
   assert.match(history, /data-amend-order-id/);
   assert.match(history, /state\.currentTab = 'invoice-panel'/);
   assert.match(invoice, /dbAmendOrder\(amendOrderId, order, amendmentReason\)/);
-  assert.match(invoice, /await fetchCloudData\(\)/);
+  assert.match(invoice, /dbRefreshOrderById\(amendOrderId\)/);
+  assert.match(invoice, /dbRefreshOrderById\(persistedOrder\.id\)/);
+  assert.doesNotMatch(invoice, /await fetchCloudData\(\)/);
   assert.match(invoice, /removeAttribute\('data-amend-order-id'\)/);
   assert.match(service, /supabaseClient\.rpc\('rpc_amend_order'/);
 });

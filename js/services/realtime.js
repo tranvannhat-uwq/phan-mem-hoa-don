@@ -1,9 +1,15 @@
 import { state } from '../state.js';
 import { updateDbStatusUI } from '../utils.js';
 import {
+  applyBrandRealtimePayload,
+  applyCashbookRealtimePayload,
+  applyCustomerDebtRealtimePayload,
+  applyPricingRealtimePayload,
+  applyProductRealtimePayload,
+  applyStartingBalanceRealtimePayload,
   dbFetchCustomerById,
-  dbRefreshCustomerFinancialState,
   dbRefreshOrderById,
+  dbRefreshSalesReturnById,
   fetchCloudData,
   isCloudActive,
   supabaseClient,
@@ -30,7 +36,6 @@ let realtimeGeneration = 0;
 let realtimeStatus = 'CLOSED';
 let pendingEvents = [];
 let flushInProgress = false;
-let visibilityHandler = null;
 let onlineHandler = null;
 
 function eventRecordId(payload) {
@@ -56,8 +61,7 @@ async function flushRealtimeEvents() {
   try {
     const orderChanges = new Map();
     const customerChanges = new Map();
-    const financialCustomerIds = new Set();
-    const refreshDomains = new Set();
+    const salesReturnChanges = new Map();
 
     batch.forEach(event => {
       if (event.kind === 'order') {
@@ -71,10 +75,30 @@ async function flushRealtimeEvents() {
         const id = eventRecordId(event.payload);
         if (id) customerChanges.set(String(id), event.payload.eventType);
       } else if (event.kind === 'customerFinancial') {
-        const id = event.payload?.new?.customer_id || event.payload?.old?.customer_id;
-        if (id) financialCustomerIds.add(String(id));
-      } else if (event.domain) {
-        refreshDomains.add(event.domain);
+        applyCustomerDebtRealtimePayload(event.payload);
+      } else if (event.kind === 'cashbook') {
+        applyCashbookRealtimePayload(event.payload);
+      } else if (event.kind === 'startingBalances') {
+        applyStartingBalanceRealtimePayload(event.payload);
+      } else if (event.kind === 'product') {
+        applyProductRealtimePayload(event.payload);
+      } else if (event.kind === 'priceList') {
+        applyPricingRealtimePayload('priceList', event.payload);
+      } else if (event.kind === 'priceListItem') {
+        applyPricingRealtimePayload('priceListItem', event.payload);
+      } else if (event.kind === 'brand') {
+        applyBrandRealtimePayload(event.payload);
+      } else if (event.kind === 'salesReturn') {
+        const id = eventRecordId(event.payload);
+        if (id) salesReturnChanges.set(String(id), event.payload.eventType === 'DELETE');
+      } else if (event.kind === 'salesReturnItem') {
+        const row = event.payload?.new || event.payload?.old || {};
+        const existingReturn = !row.return_id && row.id
+          ? (state.salesReturns || []).find(item =>
+              (item.items || []).some(returnItem => String(returnItem.id) === String(row.id)))
+          : null;
+        const returnId = row.return_id || existingReturn?.id;
+        if (returnId) salesReturnChanges.set(String(returnId), false);
       }
     });
 
@@ -88,15 +112,8 @@ async function flushRealtimeEvents() {
         await dbFetchCustomerById(customerId);
       }
     }
-    for (const customerId of financialCustomerIds) {
-      await dbRefreshCustomerFinancialState(customerId);
-    }
-
-    if (refreshDomains.size > 0) {
-      await fetchCloudData({
-        onlyDomains: [...refreshDomains],
-        hydrateCustomerHistory: false
-      });
+    for (const [returnId, deleted] of salesReturnChanges) {
+      await dbRefreshSalesReturnById(returnId, { deleted });
     }
 
     if (typeof realtimeRender === 'function' && state.currentUser) realtimeRender();
@@ -125,7 +142,12 @@ function queueVisiblePanelCatchup() {
     'reports-panel': ['orders', 'customers', 'salesReturns'],
     'dashboard-panel': ['orders', 'customers', 'salesReturns']
   };
-  (domainsByPanel[state.currentTab] || []).forEach(domain => queueRealtimeEvent({ domain }));
+  const domains = domainsByPanel[state.currentTab] || [];
+  if (domains.length === 0) return;
+  void fetchCloudData({ onlyDomains: domains, hydrateCustomerHistory: false })
+    .then(() => {
+      if (typeof realtimeRender === 'function' && state.currentUser) realtimeRender();
+    });
 }
 
 function subscribeTable(channel, table, handler) {
@@ -137,9 +159,7 @@ export async function stopRealtimeSync() {
   if (realtimeTimer) clearTimeout(realtimeTimer);
   realtimeTimer = null;
   pendingEvents = [];
-  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
   if (onlineHandler) window.removeEventListener('online', onlineHandler);
-  visibilityHandler = null;
   onlineHandler = null;
 
   const channel = realtimeChannel;
@@ -175,21 +195,21 @@ export async function startRealtimeSync(renderCallback) {
   channel = subscribeTable(channel, tableCustomerDebtTransactionsName,
     payload => queueRealtimeEvent({ kind: 'customerFinancial', payload }));
   channel = subscribeTable(channel, tableCashbookTransactionsName,
-    () => queueRealtimeEvent({ domain: 'cashbook' }));
+    payload => queueRealtimeEvent({ kind: 'cashbook', payload }));
   channel = subscribeTable(channel, tableStartingBalancesName,
-    () => queueRealtimeEvent({ domain: 'startingBalances' }));
+    payload => queueRealtimeEvent({ kind: 'startingBalances', payload }));
   channel = subscribeTable(channel, tableSalesReturnsName,
-    () => queueRealtimeEvent({ domain: 'salesReturns' }));
+    payload => queueRealtimeEvent({ kind: 'salesReturn', payload }));
   channel = subscribeTable(channel, tableSalesReturnItemsName,
-    () => queueRealtimeEvent({ domain: 'salesReturns' }));
+    payload => queueRealtimeEvent({ kind: 'salesReturnItem', payload }));
   channel = subscribeTable(channel, tableProductsName,
-    () => queueRealtimeEvent({ domain: 'products' }));
+    payload => queueRealtimeEvent({ kind: 'product', payload }));
   channel = subscribeTable(channel, tablePricelistsName,
-    () => queueRealtimeEvent({ domain: 'pricelists' }));
+    payload => queueRealtimeEvent({ kind: 'priceList', payload }));
   channel = subscribeTable(channel, tablePriceListItemsName,
-    () => queueRealtimeEvent({ domain: 'pricelists' }));
+    payload => queueRealtimeEvent({ kind: 'priceListItem', payload }));
   channel = subscribeTable(channel, tableBrandsName,
-    () => queueRealtimeEvent({ domain: 'brands' }));
+    payload => queueRealtimeEvent({ kind: 'brand', payload }));
 
   realtimeChannel = channel;
   channel.subscribe(status => {
@@ -202,11 +222,7 @@ export async function startRealtimeSync(renderCallback) {
     }
   });
 
-  visibilityHandler = () => {
-    if (document.visibilityState === 'visible') queueVisiblePanelCatchup();
-  };
   onlineHandler = queueVisiblePanelCatchup;
-  document.addEventListener('visibilitychange', visibilityHandler);
   window.addEventListener('online', onlineHandler);
   return true;
 }

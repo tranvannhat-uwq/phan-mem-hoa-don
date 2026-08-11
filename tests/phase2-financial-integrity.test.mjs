@@ -60,7 +60,7 @@ test('cancellations append reversal records and cannot be performed by Sale', ()
   assert.match(migration, /Order has sales returns/);
   assert.match(migration, /order_cancel_reversal/);
   assert.match(history, /await dbCancelOrder/);
-  assert.match(history, /await dbRefreshCustomerFinancialState\(order\.customerId\)/);
+  assert.match(history, /await dbRefreshCustomerFinancialState\(order\.customerId, \{ includeHistory: false \}\)/);
   assert.doesNotMatch(history, /Number\(result\.new_debt\)/);
   assert.match(read('js/components/customers.js'), /projectEffectiveCustomerDebtHistory/);
 });

@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, fetchCloudData, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, cacheOrdersLocally } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
-import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, cacheOrdersLocally } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
 import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260810-sale-pricing-rpc1';
 import { openHistoryOrderExportModal } from './customers.js?v=20260810-sale-pricing-rpc1';
 import {
@@ -331,7 +331,7 @@ export function setupHistoryPanel() {
       
       showToast('Đang làm mới dữ liệu từ Cloud...', 'info');
       try {
-        await fetchCloudData();
+        await ensurePanelCloudData('history-panel', { force: true });
         renderAll();
         showToast('Đã làm mới dữ liệu từ Cloud thành công!', 'success');
       } catch (err) {
@@ -432,7 +432,7 @@ export async function cancelOrderById(id) {
   // Reload the authoritative customer balance and debt ledger. The cancellation
   // RPC appends an order_cancel row; patching only customer.debt would hide it.
   const customersRefreshed = order.customerId
-    ? await dbRefreshCustomerFinancialState(order.customerId)
+    ? await dbRefreshCustomerFinancialState(order.customerId, { includeHistory: false })
     : true;
   cacheOrdersLocally(state.savedOrders);
   renderAll();

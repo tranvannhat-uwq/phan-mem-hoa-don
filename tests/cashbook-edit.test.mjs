@@ -23,7 +23,9 @@ test('cashbook edit UI uses the reviewed Cloud RPC and authoritative refresh', (
   assert.match(html, /id="cashbook-edit-collector"/);
   assert.match(html, /id="cashbook-edit-counterparty-type"/);
   assert.match(cashbookUi, /dbAmendCashbookTransaction\(getCanonicalCashbookId\(transaction\)/);
-  assert.match(cashbookUi, /await dbFetchCashbookTransactions\(\)/);
+  assert.match(cashbookUi, /upsertCashbookTransactionSnapshot/);
+  assert.match(cashbookUi, /dbFetchCashbookTransactionById\(getCanonicalCashbookId\(transaction\)\)/);
+  assert.doesNotMatch(cashbookUi, /await dbFetchCashbookTransactions\(\)/);
   assert.match(service, /supabaseClient\.rpc\('rpc_amend_cashbook_transaction'/);
 });
 

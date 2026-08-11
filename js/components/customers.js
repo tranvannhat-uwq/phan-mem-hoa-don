@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactions, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
 import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260810-sale-pricing-rpc1';
 import { addCashbookTransaction } from './so_quy.js?v=20260810-sale-pricing-rpc1';
@@ -1465,7 +1465,7 @@ export async function handlePayDebtSubmit(e) {
   // The customer UPDATE and ledger INSERT can reach Realtime before this await
   // resumes. Refresh by id so the UI never writes the receipt result into an
   // object that Realtime has already replaced in state.customers.
-  const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id);
+  const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id, { includeHistory: false });
   const currentCustomer = refreshedCustomer
     || state.customers.find(customer => String(customer.id) === String(cust.id))
     || cust;
@@ -1561,7 +1561,7 @@ export async function handleCustomerDebtAdjustSubmit(event) {
     return;
   }
 
-  const refreshedFromCloud = Boolean(await dbRefreshCustomerFinancialState(customerId));
+  const refreshedFromCloud = Boolean(await dbRefreshCustomerFinancialState(customerId, { includeHistory: false }));
   if (!refreshedFromCloud) {
     const localCustomer = state.customers.find(item => String(item.id) === String(customerId));
     if (localCustomer) localCustomer.debt = Number(result.new_debt);
@@ -2837,9 +2837,7 @@ async function openCustomerDebtSourceDetail(source, historyEntry, customer) {
       let transactions = getCachedCashbookTransactions();
       let transaction = transactions.find(item => String(item.cloudId || item.id) === source.id);
       if (!transaction) {
-        const refreshed = await dbFetchCashbookTransactions();
-        transactions = Array.isArray(refreshed) ? refreshed : getCachedCashbookTransactions();
-        transaction = transactions.find(item => String(item.cloudId || item.id) === source.id);
+        transaction = await dbFetchCashbookTransactionById(source.id);
       }
       if (!transaction) throw new Error(`Không tìm thấy phiếu thu/chi ${source.id} trong phạm vi được xem.`);
 

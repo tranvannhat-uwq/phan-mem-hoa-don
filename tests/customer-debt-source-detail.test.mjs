@@ -28,7 +28,8 @@ test('source links use database relations and refresh the authoritative source r
   assert.match(resolver, /historyEntry\.salesReturnId \|\| historyEntry\.sales_return_id/);
   assert.doesNotMatch(resolver, /note|description|match\(/);
   assert.match(customerUi, /await dbRefreshOrderById\(source\.id\)/);
-  assert.match(customerUi, /await dbFetchCashbookTransactions\(\)/);
+  assert.match(customerUi, /await dbFetchCashbookTransactionById\(source\.id\)/);
+  assert.doesNotMatch(customerUi, /await dbFetchCashbookTransactions\(\)/);
 });
 
 test('source-document modal is read-only and does not alter debt workflows', () => {

@@ -5089,6 +5089,91 @@ select#invoice-pricelist-select:disabled {
   box-shadow: var(--shadow-sm);
 }
 
+.so-quy-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  margin-top: 0.35rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.so-quy-pagination-summary {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.so-quy-pagination-controls,
+.so-quy-page-size-label {
+  display: flex;
+  align-items: center;
+}
+
+.so-quy-pagination-controls {
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.so-quy-page-size-label {
+  gap: 0.5rem;
+  margin-right: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.so-quy-page-size-label .form-control {
+  width: 72px;
+  height: 34px;
+  padding: 0.25rem 1.65rem 0.25rem 0.55rem;
+}
+
+.so-quy-pagination-controls .btn {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.so-quy-pagination-controls .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.so-quy-pagination-controls .btn i {
+  width: 15px;
+  height: 15px;
+}
+
+.so-quy-page-icon {
+  width: 34px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.so-quy-page-info {
+  min-width: 92px;
+  text-align: center;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .so-quy-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .so-quy-pagination-controls {
+    justify-content: flex-start;
+  }
+}
+
 .so-quy-search-group {
   display: flex;
   justify-content: space-between;

@@ -20,8 +20,9 @@ test('goods navigation activates purchases without legacy inventory listeners', 
 });
 
 test('normal Cloud loading does not fetch inventory or production tables', () => {
-  const start = supabase.indexOf('const secondaryLoad = Promise.all([');
+  const start = supabase.indexOf('const secondaryLoad = Promise.all(');
   const promiseAll = supabase.slice(start, supabase.indexOf(']);', start) + 3);
   assert.doesNotMatch(promiseAll, /fetchRawMaterials|fetchSemiFinished|fetchRecipes|fetchProductionLogs|fetchFinishedGoodsStock/);
   assert.match(promiseAll, /fetchPurchases/);
+  assert.match(promiseAll, /leanBootstrap \? \[\] :/);
 });

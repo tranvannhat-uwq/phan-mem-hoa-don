@@ -1,13 +1,17 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
 import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactions } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
 import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260810-sale-pricing-rpc1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
 let pendingReceiptIdempotencyKey = '';
 let expandedCashbookTransactionId = '';
+let cashbookCurrentPage = 1;
+let cashbookPageSize = 20;
+let cashbookTotalPages = 1;
+let cashbookLastFilterSignature = '';
 
 function escapeCashbookHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -456,6 +460,31 @@ export function setupSoQuyPanel() {
     });
   }
 
+  const pageSizeSelect = document.getElementById('so-quy-page-size');
+  if (pageSizeSelect) {
+    pageSizeSelect.value = String(cashbookPageSize);
+    pageSizeSelect.addEventListener('change', (event) => {
+      const nextPageSize = Number(event.target.value);
+      cashbookPageSize = [20, 50, 100].includes(nextPageSize) ? nextPageSize : 20;
+      cashbookCurrentPage = 1;
+      expandedCashbookTransactionId = '';
+      renderSoQuyTable();
+    });
+  }
+
+  const changeCashbookPage = (nextPage) => {
+    const safePage = Math.min(Math.max(1, nextPage), cashbookTotalPages);
+    if (safePage === cashbookCurrentPage) return;
+    cashbookCurrentPage = safePage;
+    expandedCashbookTransactionId = '';
+    renderSoQuyTable();
+  };
+
+  document.getElementById('so-quy-first-page')?.addEventListener('click', () => changeCashbookPage(1));
+  document.getElementById('so-quy-prev-page')?.addEventListener('click', () => changeCashbookPage(cashbookCurrentPage - 1));
+  document.getElementById('so-quy-next-page')?.addEventListener('click', () => changeCashbookPage(cashbookCurrentPage + 1));
+  document.getElementById('so-quy-last-page')?.addEventListener('click', () => changeCashbookPage(cashbookTotalPages));
+
   // 15. Manual edit starting balance (Double click balance value)
   const startBalEl = document.getElementById('so-quy-stat-start');
   if (startBalEl) {
@@ -627,7 +656,7 @@ export function setupSoQuyPanel() {
         // Re-read the authoritative balance after the transaction. Realtime can
         // replace the customer object while the RPC is in flight, so mutating
         // matchedCustomer here may otherwise update a detached, stale object.
-        const refreshedCustomer = await dbRefreshCustomerFinancialState(matchedCustomer.id);
+        const refreshedCustomer = await dbRefreshCustomerFinancialState(matchedCustomer.id, { includeHistory: false });
         const currentCustomer = refreshedCustomer
           || state.customers.find(customer => String(customer.id) === String(matchedCustomer.id))
           || matchedCustomer;
@@ -843,7 +872,15 @@ export function setupSoQuyPanel() {
       });
       if (!updated) return;
 
-      const refreshed = await dbFetchCashbookTransactions();
+      const refreshed = updated.transaction
+        ? upsertCashbookTransactionSnapshot({
+            ...updated.transaction,
+            collectorId: updated.collector_id,
+            collectorName: updated.collector_name,
+            counterpartyType: updated.counterparty_type,
+            counterpartyId: updated.counterparty_id
+          })
+        : await dbFetchCashbookTransactionById(getCanonicalCashbookId(transaction));
       if (!refreshed) {
         showToast('Phiếu đã sửa trên Cloud nhưng giao diện chưa tải lại được. Vui lòng tải lại trang.', 'warning');
       } else {
@@ -1288,6 +1325,34 @@ function renderCashbookInlineDetail(t) {
   `;
 }
 
+function renderCashbookPagination(totalItems) {
+  cashbookTotalPages = Math.max(1, Math.ceil(totalItems / cashbookPageSize));
+  cashbookCurrentPage = Math.min(Math.max(1, cashbookCurrentPage), cashbookTotalPages);
+
+  const firstItem = totalItems === 0 ? 0 : ((cashbookCurrentPage - 1) * cashbookPageSize) + 1;
+  const lastItem = Math.min(cashbookCurrentPage * cashbookPageSize, totalItems);
+  const summary = document.getElementById('so-quy-pagination-summary');
+  const pageInfo = document.getElementById('so-quy-page-info');
+  const firstButton = document.getElementById('so-quy-first-page');
+  const previousButton = document.getElementById('so-quy-prev-page');
+  const nextButton = document.getElementById('so-quy-next-page');
+  const lastButton = document.getElementById('so-quy-last-page');
+
+  if (summary) {
+    summary.textContent = totalItems === 0
+      ? 'Không có giao dịch'
+      : `Hiển thị ${firstItem}–${lastItem} / ${totalItems} giao dịch`;
+  }
+  if (pageInfo) pageInfo.textContent = `Trang ${cashbookCurrentPage} / ${cashbookTotalPages}`;
+
+  const isFirstPage = cashbookCurrentPage === 1;
+  const isLastPage = cashbookCurrentPage === cashbookTotalPages;
+  if (firstButton) firstButton.disabled = isFirstPage;
+  if (previousButton) previousButton.disabled = isFirstPage;
+  if (nextButton) nextButton.disabled = isLastPage;
+  if (lastButton) lastButton.disabled = isLastPage;
+}
+
 // Render cashbook table and update stats in UI
 export function renderSoQuyTable() {
   const tableBody = document.getElementById('so-quy-table-body');
@@ -1299,6 +1364,16 @@ export function renderSoQuyTable() {
 
   // Get processed transactions and statistics
   const { filteredTransactions, stats } = getProcessedData();
+
+  const filterSignature = JSON.stringify(activeFilters);
+  if (filterSignature !== cashbookLastFilterSignature) {
+    cashbookCurrentPage = 1;
+    expandedCashbookTransactionId = '';
+    cashbookLastFilterSignature = filterSignature;
+  }
+  renderCashbookPagination(filteredTransactions.length);
+  const pageStart = (cashbookCurrentPage - 1) * cashbookPageSize;
+  const paginatedTransactions = filteredTransactions.slice(pageStart, pageStart + cashbookPageSize);
 
   // Update Statistics in UI (with integers rounding for clean display)
   const statStartEl = document.getElementById('so-quy-stat-start');
@@ -1321,14 +1396,17 @@ export function renderSoQuyTable() {
         </td>
       </tr>
     `;
+    const selectAll = document.getElementById('so-quy-select-all');
+    if (selectAll) selectAll.checked = false;
+    safeCreateIcons();
     return;
   }
 
-  if (!filteredTransactions.some(t => String(t.id) === String(expandedCashbookTransactionId))) {
+  if (!paginatedTransactions.some(t => String(t.id) === String(expandedCashbookTransactionId))) {
     expandedCashbookTransactionId = '';
   }
 
-  tableBody.innerHTML = filteredTransactions.map(t => {
+  tableBody.innerHTML = paginatedTransactions.map(t => {
     const partnerAddress = getTransactionPartnerAddress(t);
     const valText = t.type === 'thu' ? formatCurrency(t.value) : `-${formatCurrency(t.value)}`;
     const valStyle = t.type === 'thu'
@@ -1415,7 +1493,10 @@ export function renderSoQuyTable() {
     });
   });
 
-  const expandedTransaction = filteredTransactions.find(t => String(t.id) === String(expandedCashbookTransactionId));
+  const selectAll = document.getElementById('so-quy-select-all');
+  if (selectAll) selectAll.checked = false;
+
+  const expandedTransaction = paginatedTransactions.find(t => String(t.id) === String(expandedCashbookTransactionId));
   if (expandedTransaction) wireCashbookInlineDetailActions(expandedTransaction, tableBody);
 
   safeCreateIcons();
@@ -1533,8 +1614,10 @@ function wireCashbookInlineDetailActions(t, tableBody) {
         const result = await dbReconcileLegacyCustomerReceipt(cashbookId, legacyCustomer.id);
         if (!result) return;
         await Promise.all([
-          dbRefreshCustomerFinancialState(legacyCustomer.id),
-          dbFetchCashbookTransactions()
+          dbRefreshCustomerFinancialState(legacyCustomer.id, { includeHistory: false }),
+          result.transaction
+            ? Promise.resolve(upsertCashbookTransactionSnapshot(result.transaction))
+            : dbFetchCashbookTransactionById(cashbookId)
         ]);
         expandedCashbookTransactionId = '';
         renderAll();
@@ -1563,9 +1646,15 @@ function wireCashbookInlineDetailActions(t, tableBody) {
       if (!savedToCloud) return;
 
       const customerRefreshed = savedToCloud.customer_id
-        ? await dbRefreshCustomerFinancialState(savedToCloud.customer_id)
+        ? await dbRefreshCustomerFinancialState(savedToCloud.customer_id, { includeHistory: false })
         : true;
-      const cashbookRefreshed = await dbFetchCashbookTransactions();
+      const originalRefreshed = savedToCloud.transaction
+        ? upsertCashbookTransactionSnapshot(savedToCloud.transaction)
+        : await dbFetchCashbookTransactionById(cashbookId);
+      const reversalRefreshed = savedToCloud.reversal_id
+        ? await dbFetchCashbookTransactionById(savedToCloud.reversal_id)
+        : true;
+      const cashbookRefreshed = Boolean(originalRefreshed && reversalRefreshed);
       const supplierDebt = Number(savedToCloud.supplier_debt);
       if (savedToCloud.supplier_id && savedToCloud.supplier_debt != null && Number.isFinite(supplierDebt)) {
         const supplier = state.suppliers.find(s => String(s.id) === String(savedToCloud.supplier_id));

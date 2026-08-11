@@ -512,7 +512,8 @@ export async function handleLogin(e) {
     state.currentUser = user;
     const cloudLoad = await fetchCloudData({
       deferSecondary: true,
-      hydrateCustomerHistory: false
+      hydrateCustomerHistory: false,
+      leanBootstrap: true
     });
     state.currentUser = state.users.find(item => item.authUserId === authUser.id || item.id === profile.id) || user;
 

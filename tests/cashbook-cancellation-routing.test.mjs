@@ -31,8 +31,8 @@ test('legacy customer receipts remain cancellable after a page reload', () => {
 });
 
 test('Cloud mapper retains cancellation routing fields', () => {
-  assert.match(supabase, /transactionType:\s*t\.transaction_type \|\| null/);
-  assert.match(supabase, /debtImpact:\s*t\.transaction_type === 'customer_payment'/);
+  assert.match(supabase, /transactionType:\s*t\.transaction_type \|\| t\.transactionType \|\| null/);
+  assert.match(supabase, /debtImpact:\s*\(t\.transaction_type \|\| t\.transactionType\) === 'customer_payment'/);
 });
 
 test('UI sends the canonical Cloud id to the database classifier', () => {
@@ -45,8 +45,10 @@ test('database classification is the primary atomic RPC for legacy receipts', ()
   assert.match(supabase, /supabaseClient\.rpc\('rpc_cancel_cashbook_entry',[\s\S]*p_cashbook_id: cashbookId/);
   assert.doesNotMatch(supabase, /Customer receipt must be cancelled by rpc_cancel_customer_payment/);
   assert.match(supabase, /missingCompatibilityRpc[\s\S]*rpc_cancel_cashbook_transaction/);
-  assert.match(cashbookUi, /await dbRefreshCustomerFinancialState\(savedToCloud\.customer_id\)/);
-  assert.match(cashbookUi, /await dbFetchCashbookTransactions\(\)/);
+  assert.match(cashbookUi, /await dbRefreshCustomerFinancialState\(savedToCloud\.customer_id, \{ includeHistory: false \}\)/);
+  assert.match(cashbookUi, /dbFetchCashbookTransactionById\(cashbookId\)/);
+  assert.match(cashbookUi, /dbFetchCashbookTransactionById\(savedToCloud\.reversal_id\)/);
+  assert.doesNotMatch(cashbookUi, /await dbFetchCashbookTransactions\(\)/);
   assert.doesNotMatch(cashbookUi, /Number\(savedToCloud\.new_debt\)/);
 });
 

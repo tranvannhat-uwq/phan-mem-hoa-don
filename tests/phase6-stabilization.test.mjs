@@ -16,7 +16,7 @@ test('browser synchronization only refreshes from authoritative Cloud', () => {
     service.indexOf('export async function syncLocalToCloud'),
     service.indexOf('async function legacyLocalUploadDisabled')
   );
-  assert.match(safeSync, /await fetchCloudData\(\)/);
+  assert.match(safeSync, /await fetchCloudData\(\{ leanBootstrap: true, hydrateCustomerHistory: false \}\)/);
   assert.doesNotMatch(safeSync, /localStorage|\.getItem\(|\.upsert\(|\.insert\(|\.update\(|\.delete\(/);
 });
 
@@ -66,7 +66,7 @@ test('full restore refuses non-empty targets and requires explicit staging confi
 });
 
 test('financial cancellation refresh is scoped to the affected customer', () => {
-  assert.match(service, /export async function dbRefreshCustomerFinancialState\(customerId\)/);
+  assert.match(service, /export async function dbRefreshCustomerFinancialState\(customerId, \{ includeHistory = true \} = \{\}\)/);
   assert.match(service, /\.eq\('customer_id', customerId\)/);
   assert.match(service, /fetchCustomerDebtRows\(customerId\)/);
   assert.match(service, /\.range\(from, from \+ pageSize - 1\)/);

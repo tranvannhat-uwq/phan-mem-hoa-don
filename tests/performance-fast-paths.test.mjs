@@ -19,17 +19,19 @@ test('editing one customer refreshes only that authoritative row', () => {
   assert.doesNotMatch(singleRefresh, /fetchFullTableData|hydrateCustomerDebtHistory/);
 });
 
-test('login renders from core data while secondary panels load in background', () => {
+test('login renders from core data while historical panels remain lazy', () => {
   const users = read('js/components/users.js');
   const service = read('js/services/supabase.js');
   const login = users.slice(users.indexOf('export async function handleLogin'), users.indexOf('export function handleLogout'));
 
   assert.match(login, /deferSecondary:\s*true/);
   assert.match(login, /hydrateCustomerHistory:\s*false/);
+  assert.match(login, /leanBootstrap:\s*true/);
   assert.match(login, /cloudLoad\?\.background/);
   assert.ok(login.indexOf('renderAll();') < login.indexOf('cloudLoad?.background'));
   assert.match(service, /const coreLoad = Promise\.all/);
   assert.match(service, /const secondaryLoad = Promise\.all/);
+  assert.match(service, /leanBootstrap \? \[\] :/);
   assert.match(service, /return \{ background \}/);
 });
 

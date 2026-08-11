@@ -30,6 +30,6 @@ test('cashbook exposes reconciliation only for a uniquely matched legacy receipt
   assert.match(cashbook, /function getLegacyReceiptCustomer/);
   assert.match(cashbook, /return matches\.length === 1 \? matches\[0\] : null/);
   assert.match(cashbook, /await dbReconcileLegacyCustomerReceipt\(cashbookId, legacyCustomer\.id\)/);
-  assert.match(cashbook, /dbRefreshCustomerFinancialState\(legacyCustomer\.id\)/);
+  assert.match(cashbook, /dbRefreshCustomerFinancialState\(legacyCustomer\.id, \{ includeHistory: false \}\)/);
   assert.match(service, /supabaseClient\.rpc\('rpc_reconcile_legacy_customer_receipt'/);
 });

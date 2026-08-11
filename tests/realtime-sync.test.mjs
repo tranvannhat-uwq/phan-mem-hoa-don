@@ -16,17 +16,22 @@ test('realtime migration changes publication metadata without rewriting business
   assert.doesNotMatch(sql, /INSERT\s+INTO\s+public\.(?!schema_migrations\b)/i);
 });
 
-test('realtime client batches events and refreshes only affected scopes', () => {
+test('realtime client batches events and applies changed records without full-table refreshes', () => {
   const realtime = read('js/services/realtime.js');
   const service = read('js/services/supabase.js');
   assert.match(realtime, /REALTIME_DEBOUNCE_MS\s*=\s*250/);
   assert.match(realtime, /postgres_changes/);
   assert.match(realtime, /dbRefreshOrderById/);
-  assert.match(realtime, /dbRefreshCustomerFinancialState/);
-  assert.match(realtime, /onlyDomains:\s*\[\.\.\.refreshDomains\]/);
+  assert.match(realtime, /applyCustomerDebtRealtimePayload\(event\.payload\)/);
+  assert.match(realtime, /applyCashbookRealtimePayload\(event\.payload\)/);
+  assert.match(realtime, /applyProductRealtimePayload\(event\.payload\)/);
+  assert.match(realtime, /applyPricingRealtimePayload\('priceListItem', event\.payload\)/);
+  assert.match(realtime, /dbRefreshSalesReturnById\(returnId, \{ deleted \}\)/);
+  assert.doesNotMatch(realtime, /refreshDomains\.add/);
   assert.match(service, /Array\.isArray\(options\.onlyDomains\)/);
   assert.match(service, /export async function dbRefreshOrderById/);
   assert.match(service, /if \(!onlyDomains\)[\s\S]{0,300}\.delete\(\)/);
+  assert.doesNotMatch(realtime, /document\.addEventListener\('visibilitychange'/);
 });
 
 test('realtime lifecycle follows authentication and disconnect paths', () => {

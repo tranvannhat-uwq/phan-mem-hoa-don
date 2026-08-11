@@ -380,7 +380,7 @@ export async function connectSupabase(url, key, verbose = true) {
     // state.currentUser contains that authoritative profile.
     if (connectionSession?.user && state.currentUser) {
       try {
-        await fetchCloudData();
+        await fetchCloudData({ leanBootstrap: true, hydrateCustomerHistory: false });
       } catch (cloudErr) {
         console.warn('Lỗi tải dữ liệu đám mây, chuyển về dùng LocalStorage backup:', cloudErr);
         loadLocalStorageBackup();
@@ -451,13 +451,24 @@ export async function retrySupabaseConnection() {
 }
 
 // Hàm phụ trợ tải toàn bộ dữ liệu (bỏ giới hạn mặc định 1000 dòng của PostgREST)
-async function fetchFullTableData(tableName) {
+async function fetchFullTableData(tableName, columns = '*') {
   const pageSize = 1000;
   return collectAllPages((offset, end) => supabaseClient
       .from(tableName)
-      .select('*', { count: 'exact' })
+      .select(columns, { count: 'exact' })
       .range(offset, end), pageSize);
 }
+
+const CUSTOMER_LIST_COLUMNS = [
+  'id', 'code', 'name', 'phone', 'phone2', 'email', 'facebook', 'birthday', 'gender', 'avatar_url',
+  'province', 'ward', 'customer_group_id', 'company_name', 'tax_code', 'invoice_address', 'address',
+  'status', 'created_by', 'assigned_brand', 'brand_discounts', 'shipping_support', 'debt',
+  'total_transaction', 'total_return', 'net_revenue', 'imported_debt_baseline',
+  'imported_total_transaction_baseline', 'imported_total_return_baseline',
+  'imported_net_revenue_baseline', 'imported_last_order_at_baseline', 'imported_created_at_baseline',
+  'financial_baseline_imported_at', 'last_order_at', 'last_payment_at', 'notes', 'pricelist_id',
+  'default_price_list_id', 'managed_by', 'created_at', 'updated_at', 'deleted_at'
+].join(',');
 
 async function fetchPriceListItemsForIds(priceListIds) {
   const uniqueIds = [...new Set((priceListIds || []).map(String).filter(Boolean))];
@@ -511,6 +522,39 @@ function mapAuthorizedPriceListItem(row) {
     updatedAt: row.updated_at || '',
     updatedBy: row.updated_by || ''
   };
+}
+
+function publishAuthorizedPricingState() {
+  state.pricelists = filterPriceListsForUser(state.allPricelists || [], state.currentUser);
+  const visibleIds = new Set(state.pricelists.map(item => String(item.id)));
+  state.priceListItems = (state.allPriceListItems || [])
+    .filter(item => visibleIds.has(String(item.priceListId)));
+}
+
+export function applyPricingRealtimePayload(kind, payload = {}) {
+  const row = payload.new || payload.old || {};
+  const id = String(row.id || '');
+  if (!id) return false;
+
+  if (kind === 'priceList') {
+    state.allPricelists = (state.allPricelists || []).filter(item => String(item.id) !== id);
+    if (payload.eventType !== 'DELETE' && payload.new) {
+      state.allPricelists.push(mapAuthorizedPriceList(payload.new));
+    } else {
+      state.allPriceListItems = (state.allPriceListItems || [])
+        .filter(item => String(item.priceListId) !== id);
+    }
+  } else if (kind === 'priceListItem') {
+    state.allPriceListItems = (state.allPriceListItems || []).filter(item => String(item.id) !== id);
+    if (payload.eventType !== 'DELETE' && payload.new) {
+      state.allPriceListItems.push(mapAuthorizedPriceListItem(payload.new));
+    }
+  } else {
+    return false;
+  }
+
+  publishAuthorizedPricingState();
+  return true;
 }
 
 // Retry only the exact list saved on the selected customer. RLS remains the
@@ -625,6 +669,25 @@ function mapCustomerDebtTransaction(row) {
   };
 }
 
+export function applyCustomerDebtRealtimePayload(payload = {}) {
+  const row = payload.new || payload.old || {};
+  const customerId = String(row.customer_id || '');
+  const ledgerId = String(row.id || '');
+  if (!customerId || !ledgerId) return false;
+  const customer = (state.customers || []).find(item => String(item.id) === customerId);
+  if (!customer) return false;
+
+  const history = parseDebtHistory(customer.debtHistory)
+    .filter(item => String(item.id) !== ledgerId);
+  if (payload.eventType !== 'DELETE' && payload.new) {
+    history.push(mapCustomerDebtTransaction(payload.new));
+    if (payload.new.balance_after != null) customer.debt = Number(payload.new.balance_after);
+  }
+  customer.debtHistory = history.sort((a, b) => new Date(a.date) - new Date(b.date));
+  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  return true;
+}
+
 async function hydrateCustomerDebtHistory(customers) {
   if (!Array.isArray(customers) || customers.length === 0) return customers;
   const rows = await fetchFullTableData(tableCustomerDebtTransactionsName);
@@ -665,31 +728,63 @@ function mapCashbookTransaction(t) {
   const rawNote = t.note || '';
   const supplierMeta = rawNote.match(/__supplierId=([^\s]+)/);
   return {
-    id: t.id, cloudId: t.id, date: t.date || t.transaction_date,
+    id: t.id, cloudId: t.id, date: t.date || t.transaction_date || t.transactionDate,
     type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
     direction: t.direction || (t.type === 'chi' ? 'out' : 'in'),
-    transactionType: t.transaction_type || null,
-    operationType: t.operation_type || null,
-    referenceType: t.reference_type || null,
-    referenceId: t.reference_id || null,
+    transactionType: t.transaction_type || t.transactionType || null,
+    operationType: t.operation_type || t.operationType || null,
+    referenceType: t.reference_type || t.referenceType || null,
+    referenceId: t.reference_id || t.referenceId || null,
     category: t.category || t.transaction_type,
     partner: t.partner, value: parseFloat(t.value || 0),
-    method: t.method || t.payment_method || 'cash', accounting: t.accounting,
-    status: t.status, creator: t.creator || t.created_by,
+    method: t.method || t.payment_method || t.paymentMethod || 'cash', accounting: t.accounting,
+    status: t.status, creator: t.creator || t.created_by || t.createdBy,
     note: rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim(),
-    starred: t.starred, customerId: t.customer_id || null,
-    debtImpact: t.transaction_type === 'customer_payment',
-    supplierId: t.supplier_id || (supplierMeta ? supplierMeta[1] : null),
-    orderId: t.order_id || null, salesReturnId: t.sales_return_id || null,
-    employeeId: t.employee_id || null, reversalOfId: t.reversal_of_id || null,
-    purchaseId: t.purchase_id || null, purchasePaymentId: t.purchase_payment_id || null,
-    collectorId: t.collector_id || null,
-    collectorName: t.collector_name || t.creator || '',
-    counterpartyType: t.counterparty_type || (t.customer_id ? 'customer' : (t.supplier_id ? 'supplier' : 'other')),
-    counterpartyId: t.counterparty_id || t.customer_id || t.supplier_id || null,
-    amendedAt: t.amended_at || null, amendmentCount: Number(t.amendment_count || 0),
-    cancelledAt: t.cancelled_at || null, cancellationReason: t.cancellation_reason || ''
+    starred: t.starred, customerId: t.customer_id || t.customerId || null,
+    debtImpact: (t.transaction_type || t.transactionType) === 'customer_payment',
+    supplierId: t.supplier_id || t.supplierId || (supplierMeta ? supplierMeta[1] : null),
+    orderId: t.order_id || t.orderId || null, salesReturnId: t.sales_return_id || t.salesReturnId || null,
+    employeeId: t.employee_id || t.employeeId || null, reversalOfId: t.reversal_of_id || t.reversalOfId || null,
+    purchaseId: t.purchase_id || t.purchaseId || null, purchasePaymentId: t.purchase_payment_id || t.purchasePaymentId || null,
+    collectorId: t.collector_id || t.collectorId || null,
+    collectorName: t.collector_name || t.collectorName || t.creator || '',
+    counterpartyType: t.counterparty_type || t.counterpartyType || ((t.customer_id || t.customerId) ? 'customer' : ((t.supplier_id || t.supplierId) ? 'supplier' : 'other')),
+    counterpartyId: t.counterparty_id || t.counterpartyId || t.customer_id || t.customerId || t.supplier_id || t.supplierId || null,
+    amendedAt: t.amended_at || t.amendedAt || null, amendmentCount: Number(t.amendment_count || t.amendmentCount || 0),
+    cancelledAt: t.cancelled_at || t.cancelledAt || null,
+    cancellationReason: t.cancellation_reason || t.cancellationReason || ''
   };
+}
+
+export function applyCashbookRealtimePayload(payload = {}) {
+  const row = payload.new || payload.old || {};
+  const id = String(row.id || '');
+  if (!id) return false;
+  const transactions = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]')
+    .filter(item => String(item.id) !== id);
+  if (payload.eventType !== 'DELETE' && payload.new) {
+    transactions.unshift(mapCashbookTransaction(payload.new));
+    transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(transactions));
+  return true;
+}
+
+export function upsertCashbookTransactionSnapshot(snapshot) {
+  if (!snapshot?.id) return false;
+  return applyCashbookRealtimePayload({ eventType: 'UPDATE', new: snapshot });
+}
+
+export function applyStartingBalanceRealtimePayload(payload = {}) {
+  if (payload.eventType === 'DELETE' || !payload.new) return false;
+  const row = payload.new;
+  const balances = {
+    cash: Number(row.cash || 0),
+    bank: Number(row.bank || 0),
+    wallet: Number(row.wallet || 0)
+  };
+  localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(balances));
+  return balances;
 }
 
 function mapOrderRowForState(order, isDraft = false) {
@@ -830,11 +925,57 @@ function normalizeProductRow(row, localProducts = []) {
   };
 }
 
+export function applyProductRealtimePayload(payload = {}) {
+  const row = payload.new || payload.old || {};
+  const id = String(row.id || '');
+  const code = String(row.code || '');
+  if (!id && !code) return false;
+  const remaining = (state.products || []).filter(product =>
+    id ? String(product.id) !== id : String(product.code) !== code
+  );
+  if (payload.eventType !== 'DELETE' && payload.new) {
+    remaining.push(normalizeProductRow(payload.new, state.products || []));
+    remaining.sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
+  }
+  state.products = remaining;
+  localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+  return true;
+}
+
+function mapBrandRow(row = {}) {
+  return {
+    id: row.id || ('brand_' + String(row.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')),
+    name: row.name || '',
+    companyId: row.company_id || row.companyId || null,
+    companyName: row.company_name || row.companyName || 'Dùng chung',
+    logoFilename: row.logo_filename || row.logoFilename || '',
+    hotline: row.hotline || '',
+    cskh: row.cskh || '',
+    email: row.email || '',
+    addressMain: row.address_main || row.addressMain || '',
+    addressFactory: row.address_factory || row.addressFactory || '',
+    addressBusiness: row.address_business || row.addressBusiness || null
+  };
+}
+
+export function applyBrandRealtimePayload(payload = {}) {
+  const row = payload.new || payload.old || {};
+  const id = String(row.id || '');
+  if (!id) return false;
+  const brands = (state.brands || []).filter(brand => String(brand.id) !== id);
+  if (payload.eventType !== 'DELETE' && payload.new) brands.push(mapBrandRow(payload.new));
+  brands.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'vi'));
+  state.brands = brands;
+  localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
+  return true;
+}
+
 // Tải toàn bộ dữ liệu từ Supabase về State
 export async function fetchCloudData(options = {}) {
   if (!supabaseClient) return;
   const deferSecondary = options.deferSecondary === true;
-  const hydrateCustomerHistory = options.hydrateCustomerHistory !== false;
+  const leanBootstrap = options.leanBootstrap === true;
+  const hydrateCustomerHistory = options.hydrateCustomerHistory === true;
   const onlyDomains = Array.isArray(options.onlyDomains)
     ? new Set(options.onlyDomains.filter(Boolean))
     : null;
@@ -906,7 +1047,7 @@ export async function fetchCloudData(options = {}) {
       try {
         // The paginated RPC intentionally caps one call at 500 rows. The
         // customer screen filters client-side, so load every RLS-visible page.
-        const customerData = await fetchFullTableData(tableCustomersName);
+        const customerData = await fetchFullTableData(tableCustomersName, CUSTOMER_LIST_COLUMNS);
         // A successful empty Cloud response is authoritative (for example
         // after the guarded business-data reset). Local data is used only in
         // the catch branch when the Cloud request actually fails.
@@ -939,7 +1080,7 @@ export async function fetchCloudData(options = {}) {
             defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
             customerGroupId: cust.customer_group_id || '',
             managedBy: cust.managed_by || '',
-            debtHistory: parseDebtHistory(cust.debt_history)
+            debtHistory: (state.customers || []).find(item => String(item.id) === String(cust.id))?.debtHistory || []
           }));
         if (hydrateCustomerHistory && state.customers.length > 0) {
           await hydrateCustomerDebtHistory(state.customers);
@@ -1512,13 +1653,13 @@ export async function fetchCloudData(options = {}) {
     // loading in the background and are rendered again when complete.
     const coreLoad = Promise.all([
       fetchProducts(),
-      fetchOrders(),
       fetchCustomers(),
       fetchPricelists(),
       fetchUsers(),
-      fetchBrands()
+      fetchBrands(),
+      ...(leanBootstrap ? [] : [fetchOrders()])
     ]);
-    const secondaryLoad = Promise.all([
+    const secondaryLoad = Promise.all(leanBootstrap ? [] : [
       fetchCashbook(),
       fetchStartingBalances(),
       fetchSuppliers(),
@@ -1562,7 +1703,7 @@ export async function syncLocalToCloud() {
   }
   try {
     updateDbStatusUI('connecting', 'Đang tải dữ liệu mới nhất từ Cloud...');
-    await fetchCloudData();
+    await fetchCloudData({ leanBootstrap: true, hydrateCustomerHistory: false });
     updateDbStatusUI('cloud');
     showToast('Đã tải lại dữ liệu mới nhất từ Cloud. Cache trình duyệt không được ghi ngược lên database.', 'success');
     return true;
@@ -2333,10 +2474,10 @@ export async function dbImportCustomerFinancialBaselines(customers) {
   }
 }
 
-export async function dbFetchCustomers() {
+export async function dbFetchCustomers({ includeHistory = false } = {}) {
   if (isCloudActive && supabaseClient) {
     try {
-      const customerData = await fetchFullTableData(tableCustomersName);
+      const customerData = await fetchFullTableData(tableCustomersName, CUSTOMER_LIST_COLUMNS);
       state.customers = (customerData || []).map(cust => ({
         id: cust.id,
         code: cust.code,
@@ -2377,12 +2518,12 @@ export async function dbFetchCustomers() {
         pricelistId: cust.pricelist_id || cust.default_price_list_id || '',
         defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
         managedBy: cust.managed_by || '',
-        debtHistory: parseDebtHistory(cust.debt_history),
+        debtHistory: (state.customers || []).find(item => String(item.id) === String(cust.id))?.debtHistory || [],
         createdAt: cust.created_at || null,
         updatedAt: cust.updated_at || null,
         deletedAt: cust.deleted_at || null
       }));
-      await hydrateCustomerDebtHistory(state.customers);
+      if (includeHistory) await hydrateCustomerDebtHistory(state.customers);
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
       return true;
     } catch (err) {
@@ -2400,7 +2541,7 @@ export async function dbFetchCustomerById(customerId) {
   try {
     const { data: cust, error } = await supabaseClient
       .from(tableCustomersName)
-      .select('*')
+      .select(CUSTOMER_LIST_COLUMNS)
       .eq('id', customerId)
       .single();
     if (error) throw error;
@@ -2448,7 +2589,7 @@ export async function dbFetchCustomerById(customerId) {
       pricelistId: cust.pricelist_id || cust.default_price_list_id || '',
       defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
       managedBy: cust.managed_by || '',
-      debtHistory: existing?.debtHistory || parseDebtHistory(cust.debt_history),
+      debtHistory: existing?.debtHistory || [],
       createdAt: cust.created_at || null,
       updatedAt: cust.updated_at || null,
       deletedAt: cust.deleted_at || null
@@ -2501,6 +2642,87 @@ export async function dbRefreshOrderById(orderId, { isDraft = false, deleted = f
   }
 }
 
+export async function dbRefreshSalesReturnById(returnId, { deleted = false } = {}) {
+  if (!isCloudActive || !supabaseClient || !returnId) return false;
+  const removeFromState = () => {
+    state.salesReturns = (state.salesReturns || [])
+      .filter(item => String(item.id) !== String(returnId));
+    saveSalesReturns(state.salesReturns);
+  };
+  if (deleted) {
+    removeFromState();
+    return true;
+  }
+
+  try {
+    const [{ data: row, error: rowError }, { data: itemRows, error: itemError }] = await Promise.all([
+      supabaseClient.from(tableSalesReturnsName).select('*').eq('id', returnId).maybeSingle(),
+      supabaseClient.from(tableSalesReturnItemsName).select('*').eq('return_id', returnId)
+    ]);
+    if (rowError) throw rowError;
+    if (itemError) throw itemError;
+    if (!row) {
+      removeFromState();
+      return true;
+    }
+
+    const items = (itemRows || []).map(item => ({
+      id: item.id,
+      returnId: item.return_id,
+      saleItemId: item.sale_item_id,
+      productId: item.product_id,
+      variantId: item.variant_id || null,
+      variantCode: item.variant_code_snapshot || item.product_id,
+      productName: item.product_name,
+      quantity: Number(item.quantity || 0),
+      importPrice: Number(item.import_price || 0),
+      discountType: item.discount_type,
+      discountValue: Number(item.discount_value || 0),
+      refundPrice: Number(item.refund_price || 0),
+      subtotal: Number(item.subtotal || 0),
+      packageType: item.packaging_name_snapshot || item.package_type,
+      packagingName: item.packaging_name_snapshot || item.package_type,
+      specificationSnapshot: item.specification_snapshot || ''
+    }));
+    const sourceOrder = (state.savedOrders || []).find(order =>
+      String(order.id) === String(row.order_id || row.sale_id));
+    const customer = (state.customers || []).find(item => String(item.id) === String(row.customer_id));
+    const creator = (state.users || []).find(user =>
+      String(user.authUserId || user.auth_user_id || user.id) === String(row.created_by)
+      || isSameUser(user.username, row.created_by));
+    const mapped = {
+      id: row.id,
+      saleId: row.sale_id,
+      orderId: row.order_id || row.sale_id,
+      customerId: row.customer_id,
+      customerName: customer?.name || sourceOrder?.customerName || '',
+      salespersonId: row.salesperson_id || null,
+      createdBy: row.created_by,
+      creatorName: creator?.displayName || row.created_by || '',
+      createdAt: row.created_at,
+      returnDate: row.return_date || row.created_at,
+      reason: row.reason,
+      totalRefund: Number(row.total_refund ?? row.total_return_amount ?? 0),
+      debtReductionAmount: Number(row.debt_reduction_amount || 0),
+      refundAmount: Number(row.refund_amount || 0),
+      refundCashbookId: row.refund_cashbook_transaction_id || null,
+      status: row.status,
+      cancelledAt: row.cancelled_at || null,
+      cancellationReason: row.cancellation_reason || '',
+      items
+    };
+    state.salesReturns = (state.salesReturns || [])
+      .filter(item => String(item.id) !== String(returnId));
+    state.salesReturns.push(mapped);
+    state.salesReturns.sort((a, b) => new Date(b.returnDate) - new Date(a.returnDate));
+    saveSalesReturns(state.salesReturns);
+    return mapped;
+  } catch (error) {
+    console.warn('Could not refresh one sales return:', error.message || error);
+    return false;
+  }
+}
+
 export async function dbFetchCashbookTransactions() {
   if (!isCloudActive || !supabaseClient) return false;
   try {
@@ -2518,7 +2740,26 @@ export async function dbFetchCashbookTransactions() {
   }
 }
 
-export async function dbRefreshCustomerFinancialState(customerId) {
+export async function dbFetchCashbookTransactionById(cashbookId) {
+  if (!isCloudActive || !supabaseClient || !cashbookId) return false;
+  try {
+    const { data, error } = await supabaseClient
+      .from(tableCashbookTransactionsName)
+      .select('*')
+      .eq('id', cashbookId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return false;
+    const transaction = mapCashbookTransaction(data);
+    upsertCashbookTransactionSnapshot(data);
+    return transaction;
+  } catch (error) {
+    console.warn('Could not refresh one cashbook transaction:', error.message || error);
+    return false;
+  }
+}
+
+export async function dbRefreshCustomerFinancialState(customerId, { includeHistory = true } = {}) {
   if (!isCloudActive || !supabaseClient || !customerId) return false;
   try {
     const [{ data: customerRow, error: customerError }, ledgerRows] = await Promise.all([
@@ -2527,7 +2768,7 @@ export async function dbRefreshCustomerFinancialState(customerId) {
         .select('id,debt,total_transaction,total_return,net_revenue,last_order_at,last_payment_at,updated_at')
         .eq('id', customerId)
         .single(),
-      fetchCustomerDebtRows(customerId)
+      includeHistory ? fetchCustomerDebtRows(customerId) : Promise.resolve(null)
     ]);
     if (customerError) throw customerError;
 
@@ -2541,10 +2782,12 @@ export async function dbRefreshCustomerFinancialState(customerId) {
     customer.lastPaymentAt = customerRow.last_payment_at || null;
     customer.updatedAt = customerRow.updated_at || null;
 
-    customer.debtHistory = mergeCustomerDebtHistory(
-      parseDebtHistory(customer.debtHistory),
-      (ledgerRows || []).map(mapCustomerDebtTransaction)
-    );
+    if (ledgerRows) {
+      customer.debtHistory = mergeCustomerDebtHistory(
+        parseDebtHistory(customer.debtHistory),
+        ledgerRows.map(mapCustomerDebtTransaction)
+      );
+    }
     localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
     return customer;
   } catch (error) {

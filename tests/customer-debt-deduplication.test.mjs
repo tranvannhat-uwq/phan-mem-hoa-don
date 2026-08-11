@@ -19,5 +19,5 @@ test('finalizing an order does not append a second browser-only debt row', () =>
 test('customer refresh merges the authoritative ledger and removes its legacy order twin', () => {
   const service = read('js/services/supabase.js');
   assert.match(service, /mergeCustomerDebtHistory\(/);
-  assert.match(service, /\(ledgerRows \|\| \[\]\)\.map\(mapCustomerDebtTransaction\)/);
+  assert.match(service, /if \(ledgerRows\)[\s\S]*ledgerRows\.map\(mapCustomerDebtTransaction\)/);
 });

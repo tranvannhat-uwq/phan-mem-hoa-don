@@ -18,6 +18,68 @@ import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260810-sale-pricing-rpc1';
 import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260810-sale-pricing-rpc1';
 
+const PANEL_CLOUD_DOMAINS = Object.freeze({
+  'history-panel': ['orders', 'salesReturns'],
+  'so-quy-panel': ['cashbook', 'startingBalances'],
+  'suppliers-panel': ['suppliers'],
+  'goods-panel': ['suppliers', 'purchases']
+});
+let panelCloudSessionId = '';
+const loadedPanelDomains = new Set();
+const pendingPanelDomainLoads = new Map();
+
+function syncPanelCloudSession() {
+  const sessionId = String(state.currentUser?.authUserId || state.currentUser?.id || '');
+  if (panelCloudSessionId !== sessionId) {
+    panelCloudSessionId = sessionId;
+    loadedPanelDomains.clear();
+    pendingPanelDomainLoads.clear();
+  }
+}
+
+function panelNeedsCloudData(panelId) {
+  if (!state.currentUser || !isCloudActive) return false;
+  syncPanelCloudSession();
+  return (PANEL_CLOUD_DOMAINS[panelId] || []).some(domain => !loadedPanelDomains.has(domain));
+}
+
+function renderPanelCloudLoading(panelId) {
+  const targets = {
+    'history-panel': ['history-orders-container', '<div class="empty-state"><div class="empty-state-title">Đang tải lịch sử giao dịch…</div></div>'],
+    'so-quy-panel': ['so-quy-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải dữ liệu Sổ quỹ…</td></tr>'],
+    'suppliers-panel': ['suppliers-table-body', '<tr><td colspan="10" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải nhà cung cấp…</td></tr>']
+  };
+  const target = targets[panelId];
+  if (!target) return;
+  const element = document.getElementById(target[0]);
+  if (element) element.innerHTML = target[1];
+}
+
+export async function ensurePanelCloudData(panelId, { force = false } = {}) {
+  if (!state.currentUser || !isCloudActive) return false;
+  syncPanelCloudSession();
+
+  const requestedDomains = PANEL_CLOUD_DOMAINS[panelId] || [];
+  const domains = force
+    ? requestedDomains
+    : requestedDomains.filter(domain => !loadedPanelDomains.has(domain));
+  if (domains.length === 0) return false;
+
+  const loadKey = [...domains].sort().join('|');
+  if (!force && pendingPanelDomainLoads.has(loadKey)) return pendingPanelDomainLoads.get(loadKey);
+
+  const load = fetchCloudData({
+    onlyDomains: domains,
+    hydrateCustomerHistory: false
+  }).then(result => {
+    domains.forEach(domain => loadedPanelDomains.add(domain));
+    if (state.currentTab === panelId) renderAll();
+    return result;
+  }).finally(() => pendingPanelDomainLoads.delete(loadKey));
+  pendingPanelDomainLoads.set(loadKey, load);
+  return load;
+}
+
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
 // chuyển tab, tránh dựng hàng nghìn dòng DOM ẩn trong mỗi lần cập nhật.
 export function renderAll() {
@@ -134,7 +196,10 @@ export function switchTab(panelId) {
   else if (panelId === 'activity-log-panel') heading.innerText = 'Lịch sử hoạt động';
   
   // Tự động làm mới dữ liệu và thống kê trên tất cả các tab khi chuyển đổi
-  renderAll();
+  const waitForCloud = panelNeedsCloudData(panelId);
+  if (waitForCloud) renderPanelCloudLoading(panelId);
+  else renderAll();
+  void ensurePanelCloudData(panelId);
   if (panelId === 'settings-panel') void refreshMaintenanceSettings();
 }
 
@@ -470,7 +535,8 @@ async function initApp() {
     state.currentUser = activeUser;
     recoveredCloudLoad = await fetchCloudData({
       deferSecondary: true,
-      hydrateCustomerHistory: false
+      hydrateCustomerHistory: false,
+      leanBootstrap: true
     });
     state.currentUser = state.users.find(item =>
       item.authUserId === activeUser.authUserId || item.id === activeUser.id

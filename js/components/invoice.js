@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, fetchCloudData, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
 import { renderAll, switchTab } from '../main.js?v=20260810-sale-pricing-rpc1';
 import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js?v=20260810-sale-pricing-rpc1';
@@ -1255,7 +1255,15 @@ export async function saveActiveOrder(status = 'settled') {
       }
       if (amendOrderId) {
         lastFinalizedOrder = persistedOrder;
-        await fetchCloudData();
+        await Promise.all([
+          dbRefreshOrderById(amendOrderId),
+          persistedOrder.id && String(persistedOrder.id) !== String(amendOrderId)
+            ? dbRefreshOrderById(persistedOrder.id)
+            : Promise.resolve(true),
+          persistedOrder.customerId
+            ? dbRefreshCustomerFinancialState(persistedOrder.customerId, { includeHistory: false })
+            : Promise.resolve(true)
+        ]);
         resetInvoiceBuilder();
         renderAll();
         showToast(`Đã lưu bản sửa ${persistedOrder.id}; đơn cũ ${amendOrderId} được giữ lại ở trạng thái đã hủy.`, 'success');

@@ -16,7 +16,7 @@ test('cashbook receipt reloads the authoritative customer balance after the RPC'
 
   assert.match(
     receiptSubmit,
-    /await dbRecordCustomerPayment[\s\S]*await dbRefreshCustomerFinancialState\(matchedCustomer\.id\)/
+    /await dbRecordCustomerPayment[\s\S]*await dbRefreshCustomerFinancialState\(matchedCustomer\.id, \{ includeHistory: false \}\)/
   );
   assert.match(receiptSubmit, /if \(!refreshedCustomer\)[\s\S]*currentCustomer\.debt = newDebt/);
 });
@@ -30,7 +30,7 @@ test('customer debt collection reloads the authoritative customer balance after 
 
   assert.match(
     paymentSubmit,
-    /await dbRecordCustomerPayment[\s\S]*await dbRefreshCustomerFinancialState\(cust\.id\)/
+    /await dbRecordCustomerPayment[\s\S]*await dbRefreshCustomerFinancialState\(cust\.id, \{ includeHistory: false \}\)/
   );
   assert.match(paymentSubmit, /if \(!refreshedCustomer\)[\s\S]*currentCustomer\.debt = fallbackDebt/);
   assert.match(paymentSubmit, /currentCustomer\.debt < 0/);
