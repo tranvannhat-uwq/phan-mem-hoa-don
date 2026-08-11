@@ -1,13 +1,17 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260810-sale-pricing-rpc1';
+import { switchTab } from '../main.js?v=20260811-sale-nav-v4';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
+import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260811-sale-nav-v4';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
+let dashboardStatsInFlight = null;
+let dashboardStatsInFlightKey = '';
+let dashboardStatsCache = { key: '', payload: null, cachedAt: 0 };
+const DASHBOARD_STATS_CACHE_MS = 10_000;
 const dashboardBreakdownCharts = new Map();
 const DASHBOARD_CHART_COLORS = ['#10b981', '#6366f1', '#0ea5e9', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -718,20 +722,51 @@ function renderServerDashboard(payload) {
   safeCreateIcons();
 }
 
-export async function updateDashboardStats() {
+export async function updateDashboardStats({ force = false } = {}) {
   populateDashboardFilters();
-  try {
-    const payload = await dbFetchPhase5Dashboard(dashboardRequestFiltersForRange(state.dashboardFilter.timeRange || 'month'));
+  const filters = dashboardRequestFiltersForRange(state.dashboardFilter.timeRange || 'month');
+  const requestKey = JSON.stringify(filters);
+  const renderPayload = async payload => {
     renderServerDashboard(payload);
     const canReusePayload = state.dashboardFilter.timeRange !== 'custom'
       && state.dashboardChartView === state.dashboardFilter.timeRange;
     await updateRevenueChartForView(state.dashboardChartView, canReusePayload ? payload : null);
-  } catch (error) {
-    console.error('Phase 5 dashboard RPC error:', error);
-    ['stat-total-revenue', 'stat-total-orders', 'stat-total-debt', 'stat-total-sold-products'].forEach(id => {
-      const element = document.getElementById(id); if (element) element.innerText = '—';
-    });
-    showToast('Không tải được dashboard từ cơ sở dữ liệu. Kiểm tra migration 0012.', 'danger');
+    return payload;
+  };
+
+  if (!force
+      && dashboardStatsCache.key === requestKey
+      && dashboardStatsCache.payload
+      && Date.now() - dashboardStatsCache.cachedAt < DASHBOARD_STATS_CACHE_MS) {
+    return renderPayload(dashboardStatsCache.payload);
+  }
+  if (!force && dashboardStatsInFlight && dashboardStatsInFlightKey === requestKey) {
+    return dashboardStatsInFlight;
+  }
+
+  const request = (async () => {
+    try {
+      const payload = await dbFetchPhase5Dashboard(filters);
+      dashboardStatsCache = { key: requestKey, payload, cachedAt: Date.now() };
+      return await renderPayload(payload);
+    } catch (error) {
+      console.error('Phase 5 dashboard RPC error:', error);
+      ['stat-total-revenue', 'stat-total-orders', 'stat-total-debt', 'stat-total-sold-products'].forEach(id => {
+        const element = document.getElementById(id); if (element) element.innerText = '—';
+      });
+      showToast('Không tải được dashboard từ cơ sở dữ liệu. Kiểm tra migration 0012.', 'danger');
+      return null;
+    }
+  })();
+  dashboardStatsInFlight = request;
+  dashboardStatsInFlightKey = requestKey;
+  try {
+    return await request;
+  } finally {
+    if (dashboardStatsInFlight === request) {
+      dashboardStatsInFlight = null;
+      dashboardStatsInFlightKey = '';
+    }
   }
 }
 
@@ -1005,7 +1040,7 @@ export function setupDashboardFilters() {
   if (refreshBtn) {
     refreshBtn.onclick = async () => {
       showToast('Đang làm mới dữ liệu...', 'info');
-      await updateDashboardStats();
+      await updateDashboardStats({ force: true });
       showToast('Đã làm mới dữ liệu mới nhất!');
     };
   }

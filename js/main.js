@@ -1,24 +1,26 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260810-sale-pricing-rpc1';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260810-sale-pricing-rpc1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260810-sale-pricing-rpc1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260810-sale-pricing-rpc1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260810-sale-pricing-rpc1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260810-sale-pricing-rpc1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260810-sale-pricing-rpc1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260810-sale-pricing-rpc1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260810-sale-pricing-rpc1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260810-sale-pricing-rpc1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260810-sale-pricing-rpc1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260810-sale-pricing-rpc1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260810-sale-pricing-rpc1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260810-sale-pricing-rpc1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260811-sale-nav-v4';
+import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260811-sale-nav-v4';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260811-sale-nav-v4';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260811-sale-nav-v4';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260811-sale-nav-v4';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260811-sale-nav-v4';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260811-sale-nav-v4';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260811-sale-nav-v4';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260811-sale-nav-v4';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260811-sale-nav-v4';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260811-sale-nav-v4';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260811-sale-nav-v4';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260811-sale-nav-v4';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260811-sale-nav-v4';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260810-sale-pricing-rpc1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260810-sale-pricing-rpc1';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260811-sale-nav-v4';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260811-sale-nav-v4';
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
+  'invoice-panel': ['pricelists'],
+  'pricelists-panel': ['pricelists'],
   'history-panel': ['orders', 'salesReturns'],
   'so-quy-panel': ['cashbook', 'startingBalances'],
   'suppliers-panel': ['suppliers'],
@@ -45,6 +47,8 @@ function panelNeedsCloudData(panelId) {
 
 function renderPanelCloudLoading(panelId) {
   const targets = {
+    'invoice-panel': ['invoice-items-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải dữ liệu bảng giá…</td></tr>'],
+    'pricelists-panel': ['pricelists-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải chi tiết bảng giá…</td></tr>'],
     'history-panel': ['history-orders-container', '<div class="empty-state"><div class="empty-state-title">Đang tải lịch sử giao dịch…</div></div>'],
     'so-quy-panel': ['so-quy-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải dữ liệu Sổ quỹ…</td></tr>'],
     'suppliers-panel': ['suppliers-table-body', '<tr><td colspan="10" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải nhà cung cấp…</td></tr>']
@@ -150,6 +154,9 @@ export function renderAll() {
 // Chuyển đổi giữa các phân hệ (Tab)
 export function switchTab(panelId) {
   if (panelId === 'payroll-panel') panelId = 'dashboard-panel';
+  if (state.currentUser?.role === 'sale' && panelId === 'pricelists-panel') {
+    panelId = 'invoice-panel';
+  }
   if (state.currentUser?.role === 'sale' && panelId === 'dashboard-panel') {
     panelId = 'invoice-panel';
   }
@@ -561,7 +568,8 @@ async function initApp() {
 
 
 
-  renderAll();
+  if (activeUser) switchTab(activeUser.role === 'sale' ? 'invoice-panel' : 'dashboard-panel');
+  else renderAll();
   if (activeUser) {
     void startRealtimeSync(renderAll);
     const recoveredUserId = String(state.currentUser?.authUserId || state.currentUser?.id || '');

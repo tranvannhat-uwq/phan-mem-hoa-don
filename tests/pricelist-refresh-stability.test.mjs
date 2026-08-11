@@ -9,7 +9,7 @@ const service = fs.readFileSync(path.join(root, 'js/services/supabase.js'), 'utf
 const users = fs.readFileSync(path.join(root, 'js/components/users.js'), 'utf8');
 const priceListUi = fs.readFileSync(path.join(root, 'js/components/pricelists.js'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'js/main.js'), 'utf8');
-const start = service.indexOf('const fetchPricelists = async () =>');
+const start = service.indexOf('const fetchPricelists = async ({ includeItems = true } = {}) =>');
 const end = service.indexOf('const fetchUsers = async () =>', start);
 const refreshFlow = service.slice(start, end);
 

@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260810-sale-pricing-rpc1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260810-sale-pricing-rpc1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-sale-nav-v4';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-sale-nav-v4';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260810-sale-pricing-rpc1';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-sale-nav-v4';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -1095,14 +1095,14 @@ export async function fetchCloudData(options = {}) {
       }
     };
 
-    const fetchPricelists = async () => {
+    const fetchPricelists = async ({ includeItems = true } = {}) => {
       const pricingActorId = String(
         state.currentUser?.authUserId || state.currentUser?.auth_user_id || state.currentUser?.id || ''
       );
       try {
         let plData = null;
         let itemData = null;
-        if (state.currentUser?.role === 'sale') {
+        if (includeItems && state.currentUser?.role === 'sale') {
           const { data: snapshot, error: snapshotError } = await supabaseClient
             .rpc('rpc_get_sale_pricing_snapshot');
           if (!snapshotError) {
@@ -1135,7 +1135,9 @@ export async function fetchCloudData(options = {}) {
         // This avoids evaluating the customer-assignment RLS branch for every
         // unrelated price row and prevents one slow item request from erasing
         // the otherwise valid visible price-list snapshot.
-        if (itemData === null) {
+        if (!includeItems) {
+          itemData = [];
+        } else if (itemData === null) {
           itemData = state.currentUser?.role === 'sale'
             ? await fetchPriceListItemsForIds([...visiblePriceListIds])
             : await fetchFullTableData(tablePriceListItemsName);
@@ -1654,7 +1656,7 @@ export async function fetchCloudData(options = {}) {
     const coreLoad = Promise.all([
       fetchProducts(),
       fetchCustomers(),
-      fetchPricelists(),
+      fetchPricelists({ includeItems: !leanBootstrap }),
       fetchUsers(),
       fetchBrands(),
       ...(leanBootstrap ? [] : [fetchOrders()])

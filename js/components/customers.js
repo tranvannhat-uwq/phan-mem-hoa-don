@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
-import { renderAll } from '../main.js?v=20260810-sale-pricing-rpc1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260810-sale-pricing-rpc1';
-import { addCashbookTransaction } from './so_quy.js?v=20260810-sale-pricing-rpc1';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260811-sale-nav-v4';
+import { renderAll } from '../main.js?v=20260811-sale-nav-v4';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260811-sale-nav-v4';
+import { addCashbookTransaction } from './so_quy.js?v=20260811-sale-nav-v4';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260811-sale-nav-v4';
 import { collectCustomerDebt, projectEffectiveCustomerDebtHistory } from '../domain/customer-debt.js';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';

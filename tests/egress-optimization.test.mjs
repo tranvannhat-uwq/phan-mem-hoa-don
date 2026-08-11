@@ -19,6 +19,10 @@ test('login uses a lean bootstrap and defers historical domains until their pane
   assert.match(main, /leanBootstrap:\s*true/);
   assert.match(service, /\.\.\.\(leanBootstrap \? \[\] : \[fetchOrders\(\)\]\)/);
   assert.match(service, /Promise\.all\(leanBootstrap \? \[\] : \[/);
+  assert.match(service, /fetchPricelists\(\{ includeItems: !leanBootstrap \}\)/);
+  assert.match(service, /if \(!includeItems\) \{\s*itemData = \[\]/);
+  assert.match(main, /'invoice-panel': \['pricelists'\]/);
+  assert.match(main, /'pricelists-panel': \['pricelists'\]/);
   assert.match(main, /'history-panel': \['orders', 'salesReturns'\]/);
   assert.match(main, /'so-quy-panel': \['cashbook', 'startingBalances'\]/);
   assert.match(main, /loadedPanelDomains\.has\(domain\)/);
@@ -37,6 +41,9 @@ test('customer bootstrap excludes the duplicated legacy debt-history payload', (
 
 test('routine refresh actions do not download every business table', () => {
   assert.doesNotMatch(dashboard, /fetchCloudData/);
+  assert.match(dashboard, /dashboardStatsInFlight/);
+  assert.match(dashboard, /DASHBOARD_STATS_CACHE_MS = 10_000/);
+  assert.match(dashboard, /updateDashboardStats\(\{ force: true \}\)/);
   assert.match(history, /ensurePanelCloudData\('history-panel', \{ force: true \}\)/);
   assert.doesNotMatch(history, /await fetchCloudData\(\)/);
   assert.doesNotMatch(cashbook, /await dbFetchCashbookTransactions\(\)/);

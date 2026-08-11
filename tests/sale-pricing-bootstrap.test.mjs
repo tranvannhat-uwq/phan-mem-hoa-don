@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const service = fs.readFileSync(path.join(root, 'js/services/supabase.js'), 'utf8');
 const invoice = fs.readFileSync(path.join(root, 'js/components/invoice.js'), 'utf8');
-const fetchStart = service.indexOf('const fetchPricelists = async () =>');
+const fetchStart = service.indexOf('const fetchPricelists = async ({ includeItems = true } = {}) =>');
 const fetchEnd = service.indexOf('const fetchUsers = async () =>', fetchStart);
 const fetchFlow = service.slice(fetchStart, fetchEnd);
 

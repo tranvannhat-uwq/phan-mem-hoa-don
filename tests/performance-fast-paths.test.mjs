@@ -28,7 +28,7 @@ test('login renders from core data while historical panels remain lazy', () => {
   assert.match(login, /hydrateCustomerHistory:\s*false/);
   assert.match(login, /leanBootstrap:\s*true/);
   assert.match(login, /cloudLoad\?\.background/);
-  assert.ok(login.indexOf('renderAll();') < login.indexOf('cloudLoad?.background'));
+  assert.ok(login.indexOf("switchTab(state.currentUser.role === 'sale' ? 'invoice-panel' : 'dashboard-panel')") < login.indexOf('cloudLoad?.background'));
   assert.match(service, /const coreLoad = Promise\.all/);
   assert.match(service, /const secondaryLoad = Promise\.all/);
   assert.match(service, /leanBootstrap \? \[\] :/);

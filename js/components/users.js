@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260810-sale-pricing-rpc1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260810-sale-pricing-rpc1';
-import { renderAll, switchTab } from '../main.js?v=20260810-sale-pricing-rpc1';
-import { populateManagedByDropdown } from './customers.js?v=20260810-sale-pricing-rpc1';
-import { exportBackupToExcel } from '../services/backup.js?v=20260810-sale-pricing-rpc1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260811-sale-nav-v4';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260811-sale-nav-v4';
+import { renderAll, switchTab } from '../main.js?v=20260811-sale-nav-v4';
+import { populateManagedByDropdown } from './customers.js?v=20260811-sale-nav-v4';
+import { exportBackupToExcel } from '../services/backup.js?v=20260811-sale-nav-v4';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -530,7 +530,7 @@ export async function handleLogin(e) {
     }
     applyUserPermissions(state.currentUser);
     setMaintenanceNotice('', false);
-    renderAll();
+    switchTab(state.currentUser.role === 'sale' ? 'invoice-panel' : 'dashboard-panel');
     void startRealtimeSync(renderAll);
     startMaintenanceMonitor();
     showToast(`Đăng nhập thành công! Chào mừng ${state.currentUser.displayName}!`, 'success');
@@ -628,7 +628,7 @@ export function applyUserPermissions(user) {
     if (!target) return;
     
     if (role === 'sale') {
-      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'pricelists-panel' || target === 'brands-panel') {
+      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'brands-panel') {
         navItem.style.display = 'block';
       } else {
         navItem.style.display = 'none';

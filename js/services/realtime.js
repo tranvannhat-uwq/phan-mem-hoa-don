@@ -25,7 +25,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260810-sale-pricing-rpc1';
+} from './supabase.js?v=20260811-sale-nav-v4';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;
