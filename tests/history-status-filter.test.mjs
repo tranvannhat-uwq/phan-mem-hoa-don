@@ -12,9 +12,11 @@ const html = read('index.html');
 const history = read('js/components/history.js');
 
 test('history exposes independent multi-select status checkboxes', () => {
-  for (const status of ['settled', 'draft', 'cancelled']) {
+  for (const status of ['settled', 'draft']) {
     assert.match(html, new RegExp(`class="history-status-filter-check" value="${status}" checked`));
   }
+  assert.match(html, /class="history-status-filter-check" value="cancelled"><span>Đã hủy<\/span>/);
+  assert.doesNotMatch(html, /class="history-status-filter-check" value="cancelled" checked/);
   assert.match(history, /querySelectorAll\('\.history-status-filter-check:checked'\)/);
   assert.match(history, /matchesHistoryOrderStatuses\(o\.status, selectedStatuses\)/);
 });
