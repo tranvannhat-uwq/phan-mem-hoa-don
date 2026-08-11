@@ -43,6 +43,13 @@ test('an unmatched free-text payer can still create a standalone receipt', () =>
   assert.match(receiptSubmit, /if \(affectsCustomerDebt\) \{[\s\S]*\} else \{[\s\S]*dbSaveCashbookTransaction\(newTx\)/);
 });
 
+test('salary-deduction sales receipt is available without changing legacy sales receipt routing', () => {
+  const category = 'Thu tiền hàng trừ vào lương';
+  assert.match(html, new RegExp(`<option value="${category}">${category}<\\/option>`));
+  assert.match(receiptSubmit, /const isSalaryDeductionReceipt = normalizedCategory === 'thu tiền hàng trừ vào lương'/);
+  assert.match(receiptSubmit, /\(!isSalaryDeductionReceipt && normalizedCategory\.includes\('tiền hàng'\)\)/);
+});
+
 test('existing unlinked customer receipts are reconciled safely and once', () => {
   assert.match(migration, /match\.match_count = 1/);
   assert.match(migration, /cashbook\.customer_id IS NULL/);

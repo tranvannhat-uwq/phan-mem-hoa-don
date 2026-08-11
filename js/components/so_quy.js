@@ -616,12 +616,14 @@ export function setupSoQuyPanel() {
         : (customerMatches.length === 1 ? customerMatches[0] : null);
 
       const normalizedCategory = category.toLowerCase();
+      const isSalaryDeductionReceipt = normalizedCategory === 'thu tiền hàng trừ vào lương';
       // Every receipt whose payer resolves to a customer is a customer receipt,
       // regardless of its category (shipping support, penalties, other income,
-      // etc.). Free-text payers remain standalone cashbook receipts.
+      // etc.). Free-text payers remain standalone cashbook receipts. Salary
+      // deductions are standalone unless the payer explicitly resolves to a customer.
       const affectsCustomerDebt = Boolean(matchedCustomer)
         || normalizedCategory.includes('nợ')
-        || normalizedCategory.includes('tiền hàng')
+        || (!isSalaryDeductionReceipt && normalizedCategory.includes('tiền hàng'))
         || normalizedCategory.includes('tiền khách hàng')
         || normalizedCategory.includes('trả trước');
       let paymentResult = null;
