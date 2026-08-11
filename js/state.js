@@ -11,6 +11,8 @@ export const state = {
   companies: [...DEFAULT_COMPANIES],
   invoiceItems: [], // [{ product, brand, package, colorCode, colorPercent, quantity, discountPercent, price }]
   savedOrders: [],
+  cashbookOpeningNetByMethod: null,
+  cashbookOpeningStartIso: '',
   customers: [],
   pricelists: [],
   // Bản đầy đủ dùng để áp dụng bảng giá đã gán cho khách; pricelists vẫn là

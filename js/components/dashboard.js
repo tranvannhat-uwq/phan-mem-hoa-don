@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260811-realtime-egress-v7';
+import { switchTab } from '../main.js?v=20260811-realtime-egress-v9';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260811-realtime-egress-v7';
+import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260811-realtime-egress-v9';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
 

@@ -19,7 +19,11 @@ test('a successful empty customer response clears browser state and cache', () =
   assert.match(fetchCustomers, /catch \(custErr\)[\s\S]*billing_system_customers/);
 });
 
-test('successful empty order and cashbook responses also replace their caches', () => {
-  assert.match(service, /state\.savedOrders = combined;[\s\S]*cacheOrdersLocally\(state\.savedOrders\)/);
-  assert.match(service, /const cloudTxs = \(txData \|\| \[\]\)\.map[\s\S]*billing_system_cashbook_transactions/);
+test('successful empty order and cashbook windows clear only their loaded ranges', () => {
+  assert.match(service, /function replaceLoadedOrderWindow\(rawOrders, startIso = null, endExclusiveIso = null\)/);
+  assert.match(service, /const retained = \(state\.savedOrders \|\| \[\]\)\.filter\(order => !isInsideWindow\(order\)\)/);
+  assert.match(service, /state\.savedOrders = \[\.\.\.mapped, \.\.\.retained\][\s\S]*cacheOrdersLocally\(state\.savedOrders\)/);
+  assert.match(service, /function replaceLoadedCashbookWindow\(rawTransactions, startIso, endExclusiveIso\)/);
+  assert.match(service, /const retained = cached\.filter\(transaction => \{/);
+  assert.match(service, /return replaceLoadedCashbookWindow\(rows, startIso, endExclusiveIso\)/);
 });

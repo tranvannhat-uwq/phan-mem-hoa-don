@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
-import { renderAll } from '../main.js?v=20260811-realtime-egress-v7';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260811-realtime-egress-v7';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260811-realtime-egress-v7';
+import { renderAll } from '../main.js?v=20260811-realtime-egress-v9';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260811-realtime-egress-v9';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260811-realtime-egress-v9';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -12,6 +12,8 @@ let cashbookCurrentPage = 1;
 let cashbookPageSize = 20;
 let cashbookTotalPages = 1;
 let cashbookLastFilterSignature = '';
+let cashbookRangeRequestId = 0;
+let cashbookRangeReloadTimer = null;
 
 function escapeCashbookHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -252,7 +254,7 @@ export async function saveStartingBalances(balances) {
 // Global active filters in this view
 let activeFilters = {
   accountType: 'cash', // 'cash', 'bank', 'wallet', 'all'
-  timeMode: 'month',   // 'month', 'custom'
+  timeMode: 'week',    // 'week', 'month', 'custom'
   startDate: '',       // YYYY-MM-DD
   endDate: '',         // YYYY-MM-DD
   showThu: true,
@@ -270,6 +272,60 @@ let activeFilters = {
   debtImpactNo: true,
   debtImpactNone: true
 };
+
+function getCashbookDateWindow() {
+  const now = new Date();
+  let start;
+  let endExclusive;
+
+  if (activeFilters.timeMode === 'week') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayFromMonday = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - dayFromMonday);
+    endExclusive = new Date(start);
+    endExclusive.setDate(endExclusive.getDate() + 7);
+  } else if (activeFilters.timeMode === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    endExclusive = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  } else {
+    start = activeFilters.startDate ? new Date(`${activeFilters.startDate}T00:00:00`) : null;
+    endExclusive = activeFilters.endDate ? new Date(`${activeFilters.endDate}T00:00:00`) : null;
+    if (endExclusive) endExclusive.setDate(endExclusive.getDate() + 1);
+  }
+
+  const isValidDate = value => value instanceof Date && Number.isFinite(value.getTime());
+  if (!isValidDate(start) || !isValidDate(endExclusive) || start >= endExclusive) return null;
+  return {
+    start,
+    endExclusive,
+    startIso: start.toISOString(),
+    endExclusiveIso: endExclusive.toISOString()
+  };
+}
+
+async function reloadCashbookDateWindow() {
+  const range = getCashbookDateWindow();
+  if (!range) {
+    renderSoQuyTable();
+    return;
+  }
+
+  const requestId = ++cashbookRangeRequestId;
+  const tableBody = document.getElementById('so-quy-table-body');
+  if (tableBody) {
+    tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-4">Đang tải dữ liệu sổ quỹ...</td></tr>';
+  }
+  await dbLoadCashbookForRange(range.startIso, range.endExclusiveIso);
+  if (requestId !== cashbookRangeRequestId) return;
+  cashbookCurrentPage = 1;
+  expandedCashbookTransactionId = '';
+  renderSoQuyTable();
+}
+
+function scheduleCashbookDateReload() {
+  clearTimeout(cashbookRangeReloadTimer);
+  cashbookRangeReloadTimer = setTimeout(() => void reloadCashbookDateWindow(), 180);
+}
 
 // setup listeners
 export function setupSoQuyPanel() {
@@ -296,7 +352,7 @@ export function setupSoQuyPanel() {
       if (rangeInputs) {
         rangeInputs.style.display = activeFilters.timeMode === 'custom' ? 'flex' : 'none';
       }
-      renderSoQuyTable();
+      void reloadCashbookDateWindow();
     });
   });
 
@@ -313,7 +369,7 @@ export function setupSoQuyPanel() {
     activeFilters.startDate = dateFromInput.value;
     dateFromInput.addEventListener('input', (e) => {
       activeFilters.startDate = e.target.value;
-      renderSoQuyTable();
+      scheduleCashbookDateReload();
     });
   }
   if (dateToInput) {
@@ -322,7 +378,7 @@ export function setupSoQuyPanel() {
     activeFilters.endDate = dateToInput.value;
     dateToInput.addEventListener('input', (e) => {
       activeFilters.endDate = e.target.value;
-      renderSoQuyTable();
+      scheduleCashbookDateReload();
     });
   }
 
@@ -890,6 +946,7 @@ export function setupSoQuyPanel() {
       }
       hideEditModal();
       expandedCashbookTransactionId = '';
+      await reloadCashbookDateWindow();
       renderAll();
     } finally {
       if (saveButton) saveButton.disabled = false;
@@ -959,14 +1016,6 @@ export function addCashbookTransaction({
   return newTx;
 }
 
-// Retrieve date range for current month
-function getCurrentMonthRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-  return { start, end };
-}
-
 // Retrieve currently filtered transactions for display/calculations
 function getProcessedData() {
   const txs = getCashbookTransactions();
@@ -974,23 +1023,9 @@ function getProcessedData() {
   const balances = getStartingBalances();
   
   // Define time range boundaries
-  let rangeStart = null;
-  let rangeEnd = null;
-  
-  if (activeFilters.timeMode === 'month') {
-    const range = getCurrentMonthRange();
-    rangeStart = range.start;
-    rangeEnd = range.end;
-  } else {
-    if (activeFilters.startDate) {
-      rangeStart = new Date(activeFilters.startDate);
-      rangeStart.setHours(0, 0, 0, 0);
-    }
-    if (activeFilters.endDate) {
-      rangeEnd = new Date(activeFilters.endDate);
-      rangeEnd.setHours(23, 59, 59, 999);
-    }
-  }
+  const activeRange = getCashbookDateWindow();
+  const rangeStart = activeRange?.start || null;
+  const rangeEndExclusive = activeRange?.endExclusive || null;
 
   // 1. Calculate Quỹ đầu kỳ dynamically (transactions before rangeStart)
   // Quỹ đầu kỳ base for the selected account type
@@ -1001,10 +1036,19 @@ function getProcessedData() {
     baseStartVal = balances[activeFilters.accountType] || 0;
   }
   
-  let preIncome = 0;
-  let preExpense = 0;
-  
-  if (rangeStart) {
+  let preRangeNet = 0;
+  const openingSnapshotMatches = rangeStart
+    && state.cashbookOpeningNetByMethod
+    && state.cashbookOpeningStartIso === rangeStart.toISOString();
+
+  if (openingSnapshotMatches) {
+    if (activeFilters.accountType === 'all') {
+      preRangeNet = ['cash', 'bank', 'wallet']
+        .reduce((sum, method) => sum + Number(state.cashbookOpeningNetByMethod[method] || 0), 0);
+    } else {
+      preRangeNet = Number(state.cashbookOpeningNetByMethod[activeFilters.accountType] || 0);
+    }
+  } else if (rangeStart) {
     effectiveTxs.forEach(t => {
       // Must be settled, match account type, and occur BEFORE the rangeStart
       if (!isPaidStatus(t.status)) return;
@@ -1013,13 +1057,13 @@ function getProcessedData() {
       
       const tDate = new Date(t.date);
       if (tDate < rangeStart) {
-        if (t.type === 'thu') preIncome += t.value;
-        else if (t.type === 'chi') preExpense += t.value;
+        if (t.type === 'thu') preRangeNet += Number(t.value || 0);
+        else if (t.type === 'chi') preRangeNet -= Number(t.value || 0);
       }
     });
   }
   
-  const calculatedStartBalance = baseStartVal + preIncome - preExpense;
+  const calculatedStartBalance = baseStartVal + preRangeNet;
 
   // 2. Filter transactions that are within the current date range
   let filtered = effectiveTxs.filter(t => {
@@ -1027,10 +1071,10 @@ function getProcessedData() {
     if (activeFilters.accountType !== 'all' && t.method !== activeFilters.accountType) return false;
     
     // Time filter
-    if (rangeStart || rangeEnd) {
+    if (rangeStart || rangeEndExclusive) {
       const tDate = new Date(t.date);
       if (rangeStart && tDate < rangeStart) return false;
-      if (rangeEnd && tDate > rangeEnd) return false;
+      if (rangeEndExclusive && tDate >= rangeEndExclusive) return false;
     }
     
     // Document type (Phiếu thu / Phiếu chi)
@@ -1670,6 +1714,7 @@ function wireCashbookInlineDetailActions(t, tableBody) {
         showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
       }
       expandedCashbookTransactionId = '';
+      await reloadCashbookDateWindow();
       renderAll();
     } finally {
       cancelBtn.disabled = false;

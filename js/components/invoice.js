@@ -1,12 +1,12 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260811-realtime-egress-v7';
-import { renderAll, switchTab } from '../main.js?v=20260811-realtime-egress-v7';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260811-realtime-egress-v9';
+import { renderAll, switchTab } from '../main.js?v=20260811-realtime-egress-v9';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260811-realtime-egress-v7';
-import { addCashbookTransaction } from './so_quy.js?v=20260811-realtime-egress-v7';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260811-realtime-egress-v7';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v7';
+import { generateUniqueCustomerCode } from './customers.js?v=20260811-realtime-egress-v9';
+import { addCashbookTransaction } from './so_quy.js?v=20260811-realtime-egress-v9';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260811-realtime-egress-v9';
+import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v9';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js';
 import { getOrderDisplayCode } from '../domain/order-display.js';

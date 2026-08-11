@@ -2,10 +2,10 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v7';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v7';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v9';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v9';
 import { collectAllPages } from '../domain/pagination.js';
-import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v7';
+import { mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v9';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -826,6 +826,132 @@ function mapOrderRowForState(order, isDraft = false) {
   };
 }
 
+function getCurrentLocalWeekRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const dayFromMonday = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - dayFromMonday);
+  const endExclusive = new Date(start);
+  endExclusive.setDate(endExclusive.getDate() + 7);
+  return { startIso: start.toISOString(), endExclusiveIso: endExclusive.toISOString() };
+}
+
+function replaceLoadedCashbookWindow(rawTransactions, startIso, endExclusiveIso) {
+  const startTime = new Date(startIso).getTime();
+  const endTime = new Date(endExclusiveIso).getTime();
+  const cached = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
+  const retained = cached.filter(transaction => {
+    const transactionTime = new Date(transaction.date || transaction.transaction_date || 0).getTime();
+    return !Number.isFinite(transactionTime)
+      || transactionTime < startTime
+      || transactionTime >= endTime;
+  });
+  const mapped = (rawTransactions || []).map(mapCashbookTransaction);
+  const merged = [...mapped, ...retained]
+    .filter((transaction, index, rows) => rows.findIndex(item => String(item.id) === String(transaction.id)) === index)
+    .sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(merged));
+  return mapped;
+}
+
+async function loadCashbookWindowFromCloud(startIso, endExclusiveIso) {
+  const { data, error } = await supabaseClient.rpc('rpc_get_cashbook_window', {
+    p_start: startIso,
+    p_end_exclusive: endExclusiveIso
+  });
+  if (error) throw error;
+  const rows = Array.isArray(data?.data) ? data.data : [];
+  const opening = data?.opening_net_by_method || {};
+  state.cashbookOpeningNetByMethod = {
+    cash: Number(opening.cash || 0),
+    bank: Number(opening.bank || 0),
+    wallet: Number(opening.wallet || 0)
+  };
+  state.cashbookOpeningStartIso = startIso;
+  return replaceLoadedCashbookWindow(rows, startIso, endExclusiveIso);
+}
+
+async function loadFullCashbookFallback() {
+  const { data, error } = await supabaseClient
+    .from(tableCashbookTransactionsName)
+    .select('*')
+    .order('date', { ascending: false });
+  if (error) throw error;
+  const transactions = (data || []).map(mapCashbookTransaction);
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(transactions));
+  state.cashbookOpeningNetByMethod = null;
+  state.cashbookOpeningStartIso = '';
+  return transactions;
+}
+
+export async function dbLoadCashbookForRange(startIso, endExclusiveIso) {
+  if (!isCloudActive || !supabaseClient || !startIso || !endExclusiveIso) return false;
+  try {
+    return await loadCashbookWindowFromCloud(startIso, endExclusiveIso);
+  } catch (error) {
+    const code = String(error?.code || '').toUpperCase();
+    const message = String(error?.message || '').toLowerCase();
+    const migrationMissing = ['PGRST202', '42883'].includes(code)
+      || (message.includes('rpc_get_cashbook_window') && message.includes('schema cache'));
+    if (!migrationMissing) {
+      console.warn('Không thể tải Sổ quỹ theo khoảng ngày:', error);
+      return false;
+    }
+    console.warn('Migration 0051 chưa có; tạm tải toàn bộ Sổ quỹ để giữ số dư chính xác.');
+    try {
+      return await loadFullCashbookFallback();
+    } catch (fallbackError) {
+      console.warn('Không thể tải dữ liệu Sổ quỹ dự phòng:', fallbackError);
+      return false;
+    }
+  }
+}
+
+async function fetchOrderRowsForHistoryWindow(startIso = null, endExclusiveIso = null) {
+  let query = supabaseClient
+    .from(tableOrdersName)
+    .select('*')
+    .order('order_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (startIso) query = query.gte('order_date', startIso);
+  if (endExclusiveIso) query = query.lt('order_date', endExclusiveIso);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+function replaceLoadedOrderWindow(rawOrders, startIso = null, endExclusiveIso = null) {
+  const startTime = startIso ? new Date(startIso).getTime() : null;
+  const endTime = endExclusiveIso ? new Date(endExclusiveIso).getTime() : null;
+  const isInsideWindow = order => {
+    if (String(order.status || '').toLowerCase() === 'draft') return false;
+    if (startTime === null && endTime === null) return true;
+    const orderTime = new Date(order.date || order.orderDate || order.createdAt || 0).getTime();
+    if (!Number.isFinite(orderTime)) return false;
+    return (startTime === null || orderTime >= startTime)
+      && (endTime === null || orderTime < endTime);
+  };
+  const retained = (state.savedOrders || []).filter(order => !isInsideWindow(order));
+  const mapped = (rawOrders || []).map(order => mapOrderRowForState(order, false));
+  state.savedOrders = [...mapped, ...retained]
+    .filter((order, index, rows) => rows.findIndex(item => String(item.id) === String(order.id)) === index)
+    .sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
+  cacheOrdersLocally(state.savedOrders);
+  return mapped;
+}
+
+export async function dbLoadOrdersForHistoryRange(startIso = null, endExclusiveIso = null) {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const rows = await fetchOrderRowsForHistoryWindow(startIso, endExclusiveIso);
+    return replaceLoadedOrderWindow(rows, startIso, endExclusiveIso);
+  } catch (error) {
+    console.warn('Không thể tải lịch sử đơn hàng theo khoảng ngày:', error);
+    return false;
+  }
+}
+
 // Realtime already carries the changed row. Applying it directly avoids a
 // second PostgREST download on every open browser after each order mutation.
 // Fall back to dbRefreshOrderById only when an installation sends an
@@ -1040,25 +1166,16 @@ export async function fetchCloudData(options = {}) {
           }
         }
 
-        const [{ data: orderPage, error: orderPageError }, rawDrafts] = await Promise.all([
-          supabaseClient.rpc('rpc_get_orders_paginated', {
-            p_search: '',
-            p_status: null,
-            p_customer_id: null,
-            p_limit: 10000,
-            p_offset: 0
-          }),
+        const currentWeek = getCurrentLocalWeekRange();
+        const [rawOrders, rawDrafts] = await Promise.all([
+          fetchOrderRowsForHistoryWindow(currentWeek.startIso, currentWeek.endExclusiveIso),
           fetchFullTableData(tableDraftOrdersName)
         ]);
-        const rawOrders = !orderPageError && orderPage && Array.isArray(orderPage.data)
-          ? orderPage.data
-          : await fetchFullTableData(tableOrdersName);
-
-        const mappedOrders = rawOrders.map(o => mapOrderRowForState(o, false));
+        replaceLoadedOrderWindow(rawOrders, currentWeek.startIso, currentWeek.endExclusiveIso);
         const mappedDrafts = rawDrafts.map(o => mapOrderRowForState(o, true));
-
-        const combined = [...mappedOrders, ...mappedDrafts].sort((a, b) => new Date(b.date) - new Date(a.date));
-        state.savedOrders = combined;
+        const withoutOldDrafts = state.savedOrders.filter(order => order.status !== 'draft');
+        state.savedOrders = [...mappedDrafts, ...withoutOldDrafts]
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
         cacheOrdersLocally(state.savedOrders);
       } catch (ordErr) {
         console.warn("Could not load orders from Supabase, fallback to local:", ordErr.message);
@@ -1290,56 +1407,9 @@ export async function fetchCloudData(options = {}) {
 
     const fetchCashbook = async () => {
       try {
-        const { data: txData, error: txErr } = await supabaseClient
-          .from(tableCashbookTransactionsName)
-          .select('*')
-          .order('date', { ascending: false });
-
-        if (txErr) throw txErr;
-
-        const cloudTxs = (txData || []).map(t => {
-            const rawNote = t.note || '';
-            const supplierMeta = rawNote.match(/__supplierId=([^\s]+)/);
-            const cleanNote = rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim();
-            return {
-              id: t.id,
-              cloudId: t.id,
-              date: t.date || t.transaction_date,
-              type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
-              direction: t.direction || (t.type === 'chi' ? 'out' : 'in'),
-              transactionType: t.transaction_type || null,
-              operationType: t.operation_type || null,
-              referenceType: t.reference_type || null,
-              referenceId: t.reference_id || null,
-              category: t.category || t.transaction_type,
-              partner: t.partner,
-              value: parseFloat(t.value || 0),
-              method: t.method || t.payment_method || 'cash',
-              accounting: t.accounting,
-              status: t.status,
-              creator: t.creator || t.created_by,
-              note: cleanNote,
-              starred: t.starred,
-              customerId: t.customer_id || null,
-              debtImpact: t.transaction_type === 'customer_payment',
-              supplierId: t.supplier_id || (supplierMeta ? supplierMeta[1] : null),
-              orderId: t.order_id || null,
-              salesReturnId: t.sales_return_id || null,
-              employeeId: t.employee_id || null,
-              purchaseId: t.purchase_id || null,
-              purchasePaymentId: t.purchase_payment_id || null,
-              collectorId: t.collector_id || null,
-              collectorName: t.collector_name || t.creator || '',
-              counterpartyType: t.counterparty_type || (t.customer_id ? 'customer' : (t.supplier_id ? 'supplier' : 'other')),
-              counterpartyId: t.counterparty_id || t.customer_id || t.supplier_id || null,
-              amendedAt: t.amended_at || null,
-              amendmentCount: Number(t.amendment_count || 0),
-              reversalOfId: t.reversal_of_id || null,
-              cancelledAt: t.cancelled_at || null,
-              cancellationReason: t.cancellation_reason || ''
-            };
-          }).filter(t => !(t.note && t.note.startsWith('Thu tiá»n hÃ ng cho hÃ³a Ä‘Æ¡n')));
-        localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(cloudTxs));
+        const currentWeek = getCurrentLocalWeekRange();
+        const loaded = await dbLoadCashbookForRange(currentWeek.startIso, currentWeek.endExclusiveIso);
+        if (!loaded) throw new Error('Cashbook window could not be loaded');
       } catch (txErr) {
         console.warn("Could not load cashbook transactions from Supabase:", txErr.message);
       }

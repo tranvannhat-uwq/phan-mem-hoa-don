@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260811-realtime-egress-v7">
+  <link rel="stylesheet" href="style.css?v=20260811-realtime-egress-v9">
 </head>
 <body>
 
@@ -1156,6 +1156,7 @@
             <!-- Bộ lọc thời gian -->
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; flex: 2; min-width: 320px;">
               <select class="form-control" id="history-date-mode" style="width: 140px; height: 42px; border-radius: 8px; cursor: pointer;">
+                <option value="week" selected>Tuần này</option>
                 <option value="all">Tất cả thời gian</option>
                 <option value="date">Theo ngày</option>
                 <option value="month">Theo tháng</option>
@@ -1260,7 +1261,11 @@
               <span class="filter-group-sec-title">Thời gian</span>
               <div class="custom-radio-group">
                 <label class="custom-control">
-                  <input type="radio" name="so-quy-time" value="month" checked>
+                  <input type="radio" name="so-quy-time" value="week" checked>
+                  <span>Tuần này</span>
+                </label>
+                <label class="custom-control">
+                  <input type="radio" name="so-quy-time" value="month">
                   <span>Tháng này</span>
                 </label>
                 <label class="custom-control">
@@ -4200,6 +4205,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260811-realtime-egress-v7"></script>
+  <script type="module" src="js/main.js?v=20260811-realtime-egress-v9"></script>
 </body>
 </html>

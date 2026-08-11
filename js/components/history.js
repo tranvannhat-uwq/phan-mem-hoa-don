@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, cacheOrdersLocally } from '../services/supabase.js?v=20260811-realtime-egress-v7';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20260811-realtime-egress-v7';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260811-realtime-egress-v7';
-import { openHistoryOrderExportModal } from './customers.js?v=20260811-realtime-egress-v7';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, cacheOrdersLocally } from '../services/supabase.js?v=20260811-realtime-egress-v9';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20260811-realtime-egress-v9';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260811-realtime-egress-v9';
+import { openHistoryOrderExportModal } from './customers.js?v=20260811-realtime-egress-v9';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260811-realtime-egress-v7';
+} from '../domain/order-financials.js?v=20260811-realtime-egress-v9';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260811-realtime-egress-v7';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260811-realtime-egress-v9';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -20,6 +20,78 @@ let historyFilterTimer = null;
 let historyRenderCache = null;
 let historyFinancialCache = null;
 let expandedHistoryOrderId = null;
+let historyWindowRequestId = 0;
+
+function localDateStart(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getCurrentWeekWindow() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  const endExclusive = new Date(start);
+  endExclusive.setDate(endExclusive.getDate() + 7);
+  return { start, endExclusive };
+}
+
+function getHistoryDateWindow() {
+  const mode = document.getElementById('history-date-mode')?.value || 'week';
+  let start = null;
+  let endExclusive = null;
+  if (mode === 'week') {
+    ({ start, endExclusive } = getCurrentWeekWindow());
+  } else if (mode === 'date') {
+    start = localDateStart(document.getElementById('history-filter-date')?.value);
+    if (start) {
+      endExclusive = new Date(start);
+      endExclusive.setDate(endExclusive.getDate() + 1);
+    }
+  } else if (mode === 'month') {
+    const value = document.getElementById('history-filter-month')?.value || '';
+    if (/^\d{4}-\d{2}$/.test(value)) {
+      start = localDateStart(`${value}-01`);
+      endExclusive = new Date(start);
+      endExclusive.setMonth(endExclusive.getMonth() + 1);
+    }
+  } else if (mode === 'year') {
+    const year = Number(document.getElementById('history-filter-year')?.value);
+    if (Number.isInteger(year) && year > 0) {
+      start = new Date(year, 0, 1);
+      endExclusive = new Date(year + 1, 0, 1);
+    }
+  } else if (mode === 'range') {
+    start = localDateStart(document.getElementById('history-filter-from')?.value);
+    const inclusiveEnd = localDateStart(document.getElementById('history-filter-to')?.value);
+    if (inclusiveEnd) {
+      endExclusive = new Date(inclusiveEnd);
+      endExclusive.setDate(endExclusive.getDate() + 1);
+    }
+  }
+  return {
+    mode,
+    start,
+    endExclusive,
+    startIso: start?.toISOString() || null,
+    endExclusiveIso: endExclusive?.toISOString() || null
+  };
+}
+
+async function reloadHistoryDateWindow() {
+  const requestId = ++historyWindowRequestId;
+  const window = getHistoryDateWindow();
+  const container = document.getElementById('history-orders-container');
+  if (container) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-title">Đang tải đúng khoảng thời gian…</div></div>';
+  }
+  await dbLoadOrdersForHistoryRange(window.startIso, window.endExclusiveIso);
+  if (requestId !== historyWindowRequestId) return;
+  historyRenderCache = null;
+  historyFinancialCache = null;
+  renderHistoryOrders();
+}
 
 function escapeHistoryHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -236,6 +308,10 @@ export function setupHistoryPanel() {
     state.historyPage = 1;
     renderHistoryOrders();
   };
+  const onDateFilterChange = () => {
+    state.historyPage = 1;
+    void reloadHistoryDateWindow();
+  };
 
   if (searchInput) {
     searchInput.addEventListener('input', () => scheduleHistoryFilter(onFilterChange));
@@ -259,6 +335,12 @@ export function setupHistoryPanel() {
       filterYearSelect.appendChild(opt);
     }
     filterYearSelect.value = currentYear.toString();
+    const today = new Date();
+    const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    filterDateInput.value = localToday;
+    filterMonthInput.value = localToday.slice(0, 7);
+    document.getElementById('history-filter-from').value = localToday;
+    document.getElementById('history-filter-to').value = localToday;
 
 
 
@@ -277,14 +359,14 @@ export function setupHistoryPanel() {
       else if (mode === 'year') filterYearSelect.style.display = 'block';
       else if (mode === 'range') filterRangeDiv.style.display = 'flex';
       
-      onFilterChange();
+      onDateFilterChange();
     });
     
-    filterDateInput.addEventListener('input', onFilterChange);
-    filterMonthInput.addEventListener('input', onFilterChange);
-    filterYearSelect.addEventListener('change', onFilterChange);
-    document.getElementById('history-filter-from').addEventListener('input', onFilterChange);
-    document.getElementById('history-filter-to').addEventListener('input', onFilterChange);
+    filterDateInput.addEventListener('input', onDateFilterChange);
+    filterMonthInput.addEventListener('input', onDateFilterChange);
+    filterYearSelect.addEventListener('change', onDateFilterChange);
+    document.getElementById('history-filter-from').addEventListener('input', onDateFilterChange);
+    document.getElementById('history-filter-to').addEventListener('input', onDateFilterChange);
   }
 
   ['history-company-filter', 'history-brand-filter'].forEach(id => {
@@ -331,7 +413,11 @@ export function setupHistoryPanel() {
       
       showToast('Đang làm mới dữ liệu từ Cloud...', 'info');
       try {
-        await ensurePanelCloudData('history-panel', { force: true });
+        const window = getHistoryDateWindow();
+        await Promise.all([
+          dbLoadOrdersForHistoryRange(window.startIso, window.endExclusiveIso),
+          ensurePanelCloudData('history-panel', { force: true, domains: ['salesReturns'] })
+        ]);
         renderAll();
         showToast('Đã làm mới dữ liệu từ Cloud thành công!', 'success');
       } catch (err) {
@@ -568,10 +654,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
         (u.displayName || '').toLowerCase().includes(filterLower)
         || (u.username || '').toLowerCase().includes(filterLower))
       : [];
-    const fromDate = dateMode === 'range' && filterFrom ? new Date(filterFrom) : null;
-    const toDate = dateMode === 'range' && filterTo ? new Date(filterTo) : null;
-    if (fromDate) fromDate.setHours(0, 0, 0, 0);
-    if (toDate) toDate.setHours(23, 59, 59, 999);
+    const activeWindow = getHistoryDateWindow();
+    const fromDate = activeWindow.start;
+    const endExclusiveDate = activeWindow.endExclusive;
 
     const filtered = (state.savedOrders || []).filter(o => {
     // 1. Phân quyền hiển thị đơn của Sale
@@ -624,25 +709,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       const oDate = new Date(o.date);
       if (isNaN(oDate.getTime())) return true;
       
-      if (dateMode === 'date') {
-        if (!filterDate) return true;
-        const orderDateStr = oDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
-        if (orderDateStr !== filterDate) return false;
-      } 
-      else if (dateMode === 'month') {
-        if (!filterMonth) return true;
-        const orderMonthStr = oDate.toISOString().slice(0, 7); // YYYY-MM
-        if (orderMonthStr !== filterMonth) return false;
-      } 
-      else if (dateMode === 'year') {
-        if (!filterYear) return true;
-        if (oDate.getFullYear().toString() !== filterYear) return false;
-      } 
-      else if (dateMode === 'range') {
-        const checkDate = new Date(oDate);
-        checkDate.setHours(0,0,0,0);
-        if (fromDate && checkDate < fromDate) return false;
-        if (toDate && checkDate > toDate) return false;
+      if (dateMode !== 'all') {
+        if (fromDate && oDate < fromDate) return false;
+        if (endExclusiveDate && oDate >= endExclusiveDate) return false;
       }
     }
     
