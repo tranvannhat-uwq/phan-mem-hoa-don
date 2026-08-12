@@ -1893,6 +1893,10 @@ select option {
   text-align: right;
 }
 
+.history-expanded-products-table th:nth-child(3) {
+  text-align: center;
+}
+
 .history-expanded-products-table tbody tr:last-child td {
   border-bottom: 0;
 }

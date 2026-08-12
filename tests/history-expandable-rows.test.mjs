@@ -54,6 +54,8 @@ test('expanded panel renders the full product list without requiring the view ac
   assert.match(history, /item\?\.lineTotal \?\? item\?\.total/);
   assert.match(styles, /\.history-expanded-products\s*\{[\s\S]*grid-column:\s*1 \/ -1/);
   assert.match(styles, /\.history-expanded-products-scroll\s*\{[\s\S]*overflow-x:\s*auto/);
+  assert.match(styles, /\.history-expanded-products-table th:nth-child\(3\)\s*\{[\s\S]*text-align:\s*center/);
+  assert.match(styles, /\.history-product-color\s*\{[\s\S]*text-align:\s*center/);
 });
 
 test('accordion keeps one row open and isolates interactive controls', () => {
