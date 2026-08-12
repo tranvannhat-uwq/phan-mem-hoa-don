@@ -17,12 +17,14 @@ test('details table renders one accessible expandable row pair per order', () =>
   assert.match(tableBranch, /tabindex="0" role="button" aria-expanded="\$\{isExpanded\}" aria-controls="\$\{detailId\}"/);
   assert.match(tableBranch, /class="history-expanded-row\$\{isExpanded/);
   assert.match(tableBranch, /<td colspan="11">/);
-  assert.match(tableBranch, /class="history-row-toggle"/);
-  assert.match(tableBranch, /data-lucide="chevron-down"/);
-  assert.doesNotMatch(tableBranch.match(/<td class="history-row-toggle-cell"[\s\S]*?<\/td>/)?.[0] || '', /history-(?:print|copy|edit|view|return|cancel|delete)-btn/);
+  assert.doesNotMatch(tableBranch, />Thao tác<\/th>/);
+  assert.doesNotMatch(tableBranch, /class="history-row-toggle"/);
+  assert.match(tableBranch, />KDQL<\/th>/);
+  assert.match(tableBranch, /getManagerDisplayName\(managerValue, state\.users\)/);
 });
 
 test('expanded panel uses real notes, payment fields and existing action handlers', () => {
+  assert.match(tableBranch, /renderHistoryExpandedItems\(order\)/);
   assert.match(tableBranch, /placeholder="Nhập ghi chú cho đơn hàng này\.\.\."/);
   assert.match(tableBranch, /escapeHistoryHtml\(order\.notes \|\| ''\)/);
   assert.match(tableBranch, /paymentSummary\.totalGoods/);
@@ -30,11 +32,26 @@ test('expanded panel uses real notes, payment fields and existing action handler
   assert.match(tableBranch, /paymentSummary\.shippingFeeAmount/);
   assert.match(tableBranch, /paymentSummary\.customerPayable/);
   assert.match(tableBranch, /paymentSummary\.paidAmount/);
-  for (const action of ['notes', 'view', 'edit', 'copy', 'print', 'return', 'cancel', 'delete']) {
+  for (const action of ['notes', 'edit', 'copy', 'print', 'return', 'cancel', 'delete']) {
     assert.match(tableBranch, new RegExp(`history-${action}-btn`));
   }
+  assert.doesNotMatch(history, /history-view-btn/);
   assert.match(history, /dbUpdateOrderNotes\(order\.id, nextNotes\.trim\(\), order\.status === 'draft'\)/);
   assert.doesNotMatch(tableBranch, /on(?:click|change|input)=/);
+});
+
+test('expanded panel renders the full product list without requiring the view action', () => {
+  assert.match(history, /function renderHistoryExpandedItems\(order\)/);
+  assert.match(history, /Danh sách sản phẩm/);
+  for (const heading of ['Mã hàng', 'Tên hàng', 'Số lượng', 'Đơn giá', 'Giá bán', 'Thành tiền']) {
+    assert.match(history, new RegExp(heading));
+  }
+  const productTable = history.slice(history.indexOf('function renderHistoryExpandedItems'), history.indexOf('function populateHistoryCompanyAndBrandFilters'));
+  assert.doesNotMatch(productTable, /<th>Giảm giá<\/th>/);
+  assert.match(history, /item\?\.variantCode \|\| item\?\.variantCodeSnapshot \|\| item\?\.productCode/);
+  assert.match(history, /item\?\.lineTotal \?\? item\?\.total/);
+  assert.match(styles, /\.history-expanded-products\s*\{[\s\S]*grid-column:\s*1 \/ -1/);
+  assert.match(styles, /\.history-expanded-products-scroll\s*\{[\s\S]*overflow-x:\s*auto/);
 });
 
 test('accordion keeps one row open and isolates interactive controls', () => {

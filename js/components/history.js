@@ -254,6 +254,76 @@ function historyOrderDetailId(orderId) {
   return `history-order-detail-${String(orderId || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }
 
+function getHistoryItemDisplayValues(item) {
+  const quantity = Number(item?.quantity || 0);
+  const unitPrice = Number(item?.unitPrice ?? item?.listPrice ?? item?.price ?? 0);
+  const discountPercent = Number(item?.discountPercent ?? item?.discount ?? 0);
+  const discountAmount = Number(item?.discountAmount || 0);
+  const calculatedSalePrice = unitPrice * (1 - Math.max(0, discountPercent) / 100) - discountAmount;
+  const salePrice = Number(item?.finalUnitPrice ?? item?.salePrice ?? item?.finalPrice ?? calculatedSalePrice);
+  const lineTotal = Number(item?.lineTotal ?? item?.total ?? (quantity * salePrice));
+
+  return {
+    code: item?.variantCode || item?.variantCodeSnapshot || item?.productCode || item?.code || '',
+    name: item?.productName || item?.product?.name || item?.name || 'Sản phẩm',
+    packageName: item?.package || item?.packageType || item?.specification || '',
+    quantity: Number.isFinite(quantity) ? quantity : 0,
+    unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+    discountPercent: Number.isFinite(discountPercent) ? discountPercent : 0,
+    discountAmount: Number.isFinite(discountAmount) ? discountAmount : 0,
+    salePrice: Number.isFinite(salePrice) ? Math.max(0, salePrice) : 0,
+    lineTotal: Number.isFinite(lineTotal) ? Math.max(0, lineTotal) : 0
+  };
+}
+
+function renderHistoryExpandedItems(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const totalQuantity = items.reduce((sum, item) => sum + Math.max(0, Number(item?.quantity || 0)), 0);
+  const rows = items.map(item => {
+    const values = getHistoryItemDisplayValues(item);
+
+    return `
+      <tr>
+        <td class="history-product-code">${escapeHistoryHtml(values.code || '—')}</td>
+        <td>
+          <div class="history-product-name">${escapeHistoryHtml(values.name)}</div>
+          ${values.packageName ? `<div class="history-product-package">${escapeHistoryHtml(values.packageName)}</div>` : ''}
+        </td>
+        <td class="history-product-number">${formatNumber(values.quantity)}</td>
+        <td class="history-product-number">${formatNumber(values.unitPrice)}</td>
+        <td class="history-product-number">${formatNumber(values.salePrice)}</td>
+        <td class="history-product-number history-product-total">${formatNumber(values.lineTotal)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="history-expanded-products">
+      <div class="history-expanded-products-heading">
+        <strong>Danh sách sản phẩm</strong>
+        <span>${formatNumber(items.length)} mặt hàng · ${formatNumber(totalQuantity)} sản phẩm</span>
+      </div>
+      ${items.length ? `
+        <div class="history-expanded-products-scroll">
+          <table class="history-expanded-products-table">
+            <thead>
+              <tr>
+                <th>Mã hàng</th>
+                <th>Tên hàng</th>
+                <th>Số lượng</th>
+                <th>Đơn giá</th>
+                <th>Giá bán</th>
+                <th>Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      ` : '<div class="history-expanded-products-empty">Đơn hàng chưa có sản phẩm.</div>'}
+    </div>
+  `;
+}
+
 function populateHistoryCompanyAndBrandFilters() {
   const companySelect = document.getElementById('history-company-filter');
   const brandSelect = document.getElementById('history-brand-filter');
@@ -796,8 +866,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       const cust = getHistoryCustomer(order, lookups);
       let plName = 'Nhập tay';
       let debtText = '0 ₫';
+      let managerName = 'Chưa phân công';
       
       if (cust) {
+        const managerValue = cust.managedBy || cust.managed_by || '';
+        managerName = managerValue ? getManagerDisplayName(managerValue, state.users) : managerName;
         const pl = lookups.pricelistById.get(String(cust.pricelistId));
         plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
         debtText = formatCurrency(cust.debt || 0);
@@ -824,6 +897,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
             <div style="font-size: 0.78rem; color: var(--text-muted);">Nợ hiện tại: <span style="color: var(--color-danger); font-weight: 600;">${debtText}</span></div>
           </td>
           <td>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${escapeHistoryHtml(managerName)}</span>
+          </td>
+          <td>
             <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${escapeHistoryHtml(plName)}</span>
           </td>
           <td style="text-align: right;">
@@ -838,18 +914,13 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
           <td style="text-align: right;">
             <div class="history-money-cell history-money-total">${formatNumber(amountBreakdown.totalPayment)}</div>
           </td>
-          <td class="history-row-toggle-cell" style="text-align: center;">
-            <button type="button" class="history-row-toggle" data-id="${escapeHistoryHtml(orderId)}"
-                    aria-label="${isExpanded ? 'Thu gọn' : 'Mở chi tiết'} đơn ${escapeHistoryHtml(displayOrderCode)}" tabindex="-1">
-              <i data-lucide="chevron-down"></i>
-            </button>
-          </td>
         </tr>
         <tr id="${detailId}" class="history-expanded-row${isExpanded ? ' is-expanded' : ''}" aria-hidden="${!isExpanded}">
           <td colspan="11">
             <div class="history-expanded-motion">
               <div class="history-expanded-motion-inner">
                 <section class="history-expanded-panel" aria-label="Chi tiết thao tác đơn ${escapeHistoryHtml(displayOrderCode)}" ${isExpanded ? '' : 'inert'}>
+                  ${renderHistoryExpandedItems(order)}
                   <div class="history-expanded-notes">
                     <label for="history-order-notes-${escapeHistoryHtml(orderId)}">Ghi chú</label>
                     <textarea id="history-order-notes-${escapeHistoryHtml(orderId)}" class="form-control history-order-notes-input"
@@ -867,11 +938,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                     ${canEditNotes ? `
                       <button class="history-detail-action history-action-edit history-notes-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                         <i data-lucide="save"></i> Lưu ghi chú
-                      </button>
-                    ` : ''}
-                    ${order.status !== 'draft' ? `
-                      <button class="history-detail-action history-action-view history-view-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
-                        <i data-lucide="eye"></i> Xem
                       </button>
                     ` : ''}
                     ${(order.status === 'draft' || showAmendBtn) ? `
@@ -930,12 +996,12 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <th style="width: 120px;">Mã đơn</th>
               <th style="width: 135px;">Ngày lập</th>
               <th style="width: 170px;">Khách hàng</th>
+              <th style="width: 150px;">KDQL</th>
               <th style="width: 120px;">Bảng giá</th>
               <th style="width: 140px; text-align: right;">Tổng tiền hàng</th>
               <th style="width: 125px; text-align: right;">Giảm giá</th>
               <th style="width: 120px; text-align: right;">Thu khác</th>
               <th style="width: 145px; text-align: right;">Tổng thanh toán</th>
-              <th style="width: 140px; text-align: center;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -1064,9 +1130,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                   <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
                 </button>
               ` : `
-                <button class="btn btn-teal btn-sm flex items-center justify-center gap-1 history-view-btn" data-id="${order.id}">
-                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Xem
-                </button>
                 ${showAmendBtn ? `
                   <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}" title="Sửa đơn đã chốt">
                     <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
@@ -1234,17 +1297,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       const order = state.savedOrders.find(o => String(o.id) === String(id));
       if (order) {
         loadDraftOrderIntoInvoice(order);
-      }
-    });
-  });
-
-  document.querySelectorAll('.history-view-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const b = e.currentTarget;
-      const id = b.getAttribute('data-id');
-      const order = state.savedOrders.find(o => String(o.id) === String(id));
-      if (order) {
-        loadDraftOrderIntoInvoice(order, true);
       }
     });
   });

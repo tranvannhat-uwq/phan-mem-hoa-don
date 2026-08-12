@@ -1917,6 +1917,109 @@ select option {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
+.history-expanded-products {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.history-expanded-products-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.history-expanded-products-heading strong {
+  color: var(--text-primary);
+  font-size: 0.88rem;
+}
+
+.history-expanded-products-heading span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.history-expanded-products-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.history-expanded-products-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.history-expanded-products-table th,
+.history-expanded-products-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.78rem;
+  vertical-align: middle;
+}
+
+.history-expanded-products-table th {
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.history-expanded-products-table th:nth-child(n + 3) {
+  text-align: right;
+}
+
+.history-expanded-products-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.history-expanded-products-table tbody tr:hover td {
+  background: var(--bg-surface-hover);
+}
+
+.history-product-code {
+  color: var(--color-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.history-product-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.history-product-package {
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.history-product-number {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.history-product-total {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.history-expanded-products-empty {
+  padding: 0.8rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 .history-expanded-notes {
   display: flex;
   min-width: 0;

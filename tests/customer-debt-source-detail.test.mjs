@@ -54,3 +54,9 @@ test('debt history keeps long document codes inside a compact non-overlapping la
   assert.match(styles, /\.customer-debt-source-link\s*\{[\s\S]*?max-width:\s*100%/);
   assert.match(styles, /\.customer-debt-source-link span\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
 });
+
+test('customer detail export button uses the correct Vietnamese label', () => {
+  const exportButton = html.match(/<button[^>]*id="btn-open-customer-order-export"[\s\S]*?<\/button>/)?.[0] || '';
+  assert.match(exportButton, /Xuất Excel/);
+  assert.doesNotMatch(exportButton, /Xu\?t Excel/);
+});
