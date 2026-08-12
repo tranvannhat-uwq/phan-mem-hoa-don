@@ -26,6 +26,15 @@ test('order confirmation, history and drafts keep the customer context in price 
   assert.match(migration, /AND current_definition LIKE '%public\.p40_resolve_sku_price_for_customer/);
 });
 
+test('legacy order triggers use the customer-scoped price-list authorization', () => {
+  const migration = read('migrations/0053_customer_assigned_price_list_trigger_repair.sql');
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.reject_forbidden_order_price_lists/);
+  assert.match(migration, /can_use_order_price_lists_for_customer\(\s*NEW\.customer_id,\s*NEW\.pricelist_id,\s*NEW\.items/s);
+  assert.match(migration, /UPDATE OF customer_id, pricelist_id, items ON public\.orders/);
+  assert.match(migration, /UPDATE OF customer_id, pricelist_id, items ON public\.draft_orders/);
+  assert.doesNotMatch(migration, /UPDATE public\.pricelists[\s\S]*is_available_for_sales\s*=\s*true/);
+});
+
 test('browser permits the exception only when the current order customer references that list', () => {
   const pricing = read('js/domain/pricing.js');
   const invoice = read('js/components/invoice.js');

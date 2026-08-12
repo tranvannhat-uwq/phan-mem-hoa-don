@@ -4,7 +4,6 @@ import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData
 import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260811-realtime-egress-v13';
 import { renderAll, switchTab } from '../main.js?v=20260811-realtime-egress-v13';
 import { populateManagedByDropdown } from './customers.js?v=20260811-realtime-egress-v13';
-import { exportBackupToExcel } from '../services/backup.js?v=20260811-realtime-egress-v13';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -565,22 +564,6 @@ export async function handleLogin(e) {
 
 export async function handleLogout() {
   stopMaintenanceMonitor();
-  if (state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'accounting')) {
-    const todayStr = new Date().toLocaleDateString('vi-VN');
-    const lastBackup = localStorage.getItem('weblendon_last_backup_date');
-    if (lastBackup !== todayStr) {
-      const confirmBackup = confirm("Hôm nay bạn chưa tải bản sao lưu dữ liệu Excel cuối ngày về máy tính.\n\nBạn có muốn tải bản sao lưu Excel về máy trước khi đăng xuất không?");
-      if (confirmBackup) {
-        try {
-          await exportBackupToExcel();
-          localStorage.setItem('weblendon_last_backup_date', todayStr);
-        } catch (err) {
-          console.error("Backup before logout failed:", err);
-        }
-      }
-    }
-  }
-
   // Remove obsolete pre-P0 markers; they are never read for authorization.
   await stopRealtimeSync();
   sessionStorage.removeItem('billing_system_auth');
@@ -628,7 +611,7 @@ export function applyUserPermissions(user) {
     if (!target) return;
     
     if (role === 'sale') {
-      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'products-panel' || target === 'history-panel' || target === 'brands-panel') {
+      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'history-panel' || target === 'brands-panel') {
         navItem.style.display = 'block';
       } else {
         navItem.style.display = 'none';

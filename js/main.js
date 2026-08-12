@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
 import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260811-realtime-egress-v13';
-import { setupBackupRestoreListeners, checkAndShowBackupReminder } from './services/backup.js?v=20260811-realtime-egress-v13';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20260811-realtime-egress-v13';
 import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260811-realtime-egress-v13';
 import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260811-realtime-egress-v13';
 import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260811-realtime-egress-v13';
@@ -150,14 +150,13 @@ export function renderAll() {
       break;
   }
 
-  checkAndShowBackupReminder();
   safeCreateIcons();
 }
 
 // Chuyển đổi giữa các phân hệ (Tab)
 export function switchTab(panelId) {
   if (panelId === 'payroll-panel') panelId = 'dashboard-panel';
-  if (state.currentUser?.role === 'sale' && panelId === 'pricelists-panel') {
+  if (state.currentUser?.role === 'sale' && ['products-panel', 'pricelists-panel'].includes(panelId)) {
     panelId = 'invoice-panel';
   }
   if (state.currentUser?.role === 'sale' && panelId === 'dashboard-panel') {

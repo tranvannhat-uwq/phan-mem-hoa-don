@@ -238,10 +238,7 @@ async function fetchBackupTableRows(spec, onPage) {
 
 function updateBackupExportButtons(message = '', busy = false) {
   if (typeof document === 'undefined') return;
-  const buttons = [
-    document.getElementById('btn-export-backup'),
-    document.getElementById('btn-backup-reminder-download')
-  ].filter(Boolean);
+  const buttons = [document.getElementById('btn-export-backup')].filter(Boolean);
 
   buttons.forEach(button => {
     if (busy) {
@@ -592,13 +589,7 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
   const restoreBtn = document.getElementById('btn-restore-backup');
 
   if (exportBtn) {
-    exportBtn.addEventListener('click', async () => {
-      const exported = await exportBackupToExcel();
-      if (exported) {
-        const reminderBanner = document.getElementById('backup-reminder-banner');
-        if (reminderBanner) reminderBanner.style.display = 'none';
-      }
-    });
+    exportBtn.addEventListener('click', () => exportBackupToExcel());
   }
 
   if (browseBtn && fileInput) {
@@ -635,82 +626,4 @@ export function setupBackupRestoreListeners(onRestoreComplete) {
     });
   }
 
-  // Đăng ký sự kiện cho banner nhắc nhở
-  const reminderDownloadBtn = document.getElementById('btn-backup-reminder-download');
-  const reminderIgnoreBtn = document.getElementById('btn-backup-reminder-ignore');
-  const reminderBanner = document.getElementById('backup-reminder-banner');
-
-  if (reminderDownloadBtn) {
-    reminderDownloadBtn.addEventListener('click', async () => {
-      const exported = await exportBackupToExcel();
-      if (exported) {
-        if (reminderBanner) reminderBanner.style.display = 'none';
-      }
-    });
-  }
-
-  if (reminderIgnoreBtn) {
-    reminderIgnoreBtn.addEventListener('click', () => {
-      // Trước 16h30 có thể ẩn lời nhắc. Sau 16h30 cảnh báo đỏ sẽ xuất hiện lại,
-      // nhưng không khóa hoặc che màn hình làm việc.
-      localStorage.setItem('weblendon_banner_ignored_date', new Date().toLocaleDateString('vi-VN'));
-      if (reminderBanner) reminderBanner.style.display = 'none';
-      showToast('Đã ẩn lời nhắc sao lưu trước 16:30.', 'secondary');
-    });
-  }
-
-  // Chạy kiểm tra định kỳ mỗi 30 giây để cập nhật lời nhắc trên thanh điều hướng.
-  setInterval(checkAndShowBackupReminder, 30000);
-}
-
-// Kiểm tra và hiển thị lời nhắc sao lưu không chặn trên thanh điều hướng.
-export function checkAndShowBackupReminder() {
-  const banner = document.getElementById('backup-reminder-banner');
-
-  // Chỉ hiển thị nhắc nhở cho Admin.
-  if (state.currentUser?.role !== 'admin') {
-    if (banner) banner.style.display = 'none';
-    return;
-  }
-
-  const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const todayStr = now.toLocaleDateString('vi-VN');
-  const lastBackup = localStorage.getItem('weblendon_last_backup_date');
-  const lastIgnoredBanner = localStorage.getItem('weblendon_banner_ignored_date');
-
-  // Kiểm tra mốc giờ 16:30
-  const isAfter1630 = hours > 16 || (hours === 16 && minutes >= 30);
-
-  if (lastBackup === todayStr) {
-    // Đã sao lưu hôm nay -> Ẩn lời nhắc.
-    if (banner) banner.style.display = 'none';
-    banner?.classList.remove('is-urgent');
-    return;
-  }
-
-  if (isAfter1630) {
-    // Sau 16h30: cảnh báo đỏ nhấp nháy, luôn nhìn thấy nhưng không khóa ứng dụng.
-    if (banner) {
-      banner.classList.add('is-urgent');
-      banner.style.display = 'flex';
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-    }
-  } else if (hours >= 16) {
-    // Từ 16h00 đến 16h29: hiện lời nhắc nhẹ nếu chưa nhấn ẩn.
-    banner?.classList.remove('is-urgent');
-    if (lastIgnoredBanner !== todayStr) {
-      if (banner && banner.style.display !== 'flex') {
-        banner.style.display = 'flex';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-      }
-    } else {
-      if (banner) banner.style.display = 'none';
-    }
-  } else {
-    // Chưa đến 16h00: ẩn lời nhắc.
-    if (banner) banner.style.display = 'none';
-    banner?.classList.remove('is-urgent');
-  }
 }

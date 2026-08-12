@@ -50,6 +50,15 @@ Run these files in order on a staging clone first:
 42. `0042_order_business_date_clock_skew.sql`
 43. `0043_sale_pricing_snapshot_rpc.sql`
 44. `0044_cashbook_voucher_amendment.sql`
+45. `0045_cashbook_amendment_lineage.sql`
+46. `0046_non_sales_customer_receipt_history.sql`
+47. `0047_brand_invoice_print_settings.sql`
+48. `0048_privileged_manual_order_pricing.sql`
+49. `0049_initialize_manual_price_record.sql`
+50. `0050_cancel_amended_customer_receipt.sql`
+51. `0051_cashbook_window_egress.sql`
+52. `0052_short_compact_audit_retention.sql`
+53. `0053_customer_assigned_price_list_trigger_repair.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -291,3 +300,9 @@ new rows to business-significant changes, records price-item changes that were
 previously missing, and removes older rows only from `audit_logs` and
 `activity_logs`. All audit and retention triggers fail safely so logging cannot
 block changes to orders, price lists, products, customers or cashbook entries.
+
+Migration `0053` repairs the legacy order/draft trigger that still checked only
+the global Sale visibility toggle. A Sale may save an order with a disabled
+price list only when that exact active list is assigned to the selected active
+customer inside the Sale's scope. The list remains unavailable for all other
+customers and its `is_available_for_sales` setting is not changed.

@@ -43,9 +43,11 @@ test('expanded panel uses real notes, payment fields and existing action handler
 test('expanded panel renders the full product list without requiring the view action', () => {
   assert.match(history, /function renderHistoryExpandedItems\(order\)/);
   assert.match(history, /Danh sách sản phẩm/);
-  for (const heading of ['Mã hàng', 'Tên hàng', 'Số lượng', 'Đơn giá', 'Giá bán', 'Thành tiền']) {
+  for (const heading of ['Mã hàng', 'Tên hàng', 'Mã màu', 'Số lượng', 'Đơn giá', 'Giá bán', 'Thành tiền']) {
     assert.match(history, new RegExp(heading));
   }
+  assert.match(history, /colorCode: item\?\.colorCode \|\| item\?\.color_code \|\| ''/);
+  assert.match(history, /history-product-color[^>]*>\$\{escapeHistoryHtml\(values\.colorCode \|\| '—'\)\}/);
   const productTable = history.slice(history.indexOf('function renderHistoryExpandedItems'), history.indexOf('function populateHistoryCompanyAndBrandFilters'));
   assert.doesNotMatch(productTable, /<th>Giảm giá<\/th>/);
   assert.match(history, /item\?\.variantCode \|\| item\?\.variantCodeSnapshot \|\| item\?\.productCode/);

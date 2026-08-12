@@ -267,6 +267,7 @@ function getHistoryItemDisplayValues(item) {
     code: item?.variantCode || item?.variantCodeSnapshot || item?.productCode || item?.code || '',
     name: item?.productName || item?.product?.name || item?.name || 'Sản phẩm',
     packageName: item?.package || item?.packageType || item?.specification || '',
+    colorCode: item?.colorCode || item?.color_code || '',
     quantity: Number.isFinite(quantity) ? quantity : 0,
     unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
     discountPercent: Number.isFinite(discountPercent) ? discountPercent : 0,
@@ -289,6 +290,7 @@ function renderHistoryExpandedItems(order) {
           <div class="history-product-name">${escapeHistoryHtml(values.name)}</div>
           ${values.packageName ? `<div class="history-product-package">${escapeHistoryHtml(values.packageName)}</div>` : ''}
         </td>
+        <td class="history-product-color">${escapeHistoryHtml(values.colorCode || '—')}</td>
         <td class="history-product-number">${formatNumber(values.quantity)}</td>
         <td class="history-product-number">${formatNumber(values.unitPrice)}</td>
         <td class="history-product-number">${formatNumber(values.salePrice)}</td>
@@ -310,6 +312,7 @@ function renderHistoryExpandedItems(order) {
               <tr>
                 <th>Mã hàng</th>
                 <th>Tên hàng</th>
+                <th>Mã màu</th>
                 <th>Số lượng</th>
                 <th>Đơn giá</th>
                 <th>Giá bán</th>
