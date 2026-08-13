@@ -15,6 +15,8 @@ test('invoice quick customer uses its scoped RPC instead of direct table upsert'
   );
   assert.match(quickSave, /rpc\('rpc_create_quick_customer'/);
   assert.doesNotMatch(quickSave, /\.from\(tableCustomersName\)/);
+  assert.match(invoice, /const savedCustomer = custSaved === true/);
+  assert.match(invoice, /state\.customers\.push\(savedCustomer\)/);
 });
 
 test('quick customer RPC is role-scoped, sale-owned and cannot accept financial balances', () => {
@@ -27,4 +29,14 @@ test('quick customer RPC is role-scoped, sale-owned and cannot accept financial 
   assert.match(sql, /'QUICK_CREATE'/);
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.rpc_create_quick_customer\(jsonb\) FROM PUBLIC, anon/);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.rpc_create_quick_customer\(jsonb\) TO authenticated/);
+});
+
+test('quick customer manager identity is normalized to the profile username', () => {
+  const sql = read('migrations/0054_quick_customer_manager_identity.sql');
+  assert.match(sql, /manager_profile\.username/);
+  assert.doesNotMatch(sql, /manager_profile\.auth_user_id::text/);
+  assert.match(sql, /audit\.action = 'QUICK_CREATE'/);
+  assert.match(sql, /audit\.new_data->>'source' = 'invoice_quick_create'/);
+  assert.match(sql, /customer\.managed_by = profile\.auth_user_id::text/);
+  assert.match(sql, /SET managed_by = profile\.username/);
 });

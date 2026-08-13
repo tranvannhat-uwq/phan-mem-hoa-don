@@ -59,6 +59,7 @@ Run these files in order on a staging clone first:
 51. `0051_cashbook_window_egress.sql`
 52. `0052_short_compact_audit_retention.sql`
 53. `0053_customer_assigned_price_list_trigger_repair.sql`
+54. `0054_quick_customer_manager_identity.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -156,6 +157,11 @@ the invoice screen. Admin/Accounting may choose an active manager; Sale users
 are forcibly assigned as the new customer's manager. Financial balances remain
 server-owned, direct customer-table insert policies are not widened, and every
 quick creation is audited.
+
+Migration `0054` normalizes the manager stored by that RPC to the profile
+username used by customer screens and filters. It also repairs only previously
+quick-created customers whose manager still equals the same profile's Auth UUID;
+customers created by other workflows are left unchanged.
 
 Migration `0019` lets Admin/Accounting amend a settled order by atomically
 cancelling the immutable original and confirming a replacement. Orders with

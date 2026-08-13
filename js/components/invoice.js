@@ -1235,10 +1235,15 @@ export async function saveActiveOrder(status = 'settled') {
       if (!custSaved) {
         return null;
       }
-      state.activeCustomerId = newCustId;
-      customerId = newCustId;
+      // Keep the local state aligned with the authoritative manager chosen by
+      // the RPC (Sale users are always forced to own their quick customers).
+      const savedCustomer = custSaved === true
+        ? newCustomer
+        : { ...newCustomer, ...custSaved };
+      state.activeCustomerId = savedCustomer.id;
+      customerId = savedCustomer.id;
       
-      state.customers.push(newCustomer);
+      state.customers.push(savedCustomer);
       localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
     }
 

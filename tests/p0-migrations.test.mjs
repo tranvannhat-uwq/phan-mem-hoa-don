@@ -59,7 +59,8 @@ const migrationNames = [
   '0050_cancel_amended_customer_receipt.sql',
   '0051_cashbook_window_egress.sql',
   '0052_short_compact_audit_retention.sql',
-  '0053_customer_assigned_price_list_trigger_repair.sql'
+  '0053_customer_assigned_price_list_trigger_repair.sql',
+  '0054_quick_customer_manager_identity.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
