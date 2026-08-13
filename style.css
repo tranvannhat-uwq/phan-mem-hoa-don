@@ -632,6 +632,27 @@ body {
   flex-shrink: 0;
 }
 
+.brand-project-logo {
+  width: 146px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 9px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 11px;
+  box-shadow: 0 5px 16px rgba(7, 48, 96, 0.2), 0 0 0 1px rgba(14, 89, 242, 0.08);
+}
+
+.brand-project-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .brand-logo {
   width: 32px;
   height: 32px;
@@ -2960,6 +2981,14 @@ select option {
     height: 22px !important;
   }
 
+  .brand-project-logo {
+    width: 112px;
+    height: 34px;
+    padding: 4px 7px;
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(7, 48, 96, 0.18);
+  }
+
   .brand-name {
     font-size: 0.95rem !important;
   }
@@ -3674,6 +3703,39 @@ select option {
   padding: 2.5rem 2rem;
   box-shadow: var(--shadow-lg);
   animation: authFadeInDown 0.4s ease;
+}
+
+.login-brand-lockup {
+  width: min(270px, 88%);
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+  padding: 0.75rem 1.1rem;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(14, 89, 242, 0.16);
+  border-radius: 16px;
+  box-shadow: 0 16px 38px rgba(14, 89, 242, 0.16), 0 0 0 4px rgba(0, 224, 35, 0.06);
+}
+
+.login-brand-lockup img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 78px;
+  object-fit: contain;
+}
+
+@media (max-width: 480px) {
+  .login-brand-lockup {
+    width: min(235px, 86%);
+    min-height: 74px;
+    margin-bottom: 1rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: 14px;
+  }
 }
 
 @keyframes authFadeInDown {
