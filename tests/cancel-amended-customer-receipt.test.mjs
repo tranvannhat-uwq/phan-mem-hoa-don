@@ -25,3 +25,10 @@ test('confirmed KH000003 repair is append-only, guarded and auditable', () => {
   assert.match(migration, /'DEBT_REPAIR'/);
   assert.doesNotMatch(migration, /UPDATE public\.customer_debt_transactions|DELETE FROM public\./i);
 });
+
+test('clean staging skips the production-specific repair but rejects partial target data', () => {
+  assert.match(migration, /target_customer_count = 0[\s\S]*target_voucher_count = 0[\s\S]*cancellation_count = 0/);
+  assert.match(migration, /confirmed KH000003 repair target is absent; skipping data repair/);
+  assert.match(migration, /confirmed repair target is incomplete/);
+  assert.match(migration, /NOT EXISTS \(SELECT 1 FROM public\.customers WHERE code = 'KH000003'\)/);
+});

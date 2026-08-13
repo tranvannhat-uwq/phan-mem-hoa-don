@@ -27,7 +27,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260811-realtime-egress-v13';
+} from './supabase.js?v=20260813-cashbook-amount-v15';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

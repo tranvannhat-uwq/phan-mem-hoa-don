@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260811-realtime-egress-v13">
+  <link rel="stylesheet" href="style.css?v=20260813-cashbook-amount-v15">
 </head>
 <body>
 
@@ -3698,7 +3698,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label" for="receipt-value">Giá trị (đ)</label>
-                <input type="number" class="form-control cashbook-create-value-input" id="receipt-value" min="0" placeholder="0" required>
+                <input type="text" inputmode="numeric" autocomplete="off" class="form-control cashbook-create-value-input" id="receipt-value" placeholder="0" aria-label="Số tiền thu" required>
               </div>
               <div class="form-group">
                 <label class="form-label" for="receipt-method">Phương thức thanh toán</label>
@@ -3782,7 +3782,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label" for="payment-value">Giá trị (đ)</label>
-                <input type="number" class="form-control cashbook-create-value-input" id="payment-value" min="0" placeholder="0" required>
+                <input type="text" inputmode="numeric" autocomplete="off" class="form-control cashbook-create-value-input" id="payment-value" placeholder="0" aria-label="Số tiền chi" required>
               </div>
               <div class="form-group">
                 <label class="form-label" for="payment-method">Phương thức thanh toán</label>
@@ -4194,6 +4194,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260811-realtime-egress-v13"></script>
+  <script type="module" src="js/main.js?v=20260813-cashbook-amount-v15"></script>
 </body>
 </html>

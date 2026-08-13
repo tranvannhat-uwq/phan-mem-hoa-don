@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260811-realtime-egress-v13';
-import { renderAll } from '../main.js?v=20260811-realtime-egress-v13';
+import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260813-cashbook-amount-v15';
+import { renderAll } from '../main.js?v=20260813-cashbook-amount-v15';
 import {
   buildProductFamilies,
   getProductBaseCode,

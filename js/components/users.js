@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260811-realtime-egress-v13';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260811-realtime-egress-v13';
-import { renderAll, switchTab } from '../main.js?v=20260811-realtime-egress-v13';
-import { populateManagedByDropdown } from './customers.js?v=20260811-realtime-egress-v13';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260813-cashbook-amount-v15';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260813-cashbook-amount-v15';
+import { renderAll, switchTab } from '../main.js?v=20260813-cashbook-amount-v15';
+import { populateManagedByDropdown } from './customers.js?v=20260813-cashbook-amount-v15';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
@@ -394,6 +394,9 @@ export function clearAuthenticatedSessionState() {
   state.priceListItems = [];
   state.allPriceListItems = [];
   state.pricingSnapshotActorId = '';
+  state.pricingSnapshotRole = '';
+  state.pricingSnapshotSource = '';
+  state.pricingSnapshotCachedAt = '';
   state.selectedPriceListIds = [];
 }
 

@@ -289,6 +289,8 @@ Migration `0050` makes cancellation of an amended customer receipt reverse its
 current effective voucher value instead of its original payment value. It also
 appends one guarded correction for voucher `PT-20260810-00000146`, changing
 customer `KH000003` debt from `20,587,100` to the confirmed `10,592,100` VND.
+Clean staging databases where all three incident-specific rows are absent skip
+that correction; a partially restored target set still stops the migration.
 
 Migration `0051` adds a read-only, RLS-respecting cashbook window RPC. It returns
 only vouchers in the requested date range plus three small opening-net totals

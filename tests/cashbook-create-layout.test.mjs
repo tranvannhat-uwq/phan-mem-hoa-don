@@ -38,3 +38,13 @@ test('creation layout stays responsive and preserves every form binding', () => 
   }
   assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.cashbook-create-grid \{ grid-template-columns: 1fr/);
 });
+
+test('receipt and payment amounts are large, color coded and grouped with Vietnamese dots', () => {
+  assert.match(html, /type="text" inputmode="numeric"[^>]*id="receipt-value"/);
+  assert.match(html, /type="text" inputmode="numeric"[^>]*id="payment-value"/);
+  assert.match(css, /\.cashbook-create-value-input \{[\s\S]*font-size: 1\.35rem;[\s\S]*font-weight: 800;[\s\S]*text-align: right;/);
+  assert.match(css, /\.cashbook-create-payment \.cashbook-create-value-input \{[\s\S]*color: #dc2626;/);
+  assert.match(cashbook, /input\.value = digits\.replace\(\/\\B\(\?=\(\\d\{3\}\)\+\(\?!\\d\)\)\/g, '\.'\)/);
+  assert.match(cashbook, /const value = parseCashbookCurrencyInput\(receiptValueInput\)/);
+  assert.match(cashbook, /const value = parseCashbookCurrencyInput\(paymentValueInput\)/);
+});

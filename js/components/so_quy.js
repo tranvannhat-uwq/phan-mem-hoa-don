@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
-import { renderAll } from '../main.js?v=20260811-realtime-egress-v13';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260811-realtime-egress-v13';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260811-realtime-egress-v13';
+import { renderAll } from '../main.js?v=20260813-cashbook-amount-v15';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260813-cashbook-amount-v15';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260813-cashbook-amount-v15';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -570,11 +570,27 @@ export function setupSoQuyPanel() {
     });
   }
 
+  const parseCashbookCurrencyInput = (input) => {
+    const digits = String(input?.value || '').replace(/\D/g, '');
+    return digits ? Number(digits) : 0;
+  };
+
+  const setupCashbookCurrencyInput = (input) => {
+    if (!input || input.dataset.currencyFormattingReady === 'true') return;
+    input.dataset.currencyFormattingReady = 'true';
+    input.addEventListener('input', () => {
+      const digits = input.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+      input.value = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    });
+  };
+
   // 16. Modal actions: + Phiếu thu
   const addThuBtn = document.getElementById('so-quy-btn-add-thu');
   const receiptModal = document.getElementById('so-quy-receipt-modal');
   const receiptForm = document.getElementById('so-quy-receipt-form');
   const receiptTimeInput = document.getElementById('receipt-time');
+  const receiptValueInput = document.getElementById('receipt-value');
+  setupCashbookCurrencyInput(receiptValueInput);
   
   if (addThuBtn && receiptModal) {
     addThuBtn.addEventListener('click', () => {
@@ -616,7 +632,7 @@ export function setupSoQuyPanel() {
       const time = document.getElementById('receipt-time').value;
       const category = document.getElementById('receipt-category').value;
       const payer = document.getElementById('receipt-payer').value.trim();
-      const value = parseFloat(document.getElementById('receipt-value').value) || 0;
+      const value = parseCashbookCurrencyInput(receiptValueInput);
       const method = document.getElementById('receipt-method').value;
       const accounting = document.getElementById('receipt-accounting').checked;
       const note = document.getElementById('receipt-note').value.trim();
@@ -764,6 +780,8 @@ export function setupSoQuyPanel() {
   const paymentModal = document.getElementById('so-quy-payment-modal');
   const paymentForm = document.getElementById('so-quy-payment-form');
   const paymentTimeInput = document.getElementById('payment-time');
+  const paymentValueInput = document.getElementById('payment-value');
+  setupCashbookCurrencyInput(paymentValueInput);
   
   if (addChiBtn && paymentModal) {
     addChiBtn.addEventListener('click', () => {
@@ -802,7 +820,7 @@ export function setupSoQuyPanel() {
       const time = document.getElementById('payment-time').value;
       const category = document.getElementById('payment-category').value;
       const recipient = document.getElementById('payment-recipient').value.trim();
-      const value = parseFloat(document.getElementById('payment-value').value) || 0;
+      const value = parseCashbookCurrencyInput(paymentValueInput);
       const method = document.getElementById('payment-method').value;
       const accounting = document.getElementById('payment-accounting').checked;
       const note = document.getElementById('payment-note').value.trim();

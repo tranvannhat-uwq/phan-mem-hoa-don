@@ -5,7 +5,7 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20260811-realtime-egress-v13';
+} from '../services/supabase.js?v=20260813-cashbook-amount-v15';
 
 let pendingPurchaseKey = '';
 const pendingSupplierPaymentKeys = new Map();

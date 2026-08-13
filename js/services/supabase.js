@@ -2,10 +2,11 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260811-realtime-egress-v13';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v13';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260813-cashbook-amount-v15';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260813-cashbook-amount-v15';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260811-realtime-egress-v13';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260813-cashbook-amount-v15';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260813-cashbook-amount-v15';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -531,6 +532,54 @@ function publishAuthorizedPricingState() {
     .filter(item => visibleIds.has(String(item.priceListId)));
 }
 
+function currentPricingActorId() {
+  return String(
+    state.currentUser?.authUserId || state.currentUser?.auth_user_id || state.currentUser?.id || ''
+  );
+}
+
+async function hydrateAuthorizedPricingCache(pricingActorId) {
+  const pricingRole = String(state.currentUser?.role || '');
+  if (!pricingActorId || (
+    state.pricingSnapshotActorId === pricingActorId && state.pricingSnapshotRole === pricingRole
+  )) return false;
+  const userAtRequest = state.currentUser;
+  const snapshot = await loadAuthorizedPricingCache(userAtRequest);
+  if (!snapshot || currentPricingActorId() !== pricingActorId || state.currentUser?.role !== userAtRequest?.role) {
+    return false;
+  }
+
+  state.allPricelists = snapshot.priceLists;
+  state.allPriceListItems = snapshot.priceListItems;
+  publishAuthorizedPricingState();
+  state.pricingSnapshotActorId = pricingActorId;
+  state.pricingSnapshotRole = pricingRole;
+  state.pricingSnapshotSource = 'browser';
+  state.pricingSnapshotCachedAt = snapshot.cachedAt;
+  return true;
+}
+
+export async function persistAuthorizedPricingCache() {
+  const pricingActorId = currentPricingActorId();
+  if (!pricingActorId || state.pricingSnapshotActorId !== pricingActorId ||
+      state.pricingSnapshotRole !== String(state.currentUser?.role || '')) return false;
+  return saveAuthorizedPricingCache(
+    state.currentUser,
+    state.allPricelists || [],
+    state.allPriceListItems || []
+  );
+}
+
+let pricingCacheWriteTimer = null;
+function scheduleAuthorizedPricingCachePersist() {
+  if (typeof setTimeout !== 'function') return;
+  if (pricingCacheWriteTimer) clearTimeout(pricingCacheWriteTimer);
+  pricingCacheWriteTimer = setTimeout(() => {
+    pricingCacheWriteTimer = null;
+    void persistAuthorizedPricingCache();
+  }, 150);
+}
+
 export function applyPricingRealtimePayload(kind, payload = {}) {
   const row = payload.new || payload.old || {};
   const id = String(row.id || '');
@@ -554,6 +603,7 @@ export function applyPricingRealtimePayload(kind, payload = {}) {
   }
 
   publishAuthorizedPricingState();
+  scheduleAuthorizedPricingCachePersist();
   return true;
 }
 
@@ -625,6 +675,10 @@ export async function dbLoadCustomerAssignedPricing(customer) {
     state.pricelists = filterPriceListsForUser(state.allPricelists, state.currentUser);
     const visibleIds = new Set(state.pricelists.map(item => item.id));
     state.priceListItems = state.allPriceListItems.filter(item => visibleIds.has(item.priceListId));
+    state.pricingSnapshotActorId = currentPricingActorId();
+    state.pricingSnapshotRole = String(state.currentUser?.role || '');
+    state.pricingSnapshotSource = 'cloud';
+    scheduleAuthorizedPricingCachePersist();
     return { loaded: true, priceList };
   } catch (error) {
     console.warn('Could not load the selected customer assigned pricing:', error.message);
@@ -1242,9 +1296,8 @@ export async function fetchCloudData(options = {}) {
     };
 
     const fetchPricelists = async ({ includeItems = true } = {}) => {
-      const pricingActorId = String(
-        state.currentUser?.authUserId || state.currentUser?.auth_user_id || state.currentUser?.id || ''
-      );
+      const pricingActorId = currentPricingActorId();
+      await hydrateAuthorizedPricingCache(pricingActorId);
       try {
         let plData = null;
         let itemData = null;
@@ -1289,19 +1342,29 @@ export async function fetchCloudData(options = {}) {
             : await fetchFullTableData(tablePriceListItemsName);
         }
         const mappedPriceListItems = (itemData || []).map(mapAuthorizedPriceListItem);
+        if (!includeItems) {
+          mappedPriceListItems.push(...(state.allPriceListItems || []).filter(item =>
+            visiblePriceListIds.has(String(item.priceListId))
+          ));
+        }
 
         state.allPricelists = mappedPricelists;
         state.pricelists = visiblePricelists;
         state.allPriceListItems = mappedPriceListItems;
         state.priceListItems = mappedPriceListItems
-          .filter(item => visiblePriceListIds.has(item.priceListId));
+          .filter(item => visiblePriceListIds.has(String(item.priceListId)));
         state.pricingSnapshotActorId = pricingActorId;
+        state.pricingSnapshotRole = String(state.currentUser?.role || '');
+        state.pricingSnapshotSource = includeItems ? 'cloud' : (state.pricingSnapshotSource || 'cloud-metadata');
+        if (includeItems) state.pricingSnapshotCachedAt = new Date().toISOString();
+        scheduleAuthorizedPricingCachePersist();
       } catch (plErr) {
         // Keep the last in-memory snapshot for this authenticated session on
         // transient refresh failures. Bootstrap data or a snapshot belonging
         // to another account must still fail closed.
         const canKeepCurrentSnapshot = Boolean(
-          pricingActorId && state.pricingSnapshotActorId === pricingActorId
+          pricingActorId && state.pricingSnapshotActorId === pricingActorId &&
+          state.pricingSnapshotRole === String(state.currentUser?.role || '')
         );
         if (!canKeepCurrentSnapshot) {
           state.pricelists = [];
@@ -1309,6 +1372,9 @@ export async function fetchCloudData(options = {}) {
           state.priceListItems = [];
           state.allPriceListItems = [];
           state.pricingSnapshotActorId = '';
+          state.pricingSnapshotRole = '';
+          state.pricingSnapshotSource = '';
+          state.pricingSnapshotCachedAt = '';
         }
         console.warn(
           canKeepCurrentSnapshot

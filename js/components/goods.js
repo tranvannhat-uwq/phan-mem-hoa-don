@@ -14,9 +14,9 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20260811-realtime-egress-v13';
-import { renderAll } from '../main.js?v=20260811-realtime-egress-v13';
-import { renderPurchasesPanel } from './purchases.js?v=20260811-realtime-egress-v13';
+} from '../services/supabase.js?v=20260813-cashbook-amount-v15';
+import { renderAll } from '../main.js?v=20260813-cashbook-amount-v15';
+import { renderPurchasesPanel } from './purchases.js?v=20260813-cashbook-amount-v15';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---
 

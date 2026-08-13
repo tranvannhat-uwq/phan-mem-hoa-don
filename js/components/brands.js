@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260811-realtime-egress-v13';
-import { renderAll } from '../main.js?v=20260811-realtime-egress-v13';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20260813-cashbook-amount-v15';
+import { renderAll } from '../main.js?v=20260813-cashbook-amount-v15';
 
 export function renderBrandsTable() {
   const tableBody = document.getElementById('brands-table-body');

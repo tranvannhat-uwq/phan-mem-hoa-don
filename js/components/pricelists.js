@@ -4,10 +4,11 @@ import {
   dbSavePricelist,
   dbDeletePricelist,
   dbSavePriceListItems,
-  dbDeletePriceListItem
-} from '../services/supabase.js?v=20260811-realtime-egress-v13';
-import { renderAll } from '../main.js?v=20260811-realtime-egress-v13';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20260811-realtime-egress-v13';
+  dbDeletePriceListItem,
+  persistAuthorizedPricingCache
+} from '../services/supabase.js?v=20260813-cashbook-amount-v15';
+import { renderAll } from '../main.js?v=20260813-cashbook-amount-v15';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20260813-cashbook-amount-v15';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -18,8 +19,8 @@ import {
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
-} from '../domain/pricing.js?v=20260811-realtime-egress-v13';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260811-realtime-egress-v13';
+} from '../domain/pricing.js?v=20260813-cashbook-amount-v15';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260813-cashbook-amount-v15';
 
 const pendingChanges = new Map();
 const pendingDeletes = new Set();
@@ -52,6 +53,7 @@ function upsertPriceListSnapshot(priceList) {
   else allLists.push(priceList);
   state.allPricelists = allLists;
   state.pricelists = filterPriceListsForUser(allLists, state.currentUser);
+  void persistAuthorizedPricingCache();
 }
 
 function commitPriceListItemSnapshot(changes, deletedKeys = new Set()) {
@@ -72,6 +74,7 @@ function commitPriceListItemSnapshot(changes, deletedKeys = new Set()) {
   const visibleIds = new Set((state.pricelists || []).map(priceList => priceList.id));
   state.allPriceListItems = allItems;
   state.priceListItems = allItems.filter(item => visibleIds.has(item.priceListId));
+  void persistAuthorizedPricingCache();
 }
 
 function formatVndInput(price) {
@@ -795,17 +798,13 @@ async function importPriceMatrixExcel(file) {
       if (!(await dbDeletePriceListItem(item.priceListId, item.productId))) return;
     }
 
+    const importedDeleteKeys = new Set(deletes.map(item => itemKey(item.priceListId, item.productId)));
+    commitPriceListItemSnapshot(upserts, importedDeleteKeys);
     upserts.forEach(item => {
-      const existing = getPriceItem(item.priceListId, item.productId);
-      if (existing) Object.assign(existing, item);
-      else state.priceListItems.push(item);
       pendingChanges.delete(itemKey(item.priceListId, item.productId));
       pendingDeletes.delete(itemKey(item.priceListId, item.productId));
     });
     deletes.forEach(item => {
-      state.priceListItems = state.priceListItems.filter(priceItem =>
-        !(priceItem.priceListId === item.priceListId && priceItem.productId === item.productId)
-      );
       pendingChanges.delete(itemKey(item.priceListId, item.productId));
       pendingDeletes.delete(itemKey(item.priceListId, item.productId));
     });

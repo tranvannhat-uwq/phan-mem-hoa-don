@@ -49,11 +49,43 @@ DECLARE
   target_voucher public.cashbook_transactions%ROWTYPE;
   cancellation public.customer_debt_transactions%ROWTYPE;
   correction_id constant text := 'DTX-FIX-0050-PT-20260810-00000146';
+  target_customer_count integer;
+  target_voucher_count integer;
+  cancellation_count integer;
   excess_debt numeric;
   corrected_debt numeric;
 BEGIN
   IF EXISTS (SELECT 1 FROM public.customer_debt_transactions WHERE id = correction_id) THEN
     RETURN;
+  END IF;
+
+  SELECT count(*) INTO target_customer_count
+  FROM public.customers customer
+  WHERE customer.code = 'KH000003';
+
+  SELECT count(*) INTO target_voucher_count
+  FROM public.cashbook_transactions voucher
+  WHERE voucher.id = 'PT-20260810-00000146';
+
+  SELECT count(*) INTO cancellation_count
+  FROM public.customer_debt_transactions ledger
+  WHERE ledger.id = 'DTX-P13-VOID-PT-20260810-00000146'
+    AND ledger.transaction_type = 'payment_cancel';
+
+  -- Clean staging projects do not contain this production-specific incident.
+  -- Skip only when the complete target set is absent. A partial set remains an
+  -- error because it can indicate an unexpected or incomplete data restore.
+  IF target_customer_count = 0
+     AND target_voucher_count = 0
+     AND cancellation_count = 0 THEN
+    RAISE NOTICE 'Migration 0050: confirmed KH000003 repair target is absent; skipping data repair';
+    RETURN;
+  END IF;
+  IF target_customer_count <> 1
+     OR target_voucher_count <> 1
+     OR cancellation_count <> 1 THEN
+    RAISE EXCEPTION 'Migration 0050 stopped: confirmed repair target is incomplete (customer %, voucher %, cancellation %)',
+      target_customer_count, target_voucher_count, cancellation_count;
   END IF;
 
   SELECT customer.* INTO STRICT target_customer
@@ -130,16 +162,26 @@ BEGIN
       AND procedure.prosrc LIKE '%0050: reverse the current effective voucher value%'
       AND procedure.prosrc LIKE '%debt_delta := round(COALESCE(entry.value, 0));%'
       AND procedure.prosecdef
-  ) OR NOT EXISTS (
-    SELECT 1
-    FROM public.customers customer
-    JOIN public.customer_debt_transactions correction
-      ON correction.customer_id = customer.id
-     AND correction.id = 'DTX-FIX-0050-PT-20260810-00000146'
-    WHERE customer.code = 'KH000003'
-      AND round(customer.debt) = 10592100
-      AND round(correction.debt_change) = -9995000
-      AND round(correction.balance_after) = 10592100
+  ) OR NOT (
+    EXISTS (
+      SELECT 1
+      FROM public.customers customer
+      JOIN public.customer_debt_transactions correction
+        ON correction.customer_id = customer.id
+       AND correction.id = 'DTX-FIX-0050-PT-20260810-00000146'
+      WHERE customer.code = 'KH000003'
+        AND round(customer.debt) = 10592100
+        AND round(correction.debt_change) = -9995000
+        AND round(correction.balance_after) = 10592100
+    ) OR (
+      NOT EXISTS (SELECT 1 FROM public.customers WHERE code = 'KH000003')
+      AND NOT EXISTS (SELECT 1 FROM public.cashbook_transactions WHERE id = 'PT-20260810-00000146')
+      AND NOT EXISTS (
+        SELECT 1 FROM public.customer_debt_transactions
+        WHERE id = 'DTX-P13-VOID-PT-20260810-00000146'
+          AND transaction_type = 'payment_cancel'
+      )
+    )
   ) THEN
     RAISE EXCEPTION 'Migration 0050 stopped: cancellation fix or confirmed debt repair was not verified';
   END IF;

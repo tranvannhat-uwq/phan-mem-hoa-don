@@ -5702,12 +5702,37 @@ select#invoice-pricelist-select:disabled {
 
 .cashbook-create-value-input {
   color: #047857;
-  font-size: 1rem;
-  font-weight: 700;
+  min-height: 50px !important;
+  padding: 0.65rem 0.85rem;
+  border-width: 2px;
+  border-color: #86efac;
+  background: #f0fdf4;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .cashbook-create-payment .cashbook-create-value-input {
   color: #dc2626;
+  border-color: #fca5a5;
+  background: #fff7f7;
+}
+
+.cashbook-create-value-input:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
+}
+
+.cashbook-create-payment .cashbook-create-value-input:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+
+.cashbook-create-value-input::placeholder {
+  color: #94a3b8;
+  opacity: 1;
 }
 
 .cashbook-create-accounting-option {
