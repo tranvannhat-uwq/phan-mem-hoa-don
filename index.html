@@ -2737,6 +2737,7 @@
           <div>
             <label class="form-label" for="customer-order-export-range-mode">Kho&#7843;ng th&#7901;i gian</label>
             <select class="form-control" id="customer-order-export-range-mode" style="width: 100%;">
+              <option value="current_filter">Theo b&#7897; l&#7885;c L&#7883;ch s&#7917; &#273;&#417;n</option>
               <option value="last_month">Th&#225;ng tr&#432;&#7899;c</option>
               <option value="this_month">Th&#225;ng n&#224;y</option>
               <option value="today">H&#244;m nay</option>
@@ -2953,7 +2954,7 @@
         <span id="print-subtotal">0 ₫</span>
       </div>
       <div class="print-summary-row" id="print-discount-row">
-        <span>Giảm giá:</span>
+        <span>Chiết khấu bán hàng:</span>
         <span id="print-discount-amount">-0 ₫</span>
       </div>
       <div class="print-summary-row" id="print-other-fee-row">
@@ -4245,6 +4246,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260814-processing-print-v2"></script>
+  <script type="module" src="js/main.js?v=20260814-invoice-discount-label-v19"></script>
 </body>
 </html>

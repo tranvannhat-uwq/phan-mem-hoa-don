@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260813-cashbook-amount-v15';
-import { switchTab } from '../main.js?v=20260813-cashbook-amount-v15';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20260813-cashbook-amount-v15';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260814-invoice-discount-label-v19';
+import { switchTab } from '../main.js?v=20260814-invoice-discount-label-v19';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20260814-invoice-discount-label-v19';
 import { safeCreateIcons, showToast } from '../utils.js';
 
 const PAGE_SIZE = 20;

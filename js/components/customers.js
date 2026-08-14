@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260813-cashbook-amount-v15';
-import { renderAll } from '../main.js?v=20260813-cashbook-amount-v15';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260813-cashbook-amount-v15';
-import { addCashbookTransaction } from './so_quy.js?v=20260813-cashbook-amount-v15';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260813-cashbook-amount-v15';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260813-cashbook-amount-v15';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260814-invoice-discount-label-v19';
+import { renderAll } from '../main.js?v=20260814-invoice-discount-label-v19';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260814-invoice-discount-label-v19';
+import { addCashbookTransaction } from './so_quy.js?v=20260814-invoice-discount-label-v19';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260814-invoice-discount-label-v19';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260814-invoice-discount-label-v19';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
@@ -2264,7 +2264,9 @@ function getLineAmount(item) {
 function buildCustomerOrderExportRows(orders, customer) {
   const provinceName = getProvinceNameByCode(customer.brandDiscounts && customer.brandDiscounts.province);
   return orders.flatMap(order => {
-    const items = Array.isArray(order.items) ? order.items : [];
+    // Keep the order visible in Excel even when an old/guest order has no
+    // hydrated item rows. Product columns remain blank for that one row.
+    const items = Array.isArray(order.items) && order.items.length > 0 ? order.items : [{}];
     const financials = getOrderFinancialBreakdown(order, state.salesReturns || []);
     return items.map(item => {
       const qty = toExportNumber(item.quantity);
@@ -2325,6 +2327,28 @@ function buildCustomerOrderExportRows(orders, customer) {
   });
 }
 
+const HISTORY_ORDER_ITEM_EXPORT_COLUMNS = [
+  'Mã hàng', 'Tên hàng', 'Thương hiệu', 'Thương hiệu/Nhãn sơn',
+  'Quy cách', 'ĐVT', 'Đơn vị tính', 'Ghi chú hàng hóa', 'Số lượng',
+  'Đơn giá', 'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'
+];
+
+function buildHistoryOrderExportRow(order, customer) {
+  const detailRows = buildCustomerOrderExportRows([order], customer);
+  if (detailRows.length === 0) return null;
+  if (detailRows.length === 1) return detailRows[0];
+
+  // The history screen promises an order list, so keep exactly one Excel row
+  // per order and combine its product values inside the corresponding cells.
+  const orderRow = { ...detailRows[0] };
+  HISTORY_ORDER_ITEM_EXPORT_COLUMNS.forEach(column => {
+    orderRow[column] = detailRows
+      .map(row => row[column] ?? '')
+      .join('\n');
+  });
+  return orderRow;
+}
+
 function getSavedCustomerOrderExportColumns() {
   try {
     const parsed = JSON.parse(localStorage.getItem(CUSTOMER_ORDER_EXPORT_COLUMNS_STORAGE_KEY) || '[]');
@@ -2363,6 +2387,11 @@ function getCustomerOrderExportDateRange() {
   const mode = document.getElementById('customer-order-export-range-mode')?.value || 'last_month';
   const today = getVnDateInputValue(0);
   const todayParts = today.split('-').map(Number);
+  if (mode === 'current_filter') {
+    const fromDate = document.getElementById('customer-order-export-from')?.value;
+    const toDate = document.getElementById('customer-order-export-to')?.value;
+    return { fromDate, toDate, label: 'BoLocLichSuDon' };
+  }
   if (mode === 'today') return { fromDate: today, toDate: today, label: 'HomNay' };
   if (mode === 'this_month') {
     const fromDate = `${todayParts[0]}-${String(todayParts[1]).padStart(2, '0')}-01`;
@@ -2621,22 +2650,39 @@ function openCustomerOrderExportModal(customerId = null) {
 }
 
 export function openHistoryOrderExportModal(orders, selectedOrderIds = []) {
-  if ((!selectedOrderIds || selectedOrderIds.length === 0) && !confirm(`Xuất toàn bộ ${orders.length} đơn theo bộ lọc hiện tại?`)) {
+  const availableOrders = Array.isArray(orders) ? orders : [];
+  const selectedIds = Array.isArray(selectedOrderIds) && selectedOrderIds.length > 0
+    ? selectedOrderIds.map(String)
+    : null;
+  if (availableOrders.length === 0) {
+    showToast('Không có đơn hàng trong kết quả hiện tại để xuất Excel.', 'warning');
+    return;
+  }
+  if (!selectedIds && !confirm(`Xuất toàn bộ ${availableOrders.length} đơn theo bộ lọc hiện tại?`)) {
     return;
   }
   activeExportCustomerId = null;
-  activeExportScopeMode = selectedOrderIds.length > 0 ? 'history_selected' : 'history_filtered';
-  activeExportOrders = orders || [];
-  activeExportOrderIds = selectedOrderIds || null;
+  activeExportScopeMode = selectedIds ? 'history_selected' : 'history_filtered';
+  activeExportOrders = availableOrders;
+  activeExportOrderIds = selectedIds;
   const modal = document.getElementById('customer-order-export-modal');
   if (!modal) return;
   const rangeMode = document.getElementById('customer-order-export-range-mode');
-  if (rangeMode) rangeMode.value = 'last_month';
-  const range = getCustomerOrderExportDateRange();
+  // The history screen has already applied its date filter. Preserve that
+  // exact result instead of silently resetting the export to last month.
+  if (rangeMode) rangeMode.value = 'current_filter';
+  const datedOrders = availableOrders
+    .map(order => new Date(order.date || order.createdAt || order.created_at))
+    .filter(date => Number.isFinite(date.getTime()))
+    .sort((a, b) => a - b);
+  const fromDate = datedOrders.length > 0 ? getVnDateInputValueFromDate(datedOrders[0]) : getVnDateInputValue(0);
+  const toDate = datedOrders.length > 0 ? getVnDateInputValueFromDate(datedOrders.at(-1)) : fromDate;
   const fromInput = document.getElementById('customer-order-export-from');
   const toInput = document.getElementById('customer-order-export-to');
-  if (fromInput) fromInput.value = range.fromDate;
-  if (toInput) toInput.value = range.toDate;
+  if (fromInput) fromInput.value = fromDate;
+  if (toInput) toInput.value = toDate;
+  const customRange = document.getElementById('customer-order-export-custom-range');
+  if (customRange) customRange.style.display = 'none';
   populateCustomerOrderExportCompanyFilter();
   populateCustomerOrderExportBrandFilter();
   populateCustomerOrderExportManagerFilter();
@@ -2653,9 +2699,14 @@ function closeCustomerOrderExportModal() {
 }
 
 async function exportCustomerOrderHistoryExcel() {
-  const customers = activeExportOrders ? (state.customers || []) : getExportCustomersByScope();
-  if (customers.length === 0) {
+  const isHistoryExport = Array.isArray(activeExportOrders);
+  const customers = isHistoryExport ? (state.customers || []) : getExportCustomersByScope();
+  if (!isHistoryExport && customers.length === 0) {
     showToast('Không có khách hàng phù hợp để xuất.', 'warning');
+    return;
+  }
+  if (!globalThis.XLSX) {
+    showToast('Thư viện Excel chưa tải xong. Vui lòng thử lại.', 'danger');
     return;
   }
   const selectedColumns = getSelectedCustomerOrderExportColumns();
@@ -2694,10 +2745,10 @@ async function exportCustomerOrderHistoryExcel() {
     if (selectedCustomerId !== 'all') {
       scopedCustomers = scopedCustomers.filter(c => String(c.id) === String(selectedCustomerId));
     }
-    if (!activeExportOrders && selectedCompanyId !== 'all') {
+    if (!isHistoryExport && selectedCompanyId !== 'all') {
       scopedCustomers = scopedCustomers.filter(c => customerMatchesExportCompany(c, selectedCompanyId));
     }
-    if (!activeExportOrders && selectedBrand !== 'all') {
+    if (!isHistoryExport && selectedBrand !== 'all') {
       scopedCustomers = scopedCustomers.filter(c => customerMatchesExportBrand(c, selectedBrand));
     }
     if (selectedManagerId !== 'all') {
@@ -2705,12 +2756,14 @@ async function exportCustomerOrderHistoryExcel() {
     }
     const customerById = new Map(scopedCustomers.map(c => [String(c.id), c]));
     let orders = [];
-    if (activeExportOrders) {
+    if (isHistoryExport) {
       const allowedOrderIds = activeExportOrderIds ? new Set(activeExportOrderIds.map(String)) : null;
       const startTime = new Date(startIso).getTime();
       const endTime = new Date(endExclusiveIso).getTime();
       orders = activeExportOrders.filter(order => {
         if (allowedOrderIds && !allowedOrderIds.has(String(order.id))) return false;
+        if (selectedCustomerId !== 'all'
+          && String(order.customerId || order.customer_id || '') !== String(selectedCustomerId)) return false;
         const orderTime = new Date(order.date || order.createdAt || order.created_at).getTime();
         if (!Number.isFinite(orderTime) || orderTime < startTime || orderTime >= endTime) return false;
         if (!orderMatchesExportStatus(order, status)) return false;
@@ -2730,8 +2783,21 @@ async function exportCustomerOrderHistoryExcel() {
       orders = await dbFetchCustomersOrderHistory(scopedCustomers.map(c => c.id), startIso, endExclusiveIso, status);
     }
     const exportRows = orders.flatMap(order => {
-      const customer = customerById.get(String(order.customerId));
-      return customer ? buildCustomerOrderExportRows([order], customer) : [];
+      const customer = customerById.get(String(order.customerId || order.customer_id)) || {
+        id: order.customerId || order.customer_id || '',
+        code: order.customerCode || order.customer_code || '',
+        name: order.customerName || order.customer_name || 'Khách lẻ',
+        phone: order.customerPhone || order.customer_phone || '',
+        address: order.customerAddress || order.customer_address || '',
+        pricelistId: order.pricelistId || order.pricelist_id || '',
+        managedBy: order.customerManagerId || order.customer_manager_id || '',
+        brandDiscounts: {}
+      };
+      if (isHistoryExport) {
+        const row = buildHistoryOrderExportRow(order, customer);
+        return row ? [row] : [];
+      }
+      return buildCustomerOrderExportRows([order], customer);
     });
     if (exportRows.length === 0) {
       showToast('Không có đơn hàng phù hợp để xuất Excel.', 'warning');
@@ -2757,7 +2823,15 @@ async function exportCustomerOrderHistoryExcel() {
     const fileName = `LichSuDonHang_${sanitizeFilePart(fileRange)}_${customers.length}Khach.xlsx`;
     XLSX.writeFile(workbook, fileName);
     closeCustomerOrderExportModal();
-    showToast(`Đã xuất ${exportRows.length} dòng lịch sử đơn hàng.`, 'success');
+    showToast(
+      isHistoryExport
+        ? `Đã xuất ${exportRows.length} đơn hàng, mỗi đơn một dòng.`
+        : `Đã xuất ${exportRows.length} dòng chi tiết lịch sử đơn hàng.`,
+      'success'
+    );
+  } catch (error) {
+    console.error('Không thể xuất Excel lịch sử đơn hàng:', error);
+    showToast('Không thể xuất Excel lịch sử đơn hàng: ' + (error.message || 'Lỗi hệ thống'), 'danger');
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
