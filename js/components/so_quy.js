@@ -108,6 +108,51 @@ function toLocalDateTimeInput(value) {
   return date.toISOString().slice(0, 16);
 }
 
+function setCashbookDateTimeValue(targetId, value) {
+  const target = document.getElementById(targetId);
+  const picker = document.querySelector(`[data-cashbook-datetime-target="${targetId}"]`);
+  if (!target || !picker) return;
+
+  const normalized = String(value || '').slice(0, 16);
+  const [date = '', time = ''] = normalized.split('T');
+  const [hour = '00', minute = '00'] = time.split(':');
+  target.value = normalized;
+  picker.querySelector('[data-cashbook-date]').value = date;
+  picker.querySelector('[data-cashbook-hour]').value = hour;
+  picker.querySelector('[data-cashbook-minute]').value = minute;
+}
+
+function setupCashbook24HourPicker(targetId) {
+  const target = document.getElementById(targetId);
+  const picker = document.querySelector(`[data-cashbook-datetime-target="${targetId}"]`);
+  if (!target || !picker || picker.dataset.ready === 'true') return;
+
+  const dateInput = picker.querySelector('[data-cashbook-date]');
+  const hourSelect = picker.querySelector('[data-cashbook-hour]');
+  const minuteSelect = picker.querySelector('[data-cashbook-minute]');
+  if (!dateInput || !hourSelect || !minuteSelect) return;
+
+  hourSelect.innerHTML = Array.from({ length: 24 }, (_, hour) => {
+    const value = String(hour).padStart(2, '0');
+    return `<option value="${value}">${value}</option>`;
+  }).join('');
+  minuteSelect.innerHTML = Array.from({ length: 60 }, (_, minute) => {
+    const value = String(minute).padStart(2, '0');
+    return `<option value="${value}">${value}</option>`;
+  }).join('');
+
+  const syncTarget = () => {
+    target.value = dateInput.value
+      ? `${dateInput.value}T${hourSelect.value}:${minuteSelect.value}`
+      : '';
+  };
+  dateInput.addEventListener('change', syncTarget);
+  hourSelect.addEventListener('change', syncTarget);
+  minuteSelect.addEventListener('change', syncTarget);
+  picker.dataset.ready = 'true';
+  setCashbookDateTimeValue(targetId, target.value);
+}
+
 // Helper: load/save transactions from LocalStorage
 export function getCashbookTransactions() {
   const stored = localStorage.getItem('billing_system_cashbook_transactions');
@@ -329,6 +374,7 @@ function scheduleCashbookDateReload() {
 
 // setup listeners
 export function setupSoQuyPanel() {
+  ['receipt-time', 'payment-time', 'cashbook-edit-time'].forEach(setupCashbook24HourPicker);
   // 1. Account type selection (Quỹ tiền)
   document.querySelectorAll('input[name="so-quy-acc-type"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
@@ -601,7 +647,7 @@ export function setupSoQuyPanel() {
       const now = new Date();
       now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
       if (receiptTimeInput) {
-        receiptTimeInput.value = now.toISOString().slice(0, 16);
+        setCashbookDateTimeValue('receipt-time', now.toISOString().slice(0, 16));
       }
       // Set method select to match current view filter
       const rMethod = document.getElementById('receipt-method');
@@ -790,7 +836,7 @@ export function setupSoQuyPanel() {
       const now = new Date();
       now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
       if (paymentTimeInput) {
-        paymentTimeInput.value = now.toISOString().slice(0, 16);
+        setCashbookDateTimeValue('payment-time', now.toISOString().slice(0, 16));
       }
       // Set method select to match current view filter
       const pMethod = document.getElementById('payment-method');
@@ -1590,7 +1636,7 @@ function openCashbookEditModal(transaction) {
   document.getElementById('cashbook-edit-id').value = transaction.id;
   document.getElementById('cashbook-edit-code').value = transaction.id;
   document.getElementById('cashbook-edit-type').value = transaction.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi';
-  document.getElementById('cashbook-edit-time').value = toLocalDateTimeInput(transaction.date);
+  setCashbookDateTimeValue('cashbook-edit-time', toLocalDateTimeInput(transaction.date));
   document.getElementById('cashbook-edit-category').value = transaction.category || '';
   document.getElementById('cashbook-edit-partner').value = transaction.partner || '';
   document.getElementById('cashbook-edit-value').value = Number(transaction.value || 0);

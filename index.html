@@ -3696,8 +3696,14 @@
                 <small class="cashbook-create-field-hint">Ví dụ: TTM000001</small>
               </div>
               <div class="form-group">
-                <label class="form-label" for="receipt-time">Thời gian</label>
-                <input type="datetime-local" class="form-control" id="receipt-time" required>
+                <label class="form-label" for="receipt-date">Thời gian (24 giờ)</label>
+                <div class="cashbook-datetime-24h" data-cashbook-datetime-target="receipt-time">
+                  <input type="date" class="form-control cashbook-date-input" id="receipt-date" data-cashbook-date required aria-label="Ngày lập phiếu thu">
+                  <select class="form-control cashbook-hour-input" data-cashbook-hour required aria-label="Giờ lập phiếu thu (định dạng 24 giờ)"></select>
+                  <span class="cashbook-time-separator" aria-hidden="true">:</span>
+                  <select class="form-control cashbook-minute-input" data-cashbook-minute required aria-label="Phút lập phiếu thu"></select>
+                </div>
+                <input type="hidden" id="receipt-time">
               </div>
               <div class="form-group cashbook-create-field-full">
                 <label class="form-label" for="receipt-category">Loại thu</label>
@@ -3783,8 +3789,14 @@
                 <small class="cashbook-create-field-hint">Ví dụ: TCM000001</small>
               </div>
               <div class="form-group">
-                <label class="form-label" for="payment-time">Thời gian</label>
-                <input type="datetime-local" class="form-control" id="payment-time" required>
+                <label class="form-label" for="payment-date">Thời gian (24 giờ)</label>
+                <div class="cashbook-datetime-24h" data-cashbook-datetime-target="payment-time">
+                  <input type="date" class="form-control cashbook-date-input" id="payment-date" data-cashbook-date required aria-label="Ngày lập phiếu chi">
+                  <select class="form-control cashbook-hour-input" data-cashbook-hour required aria-label="Giờ lập phiếu chi (định dạng 24 giờ)"></select>
+                  <span class="cashbook-time-separator" aria-hidden="true">:</span>
+                  <select class="form-control cashbook-minute-input" data-cashbook-minute required aria-label="Phút lập phiếu chi"></select>
+                </div>
+                <input type="hidden" id="payment-time">
               </div>
               <div class="form-group cashbook-create-field-full">
                 <label class="form-label" for="payment-category">Loại chi</label>
@@ -3870,8 +3882,14 @@
                 <input type="text" class="form-control" id="cashbook-edit-type" readonly>
               </div>
               <div class="form-group">
-                <label class="form-label" for="cashbook-edit-time">Thời gian</label>
-                <input type="datetime-local" class="form-control" id="cashbook-edit-time" required>
+                <label class="form-label" for="cashbook-edit-date">Thời gian (24 giờ)</label>
+                <div class="cashbook-datetime-24h" data-cashbook-datetime-target="cashbook-edit-time">
+                  <input type="date" class="form-control cashbook-date-input" id="cashbook-edit-date" data-cashbook-date required aria-label="Ngày ghi sổ">
+                  <select class="form-control cashbook-hour-input" data-cashbook-hour required aria-label="Giờ ghi sổ (định dạng 24 giờ)"></select>
+                  <span class="cashbook-time-separator" aria-hidden="true">:</span>
+                  <select class="form-control cashbook-minute-input" data-cashbook-minute required aria-label="Phút ghi sổ"></select>
+                </div>
+                <input type="hidden" id="cashbook-edit-time">
               </div>
               <div class="form-group">
                 <label class="form-label" for="cashbook-edit-category" id="cashbook-edit-category-label">Loại thu/chi</label>

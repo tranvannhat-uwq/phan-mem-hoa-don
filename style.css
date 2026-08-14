@@ -5788,6 +5788,34 @@ select#invoice-pricelist-select:disabled {
   min-height: 42px;
 }
 
+.cashbook-datetime-24h {
+  display: grid;
+  grid-template-columns: minmax(128px, 1fr) 80px 8px 80px;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cashbook-datetime-24h .form-control {
+  min-width: 0;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cashbook-datetime-24h .cashbook-hour-input,
+.cashbook-datetime-24h .cashbook-minute-input {
+  width: 80px;
+  padding-left: 0.65rem;
+  padding-right: 1.75rem;
+  font-weight: 700;
+}
+
+.cashbook-time-separator {
+  color: var(--text-primary);
+  font-weight: 800;
+  text-align: center;
+}
+
 .cashbook-create-field-full {
   grid-column: 1 / -1;
 }
