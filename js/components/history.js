@@ -1149,10 +1149,10 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                   </button>
                 ` : ''}
                 ${['admin', 'accounting'].includes(state.currentUser?.role) ? activeOrderReturns.map(item => `
-                  <button class="btn btn-secondary btn-sm history-return-print-btn" data-return-id="${item.id}" title="In phiếu trả ${item.id}">
-                    <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> ${item.id}
+                  <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" title="In phiếu trả ${escapeHistoryHtml(item.id)}" aria-label="In phiếu trả ${escapeHistoryHtml(item.id)}">
+                    <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> In phiếu
                   </button>
-                  <button class="btn btn-danger btn-sm history-return-cancel-btn" data-return-id="${item.id}" title="Hủy phiếu trả ${item.id}">
+                  <button class="btn btn-danger btn-sm history-return-cancel-btn" data-return-id="${escapeHistoryHtml(item.id)}" title="Hủy phiếu trả ${escapeHistoryHtml(item.id)}" aria-label="Hủy phiếu trả ${escapeHistoryHtml(item.id)}">
                     <i data-lucide="ban" style="width: 13px; height: 13px;"></i>
                   </button>
                 `).join('') : ''}
@@ -1675,6 +1675,9 @@ export function openSalesReturnModal(orderId) {
         <td style="text-align: center;">
           <input type="number" class="form-control return-qty-input" min="0" max="${maxReturnable}" value="0" ${maxReturnable === 0 ? 'disabled' : ''} style="width: 70px; text-align: center; font-weight: 700; height: 32px; padding: 2px;">
         </td>
+        <td style="text-align: center;">
+          <input type="number" class="form-control return-deduction-percent-input" min="0" max="100" step="0.01" value="0" ${maxReturnable === 0 ? 'disabled' : ''} aria-label="Phần trăm khấu trừ khi trả ${prodName}" style="width: 72px; text-align: center; font-weight: 700; height: 32px; padding: 2px;">
+        </td>
         <td style="text-align: right; font-weight: 600; color: var(--color-primary);" class="return-refund-price-lbl">${formatCurrency(unitPrice)}</td>
         <td style="text-align: right; font-weight: 700; color: #f59e0b;" class="return-subtotal-lbl">0 ₫</td>
       </tr>
@@ -1688,16 +1691,24 @@ export function openSalesReturnModal(orderId) {
       const maxReturnable = parseFloat(row.getAttribute('data-max-returnable')) || 0;
       
       const qtyInput = row.querySelector('.return-qty-input');
+      const deductionInput = row.querySelector('.return-deduction-percent-input');
       let qty = parseFloat(qtyInput.value) || 0;
+      let deductionPercent = parseFloat(deductionInput?.value) || 0;
       if (qty < 0) { qty = 0; qtyInput.value = 0; }
       if (qty > maxReturnable) {
         showToast(`Số lượng trả không được vượt quá số lượng còn lại (${maxReturnable})!`, 'warning');
         qty = maxReturnable;
         qtyInput.value = maxReturnable;
       }
+      if (deductionPercent < 0) { deductionPercent = 0; deductionInput.value = 0; }
+      if (deductionPercent > 100) {
+        showToast('Khấu trừ trả hàng phải nằm trong khoảng từ 0% đến 100%.', 'warning');
+        deductionPercent = 100;
+        deductionInput.value = 100;
+      }
 
-      const refundPrice = unitPrice;
-      const subtotal = Math.round(unitPrice * qty);
+      const refundPrice = Math.round(unitPrice * (1 - deductionPercent / 100));
+      const subtotal = Math.round(unitPrice * qty * (1 - deductionPercent / 100));
 
       row.querySelector('.return-refund-price-lbl').innerText = formatCurrency(refundPrice);
       row.querySelector('.return-subtotal-lbl').innerText = formatCurrency(subtotal);
@@ -1723,7 +1734,7 @@ export function openSalesReturnModal(orderId) {
     }
   };
 
-  document.querySelectorAll('.return-qty-input').forEach(el => {
+  document.querySelectorAll('.return-qty-input, .return-deduction-percent-input').forEach(el => {
     el.addEventListener('input', recalculateTotals);
     el.addEventListener('change', recalculateTotals);
   });
@@ -1755,6 +1766,7 @@ export async function processSalesReturnSubmit(e) {
 
   document.querySelectorAll('.return-item-row').forEach(row => {
     const qty = parseFloat(row.querySelector('.return-qty-input').value) || 0;
+    const deductionPercent = parseFloat(row.querySelector('.return-deduction-percent-input')?.value) || 0;
     const maxReturnable = parseFloat(row.getAttribute('data-max-returnable')) || 0;
     const prodName = row.getAttribute('data-product-name');
     
@@ -1763,12 +1775,18 @@ export async function processSalesReturnSubmit(e) {
       validationError = true;
       return;
     }
+    if (deductionPercent < 0 || deductionPercent > 100) {
+      showToast(`Khấu trừ của sản phẩm "${prodName}" phải nằm trong khoảng từ 0% đến 100%.`, 'danger');
+      validationError = true;
+      return;
+    }
 
     if (qty > 0) {
       hasValidQty = true;
       returnItems.push({
         saleItemId: row.getAttribute('data-sale-item-id'),
-        quantity: qty
+        quantity: qty,
+        deductionPercent
       });
     }
   });

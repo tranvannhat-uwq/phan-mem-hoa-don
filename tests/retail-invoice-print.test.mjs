@@ -20,7 +20,9 @@ test('retail invoice uses the shorter title and hides company and warehouse rows
   assert.doesNotMatch(printFlow, /titleEl\.innerText = 'HÓA ĐƠN BÁN LẺ'/);
   assert.match(printFlow, /companyLargeEl\.style\.display = type === 'retail' \? 'none' : ''/);
   assert.match(printFlow, /warehouseRowEl\.style\.display = type === 'retail' \? 'none' : ''/);
+  assert.match(printFlow, /salesPhoneGroupEl\.style\.display = type === 'warehouse' \? '' : 'none'/);
   assert.match(html, /id="print-warehouse-row"/);
+  assert.match(html, /id="print-sales-phone-group"/);
 });
 
 test('sales invoice prints the managed business name instead of the paint brand label', () => {

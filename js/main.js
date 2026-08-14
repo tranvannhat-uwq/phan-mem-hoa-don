@@ -17,6 +17,7 @@ import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './comp
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260813-cashbook-amount-v15';
 import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260813-cashbook-amount-v15';
+import { setupNavigationColorSettings } from './components/navigation-theme.js?v=20260813-cashbook-amount-v15';
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
   'invoice-panel': ['pricelists'],
@@ -456,6 +457,7 @@ async function initApp() {
   const dateLbl = document.getElementById('current-date-lbl');
   if (dateLbl) dateLbl.innerText = today.toLocaleDateString('vi-VN');
 
+  setupNavigationColorSettings();
   setupNavigation();
   setupProductManagement();
   setupCustomerManagement();

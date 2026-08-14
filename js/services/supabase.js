@@ -4732,7 +4732,8 @@ export async function dbRecordSalesReturn(ret, items) {
           idempotencyKey: ret.idempotencyKey,
           items: (items || []).map(item => ({
             saleItemId: item.saleItemId,
-            quantity: Number(item.quantity || 0)
+            quantity: Number(item.quantity || 0),
+            deductionPercent: Number(item.deductionPercent || 0)
           }))
         }
       });

@@ -26,7 +26,7 @@
       }, true);
     }());
   </script>
-  <title>Hệ thống Quản lý Sản phẩm & Lên đơn hàng</title>
+  <title>VieOne | Hệ thống Quản lý Sản phẩm & Lên đơn hàng</title>
   <!-- Google Fonts: Inter & Lexend -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260813-empone-brand-v1">
+  <link rel="stylesheet" href="style.css?v=20260814-vieone-nav-color-v2">
 </head>
 <body>
 
@@ -48,8 +48,8 @@
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-project-logo" aria-label="EMP One">
-          <img src="empone-logo.png" alt="EMP One">
+        <div class="brand-project-logo" aria-label="VieOne">
+          <img src="vieone-logo.png" alt="VieOne">
         </div>
       </div>
 
@@ -157,10 +157,29 @@
             <i data-lucide="settings" style="width: 18px; height: 18px; color: #fff;"></i>
           </button>
           <!-- Dropdown Menu -->
-          <div class="global-settings-menu" id="global-settings-menu" style="display: none; position: absolute; right: 0; top: 45px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow-lg); width: 220px; z-index: 300; padding: 0.5rem 0; animation: fadeIn 0.2s ease;">
+          <div class="global-settings-menu" id="global-settings-menu" style="display: none; position: absolute; right: 0; top: 45px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow-lg); width: 260px; z-index: 300; padding: 0.5rem 0; animation: fadeIn 0.2s ease;">
             <div class="dropdown-user-info" style="padding: 0.65rem 1rem; border-bottom: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem;">
               <i data-lucide="user" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
               <span id="header-user-display" style="font-weight: 600; color: var(--text-primary);"></span>
+            </div>
+            <div class="nav-color-settings" id="nav-color-settings">
+              <div class="nav-color-settings-title">
+                <i data-lucide="paintbrush"></i>
+                <span>Màu thanh điều hướng</span>
+              </div>
+              <div class="nav-color-swatches" role="group" aria-label="Màu thanh điều hướng gợi ý">
+                <button type="button" class="nav-color-swatch" data-nav-color="#22c55e" style="--swatch-color: #22c55e;" aria-label="Màu xanh lá"></button>
+                <button type="button" class="nav-color-swatch" data-nav-color="#0e59f2" style="--swatch-color: #0e59f2;" aria-label="Màu xanh dương"></button>
+                <button type="button" class="nav-color-swatch" data-nav-color="#4f46e5" style="--swatch-color: #4f46e5;" aria-label="Màu chàm"></button>
+                <button type="button" class="nav-color-swatch" data-nav-color="#7c3aed" style="--swatch-color: #7c3aed;" aria-label="Màu tím"></button>
+                <button type="button" class="nav-color-swatch" data-nav-color="#0f766e" style="--swatch-color: #0f766e;" aria-label="Màu xanh ngọc"></button>
+                <button type="button" class="nav-color-swatch" data-nav-color="#334155" style="--swatch-color: #334155;" aria-label="Màu xám đậm"></button>
+              </div>
+              <div class="nav-color-custom-row">
+                <label for="nav-color-picker">Màu tùy chọn</label>
+                <input type="color" id="nav-color-picker" value="#22c55e" aria-label="Chọn màu thanh điều hướng tùy ý">
+                <button type="button" id="btn-reset-nav-color">Mặc định</button>
+              </div>
             </div>
             <!-- Dropdown Nav Links -->
             <button class="dropdown-item dropdown-nav-link" data-target="brands-panel" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
@@ -2904,7 +2923,7 @@
       <p style="margin: 0; margin-top: 2px;">- <strong>Địa chỉ:</strong> <span id="print-customer-address">N/A</span></p>
       <p id="print-warehouse-row" style="margin: 0; margin-top: 2px;">- <strong id="print-warehouse-text">Xuất Tại kho số 03 Chi nhánh Thái Nguyên</strong></p>
       <div style="display: flex; justify-content: space-between; margin-top: 2px;">
-        <span>- <strong>Nhân viên bán hàng:</strong> <span id="print-creator-name">admin</span>&nbsp;&nbsp; <strong>SĐT:</strong> <span id="print-sales-phone">N/A</span></span>
+        <span>- <strong>Nhân viên bán hàng:</strong> <span id="print-creator-name">admin</span><span id="print-sales-phone-group">&nbsp;&nbsp; <strong>SĐT:</strong> <span id="print-sales-phone">N/A</span></span></span>
         <span id="print-customer-manager" style="font-weight: bold;">NVKD: N/A</span>
       </div>
       <p style="display: none;">- <strong>Ghi chú:</strong> <span id="print-invoice-notes">N/A</span></p>
@@ -3618,7 +3637,7 @@
     <div class="login-card">
       <div class="login-header">
         <div class="login-brand-lockup">
-          <img src="empone-logo.png" alt="EMP One">
+          <img src="vieone-logo.png" alt="VieOne">
         </div>
         <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff; text-align: center; margin-bottom: 0.25rem;">HỆ THỐNG ĐĂNG NHẬP</h2>
         <p style="font-size: 0.85rem; color: var(--text-secondary); text-align: center; margin-bottom: 1.5rem;">Phần mềm Quản lý Bán hàng & Hóa đơn</p>
@@ -3921,7 +3940,7 @@
   <!-- Modal Tạo Phiếu Trả Hàng -->
   <div class="modal-overlay" id="sales-return-modal">
 
-    <div class="modal-content" style="max-width: 950px; width: 95%;">
+    <div class="modal-content" style="max-width: 1050px; width: 95%;">
       <div class="modal-header">
         <h3 class="modal-title" id="sales-return-modal-title">Tạo phiếu trả hàng</h3>
         <button type="button" class="modal-close" onclick="document.getElementById('sales-return-modal').classList.remove('active')">&times;</button>
@@ -3949,6 +3968,7 @@
                   <th style="width: 7%; text-align: center;">Đã bán</th>
                   <th style="width: 7%; text-align: center;">Đã trả</th>
                   <th style="width: 10%; text-align: center;">SL trả lần này</th>
+                  <th style="width: 9%; text-align: center;">Khấu trừ %</th>
                   <th style="width: 11%; text-align: right;">Giá hoàn dự kiến</th>
                   <th style="width: 11%; text-align: right;">Dự kiến</th>
                 </tr>
@@ -4194,6 +4214,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260813-cashbook-amount-v15"></script>
+  <script type="module" src="js/main.js?v=20260814-nav-color-v1"></script>
 </body>
 </html>

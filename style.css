@@ -541,6 +541,10 @@ body.invoice-variant-open {
   --color-primary: #22c55e; /* Bright Green */
   --color-primary-hover: #16a34a;
   --color-primary-light: rgba(34, 197, 94, 0.1);
+  --nav-background-color: #22c55e;
+  --nav-foreground-color: #ffffff;
+  --nav-control-background: rgba(255, 255, 255, 0.15);
+  --nav-active-background: rgba(0, 0, 0, 0.15);
   
   --color-secondary: #10b981; /* Emerald */
   --color-secondary-hover: #059669;
@@ -605,7 +609,7 @@ body {
 .sidebar {
   width: 100%;
   height: 60px;
-  background-color: var(--color-primary); /* Bright Green */
+  background-color: var(--nav-background-color); /* User-selectable navigation color */
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   border-right: none;
   display: flex;
@@ -4789,6 +4793,12 @@ select.form-control-inline {
   white-space: nowrap !important; /* Ngăn chặn tuyệt đối việc chữ bị rớt dòng */
 }
 
+.order-actions .history-return-print-btn {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ========================================================
    THIẾT KẾ CARD CHO TÙY CHỌN IN HÓA ĐƠN (PRINT MODAL CARD OPTIONS)
    ======================================================== */
@@ -6209,6 +6219,113 @@ select#invoice-pricelist-select:disabled {
 
 .dropdown-item:hover {
   background-color: var(--bg-primary) !important;
+}
+
+.nav-color-settings {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.nav-color-settings-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.nav-color-settings-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--color-primary);
+}
+
+.nav-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.45rem;
+}
+
+.nav-color-swatch {
+  width: 26px;
+  height: 26px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  box-shadow: 0 0 0 1px #cbd5e1;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.nav-color-swatch:hover,
+.nav-color-swatch:focus-visible {
+  transform: scale(1.08);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.nav-color-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 3px var(--text-primary);
+}
+
+.nav-color-custom-row {
+  display: grid;
+  grid-template-columns: 1fr 34px auto;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+#nav-color-picker {
+  width: 34px;
+  height: 28px;
+  padding: 1px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+#btn-reset-nav-color {
+  padding: 0.32rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#btn-reset-nav-color:hover {
+  background: var(--bg-primary);
+}
+
+.sidebar > .nav-menu > .nav-item > .nav-link {
+  color: var(--nav-foreground-color) !important;
+}
+
+.sidebar > .nav-menu > .nav-item > .nav-link:hover,
+.sidebar > .nav-menu > .nav-item > .nav-link.active {
+  color: var(--nav-foreground-color) !important;
+  background-color: var(--nav-active-background) !important;
+}
+
+.sidebar > .nav-menu > .nav-item > .nav-link.active svg,
+.sidebar .activity-header-button,
+.sidebar .btn-settings-toggle,
+.sidebar .btn-settings-toggle svg {
+  color: var(--nav-foreground-color) !important;
+  stroke: currentColor !important;
+}
+
+.sidebar .activity-header-button,
+.sidebar .btn-settings-toggle {
+  background: var(--nav-control-background) !important;
 }
 
 /* Exclusive brand select red color overrides */

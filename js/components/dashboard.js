@@ -12,9 +12,18 @@ let dashboardStatsInFlight = null;
 let dashboardStatsInFlightKey = '';
 let dashboardStatsCache = { key: '', payload: null, cachedAt: 0 };
 const DASHBOARD_STATS_CACHE_MS = 10_000;
+const DASHBOARD_COMPANY_SCOPE_VERSION = 'finance-all-companies-v1';
 const dashboardBreakdownCharts = new Map();
 const DASHBOARD_CHART_COLORS = ['#10b981', '#6366f1', '#0ea5e9', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+
+function canViewAllDashboardCompanies(user = state.currentUser) {
+  return ['admin', 'accounting'].includes(String(user?.role || '').toLowerCase());
+}
+
+function dashboardCompanyScopeActor(user = state.currentUser) {
+  return String(user?.authUserId || user?.auth_user_id || user?.id || user?.username || '');
+}
 
 function getRevenueChartAnimation() {
   if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false;
@@ -261,7 +270,9 @@ export function saveDashboardFilterToStorage() {
   try {
     localStorage.setItem('billing_system_dashboard_filter', JSON.stringify({
       filter: state.dashboardFilter,
-      mode: state.dashboardSalesMode
+      mode: state.dashboardSalesMode,
+      companyScopeVersion: DASHBOARD_COMPANY_SCOPE_VERSION,
+      companyScopeActor: dashboardCompanyScopeActor()
     }));
   } catch (e) {}
 }
@@ -273,6 +284,14 @@ export function loadDashboardFilterFromStorage() {
       const parsed = JSON.parse(stored);
       if (parsed.filter) {
         state.dashboardFilter = { ...state.dashboardFilter, ...parsed.filter };
+      }
+      // Older Accounting sessions were silently pinned to the profile's
+      // company. Start the expanded finance scope at "all" once, while still
+      // preserving later company choices made through the visible filter.
+      if (state.currentUser?.role === 'accounting'
+        && (parsed.companyScopeVersion !== DASHBOARD_COMPANY_SCOPE_VERSION
+          || parsed.companyScopeActor !== dashboardCompanyScopeActor())) {
+        state.dashboardFilter.companyId = 'all';
       }
       if (parsed.mode) {
         state.dashboardSalesMode = parsed.mode;
@@ -305,7 +324,7 @@ export function populateDashboardFilters() {
 
   // 1. Công ty
   if (companySelect) {
-    if (currUser && currUser.role !== 'admin') {
+    if (currUser && !canViewAllDashboardCompanies(currUser)) {
       const userCompId = getUserCompanyId(currUser);
       if (companyGroup) companyGroup.style.display = 'none';
       state.dashboardFilter.companyId = userCompId;
@@ -393,10 +412,10 @@ export function getFilteredDashboardOrders() {
     const userCompanyId = getUserCompanyId(currUser);
     if (currUser.role === 'sale') {
       orders = orders.filter(o => isSameUser(getOrderManagedSalesperson(o), currUser.username) && orderMatchesDashboardCompany(o, userCompanyId));
-    } else if (currUser.role === 'accounting' || currUser.role === 'manager') {
-      orders = orders.filter(o => orderMatchesDashboardCompany(o, userCompanyId));
-    } else if (currUser.role === 'admin' && state.dashboardFilter.companyId && state.dashboardFilter.companyId !== 'all') {
+    } else if (canViewAllDashboardCompanies(currUser) && state.dashboardFilter.companyId && state.dashboardFilter.companyId !== 'all') {
       orders = orders.filter(o => orderMatchesDashboardCompany(o, state.dashboardFilter.companyId));
+    } else if (currUser.role === 'manager') {
+      orders = orders.filter(o => orderMatchesDashboardCompany(o, userCompanyId));
     }
   }
 

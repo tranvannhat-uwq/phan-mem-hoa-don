@@ -4,13 +4,16 @@ import test from 'node:test';
 
 const read = relative => fs.readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8');
 
-test('EMP One is the primary project brand in navigation and login', () => {
+test('VieOne is the primary project brand in navigation and login', () => {
   const html = read('index.html');
-  const logoReferences = html.match(/src="empone-logo\.png"/g) || [];
+  const logoReferences = html.match(/src="vieone-logo\.png"/g) || [];
 
+  assert.equal(fs.existsSync(new URL('../vieone-logo.png', import.meta.url)), true);
   assert.equal(logoReferences.length, 2);
-  assert.match(html, /class="brand-project-logo"[\s\S]*alt="EMP One"/);
-  assert.match(html, /class="login-brand-lockup"[\s\S]*alt="EMP One"/);
+  assert.match(html, /<title>VieOne \|/);
+  assert.match(html, /class="brand-project-logo"[\s\S]*alt="VieOne"/);
+  assert.match(html, /class="login-brand-lockup"[\s\S]*alt="VieOne"/);
+  assert.doesNotMatch(html, /src="empone-logo\.png"|alt="EMP One"|aria-label="EMP One"/);
   assert.doesNotMatch(html, /<span class="brand-name"[^>]*>KIOT NANO<\/span>/);
   assert.doesNotMatch(html, /class="login-logo"/);
 });

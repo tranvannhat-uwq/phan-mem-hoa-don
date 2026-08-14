@@ -60,6 +60,7 @@ Run these files in order on a staging clone first:
 52. `0052_short_compact_audit_retention.sql`
 53. `0053_customer_assigned_price_list_trigger_repair.sql`
 54. `0054_quick_customer_manager_identity.sql`
+55. `0055_sales_return_deduction_percent.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -314,3 +315,9 @@ the global Sale visibility toggle. A Sale may save an order with a disabled
 price list only when that exact active list is assigned to the selected active
 customer inside the Sale's scope. The list remains unavailable for all other
 customers and its `is_available_for_sales` setting is not changed.
+
+Migration `0055` adds an optional percentage deduction to each returned order
+item. The database validates the percentage, calculates the net refund from the
+immutable original-order value, and keeps debt, cash refund, revenue, commission
+and return cancellation authoritative. A zero or omitted percentage preserves
+the previous return calculation exactly.

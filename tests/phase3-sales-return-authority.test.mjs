@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const migration = read('migrations/0008_authoritative_sales_returns_and_reversals.sql');
 const conflictFix = read('migrations/0014_sales_return_variable_conflict_fix.sql');
+const deductionMigration = read('migrations/0055_sales_return_deduction_percent.sql');
 const service = read('js/services/supabase.js');
 const history = read('js/components/history.js');
 const markup = read('index.html');
@@ -19,6 +20,20 @@ test('return RPC accepts business quantities and calculates canonical refund val
   assert.match(migration, /line_refund := cumulative_amount - previous_cumulative_amount/);
   assert.match(migration, /new_order_returned > COALESCE\(sale\.total_payable, 0\)/);
   assert.doesNotMatch(migration, /p_total_refund/);
+});
+
+test('return deduction is per item, optional and calculated authoritatively', () => {
+  assert.match(markup, /Khấu trừ %/);
+  assert.match(history, /class="form-control return-deduction-percent-input"/);
+  assert.match(history, /deductionPercent = parseFloat/);
+  assert.match(history, /unitPrice \* qty \* \(1 - deductionPercent \/ 100\)/);
+  assert.match(service, /deductionPercent: Number\(item\.deductionPercent \|\| 0\)/);
+  assert.match(deductionMigration, /item_deduction_percent < 0 OR item_deduction_percent > 100/);
+  assert.match(deductionMigration, /line_refund := round\(line_refund \* \(100 - item_deduction_percent\) \/ 100\)/);
+  assert.match(deductionMigration, /return_deduction_percent.*item_deduction_percent/);
+  assert.match(deductionMigration, /sum\(other_item\.subtotal\).*INTO remaining_amount/s);
+  assert.match(deductionMigration, /active_item\.quantity > 0/);
+  assert.match(deductionMigration, /VALUES \('0055'/);
 });
 
 test('return idempotency and database actors cannot be supplied by the browser', () => {
@@ -64,6 +79,9 @@ test('frontend exposes return actions only to finance roles and uses canonical r
   assert.match(history, /cancelResult\.order_status/);
   assert.match(history, /history-return-cancel-btn/);
   assert.match(history, /history-return-print-btn/);
+  assert.match(history, /history-return-print-btn[^>]*aria-label="In phiếu trả[^>]*>[\s\S]*In phiếu/);
+  assert.doesNotMatch(history, /history-return-print-btn[^>]*>[\s\S]{0,120}\$\{item\.id\}/);
+  assert.match(read('style.css'), /\.order-actions \.history-return-print-btn[\s\S]*overflow: hidden/);
   assert.match(markup, /Database sẽ tính lại từ snapshot giá của đơn gốc/);
   assert.doesNotMatch(markup, /class="form-control return-disc-type"/);
 });

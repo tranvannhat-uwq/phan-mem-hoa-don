@@ -1825,6 +1825,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   const managerEl = document.getElementById('print-customer-manager');
   const creatorEl = document.getElementById('print-creator-name');
   const salesPhoneEl = document.getElementById('print-sales-phone');
+  const salesPhoneGroupEl = document.getElementById('print-sales-phone-group');
   const warehouseTextEl = document.getElementById('print-warehouse-text');
   const warehouseRowEl = document.getElementById('print-warehouse-row');
 
@@ -1833,6 +1834,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
 
   if (creatorEl) creatorEl.innerText = creatorName || 'admin';
   if (salesPhoneEl) salesPhoneEl.innerText = config.salesPhone || config.hotline || 'N/A';
+  if (salesPhoneGroupEl) salesPhoneGroupEl.style.display = type === 'warehouse' ? '' : 'none';
   if (warehouseTextEl) warehouseTextEl.innerText = config.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên';
   if (warehouseRowEl) warehouseRowEl.style.display = type === 'retail' ? 'none' : '';
 
