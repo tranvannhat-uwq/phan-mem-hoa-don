@@ -1307,6 +1307,22 @@ select option {
   width: 280px !important;
 }
 
+.customers-table col[data-customer-column="notes"] {
+  width: 220px !important;
+}
+
+.customers-table .customer-notes-cell {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
 .customers-table col[data-customer-column="debt"] {
   width: 115px !important;
 }

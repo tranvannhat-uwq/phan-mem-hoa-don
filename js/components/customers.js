@@ -59,6 +59,7 @@ const CUSTOMER_COLUMN_DEFINITIONS = [
   { key: 'name', label: 'Tên khách hàng', width: 165 },
   { key: 'phone', label: 'Số điện thoại', width: 105 },
   { key: 'address', label: 'Địa chỉ', width: 280 },
+  { key: 'notes', label: 'Ghi chú', width: 220 },
   { key: 'brand', label: 'Nhãn sơn', width: 90 },
   { key: 'manager', label: 'KD quản lý', width: 125 },
   { key: 'pricelist', label: 'Bảng giá', width: 125 },
@@ -898,6 +899,10 @@ export function renderCustomersTable() {
     const provinceName = getProvinceNameByCode(c.brandDiscounts && c.brandDiscounts.province);
     const displayAddr = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '<span style="color: var(--text-muted);">N/A</span>');
     const addrTitle = provinceName ? `[${provinceName}] ${c.address || ''}` : (c.address || '');
+    const notes = String(c.notes || '').trim();
+    const notesHtml = notes
+      ? escapeCustomerHtml(notes)
+      : '<span style="color: var(--text-muted);">Không có</span>';
     
     const metrics = getCustomerMetrics(c);
     const lastTransactionDate = getCustomerLastTransactionDate(c);
@@ -919,6 +924,7 @@ export function renderCustomersTable() {
         </td>
         <td data-customer-column="phone">${c.phone || '<span style="color: var(--text-muted);">N/A</span>'}</td>
         <td data-customer-column="address" style="font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${addrTitle}">${displayAddr}</td>
+        <td data-customer-column="notes" title="${escapeCustomerHtml(notes)}"><div class="customer-notes-cell">${notesHtml}</div></td>
         <td data-customer-column="brand">
           <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: ${c.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(34, 197, 94, 0.15)'}; color: ${c.assignedBrand === 'Tất cả' ? '#10b981' : '#22c55e'}; border: 1px solid ${c.assignedBrand === 'Tất cả' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(34, 197, 94, 0.3)'};">${c.assignedBrand}</span>
         </td>
@@ -1225,8 +1231,14 @@ function validateCustomerForm() {
 export async function saveCustomer() {
   const index = parseInt(document.getElementById('customer-edit-index').value);
   const editId = document.getElementById('customer-edit-id').value;
+  const isEditing = index !== -1 && Boolean(editId);
+  // Realtime refreshes can reorder state.customers while this modal is open.
+  // Resolve the edited record by its stable id instead of trusting the old array index.
+  const editedCustomer = isEditing
+    ? state.customers.find(customer => String(customer.id) === String(editId)) || null
+    : null;
 
-  if (state.currentUser?.role === 'sale' && index !== -1) {
+  if (state.currentUser?.role === 'sale' && isEditing) {
     showToast('Kinh doanh không được sửa thông tin khách hàng đã thêm. Vui lòng liên hệ quản trị/kế toán để cập nhật.', 'warning');
     closeCustomerModal();
     return;
@@ -1240,7 +1252,7 @@ export async function saveCustomer() {
   const assignedBrand = document.getElementById('cust-assigned-brand').value;
   
   // Công nợ chỉ hiển thị trong form hồ sơ; không bao giờ lấy làm payload lưu.
-  let debt = index === -1 ? 0 : Number(state.customers[index]?.debt || 0);
+  let debt = isEditing ? Number(editedCustomer?.debt || 0) : 0;
   
   const notes = document.getElementById('cust-notes').value.trim();
   const pricelistId = document.getElementById('cust-pricelist').value;
@@ -1257,10 +1269,10 @@ export async function saveCustomer() {
   let managedBy = 'nhat';
   if (state.currentUser) {
     if (state.currentUser.role === 'sale') {
-      if (index === -1) {
+      if (!isEditing) {
         managedBy = state.currentUser.username;
       } else {
-        managedBy = state.customers[index].managedBy || state.currentUser.username;
+        managedBy = editedCustomer?.managedBy || state.currentUser.username;
       }
     } else {
       managedBy = document.getElementById('cust-managed-by').value;
@@ -1268,7 +1280,9 @@ export async function saveCustomer() {
   }
   // Lưu trữ đầy đủ email/username để đảm bảo tính đồng nhất
   
-  const duplicateCode = state.customers.some((c, idx) => c.code === code && idx !== index);
+  const duplicateCode = state.customers.some(c => (
+    c.code === code && (!isEditing || String(c.id) !== String(editId))
+  ));
   if (duplicateCode) {
     showToast('Mã khách hàng đã tồn tại trên hệ thống!', 'danger');
     return;
@@ -1276,8 +1290,8 @@ export async function saveCustomer() {
   
   const cleanPhone = phone.replace(/\D/g, '');
   if (cleanPhone) {
-    const duplicatePhone = state.customers.some((c, idx) => {
-      if (idx === index) return false;
+    const duplicatePhone = state.customers.some(c => {
+      if (isEditing && String(c.id) === String(editId)) return false;
       const cPhone = (c.phone || '').replace(/\D/g, '');
       return cPhone === cleanPhone;
     });
@@ -1297,17 +1311,17 @@ export async function saveCustomer() {
   if (provinceSelect) {
     brandDiscounts.province = provinceSelect.value;
   }
-  if (index !== -1 && state.customers[index].brandDiscounts?.salesBaselineImportedAt) {
-    brandDiscounts.salesBaselineImportedAt = state.customers[index].brandDiscounts.salesBaselineImportedAt;
+  if (editedCustomer?.brandDiscounts?.salesBaselineImportedAt) {
+    brandDiscounts.salesBaselineImportedAt = editedCustomer.brandDiscounts.salesBaselineImportedAt;
   }
-  if (index !== -1 && state.customers[index].brandDiscounts?.debtDays !== undefined) {
-    brandDiscounts.debtDays = state.customers[index].brandDiscounts.debtDays;
+  if (editedCustomer?.brandDiscounts?.debtDays !== undefined) {
+    brandDiscounts.debtDays = editedCustomer.brandDiscounts.debtDays;
   }
   
-  const customerId = index === -1 ? `cust-${Date.now()}` : editId;
+  const customerId = isEditing ? editId : `cust-${Date.now()}`;
   
   // Ghi nhận biến động công nợ nếu Admin/Kế toán trực tiếp điều chỉnh công nợ khách hàng
-  const oldCust = index === -1 ? null : state.customers[index];
+  const oldCust = editedCustomer;
   const oldDebt = oldCust ? oldCust.debt || 0 : 0;
   const debtHistory = oldCust ? [...(oldCust.debtHistory || [])] : [];
   
@@ -1325,14 +1339,14 @@ export async function saveCustomer() {
     brandDiscounts,
     // Không upsert trực tiếp số dư mới. RPC công nợ sẽ ghi ledger sau khi hồ sơ tồn tại.
     debt: oldDebt,
-    totalTransaction: index === -1 ? 0 : state.customers[index].totalTransaction || 0,
-    totalReturn: index === -1 ? 0 : state.customers[index].totalReturn || 0,
-    netRevenue: index === -1 ? 0 : state.customers[index].netRevenue || 0,
-    debtDays: index === -1 ? 0 : state.customers[index].debtDays ?? state.customers[index].brandDiscounts?.debtDays ?? 0,
-    lastOrderAt: index === -1 ? null : state.customers[index].lastOrderAt || state.customers[index].last_order_at || null,
-    lastPaymentAt: index === -1 ? null : state.customers[index].lastPaymentAt || state.customers[index].last_payment_at || null,
-    createdAt: index === -1 ? new Date().toISOString() : state.customers[index].createdAt || state.customers[index].created_at || new Date().toISOString(),
-    salesBaselineImportedAt: index === -1 ? '' : state.customers[index].salesBaselineImportedAt || '',
+    totalTransaction: isEditing ? editedCustomer?.totalTransaction || 0 : 0,
+    totalReturn: isEditing ? editedCustomer?.totalReturn || 0 : 0,
+    netRevenue: isEditing ? editedCustomer?.netRevenue || 0 : 0,
+    debtDays: isEditing ? editedCustomer?.debtDays ?? editedCustomer?.brandDiscounts?.debtDays ?? 0 : 0,
+    lastOrderAt: isEditing ? editedCustomer?.lastOrderAt || editedCustomer?.last_order_at || null : null,
+    lastPaymentAt: isEditing ? editedCustomer?.lastPaymentAt || editedCustomer?.last_payment_at || null : null,
+    createdAt: isEditing ? editedCustomer?.createdAt || editedCustomer?.created_at || new Date().toISOString() : new Date().toISOString(),
+    salesBaselineImportedAt: isEditing ? editedCustomer?.salesBaselineImportedAt || '' : '',
     notes,
     pricelistId,
     managedBy,
@@ -1346,7 +1360,7 @@ export async function saveCustomer() {
       debt = Number(refreshedCustomer.debt || 0);
       Object.assign(customerData, refreshedCustomer);
     }
-    if (index === -1) showToast('Thêm khách hàng thành công!');
+    if (!isEditing) showToast('Thêm khách hàng thành công!');
     else showToast('Cập nhật khách hàng thành công!');
     
     // Nếu cập nhật đúng khách hàng đang chọn lên đơn, cập nhật lại giao diện lên đơn
