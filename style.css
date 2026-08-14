@@ -4846,6 +4846,10 @@ select.form-control-inline {
   background-color: rgba(16, 185, 129, 0.1) !important;
   color: #10b981 !important;
 }
+.print-type-option-processing i {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+  color: #d97706 !important;
+}
 .print-type-option-warehouse i {
   background-color: rgba(75, 85, 99, 0.1) !important;
   color: #4b5563 !important;

@@ -40,7 +40,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260814-vieone-nav-color-v2">
+  <link rel="stylesheet" href="style.css?v=20260814-processing-print-v2">
 </head>
 <body>
 
@@ -2909,8 +2909,8 @@
       <h1 id="print-invoice-title-large" style="text-align: center; font-size: 22pt; font-weight: bold; margin: 15px 0 5px 0; text-transform: uppercase; color: #000;">HÓA ĐƠN BÁN HÀNG</h1>
       <!-- Mã hóa đơn và Ngày lập cùng hàng -->
       <div style="text-align: center; font-size: 12pt; line-height: 1.4; display: flex; justify-content: center; gap: 30px;">
-        <p style="margin: 0;"><strong>Mã hóa đơn:</strong> <span id="print-invoice-id">HD-000000</span></p>
-        <p style="margin: 0;"><strong>Ngày lập:</strong> <span id="print-invoice-date">23/06/2026</span></p>
+        <p id="print-invoice-id-row" style="margin: 0;"><strong>Mã hóa đơn:</strong> <span id="print-invoice-id">HD-000000</span></p>
+        <p id="print-invoice-date-row" style="margin: 0;"><strong id="print-invoice-date-label">Ngày lập:</strong> <span id="print-invoice-date">23/06/2026</span></p>
       </div>
     </div>
 
@@ -2920,7 +2920,11 @@
         <span>- <strong>Họ tên người nhận hàng:</strong> <span id="print-customer-name" style="font-weight: bold;">Khách hàng vãng lai</span></span>
         <span><strong>SĐT:</strong> <span id="print-customer-phone" style="font-weight: bold;">N/A</span></span>
       </div>
-      <p style="margin: 0; margin-top: 2px;">- <strong>Địa chỉ:</strong> <span id="print-customer-address">N/A</span></p>
+      <p id="print-processing-reason-row" style="display: none; margin: 0; margin-top: 2px;">- <strong>Lý do xuất b&#225;n:</strong> <span id="print-processing-reason"></span></p>
+      <div id="print-address-payment-row" style="display: flex; justify-content: space-between; margin-top: 2px;">
+        <span>- <strong>Địa chỉ:</strong> <span id="print-customer-address">N/A</span></span>
+        <span id="print-payment-method-wrap" style="display: none;"><strong>Hình thức thanh toán:</strong> <span id="print-payment-method"></span></span>
+      </div>
       <p id="print-warehouse-row" style="margin: 0; margin-top: 2px;">- <strong id="print-warehouse-text">Xuất Tại kho số 03 Chi nhánh Thái Nguyên</strong></p>
       <div style="display: flex; justify-content: space-between; margin-top: 2px;">
         <span>- <strong>Nhân viên bán hàng:</strong> <span id="print-creator-name">admin</span><span id="print-sales-phone-group">&nbsp;&nbsp; <strong>SĐT:</strong> <span id="print-sales-phone">N/A</span></span></span>
@@ -3239,6 +3243,13 @@
           <div style="flex: 1;">
             <div class="option-title">Hóa đơn bán hàng</div>
             <div class="option-desc">Ẩn tỷ lệ % chiết khấu ở dòng tổng, bỏ cột % chiết khấu</div>
+          </div>
+        </button>
+        <button class="print-type-option print-type-option-processing" id="btn-print-type-processing">
+          <i data-lucide="factory" style="width: 22px; height: 22px;"></i>
+          <div style="flex: 1;">
+            <div class="option-title">Hóa đơn bên gia công</div>
+            <div class="option-desc">Phiếu xuất kho rút gọn, không có thông tin công ty, mã sản phẩm và giá tiền</div>
           </div>
         </button>
         <button class="print-type-option print-type-option-warehouse" id="btn-print-type-warehouse">
@@ -4214,6 +4225,6 @@
   </div>
 
   <!-- App logic -->
-  <script type="module" src="js/main.js?v=20260814-nav-color-v1"></script>
+  <script type="module" src="js/main.js?v=20260814-processing-print-v2"></script>
 </body>
 </html>

@@ -1633,7 +1633,16 @@ export function handleQuickCustomerBrandChange(newBrand) {
   renderInvoiceTable();
 }
 
+function canPrintProcessingInvoice(user = state.currentUser) {
+  return ['admin', 'accounting'].includes(String(user?.role || '').toLowerCase());
+}
+
 export async function renderAndPrintOrder(order, type = 'retail') {
+  if (type === 'processing' && !canPrintProcessingInvoice()) {
+    showToast('Chỉ Admin hoặc Kế toán được in hóa đơn bên gia công.', 'danger');
+    return false;
+  }
+
   const orderDebtSnapshot = type === 'agent' && order?.status === 'settled' && order?.customerId
     ? await dbFetchOrderDebtSnapshot(order.id, order.customerId)
     : null;
@@ -1648,7 +1657,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   }
   
   if (titleEl) {
-    if (type === 'warehouse') {
+    if (type === 'warehouse' || type === 'processing') {
       titleEl.innerText = 'PHIẾU XUẤT KHO';
       titleEl.style.fontSize = '17.6pt'; // Giảm 20% từ 22pt
     } else if (type === 'retail') {
@@ -1688,10 +1697,15 @@ export async function renderAndPrintOrder(order, type = 'retail') {
 
   document.getElementById('print-invoice-id').innerText = getOrderDisplayCode(order);
   document.getElementById('print-invoice-date').innerText = formatDateTime(order.date);
+  const invoiceIdRowEl = document.getElementById('print-invoice-id-row');
+  const invoiceDateLabelEl = document.getElementById('print-invoice-date-label');
+  if (invoiceIdRowEl) invoiceIdRowEl.style.display = type === 'processing' ? 'none' : '';
+  if (invoiceDateLabelEl) invoiceDateLabelEl.innerText = type === 'processing' ? 'Ngày:' : 'Ngày lập:';
   const customerNameEl = document.getElementById('print-customer-name');
   if (customerNameEl) {
     customerNameEl.innerText = order.customerName;
     customerNameEl.style.fontSize = type === 'warehouse' ? 'calc(1em + 4px)' : '';
+    if (type === 'processing') customerNameEl.style.fontSize = 'calc(1em + 4px)';
   }
   
   // Tổng hợp ghi chú đơn hàng và ghi chú mặc định của khách hàng
@@ -1797,6 +1811,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   if (companyLargeEl) {
     companyLargeEl.innerText = config.companyName;
     companyLargeEl.style.display = type === 'retail' ? 'none' : '';
+    if (type === 'processing') companyLargeEl.style.display = 'none';
   }
 
   const sellerNameEl = document.getElementById('print-seller-name');
@@ -1828,6 +1843,10 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   const salesPhoneGroupEl = document.getElementById('print-sales-phone-group');
   const warehouseTextEl = document.getElementById('print-warehouse-text');
   const warehouseRowEl = document.getElementById('print-warehouse-row');
+  const processingReasonRowEl = document.getElementById('print-processing-reason-row');
+  const processingReasonEl = document.getElementById('print-processing-reason');
+  const paymentMethodWrapEl = document.getElementById('print-payment-method-wrap');
+  const paymentMethodEl = document.getElementById('print-payment-method');
 
   const salespersonId = order.salespersonId || order.salesperson_id || order.createdBy;
   const creatorName = getUserDisplayName(salespersonId, 'Không xác định', state.users);
@@ -1836,7 +1855,27 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   if (salesPhoneEl) salesPhoneEl.innerText = config.salesPhone || config.hotline || 'N/A';
   if (salesPhoneGroupEl) salesPhoneGroupEl.style.display = type === 'warehouse' ? '' : 'none';
   if (warehouseTextEl) warehouseTextEl.innerText = config.invoiceWarehouseText || 'Xuất Tại kho số 03 Chi nhánh Thái Nguyên';
-  if (warehouseRowEl) warehouseRowEl.style.display = type === 'retail' ? 'none' : '';
+  if (warehouseRowEl) {
+    warehouseRowEl.style.display = type === 'retail' ? 'none' : '';
+    if (type === 'processing') warehouseRowEl.style.display = 'none';
+  }
+  if (processingReasonRowEl) processingReasonRowEl.style.display = type === 'processing' ? '' : 'none';
+  if (processingReasonEl) processingReasonEl.innerText = order.processingReason || order.exportReason || order.reason || order.notes || '';
+  if (paymentMethodWrapEl) paymentMethodWrapEl.style.display = type === 'processing' ? '' : 'none';
+  if (paymentMethodEl) {
+    const paymentMethod = String(order.paymentMethod || order.payment_method || '').trim();
+    const normalizedPaymentMethod = paymentMethod.toLowerCase();
+    const paymentMethodLabels = {
+      cash: 'Tiền mặt',
+      tien_mat: 'Tiền mặt',
+      bank_transfer: 'Chuyển khoản',
+      transfer: 'Chuyển khoản',
+      chuyen_khoan: 'Chuyển khoản',
+      card: 'Thẻ',
+      e_wallet: 'Ví điện tử'
+    };
+    paymentMethodEl.innerText = paymentMethodLabels[normalizedPaymentMethod] || paymentMethod;
+  }
 
   const orderCustomer = order.customerId
     ? state.customers.find(c => String(c.id) === String(order.customerId))
@@ -1847,7 +1886,10 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     || order.customer_manager_id
     || order.managedBy
     || '';
-  if (managerEl) managerEl.innerText = formatSalesManagerPrintLabel(managerId);
+  if (managerEl) {
+    managerEl.innerText = formatSalesManagerPrintLabel(managerId);
+    managerEl.style.display = type === 'processing' ? 'none' : '';
+  }
 
   if (order.customerId) {
     const cust = orderCustomer;
@@ -1931,8 +1973,51 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     
     // Ẩn tổng tiền thanh toán trên hóa đơn kho
     document.querySelector('.print-summary').style.display = 'none';
+  } else if (type === 'processing') {
+    let totalQty = 0;
+    const itemRowsHtml = order.items.map((item, idx) => {
+      const quantity = Number(item.quantity) || 0;
+      totalQty += quantity;
+      const specification = getOrderItemSpecification(item);
+      const colorPercentText = Number(item.colorPercent) > 0 ? ` (+${item.colorPercent}% màu)` : '';
+      const colorCodeDisplay = item.colorCode ? `${item.colorCode}${colorPercentText}` : '';
+
+      return `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td>${item.productName}</td>
+          <td style="text-align: center; font-weight: bold;">${colorCodeDisplay}</td>
+          <td style="text-align: center;">${specification}</td>
+          <td style="text-align: center; font-weight: bold;">${item.quantity}</td>
+        </tr>
+      `;
+    }).join('');
+
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th style="width: 7%;">STT</th>
+          <th style="width: 55%;">Tên, nhãn hiệu, sản phẩm</th>
+          <th style="width: 16%; text-align: center;">Mã màu/ % Màu</th>
+          <th style="width: 14%;">ĐVT</th>
+          <th style="width: 8%; text-align: center;">SL</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemRowsHtml}
+        <tr style="background-color: #f5f5f5; font-weight: bold;">
+          <td colspan="4" style="text-align: center; font-size: 13pt;">Tổng số lượng:</td>
+          <td style="text-align: center; font-size: 13pt;">${totalQty}</td>
+        </tr>
+      </tbody>
+    `;
+
+    const processingSummary = document.querySelector('.print-summary');
+    if (processingSummary) processingSummary.style.display = 'none';
   } else {
     // Hóa đơn bán hàng (Đại lý & Bán lẻ) dùng chung mẫu in chuẩn như yêu cầu
+    const isRetail = type === 'retail';
+    const summaryLabelColspan = 7;
     let oldDebt = 0;
     let newDebt = 0;
     let hasDebtInfo = false;
@@ -1960,19 +2045,17 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     if (hasDebtInfo) {
       debtRowsHtml = `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Nợ cũ</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Nợ cũ</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(oldDebt)}</td>
         </tr>
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng nợ hiện tại</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng nợ hiện tại</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(newDebt)}</td>
         </tr>
       `;
     }
 
     let sumSubTotal = 0;
-    const isRetail = type === 'retail';
-
     const headerPriceText = isRetail ? 'Giá bán x % màu' : 'Giá nhập';
     const headerSubtotalText = isRetail ? 'Thành tiền X % màu' : 'Thành tiền';
 
@@ -1985,8 +2068,6 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       sumSubTotal += subTotal;
       
       const packageDisplay = getOrderItemSpecification(item);
-      const variantCode = getOrderItemVariantCode(item);
-
       const colorPercentText = item.colorPercent > 0 ? ` (+${item.colorPercent}% màu)` : '';
       const colorCodeDisplay = item.colorCode ? `${item.colorCode}${colorPercentText}` : '';
       
@@ -1994,7 +2075,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         <tr>
           <td style="text-align: center;">${idx + 1}</td>
           <td>${item.productName}</td>
-          <td style="font-weight: bold; text-align: center;">${variantCode}</td>
+          <td style="font-weight: bold; text-align: center;">${getOrderItemVariantCode(item)}</td>
           <td style="text-align: center; font-weight: bold;">${colorCodeDisplay}</td>
           <td style="text-align: center;">${packageDisplay}</td>
           <td style="text-align: center;">${item.quantity}</td>
@@ -2026,41 +2107,41 @@ export async function renderAndPrintOrder(order, type = 'retail') {
         ${itemRowsHtml}
         ${isRetail ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng tiền hàng:</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng tiền hàng:</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(sumSubTotal)}</td>
         </tr>
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán lẻ</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán lẻ</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(order.totalDiscount)}</td>
         </tr>
         ` : ''}
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tạm tính</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tạm tính</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printSubtotal)}</td>
         </tr>
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Giảm giá${isRetail && order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Giảm giá${isRetail && order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printDiscount)}</td>
         </tr>
         
         ${printOtherFee > 0 ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printOtherFee)}</td>
         </tr>
         ` : ''}
 
         ${printShippingFee > 0 ? `
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu Khác</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu Khác</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">+${formatNumber(printShippingFee)}</td>
         </tr>
         ` : ''}
         
         <tr>
-          <td colspan="7" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px; font-size: 13pt;">${formatNumber(order.amountDue !== undefined ? order.amountDue : Math.max(0, order.totalPayable - (order.paidAmount || 0)))}</td>
         </tr>
         
@@ -2076,7 +2157,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   // Tổng số tiền viết bằng chữ
   const wordsContainer = document.getElementById('print-amount-in-words-container');
   if (wordsContainer) {
-    if (type === 'warehouse') {
+    if (type === 'warehouse' || type === 'processing') {
       wordsContainer.style.display = 'none';
     } else {
       wordsContainer.style.display = 'block';
@@ -2095,7 +2176,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   // Gán nhãn ký tên khách hàng và dựng các cột chữ ký
   const sigsEl = document.querySelector('.print-signatures');
   if (sigsEl) {
-    if (type === 'warehouse') {
+    if (type === 'warehouse' || type === 'processing') {
       sigsEl.innerHTML = `
         <div class="print-sig-col" style="width: 30%;">
           <p><strong>Người lập phiếu</strong></p>
@@ -2203,6 +2284,21 @@ export function setupPrintTypeModal() {
         renderAndPrintOrder(currentOrderToPrint, 'agent');
         modal.classList.remove('active');
       }
+    });
+  }
+
+  const processingBtn = document.getElementById('btn-print-type-processing');
+  if (processingBtn) {
+    const newProcessingBtn = processingBtn.cloneNode(true);
+    processingBtn.parentNode.replaceChild(newProcessingBtn, processingBtn);
+    newProcessingBtn.addEventListener('click', () => {
+      if (!currentOrderToPrint) return;
+      if (!canPrintProcessingInvoice()) {
+        showToast('Chỉ Admin hoặc Kế toán được in hóa đơn bên gia công.', 'danger');
+        return;
+      }
+      renderAndPrintOrder(currentOrderToPrint, 'processing');
+      modal.classList.remove('active');
     });
   }
   

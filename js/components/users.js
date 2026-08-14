@@ -705,7 +705,7 @@ export function applyUserPermissions(user) {
   if (role === 'sale') {
     styleTag.innerHTML = `
       #btn-save-order { display: none !important; }
-      #btn-print-type-warehouse { display: none !important; }
+      #btn-print-type-processing, #btn-print-type-warehouse { display: none !important; }
       .delete-cust-btn, .pay-debt-btn { display: none !important; }
       .edit-cust-btn { display: inline-flex !important; }
       #btn-open-add-product-modal, #btn-open-excel-modal, #btn-download-excel-template, .edit-product-btn, .delete-prod-btn { display: none !important; }
