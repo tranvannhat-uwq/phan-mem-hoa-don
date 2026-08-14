@@ -6,6 +6,7 @@ import { populatePricelistsDropdowns } from './pricelists.js';
 import { generateUniqueCustomerCode } from './customers.js?v=20260813-cashbook-amount-v15';
 import { addCashbookTransaction } from './so_quy.js?v=20260813-cashbook-amount-v15';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260813-cashbook-amount-v15';
+import { normalizeCustomerPhone } from '../domain/customer-query.js';
 import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260813-cashbook-amount-v15';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260813-cashbook-amount-v15';
@@ -233,7 +234,7 @@ function isUsingCustomerDefaultPriceList(customer) {
   return applicable.priceList?.id === selectedId;
 }
 
-function canPersistCurrentInvoicePricing() {
+function canPersistCurrentInvoicePricing(customerOverride = null) {
   // Admin and Accounting may deliberately use the manual-price workflow for
   // an existing customer. Sale keeps the existing customer price-list rules.
   if (isManualInvoicePriceMode() && canApproveManualInvoicePricing()) return true;
@@ -252,8 +253,10 @@ function canPersistCurrentInvoicePricing() {
       && canUserViewPriceList(state.currentUser, selected)
     );
   }
-  if (!state.activeCustomerId || state.isQuickCustomerMode) return true;
-  const customer = state.customers.find(item => item.id === state.activeCustomerId);
+  const activeCustomerId = customerOverride?.id || state.activeCustomerId;
+  if (!activeCustomerId || (state.isQuickCustomerMode && !customerOverride)) return true;
+  const customer = customerOverride
+    || state.customers.find(item => item.id === activeCustomerId);
   return isUsingCustomerDefaultPriceList(customer);
 }
 
@@ -898,7 +901,7 @@ export async function addProductToInvoice() {
   openVariantPicker(family, matchedVariantId);
 }
 
-export function compileActiveOrder() {
+export function compileActiveOrder(customerOverride = null) {
   if (state.invoiceItems.length === 0) {
     showToast('Vui lòng chọn ít nhất một sản phẩm vào hóa đơn!', 'danger');
     return null;
@@ -919,7 +922,16 @@ export function compileActiveOrder() {
   let agencyBrand = 'Nano10*';
   let customerManagerId = '';
   
-  if (state.isQuickCustomerMode) {
+  if (customerOverride) {
+    custId = customerOverride.id;
+    customerName = customerOverride.name || 'Khách hàng';
+    phone = customerOverride.phone || 'N/A';
+    address = customerOverride.address || 'N/A';
+    customerManagerId = customerOverride.managedBy || customerOverride.managed_by || '';
+    if (customerOverride.assignedBrand && customerOverride.assignedBrand !== 'Tất cả') {
+      agencyBrand = customerOverride.assignedBrand;
+    }
+  } else if (state.isQuickCustomerMode) {
     const qName = document.getElementById('quick-cust-name').value.trim();
     if (!qName) {
       showToast('Vui lòng nhập tên khách hàng mới!', 'danger');
@@ -1167,90 +1179,93 @@ export async function saveActiveOrder(status = 'settled') {
       if (!manualPricingApproved) return null;
     }
 
-    let customerId = state.activeCustomerId || null;
+    let resolvedQuickCustomer = null;
+    let reusedExistingQuickCustomer = false;
     
     // Xử lý tạo nhanh khách hàng mới nếu ở chế độ thêm nhanh
     if (state.isQuickCustomerMode) {
       const qName = document.getElementById('quick-cust-name').value.trim();
-      if (!qName) {
-        showToast('Vui lòng nhập tên khách hàng mới!', 'danger');
-        return null;
-      }
-      
-      const qProvinceSelect = document.getElementById('quick-cust-province');
-      const qProvince = qProvinceSelect ? qProvinceSelect.value : '';
-      if (!qProvince) {
-        showToast('Vui lòng chọn Tỉnh/Thành phố cho khách hàng mới!', 'danger');
-        return null;
-      }
-      
-      const qCode = generateUniqueCustomerCode(qProvince);
       const qPhone = document.getElementById('quick-cust-phone').value.trim();
-      const cleanPhone = qPhone.replace(/\D/g, '');
-      if (cleanPhone) {
-        const duplicatePhone = state.customers.some(c => {
-          const cPhone = (c.phone || '').replace(/\D/g, '');
+      const cleanPhone = normalizeCustomerPhone(qPhone);
+      const duplicateCustomer = cleanPhone
+        ? state.customers.find(c => {
+          const cPhone = normalizeCustomerPhone(c.phone);
           return cPhone === cleanPhone;
-        });
-        if (duplicatePhone) {
-          showToast('Số điện thoại này đã được đăng ký cho khách hàng khác!', 'danger');
+        })
+        : null;
+
+      if (duplicateCustomer) {
+        // Reuse the existing profile without overwriting it. The order still
+        // goes through the normal existing-customer pricing and permission checks.
+        resolvedQuickCustomer = duplicateCustomer;
+        reusedExistingQuickCustomer = true;
+        state.activeCustomerId = duplicateCustomer.id;
+        showToast(
+          `Số điện thoại đã thuộc khách hàng ${duplicateCustomer.name} (${duplicateCustomer.code || duplicateCustomer.id}). Đơn hàng sẽ được lưu cho khách hàng này.`,
+          'warning'
+        );
+      } else {
+        if (!qName) {
+          showToast('Vui lòng nhập tên khách hàng mới!', 'danger');
           return null;
         }
+        const qProvinceSelect = document.getElementById('quick-cust-province');
+        const qProvince = qProvinceSelect ? qProvinceSelect.value : '';
+        if (!qProvince) {
+          showToast('Vui lòng chọn Tỉnh/Thành phố cho khách hàng mới!', 'danger');
+          return null;
+        }
+
+        const qCode = generateUniqueCustomerCode(qProvince);
+        const qAddress = document.getElementById('quick-cust-address').value.trim();
+        const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
+        if (!qAssignedBrand) {
+          showToast('Vui lòng chọn nhãn đại lý độc quyền!', 'warning');
+          return null;
+        }
+
+        const qManagerSelect = document.getElementById('quick-cust-manager');
+        const qManager = qManagerSelect ? qManagerSelect.value : '';
+        if (!qManager) {
+          showToast('Vui lòng chọn nhân viên quản lý cho khách hàng mới!', 'danger');
+          return null;
+        }
+
+        const plSelect = document.getElementById('invoice-pricelist-select');
+        const qPricelistId = plSelect && plSelect.value ? plSelect.value : 'custom';
+        const newCustomer = {
+          id: `cust-${Date.now()}`,
+          code: qCode,
+          name: qName,
+          phone: qPhone,
+          address: qAddress,
+          assignedBrand: qAssignedBrand,
+          brandDiscounts: { province: qProvince },
+          debt: 0,
+          totalTransaction: 0,
+          notes: 'Thêm nhanh từ màn hình lên đơn',
+          pricelistId: qPricelistId,
+          managedBy: qManager
+        };
+
+        const custSaved = await dbCreateQuickCustomer(newCustomer);
+        if (!custSaved) return null;
+        // Keep the local state aligned with the authoritative manager chosen by
+        // the RPC (Sale users are always forced to own their quick customers).
+        const savedCustomer = custSaved === true
+          ? newCustomer
+          : { ...newCustomer, ...custSaved };
+        resolvedQuickCustomer = savedCustomer;
+        state.activeCustomerId = savedCustomer.id;
+        state.customers.push(savedCustomer);
+        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
       }
-      const qAddress = document.getElementById('quick-cust-address').value.trim();
-      const qAssignedBrand = document.getElementById('quick-cust-assigned-brand').value;
-      
-      if (!qAssignedBrand) {
-        showToast('Vui lòng chọn nhãn đại lý độc quyền!', 'warning');
-        return null;
-      }
-      
-      const qManagerSelect = document.getElementById('quick-cust-manager');
-      const qManager = qManagerSelect ? qManagerSelect.value : '';
-      if (!qManager) {
-        showToast('Vui lòng chọn nhân viên quản lý cho khách hàng mới!', 'danger');
-        return null;
-      }
-      
-      const plSelect = document.getElementById('invoice-pricelist-select');
-      const qPricelistId = plSelect && plSelect.value ? plSelect.value : 'custom';
-      
-      const newCustId = `cust-${Date.now()}`;
-      const newCustomer = {
-        id: newCustId,
-        code: qCode,
-        name: qName,
-        phone: qPhone,
-        address: qAddress,
-        assignedBrand: qAssignedBrand,
-        brandDiscounts: { province: qProvince },
-        debt: 0,
-        totalTransaction: 0,
-        notes: 'Thêm nhanh từ màn hình lên đơn',
-        pricelistId: qPricelistId,
-        managedBy: qManager
-      };
-      
-      const custSaved = await dbCreateQuickCustomer(newCustomer);
-      if (!custSaved) {
-        return null;
-      }
-      // Keep the local state aligned with the authoritative manager chosen by
-      // the RPC (Sale users are always forced to own their quick customers).
-      const savedCustomer = custSaved === true
-        ? newCustomer
-        : { ...newCustomer, ...custSaved };
-      state.activeCustomerId = savedCustomer.id;
-      customerId = savedCustomer.id;
-      
-      state.customers.push(savedCustomer);
-      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
     }
 
-    const order = compileActiveOrder();
+    const order = compileActiveOrder(resolvedQuickCustomer);
     if (!order) return null;
 
-    if (!canPersistCurrentInvoicePricing()) {
+    if (!canPersistCurrentInvoicePricing(reusedExistingQuickCustomer ? resolvedQuickCustomer : null)) {
       showToast('Chỉ Bảng giá chung được phép ghi đè bảng giá mặc định của khách hàng.', 'warning');
       return null;
     }

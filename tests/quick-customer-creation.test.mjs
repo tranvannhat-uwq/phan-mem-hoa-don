@@ -19,6 +19,35 @@ test('invoice quick customer uses its scoped RPC instead of direct table upsert'
   assert.match(invoice, /state\.customers\.push\(savedCustomer\)/);
 });
 
+test('duplicate quick-customer phone reuses the existing customer without blocking the order', () => {
+  const invoice = read('js/components/invoice.js');
+  const saveStart = invoice.indexOf('export async function saveActiveOrder');
+  const saveEnd = invoice.indexOf('export function resetInvoiceCustomer', saveStart);
+  const save = invoice.slice(saveStart, saveEnd);
+
+  assert.match(save, /const duplicateCustomer = cleanPhone[\s\S]*?state\.customers\.find/);
+  assert.match(save, /const cleanPhone = normalizeCustomerPhone\(qPhone\)/);
+  assert.match(save, /const cPhone = normalizeCustomerPhone\(c\.phone\)/);
+  assert.match(save, /resolvedQuickCustomer = duplicateCustomer;/);
+  assert.match(save, /reusedExistingQuickCustomer = true;/);
+  assert.match(save, /Đơn hàng sẽ được lưu cho khách hàng này\./);
+  assert.match(save, /compileActiveOrder\(resolvedQuickCustomer\)/);
+  assert.match(save, /canPersistCurrentInvoicePricing\(reusedExistingQuickCustomer \? resolvedQuickCustomer : null\)/);
+  assert.doesNotMatch(save, /Số điện thoại này đã được đăng ký cho khách hàng khác![\s\S]{0,100}return null/);
+});
+
+test('existing customer override supplies authoritative order identity snapshots', () => {
+  const invoice = read('js/components/invoice.js');
+  const compileStart = invoice.indexOf('export function compileActiveOrder');
+  const compileEnd = invoice.indexOf('export async function saveActiveOrder', compileStart);
+  const compile = invoice.slice(compileStart, compileEnd);
+
+  assert.match(compile, /if \(customerOverride\)/);
+  assert.match(compile, /custId = customerOverride\.id;/);
+  assert.match(compile, /customerName = customerOverride\.name/);
+  assert.match(compile, /customerManagerId = customerOverride\.managedBy/);
+});
+
 test('quick customer RPC is role-scoped, sale-owned and cannot accept financial balances', () => {
   const sql = read('migrations/0018_quick_customer_creation_rpc.sql');
   assert.match(sql, /actor\.role NOT IN \('admin', 'accounting', 'sale'\)/);

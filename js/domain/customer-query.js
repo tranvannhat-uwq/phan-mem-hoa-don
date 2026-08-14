@@ -11,6 +11,27 @@ export function normalizeCustomerSearch(value) {
     .replace(/\s+/g, ' ');
 }
 
+export function normalizeCustomerPhone(value) {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function matchesCustomerQuickSearch(customer, rawSearch) {
+  const search = normalizeCustomerSearch(rawSearch);
+  if (!search) return true;
+
+  const textMatches = normalizeCustomerSearch([
+    customer.code, customer.name, customer.phone
+  ].join(' ')).includes(search);
+  if (textMatches) return true;
+
+  // Only use digits-only phone matching for phone-shaped queries. This avoids
+  // a customer code such as KH003 matching every phone number containing 003.
+  const raw = String(rawSearch ?? '').trim();
+  if (!/^[+\d\s()./-]+$/.test(raw)) return false;
+  const phoneQuery = normalizeCustomerPhone(raw);
+  return Boolean(phoneQuery) && normalizeCustomerPhone(customer.phone).includes(phoneQuery);
+}
+
 export function finiteCustomerNumber(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = typeof value === 'number'
@@ -205,7 +226,6 @@ export function sortCustomerRows(rows, query = {}, now = new Date()) {
 }
 
 export function filterCustomerRows(rows, query = {}, now = new Date()) {
-  const search = normalizeCustomerSearch(query.q);
   const createdPresetRange = dateRangeForPreset(query.createdPreset, now);
   const salesMin = finiteCustomerNumber(query.salesMin);
   const salesMax = finiteCustomerNumber(query.salesMax);
@@ -213,9 +233,7 @@ export function filterCustomerRows(rows, query = {}, now = new Date()) {
   const debtMax = finiteCustomerNumber(query.debtMax);
 
   return rows.filter(customer => {
-    if (search && !normalizeCustomerSearch([
-      customer.code, customer.name, customer.phone
-    ].join(' ')).includes(search)) return false;
+    if (!matchesCustomerQuickSearch(customer, query.q)) return false;
 
     const createdAt = customer.createdAt;
     if (query.createdPreset === 'missing' && createdAt) return false;

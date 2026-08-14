@@ -1,18 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { customerDateKey, customerDaysSince, filterCustomerRows, normalizeCustomerSearch, queryCustomerRows, sortCustomerRows } from '../js/domain/customer-query.js';
+import { customerDateKey, customerDaysSince, filterCustomerRows, normalizeCustomerPhone, normalizeCustomerSearch, queryCustomerRows, sortCustomerRows } from '../js/domain/customer-query.js';
 
 const now = new Date(2026, 7, 3, 12);
 const rows = [
-  { id: '1', code: 'KH001', name: 'Nguyễn Thành', phone: '0912000001', address: 'Hà Nội', provinceName: 'Hà Nội', provinceCode: 'HN', brand: 'NANO10', pricelistId: 'p1', pricelistName: 'Bảng giá 01', managerId: 'hoan', managerName: 'Dương Hoàn', notes: 'Khách VIP', createdAt: '2026-07-30T12:00:00Z', lastTransactionAt: '2026-07-28T12:00:00Z', grossSales: 100000000, totalReturns: 10000000, netSales: 90000000, debt: 12000000, debtDays: 3, status: 'active' },
+  { id: '1', code: 'KH001', name: 'Nguyễn Thành', phone: '0912.000.001', address: 'Hà Nội', provinceName: 'Hà Nội', provinceCode: 'HN', brand: 'NANO10', pricelistId: 'p1', pricelistName: 'Bảng giá 01', managerId: 'hoan', managerName: 'Dương Hoàn', notes: 'Khách VIP', createdAt: '2026-07-30T12:00:00Z', lastTransactionAt: '2026-07-28T12:00:00Z', grossSales: 100000000, totalReturns: 10000000, netSales: 90000000, debt: 12000000, debtDays: 3, status: 'active' },
   { id: '2', code: 'KH002', name: 'Anh Bình', phone: '0988000002', address: '', provinceName: 'Đà Nẵng', provinceCode: 'DN', brand: 'FESTIVA', pricelistId: '', pricelistName: '', managerId: '', managerName: '', notes: '', createdAt: '2026-07-01T12:00:00Z', lastTransactionAt: '', grossSales: 0, totalReturns: 0, netSales: 0, debt: -2870, debtDays: 0, status: 'active' },
   { id: '3', code: 'KH003', name: 'Trần Lan', phone: '', address: 'Vĩnh Phúc', provinceName: 'Vĩnh Phúc', provinceCode: 'VP', brand: 'NANO10', pricelistId: 'p2', pricelistName: 'Bảng giá 02', managerId: 'thuy', managerName: 'Thanh Thụy', notes: 'Theo dõi', createdAt: '', lastTransactionAt: '2026-04-01T12:00:00Z', grossSales: 50000000, totalReturns: 5000000, netSales: 45000000, debt: 0, debtDays: 30, status: 'inactive' }
 ];
 
 test('quick search is accent-insensitive and limited to customer code, name and phone', () => {
   assert.equal(normalizeCustomerSearch('  ĐƯỜNG   hoàn '), 'duong hoan');
+  assert.equal(normalizeCustomerPhone('0912.000 001'), '0912000001');
+  assert.equal(normalizeCustomerPhone('0912,000,001'), '0912000001');
   assert.deepEqual(filterCustomerRows(rows, { q: 'nguyen thanh' }, now).map(row => row.id), ['1']);
+  assert.deepEqual(filterCustomerRows(rows, { q: 'NGUYỄN THÀNH' }, now).map(row => row.id), ['1']);
   assert.deepEqual(filterCustomerRows(rows, { q: '0912' }, now).map(row => row.id), ['1']);
+  assert.deepEqual(filterCustomerRows(rows, { q: '0912 000 001' }, now).map(row => row.id), ['1']);
+  assert.deepEqual(filterCustomerRows(rows, { q: '0912000001' }, now).map(row => row.id), ['1']);
+  assert.deepEqual(filterCustomerRows(rows, { q: '0988.000.002' }, now).map(row => row.id), ['2']);
   assert.deepEqual(filterCustomerRows(rows, { q: 'kh003' }, now).map(row => row.id), ['3']);
   for (const excludedValue of ['duong hoan', 'ha noi', 'nano10', 'bang gia 01', 'khach vip']) {
     assert.deepEqual(filterCustomerRows(rows, { q: excludedValue }, now), []);
