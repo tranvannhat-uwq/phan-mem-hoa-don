@@ -11,7 +11,8 @@ test('SoVie is the primary project brand in navigation and login', () => {
   assert.equal(fs.existsSync(new URL('../sovie-logo.png', import.meta.url)), true);
   assert.equal(logoReferences.length, 2);
   assert.match(html, /<title>SoVie \|/);
-  assert.match(html, /rel="icon"[^>]*href="sovie-logo\.png\?v=20260815-sovie-v2"/);
+  assert.equal(fs.existsSync(new URL('../sovie-favicon.png', import.meta.url)), true);
+  assert.match(html, /rel="icon"[^>]*href="sovie-favicon\.png\?v=20260815-sovie-icon-v1"/);
   assert.match(html, /class="brand-project-logo"[\s\S]*alt="SoVie"/);
   assert.match(html, /class="login-brand-lockup"[\s\S]*alt="SoVie"/);
   assert.doesNotMatch(html, /vieone-logo\.png|alt="VieOne"|aria-label="VieOne"/);
