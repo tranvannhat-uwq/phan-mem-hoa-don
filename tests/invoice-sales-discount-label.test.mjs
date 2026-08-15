@@ -13,6 +13,7 @@ test('retail and sales invoice prints use one sales-discount row', () => {
 
   assert.doesNotMatch(printFlow, /Chiết khấu bán lẻ/);
   assert.doesNotMatch(printFlow, />Giảm giá\$\{/);
+  assert.doesNotMatch(printFlow, /Cộng tiền hàng/);
   assert.match(printFlow, /Chiết khấu bán hàng\$\{order\.discountType/);
   assert.match(printFlow, /formatNumber\(printDiscount\)/);
   assert.match(html, /<span>Chiết khấu bán hàng:<\/span>\s*<span id="print-discount-amount">/);

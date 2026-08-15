@@ -2120,13 +2120,6 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       </thead>
       <tbody>
         ${itemRowsHtml}
-        ${isRetail ? `
-        <tr>
-          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng tiền hàng:</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(sumSubTotal)}</td>
-        </tr>
-        ` : ''}
-        
         <tr>
           <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tạm tính</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printSubtotal)}</td>
