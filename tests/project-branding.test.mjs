@@ -6,12 +6,12 @@ const read = relative => fs.readFileSync(new URL(`../${relative}`, import.meta.u
 
 test('SoVie is the primary project brand in navigation and login', () => {
   const html = read('index.html');
-  const logoReferences = html.match(/src="sovie-logo\.png"/g) || [];
+  const logoReferences = html.match(/src="sovie-logo\.png\?v=20260815-sovie-v2"/g) || [];
 
   assert.equal(fs.existsSync(new URL('../sovie-logo.png', import.meta.url)), true);
   assert.equal(logoReferences.length, 2);
   assert.match(html, /<title>SoVie \|/);
-  assert.match(html, /rel="icon"[^>]*href="sovie-logo\.png"/);
+  assert.match(html, /rel="icon"[^>]*href="sovie-logo\.png\?v=20260815-sovie-v2"/);
   assert.match(html, /class="brand-project-logo"[\s\S]*alt="SoVie"/);
   assert.match(html, /class="login-brand-lockup"[\s\S]*alt="SoVie"/);
   assert.doesNotMatch(html, /vieone-logo\.png|alt="VieOne"|aria-label="VieOne"/);
