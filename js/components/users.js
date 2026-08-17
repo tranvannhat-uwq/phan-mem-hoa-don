@@ -520,6 +520,8 @@ export async function handleLogin(e) {
     state.currentUser = state.users.find(item => item.authUserId === authUser.id || item.id === profile.id) || user;
 
     document.getElementById('login-screen').style.display = 'none';
+    const landingPage = document.getElementById('landing-page');
+    if (landingPage) landingPage.style.display = 'none';
     document.getElementById('app-layout').classList.remove('auth-hidden');
     const userInfoHeader = document.getElementById('user-info-header');
     if (userInfoHeader) userInfoHeader.style.display = 'flex';
@@ -589,7 +591,9 @@ export function showLoginGate() {
   const userInfoHeader = document.getElementById('user-info-header');
   const logoutBtn = document.getElementById('btn-logout');
 
-  if (loginScreen) loginScreen.style.display = 'flex';
+  const landingPage = document.getElementById('landing-page');
+  if (landingPage) landingPage.style.display = 'block';
+  if (loginScreen) loginScreen.style.display = 'none';
   if (appLayout) appLayout.classList.add('auth-hidden');
   if (userInfoHeader) userInfoHeader.style.display = 'none';
   if (logoutBtn) logoutBtn.style.display = 'none';

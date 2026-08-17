@@ -551,6 +551,21 @@ async function initApp() {
       if (err?.message) showToast(err.message, 'danger');
     }
   }
+
+  const landingPage = document.getElementById('landing-page');
+  const loginScreen = document.getElementById('login-screen');
+  document.querySelectorAll('.js-open-login').forEach(button => {
+    button.addEventListener('click', () => {
+      if (loginScreen) loginScreen.style.display = 'flex';
+      document.getElementById('login-username')?.focus();
+    });
+  });
+  document.getElementById('btn-close-login')?.addEventListener('click', () => {
+    if (loginScreen) loginScreen.style.display = 'none';
+  });
+  loginScreen?.addEventListener('click', event => {
+    if (event.target === loginScreen) loginScreen.style.display = 'none';
+  });
   
   let recoveredCloudLoad = null;
   if (activeUser) {
@@ -564,6 +579,7 @@ async function initApp() {
       item.authUserId === activeUser.authUserId || item.id === activeUser.id
     ) || activeUser;
     document.getElementById('login-screen').style.display = 'none';
+    if (landingPage) landingPage.style.display = 'none';
     document.getElementById('app-layout').classList.remove('auth-hidden');
     const userInfoHeader = document.getElementById('user-info-header');
     if (userInfoHeader) userInfoHeader.style.display = 'flex';
