@@ -1123,6 +1123,25 @@ body.invoice-variant-open {
   #landing-page .landing-footer-bottom { flex-direction: column; gap: 7px; }
 }
 
+/* Give Vietnamese diacritics enough vertical room in multiline display headings. */
+#landing-page .section-heading-row h2 {
+  line-height: 1.24;
+  letter-spacing: -.035em;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+}
+
+#landing-page .landing-benefits h2,
+#landing-page .solution-copy h2 {
+  line-height: 1.18;
+}
+
+@media (max-width: 640px) {
+  #landing-page .section-heading-row h2 { line-height: 1.26; }
+  #landing-page .landing-benefits h2,
+  #landing-page .solution-copy h2 { line-height: 1.2; }
+}
+
 :root {
   /* Color Palette (Bright Light & Green Theme) */
   --bg-primary: #edf0f5; /* Soft light slate background like KiotViet */
