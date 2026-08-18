@@ -1488,7 +1488,7 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
   const discVal = order.discountValue || 0;
   if (discTypeSelect) discTypeSelect.value = discType;
   if (discValInput) {
-    discValInput.value = discType === 'percent' ? discVal : formatNumber(discVal);
+    discValInput.value = discType === 'percent' ? String(discVal).replace('.', ',') : formatNumber(discVal);
   }
 
   const feeType = order.otherFeeType || 'amount';

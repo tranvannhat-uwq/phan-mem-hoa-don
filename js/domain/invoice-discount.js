@@ -8,6 +8,28 @@ function normalizePriceListLabel(value) {
     .trim();
 }
 
+export function sanitizeInvoicePercentInput(value) {
+  let text = String(value ?? '')
+    .replace(/\./g, ',')
+    .replace(/[^0-9,]/g, '');
+  const separatorIndex = text.indexOf(',');
+  if (separatorIndex >= 0) {
+    text = text.slice(0, separatorIndex + 1)
+      + text.slice(separatorIndex + 1).replace(/,/g, '');
+  }
+  if (text.startsWith(',')) text = `0${text}`;
+
+  const parsed = Number.parseFloat(text.replace(',', '.'));
+  if (Number.isFinite(parsed) && parsed > 100) return '100';
+  return text;
+}
+
+export function parseInvoicePercent(value) {
+  const parsed = Number.parseFloat(sanitizeInvoicePercentInput(value).replace(',', '.'));
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(100, Math.max(0, parsed));
+}
+
 export function requiresOrderSaveApproval(priceList) {
   if (!priceList) return false;
   const label = normalizePriceListLabel(`${priceList.name || ''} ${priceList.code || ''}`);

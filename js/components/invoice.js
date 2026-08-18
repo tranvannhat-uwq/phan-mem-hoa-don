@@ -7,7 +7,7 @@ import { generateUniqueCustomerCode } from './customers.js?v=20260814-invoice-di
 import { addCashbookTransaction } from './so_quy.js?v=20260814-invoice-discount-label-v19';
 import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260814-invoice-discount-label-v19';
 import { normalizeCustomerPhone } from '../domain/customer-query.js';
-import { isPrintOnlyPriceList, requiresOrderSaveApproval, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260814-invoice-discount-label-v19';
+import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260814-invoice-discount-label-v19';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
 import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260814-invoice-discount-label-v19';
 import { getOrderDisplayCode } from '../domain/order-display.js';
@@ -756,10 +756,7 @@ export function parseDiscountOrFeeInput(inputId, typeId) {
   const valStr = inputEl.value || '0';
   
   if (type === 'percent') {
-    let num = parseFloat(valStr.replace(/[^0-9.]/g, '')) || 0;
-    if (num < 0) num = 0;
-    if (num > 100) num = 100;
-    return { value: num, type: 'percent' };
+    return { value: parseInvoicePercent(valStr), type: 'percent' };
   } else {
     let num = parseInt(valStr.replace(/\D/g, ''), 10) || 0;
     if (num < 0) num = 0;
@@ -772,20 +769,9 @@ function handleDiscountOrFeeInputChange(inputEl, typeSelectEl) {
   let valStr = inputEl.value;
 
   if (isPercent) {
-    valStr = valStr.replace(/[^0-9.]/g, '');
-    const parts = valStr.split('.');
-    if (parts.length > 2) {
-      valStr = parts[0] + '.' + parts.slice(1).join('');
-    }
-    let num = parseFloat(valStr);
-    if (!isNaN(num)) {
-      if (num < 0) num = 0;
-      if (num > 100) num = 100;
-      valStr = num.toString();
-    } else if (valStr !== '' && valStr !== '.') {
-      valStr = '0';
-    }
-    inputEl.value = valStr;
+    // Keep a trailing comma while the user is typing (for example "15,") so
+    // the next digit can form a Vietnamese decimal percentage such as 15,2%.
+    inputEl.value = sanitizeInvoicePercentInput(valStr);
   } else {
     let rawDigits = valStr.replace(/\D/g, '');
     if (!rawDigits) {
@@ -2104,6 +2090,11 @@ export async function renderAndPrintOrder(order, type = 'retail') {
     const printDiscount = order.discountAmount || 0;
     const printOtherFee = order.otherFeeAmount || 0;
     const printShippingFee = order.shippingFeeAmount || order.shippingFeeValue || 0;
+    const printPaidAmount = Math.max(0, Number(order.paidAmount ?? printOtherFee ?? 0));
+    const printTotalAfterDiscount = Math.max(
+      0,
+      Number(order.totalPayable ?? Math.max(0, printSubtotal - printDiscount)) + Number(printShippingFee)
+    );
 
     table.innerHTML = `
       <thead>
@@ -2121,32 +2112,28 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       <tbody>
         ${itemRowsHtml}
         <tr>
-          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tạm tính</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cộng:</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printSubtotal)}</td>
         </tr>
         
         <tr>
           <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Chiết khấu bán hàng${order.discountType === 'percent' && order.discountValue > 0 ? ` (${order.discountValue}%)` : ''}</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printDiscount)}</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printDiscount)}</td>
         </tr>
-        
-        ${printOtherFee > 0 ? `
-        <tr>
-          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Khách cọc${order.otherFeeType === 'percent' && order.otherFeeValue > 0 ? ` (${order.otherFeeValue}%)` : ''}</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">-${formatNumber(printOtherFee)}</td>
-        </tr>
-        ` : ''}
 
-        ${printShippingFee > 0 ? `
         <tr>
-          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thu Khác</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">+${formatNumber(printShippingFee)}</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Cước Vận Chuyển</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printShippingFee)}</td>
         </tr>
-        ` : ''}
-        
+
         <tr>
-          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px; font-size: 13pt;">TỔNG THANH TOÁN</td>
-          <td style="text-align: right; font-weight: bold; padding: 4px 8px; font-size: 13pt;">${formatNumber(order.amountDue !== undefined ? order.amountDue : Math.max(0, order.totalPayable - (order.paidAmount || 0)))}</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng tiền sau chiết khấu</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printTotalAfterDiscount)}</td>
+        </tr>
+
+        <tr>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Thanh toán</td>
+          <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(printPaidAmount)}</td>
         </tr>
         
         ${debtRowsHtml}
