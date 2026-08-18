@@ -3270,19 +3270,14 @@ export async function dbSaveOrder(order) {
         other_fee_value: order.otherFeeValue || 0,
         other_fee_type: order.otherFeeType || 'amount',
         other_fee_amount: order.otherFeeAmount || 0,
+        shipping_fee_value: order.shippingFeeValue || 0,
+        shipping_fee_amount: order.shippingFeeAmount || 0,
         total_payable: order.totalPayable,
         status: order.status || 'settled',
         created_by: state.currentUser?.authUserId || null,
         created_at: order.date || order.createdAt || new Date().toISOString(),
         pricelist_id: order.pricelistId || 'retail'
       };
-
-      // Older installations may not yet have the shipping columns on
-      // draft_orders. A draft must remain savable during that transition.
-      if (order.status !== 'draft') {
-        commonRow.shipping_fee_value = order.shippingFeeValue || 0;
-        commonRow.shipping_fee_amount = order.shippingFeeAmount || 0;
-      }
 
       const dbRow = order.status === 'draft' ? commonRow : {
         ...commonRow,
@@ -3303,8 +3298,20 @@ export async function dbSaveOrder(order) {
         .from(targetTable)
         .upsert(dbRow, { onConflict: 'id' });
 
-      if (error && order.status === 'draft' && /idempotency_key|schema cache|column/i.test(error.message || '')) {
+      if (error && order.status === 'draft' && /idempotency_key/i.test(error.message || '')) {
         delete dbRow.idempotency_key;
+        const retry = await supabaseClient.from(targetTable).upsert(dbRow, { onConflict: 'id' });
+        error = retry.error;
+      }
+
+      // Keep legacy databases usable, but persist "Thu khac" on every current
+      // draft. Previously these fields were omitted for all drafts, so editing a
+      // draft appeared successful while the added amount disappeared on reload.
+      if (error && order.status === 'draft'
+        && /shipping_fee_(?:value|amount)/i.test(error.message || '')
+        && /schema cache|column/i.test(error.message || '')) {
+        delete dbRow.shipping_fee_value;
+        delete dbRow.shipping_fee_amount;
         const retry = await supabaseClient.from(targetTable).upsert(dbRow, { onConflict: 'id' });
         error = retry.error;
       }
