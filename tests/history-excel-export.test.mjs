@@ -41,3 +41,15 @@ test('history Excel export emits exactly one row per order', () => {
   assert.match(customers, /if \(isHistoryExport\)[\s\S]*?buildHistoryOrderExportRow\(order, customer\)/);
   assert.match(customers, /Đã xuất \$\{exportRows\.length\} đơn hàng, mỗi đơn một dòng\./);
 });
+
+test('history Excel export resolves creator and manager UUIDs to employee names', () => {
+  const customers = read('js/components/customers.js');
+  const resolverStart = customers.indexOf('function getDisplayUserName');
+  const resolverEnd = customers.indexOf('function getPricelistName', resolverStart);
+  const resolver = customers.slice(resolverStart, resolverEnd);
+
+  assert.match(resolver, /getUserDisplayName\(userReference, String\(userReference\), state\.users \|\| \[\]\)/);
+  assert.match(customers, /'Kinh doanh quản lý': getDisplayUserName\(customer\.managedBy \|\| customer\.managed_by\)/);
+  assert.match(customers, /'Người bán': getDisplayUserName\(order\.salespersonId \|\| order\.createdBy\)/);
+  assert.match(customers, /'Người tạo': getDisplayUserName\(order\.createdBy\)/);
+});

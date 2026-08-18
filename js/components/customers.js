@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
 import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260814-invoice-discount-label-v19';
 import { renderAll } from '../main.js?v=20260814-invoice-discount-label-v19';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260814-invoice-discount-label-v19';
@@ -2228,10 +2228,9 @@ function sanitizeFilePart(value) {
     .slice(0, 80) || 'KhachHang';
 }
 
-function getDisplayUserName(username) {
-  if (!username) return '';
-  const found = (state.users || []).find(u => isSameUser(u.username, username));
-  return found ? (found.displayName || found.name || found.username) : username;
+function getDisplayUserName(userReference) {
+  if (!userReference) return '';
+  return getUserDisplayName(userReference, String(userReference), state.users || []);
 }
 
 function getPricelistName(id) {
