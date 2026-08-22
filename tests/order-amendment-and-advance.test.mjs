@@ -37,6 +37,24 @@ test('history and invoice expose a dedicated finalized-order amendment path', ()
   assert.match(service, /supabaseClient\.rpc\('rpc_amend_order'/);
 });
 
+test('amending an order keeps its exact original timestamp and records the edit time only as activity', () => {
+  const sql = read('migrations/0056_preserve_order_time_on_amendment.sql');
+  const history = read('js/components/history.js');
+  const invoice = read('js/components/invoice.js');
+  assert.match(sql, /p_order - 'draftId' - 'date'/);
+  assert.match(sql, /'date', original_order\.order_date/);
+  assert.match(sql, /replacement_order\.order_date IS DISTINCT FROM original_order\.order_date/);
+  assert.match(sql, /NEW\.created_at := OLD\.created_at/);
+  assert.match(sql, /sale\.idempotency_key = amendment_key/);
+  assert.match(sql, /SET action = 'update_order'/);
+  assert.match(sql, /operation_key = txid_current\(\)::text/);
+  assert.match(sql, /'reason', jsonb_build_object\('old', NULL, 'new'/);
+  assert.match(sql, /created_at[\s\S]*now\(\)/);
+  assert.match(history, /data-original-order-date/);
+  assert.match(invoice, /orderDate = originalOrderDate/);
+  assert.match(invoice, /removeAttribute\('data-original-order-date'\)/);
+});
+
 test('customer receipts may exceed receivables and become advance credit', () => {
   const sql = read('migrations/0019_order_amendment_and_customer_advance.sql');
   const service = read('js/services/supabase.js');

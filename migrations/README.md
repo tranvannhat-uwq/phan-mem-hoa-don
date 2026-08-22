@@ -321,3 +321,9 @@ item. The database validates the percentage, calculates the net refund from the
 immutable original-order value, and keeps debt, cash refund, revenue, commission
 and return cancellation authoritative. A zero or omitted percentage preserves
 the previous return calculation exactly.
+
+Migration `0056` makes draft edits and finalized-order amendments keep the
+exact original order timestamp, including its time. The actual edit time and
+reason are recorded in Activity, together with the meaningful before/after
+values; financial reversal and replacement posting remain atomic and
+authoritative.

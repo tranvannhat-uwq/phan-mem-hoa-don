@@ -27,7 +27,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260814-invoice-discount-label-v19';
+} from './supabase.js?v=20260822-order-time-v20';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

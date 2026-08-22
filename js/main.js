@@ -1,23 +1,23 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260814-invoice-discount-label-v19';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20260814-invoice-discount-label-v19';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260814-invoice-discount-label-v19';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260814-invoice-discount-label-v19';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260814-invoice-discount-label-v19';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260814-invoice-discount-label-v19';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260814-invoice-discount-label-v19';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260814-invoice-discount-label-v19';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260814-invoice-discount-label-v19';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260814-invoice-discount-label-v19';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260814-invoice-discount-label-v19';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260814-invoice-discount-label-v19';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260814-invoice-discount-label-v19';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260814-invoice-discount-label-v19';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260822-order-time-v20';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20260822-order-time-v20';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260822-order-time-v20';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260822-order-time-v20';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260822-order-time-v20';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260822-order-time-v20';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260822-order-time-v20';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260822-order-time-v20';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260822-order-time-v20';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260822-order-time-v20';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260822-order-time-v20';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260822-order-time-v20';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260822-order-time-v20';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260822-order-time-v20';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260814-invoice-discount-label-v19';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260814-invoice-discount-label-v19';
-import { setupNavigationColorSettings } from './components/navigation-theme.js?v=20260814-invoice-discount-label-v19';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260822-order-time-v20';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260822-order-time-v20';
+import { setupNavigationColorSettings } from './components/navigation-theme.js?v=20260822-order-time-v20';
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
   'invoice-panel': ['pricelists'],

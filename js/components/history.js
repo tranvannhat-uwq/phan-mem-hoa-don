@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, cacheOrdersLocally } from '../services/supabase.js?v=20260814-invoice-discount-label-v19';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20260814-invoice-discount-label-v19';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260814-invoice-discount-label-v19';
-import { openHistoryOrderExportModal } from './customers.js?v=20260814-invoice-discount-label-v19';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, cacheOrdersLocally } from '../services/supabase.js?v=20260822-order-time-v20';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20260822-order-time-v20';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260822-order-time-v20';
+import { openHistoryOrderExportModal } from './customers.js?v=20260822-order-time-v20';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260814-invoice-discount-label-v19';
+} from '../domain/order-financials.js?v=20260822-order-time-v20';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260814-invoice-discount-label-v19';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260822-order-time-v20';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -1393,7 +1393,7 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
   const isAmendment = isFinalizedAmendment && !isCopy;
   syncInvoiceBusinessDateControl(
     isCopy ? currentBusinessDateInputValue() : orderDateToInputValue(order.date),
-    isReadOnly
+    isReadOnly || !isCopy
   );
   // Đồng bộ khách hàng
   const customerContext = resolveOrderCustomerForEditing(order, state.customers);
@@ -1509,6 +1509,10 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
   if (saveBtn) {
     saveBtn.removeAttribute('data-edit-order-id');
     saveBtn.removeAttribute('data-amend-order-id');
+    saveBtn.removeAttribute('data-original-order-date');
+    if (!isCopy && order.date) {
+      saveBtn.setAttribute('data-original-order-date', order.date);
+    }
   }
   
   if (isReadOnly) {
