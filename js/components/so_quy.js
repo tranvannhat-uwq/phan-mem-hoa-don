@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, formatCurrency, safeCreateIcons, formatDateTime } from '../utils.js';
+import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
 import { renderAll } from '../main.js?v=20260822-order-time-v20';
 import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260822-order-time-v20';
 import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260822-order-time-v20';
@@ -1330,6 +1330,8 @@ function refreshDynamicFilters(txs) {
     } else {
       activeFilters.creator = 'all';
     }
+
+    makeSelectSearchable('so-quy-creator-select', 'Tìm người tạo...');
   }
 
   // 3. Employee filter (from system users in state)
@@ -1350,6 +1352,8 @@ function refreshDynamicFilters(txs) {
     } else {
       activeFilters.employee = 'all';
     }
+
+    makeSelectSearchable('so-quy-employee-select', 'Tìm nhân viên...');
   }
 
   // 4. Receipt payer suggestions (danh sách khách hàng)
@@ -1668,6 +1672,7 @@ function openCashbookEditModal(transaction) {
     if (collectorId && [...collectorSelect.options].some(option => option.value === String(collectorId))) {
       collectorSelect.value = String(collectorId);
     }
+    makeSelectSearchable('cashbook-edit-collector', 'Tìm người thu/chi...');
   }
 
   const counterpartyType = getCashbookCounterpartyType(transaction);

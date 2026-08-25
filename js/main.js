@@ -17,7 +17,6 @@ import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './comp
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260822-order-time-v20';
 import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260822-order-time-v20';
-import { setupNavigationColorSettings } from './components/navigation-theme.js?v=20260822-order-time-v20';
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
   'invoice-panel': ['pricelists'],
@@ -457,7 +456,6 @@ async function initApp() {
   const dateLbl = document.getElementById('current-date-lbl');
   if (dateLbl) dateLbl.innerText = today.toLocaleDateString('vi-VN');
 
-  setupNavigationColorSettings();
   setupNavigation();
   setupProductManagement();
   setupCustomerManagement();
@@ -515,6 +513,16 @@ async function initApp() {
   const loginForm = document.getElementById('login-form');
   if (loginForm) {
     loginForm.addEventListener('submit', handleLogin);
+    loginForm.addEventListener('submit', () => {
+      const rememberAccount = document.getElementById('login-remember-account');
+      const username = document.getElementById('login-username')?.value.trim() || '';
+      try {
+        if (rememberAccount?.checked && username) localStorage.setItem('sovie_remembered_login_account', username);
+        else localStorage.removeItem('sovie_remembered_login_account');
+      } catch (_) {
+        // Login remains available when browser storage is disabled.
+      }
+    });
   }
 
   const logoutBtn = document.getElementById('btn-logout');
@@ -554,6 +562,15 @@ async function initApp() {
 
   const landingPage = document.getElementById('landing-page');
   const loginScreen = document.getElementById('login-screen');
+  try {
+    const rememberedAccount = localStorage.getItem('sovie_remembered_login_account') || '';
+    const usernameField = document.getElementById('login-username');
+    const rememberCheckbox = document.getElementById('login-remember-account');
+    if (usernameField && rememberedAccount) usernameField.value = rememberedAccount;
+    if (rememberCheckbox) rememberCheckbox.checked = Boolean(rememberedAccount || rememberCheckbox.checked);
+  } catch (_) {
+    // Private browsing can disable storage without blocking authentication.
+  }
   document.querySelectorAll('.js-open-login').forEach(button => {
     button.addEventListener('click', () => {
       if (loginScreen) loginScreen.style.display = 'flex';

@@ -15,3 +15,18 @@ test('customer form reports hidden searchable-select validation instead of silen
   assert.match(customers, /showToast\(message, 'warning'\)/);
   assert.match(css, /\.searchable-select-trigger\.customer-field-invalid/);
 });
+
+test('customer form no longer exposes per-brand discount inputs', () => {
+  const html = read('index.html');
+  const customers = read('js/components/customers.js');
+  assert.doesNotMatch(html, /cust-brand-discounts-section|customer-brand-discounts-container|cust-brand-disc/);
+  assert.doesNotMatch(customers, /cust-brand-discounts-section|customer-brand-discounts-container|cust-brand-disc/);
+  assert.doesNotMatch(html, /Tự thiết lập bên dưới/);
+  assert.match(customers, /const brandDiscounts = isEditing \? \{ \.\.\.\(editedCustomer\?\.brandDiscounts \|\| \{\}\) \} : \{\}/);
+});
+
+test('light success buttons keep readable green text', () => {
+  const css = read('style.css');
+  assert.doesNotMatch(css, /\.btn-primary, \.btn-indigo, \.btn-danger, \.btn-success/);
+  assert.match(css, /\.btn-success\s*\{[\s\S]*?background-color:\s*#e9f9f0;[\s\S]*?color:\s*#15803d !important;/);
+});

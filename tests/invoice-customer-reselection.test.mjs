@@ -24,7 +24,8 @@ test('all editable roles can replace the selected customer without resetting ord
   assert.match(reselection, /removeAttribute\('disabled'\)/);
   assert.match(reselection, /applyActivePriceListToInvoice\(\)/);
   assert.doesNotMatch(reselection, /invoice-notes|invoice-discount-value|invoiceItems\s*=\s*\[\]/);
-  assert.match(invoice, /clearBtn\?\.addEventListener\('click', \(\) => prepareInvoiceCustomerReselection\(\)\)/);
+  assert.match(invoice, /clearBtn\?\.addEventListener\('click',[\s\S]{0,220}prepareInvoiceCustomerReselection\(\)/);
+  assert.match(invoice, /state\.isQuickCustomerMode[\s\S]{0,120}disableQuickCustomerMode\(\)/);
   assert.match(invoice, /dataset\.selectedCustomerName = customer\.name/);
   assert.match(invoice, /prepareInvoiceCustomerReselection\(typedValue, false\)/);
 });

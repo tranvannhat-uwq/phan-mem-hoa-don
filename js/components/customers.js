@@ -1053,28 +1053,6 @@ export function openCustomerModal(index = -1) {
   
   if (!modal) return;
 
-  // Dynamic rendering of brand discount inputs in customer modal
-  const container = document.getElementById('customer-brand-discounts-container');
-  if (container) {
-    const brands = state.brands && state.brands.length > 0
-      ? state.brands
-      : [
-          { name: 'Nano10*' },
-          { name: 'Hatacco nano' },
-          { name: 'mutsutec' },
-          { name: 'tdkaw' },
-          { name: 'cova' },
-          { name: 'festivanano' }
-        ];
-        
-    container.innerHTML = brands.map(b => `
-      <div class="form-group" style="margin-bottom: 0;">
-        <label class="form-label">Chiết khấu ${b.name} (%)</label>
-        <input type="number" class="form-control cust-brand-disc" data-brand="${b.name}" value="0" min="0" max="100" step="any">
-      </div>
-    `).join('');
-  }
-
   // Dynamic population of cust-assigned-brand
   const assignedBrandSelect = document.getElementById('cust-assigned-brand');
   if (assignedBrandSelect) {
@@ -1102,19 +1080,10 @@ export function openCustomerModal(index = -1) {
   const plSelect = document.getElementById('cust-pricelist');
   if (plSelect) {
     plSelect.innerHTML = `
-      <option value="custom" ${isSale ? 'disabled' : ''}>Chiết khấu riêng (Tự thiết lập bên dưới)</option>
+      <option value="custom" ${isSale ? 'disabled' : ''}>Chiết khấu riêng</option>
       ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
     `;
   }
-  
-  document.querySelectorAll('.cust-brand-disc').forEach(input => {
-    input.value = 0;
-    if (isSale) {
-      input.setAttribute('disabled', 'true');
-    } else {
-      input.removeAttribute('disabled');
-    }
-  });
   
   const provinceSelect = document.getElementById('cust-province');
   if (provinceSelect) {
@@ -1135,10 +1104,6 @@ export function openCustomerModal(index = -1) {
       } else {
         plSelect.value = 'custom';
       }
-    }
-    const discSection = document.getElementById('cust-brand-discounts-section');
-    if (discSection) {
-      discSection.style.display = (plSelect && plSelect.value === 'custom') ? 'block' : 'none';
     }
     const mBySelect = document.getElementById('cust-managed-by');
     if (mBySelect) {
@@ -1165,16 +1130,6 @@ export function openCustomerModal(index = -1) {
     const cPlId = customer.pricelistId || 'custom';
     if (plSelect) plSelect.value = cPlId;
     
-    const discSection = document.getElementById('cust-brand-discounts-section');
-    if (discSection) {
-      discSection.style.display = cPlId === 'custom' ? 'block' : 'none';
-    }
-    
-    document.querySelectorAll('.cust-brand-disc').forEach(input => {
-      const brand = input.getAttribute('data-brand');
-      input.value = (customer.brandDiscounts && customer.brandDiscounts[brand] !== undefined) ? customer.brandDiscounts[brand] : 0;
-    });
-
     if (provinceSelect) {
       provinceSelect.value = (customer.brandDiscounts && customer.brandDiscounts.province) ? customer.brandDiscounts.province : '';
     }
@@ -1301,11 +1256,9 @@ export async function saveCustomer() {
     }
   }
   
-  const brandDiscounts = {};
-  document.querySelectorAll('.cust-brand-disc').forEach(input => {
-    const brand = input.getAttribute('data-brand');
-    brandDiscounts[brand] = parseFloat(input.value) || 0;
-  });
+  // Khối nhập chiết khấu theo nhãn đã được bỏ khỏi hồ sơ khách hàng.
+  // Khi sửa, giữ nguyên dữ liệu cũ để không làm thay đổi giá của khách hàng đã lưu.
+  const brandDiscounts = isEditing ? { ...(editedCustomer?.brandDiscounts || {}) } : {};
   
   const provinceSelect = document.getElementById('cust-province');
   if (provinceSelect) {
@@ -1888,17 +1841,6 @@ export function setupCustomerManagement() {
   if (closeDebtAdjustBtn) closeDebtAdjustBtn.addEventListener('click', closeCustomerDebtAdjustModal);
   if (cancelDebtAdjustBtn) cancelDebtAdjustBtn.addEventListener('click', closeCustomerDebtAdjustModal);
   if (debtAdjustForm) debtAdjustForm.addEventListener('submit', handleCustomerDebtAdjustSubmit);
-
-  // Thay đổi hiển thị phần trăm chiết khấu hãng sơn theo bảng giá
-  const custPricelistSelect = document.getElementById('cust-pricelist');
-  if (custPricelistSelect) {
-    custPricelistSelect.addEventListener('change', () => {
-      const discSection = document.getElementById('cust-brand-discounts-section');
-      if (discSection) {
-        discSection.style.display = custPricelistSelect.value === 'custom' ? 'block' : 'none';
-      }
-    });
-  }
 
   // Sự kiện đóng modal chi tiết công nợ
   const closeDetailBtn = document.getElementById('btn-close-customer-detail-modal');
@@ -3158,6 +3100,8 @@ export function populateManagedByDropdown() {
       <option value="${u.username}">${u.displayName} (${u.isExternal ? 'Kinh doanh ngoài' : (u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale')})</option>
     `).join('')}
   `;
+
+  makeSelectSearchable('cust-managed-by', 'Tìm nhân viên kinh doanh...');
 }
 
 let custExcelImportData = [];

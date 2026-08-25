@@ -4,6 +4,19 @@ import test from 'node:test';
 
 const read = relative => fs.readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8');
 
+test('invoice quick customer opens in an accessible confirmation dialog', () => {
+  const html = read('index.html');
+  const css = read('style.css');
+  const invoice = read('js/components/invoice.js');
+
+  assert.match(html, /class="quick-customer-modal-card" role="dialog" aria-modal="true"/);
+  assert.match(html, /id="btn-quick-customer-confirm"[\s\S]{0,160}Thêm vào đơn/);
+  assert.match(css, /#invoice-quick-customer-fields\[style\*="display: flex"\][\s\S]{0,180}position: fixed/);
+  assert.match(invoice, /function openQuickCustomerDialog\(\)/);
+  assert.match(invoice, /quickConfirmBtn\.addEventListener\('click', confirmQuickCustomerForInvoice\)/);
+  assert.match(invoice, /event\.key === 'Escape'/);
+});
+
 test('invoice quick customer uses its scoped RPC instead of direct table upsert', () => {
   const invoice = read('js/components/invoice.js');
   const service = read('js/services/supabase.js');

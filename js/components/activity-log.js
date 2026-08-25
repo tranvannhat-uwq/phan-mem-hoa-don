@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260822-order-time-v20';
 import { switchTab } from '../main.js?v=20260822-order-time-v20';
 import { getOrderDisplayCode } from '../domain/order-display.js?v=20260822-order-time-v20';
-import { safeCreateIcons, showToast } from '../utils.js';
+import { safeCreateIcons, showToast, makeSelectSearchable } from '../utils.js';
 
 const PAGE_SIZE = 20;
 let activityPage = 1;
@@ -177,7 +177,10 @@ export async function renderActivityLog() {
     return;
   }
   const actorFilter = document.getElementById('activity-actor-filter');
-  if (actorFilter && actorFilter.options.length <= 1) actorFilter.innerHTML = '<option value="all">Tất cả nhân viên</option>' + (state.users || []).map(user => `<option value="${escapeHtml(user.authUserId || user.id)}">${escapeHtml(user.displayName || user.username)}</option>`).join('');
+  if (actorFilter && actorFilter.options.length <= 1) {
+    actorFilter.innerHTML = '<option value="all">Tất cả nhân viên</option>' + (state.users || []).map(user => `<option value="${escapeHtml(user.authUserId || user.id)}">${escapeHtml(user.displayName || user.username)}</option>`).join('');
+    makeSelectSearchable('activity-actor-filter', 'Tìm nhân viên...');
+  }
   body.innerHTML = '<tr><td colspan="5" class="activity-empty">Đang tải lịch sử hoạt động...</td></tr>';
   try {
     const rawResult = await dbFetchActivityLogs(currentFilters());
@@ -234,7 +237,10 @@ export async function openOrderActivityModal(orderId) {
 
 export function setupActivityLog() {
   const actorFilter = document.getElementById('activity-actor-filter');
-  if (actorFilter) actorFilter.innerHTML = '<option value="all">Tất cả nhân viên</option>' + (state.users || []).map(user => `<option value="${escapeHtml(user.authUserId || user.id)}">${escapeHtml(user.displayName || user.username)}</option>`).join('');
+  if (actorFilter) {
+    actorFilter.innerHTML = '<option value="all">Tất cả nhân viên</option>' + (state.users || []).map(user => `<option value="${escapeHtml(user.authUserId || user.id)}">${escapeHtml(user.displayName || user.username)}</option>`).join('');
+    makeSelectSearchable('activity-actor-filter', 'Tìm nhân viên...');
+  }
   const button = document.getElementById('btn-activity-log');
   const dropdown = document.getElementById('activity-dropdown');
   if (button) button.onclick = async event => { event.stopPropagation(); dropdown.classList.toggle('active'); if (dropdown.classList.contains('active')) await renderActivityDropdown(); };

@@ -1499,7 +1499,62 @@ export function resetInvoiceBuilder() {
   renderInvoiceTable();
 }
 
+function openQuickCustomerDialog() {
+  const quickFields = document.getElementById('invoice-quick-customer-fields');
+  if (!quickFields) return;
+  quickFields.style.display = 'flex';
+  document.body.classList.add('quick-customer-modal-open');
+  setTimeout(() => {
+    const preferredField = document.getElementById('quick-cust-name');
+    if (preferredField) preferredField.focus();
+  }, 0);
+}
+
+function closeQuickCustomerDialog() {
+  const quickFields = document.getElementById('invoice-quick-customer-fields');
+  if (quickFields) quickFields.style.display = 'none';
+  document.body.classList.remove('quick-customer-modal-open');
+}
+
+function confirmQuickCustomerForInvoice() {
+  const requiredFields = [
+    { id: 'quick-cust-name', message: 'Vui lòng nhập tên khách hàng mới!' },
+    { id: 'quick-cust-province', message: 'Vui lòng chọn Tỉnh/Thành phố!' },
+    { id: 'quick-cust-manager', message: 'Vui lòng chọn nhân viên quản lý!' }
+  ];
+
+  for (const field of requiredFields) {
+    const control = document.getElementById(field.id);
+    if (!control || !String(control.value || '').trim()) {
+      showToast(field.message, 'danger');
+      control?.focus();
+      return;
+    }
+  }
+
+  const quickName = document.getElementById('quick-cust-name').value.trim();
+  const searchGroup = document.getElementById('invoice-customer-search-group');
+  const searchInput = document.getElementById('invoice-customer-search');
+  const clearBtn = document.getElementById('btn-clear-invoice-customer');
+
+  if (searchGroup) searchGroup.style.display = 'block';
+  if (searchInput) {
+    searchInput.value = quickName;
+    searchInput.disabled = true;
+    searchInput.dataset.selectedCustomerName = quickName;
+  }
+  if (clearBtn) clearBtn.style.display = 'inline-flex';
+
+  closeQuickCustomerDialog();
+  showToast(`Đã thêm thông tin khách hàng ${quickName} vào đơn.`, 'success');
+}
+
 export function enableQuickCustomerMode() {
+  if (state.isQuickCustomerMode) {
+    openQuickCustomerDialog();
+    return;
+  }
+
   state.isQuickCustomerMode = true;
   
   // Hide search and show quick add fields
@@ -1511,7 +1566,6 @@ export function enableQuickCustomerMode() {
   
   const quickFields = document.getElementById('invoice-quick-customer-fields');
   if (quickFields) {
-    quickFields.style.display = 'flex';
     // Pre-fill name with whatever is in search input
     const searchInput = document.getElementById('invoice-customer-search');
     const quickNameInput = document.getElementById('quick-cust-name');
@@ -1546,13 +1600,7 @@ export function enableQuickCustomerMode() {
     item.discountPercent = 0;
   });
   
-  // Move the price list selector inside quick customer fields
-  const plGroup = document.getElementById('invoice-pricelist-group');
-  if (plGroup && quickFields) {
-    plGroup.style.display = 'block';
-    quickFields.appendChild(plGroup);
-  }
-  
+  openQuickCustomerDialog();
   renderInvoiceTable();
 }
 
@@ -1566,8 +1614,7 @@ export function disableQuickCustomerMode() {
   const toggleContainer = document.getElementById('invoice-quick-customer-toggle-container');
   if (toggleContainer) toggleContainer.style.display = 'block';
   
-  const quickFields = document.getElementById('invoice-quick-customer-fields');
-  if (quickFields) quickFields.style.display = 'none';
+  closeQuickCustomerDialog();
   
   // Clear inputs
   const qName = document.getElementById('quick-cust-name');
@@ -2499,6 +2546,26 @@ export function setupInvoiceCreator() {
     quickCancelBtn.addEventListener('click', disableQuickCustomerMode);
   }
 
+  const quickCancelFooterBtn = document.getElementById('btn-quick-customer-cancel-footer');
+  if (quickCancelFooterBtn) {
+    quickCancelFooterBtn.addEventListener('click', disableQuickCustomerMode);
+  }
+
+  const quickConfirmBtn = document.getElementById('btn-quick-customer-confirm');
+  if (quickConfirmBtn) {
+    quickConfirmBtn.addEventListener('click', confirmQuickCustomerForInvoice);
+  }
+
+  const quickCustomerDialog = document.getElementById('invoice-quick-customer-fields');
+  quickCustomerDialog?.addEventListener('click', event => {
+    if (event.target === quickCustomerDialog) disableQuickCustomerMode();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && quickCustomerDialog?.style.display === 'flex') {
+      disableQuickCustomerMode();
+    }
+  });
+
   const quickBrandSelect = document.getElementById('quick-cust-assigned-brand');
   if (quickBrandSelect) {
     quickBrandSelect.addEventListener('change', () => {
@@ -2526,7 +2593,13 @@ function setupInvoiceCustomerSearch() {
 
   if (!custSearchInput) return;
 
-  clearBtn?.addEventListener('click', () => prepareInvoiceCustomerReselection());
+  clearBtn?.addEventListener('click', () => {
+    if (state.isQuickCustomerMode) {
+      disableQuickCustomerMode();
+      return;
+    }
+    prepareInvoiceCustomerReselection();
+  });
 
   // Lắng nghe sự kiện để tìm kiếm gợi ý khách hàng giống như tìm sản phẩm
   const suggestions = document.createElement('ul');
@@ -2736,4 +2809,6 @@ export function populateQuickCustomerManagerDropdown() {
       select.value = '';
     }
   }
+
+  makeSelectSearchable('quick-cust-manager', 'Tìm nhân viên quản lý...');
 }

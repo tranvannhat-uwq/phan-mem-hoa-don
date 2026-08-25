@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { showToast, safeCreateIcons, isSameUser, getCompanyNameById } from '../utils.js';
+import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
 import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260822-order-time-v20';
 import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260822-order-time-v20';
 import { renderAll, switchTab } from '../main.js?v=20260822-order-time-v20';
@@ -339,6 +339,7 @@ export function populateCustomerEmployeeFilter() {
   `;
   
   select.value = currentVal;
+  makeSelectSearchable('customer-managed-filter', 'Tìm nhân viên kinh doanh...');
 }
 
 let isLoggingIn = false;
@@ -347,6 +348,7 @@ let maintenanceMonitor = null;
 function setMaintenanceNotice(message = '', visible = false) {
   const notice = document.getElementById('login-maintenance-notice');
   if (!notice) return;
+  delete notice.dataset.tone;
   notice.textContent = message || loginErrorMessage(LOGIN_ERROR.MAINTENANCE);
   notice.style.display = visible ? 'block' : 'none';
 }
@@ -445,7 +447,7 @@ export async function handleLogin(e) {
 
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = `<span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 6px; vertical-align: middle;"></span> ĐANG ĐĂNG NHẬP...`;
+    submitBtn.innerHTML = `<span class="login-submit-loading"><span style="display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px;"></span> Đang đăng nhập...</span>`;
   }
   if (usernameField) usernameField.disabled = true;
   if (passwordField) passwordField.disabled = true;

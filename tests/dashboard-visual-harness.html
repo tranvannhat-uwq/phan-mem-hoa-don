@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard visual harness</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body style="margin:0;padding:18px;background:#edf4fd;">
+  <main id="dashboard-harness"></main>
+  <script>
+    const colors = ['#10b981', '#6366f1', '#0ea5e9', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
+    const labels = {
+      company: ['ABS JAPAN', 'EMP Hoa Kỳ', 'ABS JAPAN - CN miền Nam'],
+      brand: ['NANO10 MB', 'HATACCO NANO', 'TĐKAW NANO', 'MUTSUTEC', 'COVA NANO', 'NANO10 MN', 'FESTIVA'],
+      salesperson: ['Lê Dũng', 'Hoàng Vui', 'Nguyễn Thụy', 'Ngô Hoàn', 'Trần Phương', 'Phạm Lượng'],
+      customer: ['Anh Thắng - Bắc Giang', 'Đại lý Dũng Liên', 'Trường Anh', 'Đinh Thành', 'Văn Hoàng', 'Nguyễn Dũng', 'Tiến Duy', 'Dương Ngô Tuấn']
+    };
+    const amounts = [1860, 920, 680, 540, 430, 360, 280, 210];
+
+    fetch('../index.html').then(response => response.text()).then(source => {
+      const parsed = new DOMParser().parseFromString(source, 'text/html');
+      const toolbar = parsed.querySelector('.dashboard-toolbar');
+      const insights = parsed.querySelector('.dashboard-insights-grid');
+      insights.querySelector('.dashboard-insight-festival')?.remove();
+      document.getElementById('dashboard-harness').append(toolbar, insights);
+      insights.querySelectorAll('.dashboard-chart-empty').forEach(element => { element.style.display = 'none'; });
+      insights.querySelectorAll('canvas').forEach(element => { element.style.display = 'block'; });
+      toolbar.querySelector('#dashboard-company-filter').insertAdjacentHTML('beforeend', '<option>ABS JAPAN</option><option>EMP Hoa Kỳ</option>');
+      toolbar.querySelector('#dashboard-brand-filter').insertAdjacentHTML('beforeend', '<option>NANO10 MB</option><option>HATACCO NANO</option>');
+      if (window.lucide) lucide.createIcons();
+
+      const draw = (id, type, chartLabels, options = {}) => new Chart(document.getElementById(id), {
+        type,
+        data: { labels: chartLabels, datasets: [{ data: amounts.slice(0, chartLabels.length), backgroundColor: type === 'line' ? 'rgba(124,58,237,.14)' : colors, borderColor: type === 'line' ? '#7c3aed' : (type === 'bar' ? 'transparent' : '#fff'), borderWidth: type === 'line' ? 3 : (type === 'bar' ? 0 : 2), borderRadius: type === 'bar' ? 8 : 0, fill: type === 'line', tension: type === 'line' ? .34 : 0, pointRadius: type === 'line' ? 5 : 0, pointBackgroundColor: colors }] },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: options.indexAxis, cutout: type === 'doughnut' ? '66%' : undefined, plugins: { legend: { display: type === 'doughnut' || type === 'polarArea', position: type === 'polarArea' ? 'right' : 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10 } } } }, scales: type === 'doughnut' ? undefined : (type === 'polarArea' ? { r: { ticks: { display: false } } } : undefined) }
+      });
+      draw('company-revenue-chart', 'doughnut', labels.company);
+      draw('brand-revenue-chart', 'bar', labels.brand, { indexAxis: 'x' });
+      draw('salesperson-revenue-chart', 'line', labels.salesperson);
+      draw('customer-revenue-chart', 'bar', labels.customer, { indexAxis: 'y' });
+    });
+  </script>
+</body>
+</html>

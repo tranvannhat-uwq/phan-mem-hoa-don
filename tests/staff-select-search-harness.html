@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff searchable select harness</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    body { margin: 0; padding: 32px; background: #eef5ff; }
+    main { width: min(460px, 100%); padding: 24px; background: white; border-radius: 16px; }
+  </style>
+</head>
+<body>
+  <main>
+    <label class="form-label" for="staff-search-harness">Nhân viên quản lý (Kinh doanh)</label>
+    <select class="form-control" id="staff-search-harness">
+      <option value="">-- Chưa bàn giao / Trống --</option>
+      <option value="ms01">Trần Nga (Sale)</option>
+      <option value="ngo-hien">Ngô Hiền (Kế toán)</option>
+      <option value="abs-japan">ABS JAPAN (Công ty) (Kinh doanh ngoài)</option>
+      <option value="anh-thang">Anh Thắng - Hà Giang (Kinh doanh ngoài)</option>
+    </select>
+    <output id="staff-search-value">Giá trị: trống</output>
+  </main>
+  <script type="module">
+    import { makeSelectSearchable } from '../js/utils.js';
+    const select = document.getElementById('staff-search-harness');
+    const output = document.getElementById('staff-search-value');
+    select.addEventListener('change', () => { output.textContent = `Giá trị: ${select.value || 'trống'}`; });
+    makeSelectSearchable('staff-search-harness', 'Tìm tên hoặc mã kinh doanh...');
+  </script>
+</body>
+</html>
