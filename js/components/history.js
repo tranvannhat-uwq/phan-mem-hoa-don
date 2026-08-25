@@ -22,6 +22,125 @@ let historyFinancialCache = null;
 let expandedHistoryOrderId = null;
 let historyWindowRequestId = 0;
 
+const HISTORY_COLUMN_STORAGE_KEY = 'billing_history_visible_columns';
+const HISTORY_COLUMN_DEFINITIONS = Object.freeze([
+  { key: 'index', label: 'STT', width: 45 },
+  { key: 'code', label: 'Mã đơn', width: 120 },
+  { key: 'date', label: 'Ngày lập', width: 135 },
+  { key: 'customer', label: 'Khách hàng', width: 170 },
+  { key: 'manager', label: 'KDQL', width: 150 },
+  { key: 'pricelist', label: 'Bảng giá', width: 120 },
+  { key: 'notes', label: 'Ghi chú', width: 220 },
+  { key: 'totalGoods', label: 'Tổng tiền hàng', width: 140 },
+  { key: 'discount', label: 'Giảm giá', width: 125 },
+  { key: 'otherFee', label: 'Thu khác', width: 120 },
+  { key: 'totalPayment', label: 'Tổng thanh toán', width: 145 }
+]);
+
+function getVisibleHistoryColumns() {
+  const allKeys = HISTORY_COLUMN_DEFINITIONS.map(column => column.key);
+  try {
+    const saved = JSON.parse(localStorage.getItem(HISTORY_COLUMN_STORAGE_KEY) || 'null');
+    if (Array.isArray(saved)) return new Set(saved.filter(key => allKeys.includes(key)));
+  } catch (error) {
+    console.warn('Không thể đọc cấu hình cột lịch sử đơn:', error);
+  }
+  return new Set(allKeys);
+}
+
+function saveVisibleHistoryColumns(visibleColumns) {
+  localStorage.setItem(
+    HISTORY_COLUMN_STORAGE_KEY,
+    JSON.stringify(HISTORY_COLUMN_DEFINITIONS.map(column => column.key).filter(key => visibleColumns.has(key)))
+  );
+}
+
+function applyHistoryColumnVisibility() {
+  const visibleColumns = getVisibleHistoryColumns();
+  document.querySelectorAll('[data-history-column]').forEach(element => {
+    element.style.display = visibleColumns.has(element.dataset.historyColumn) ? '' : 'none';
+  });
+
+  const table = document.querySelector('.history-details-table');
+  if (table) {
+    const visibleWidth = HISTORY_COLUMN_DEFINITIONS.reduce(
+      (sum, column) => sum + (visibleColumns.has(column.key) ? column.width : 0),
+      42
+    );
+    table.style.minWidth = `${Math.max(520, visibleWidth)}px`;
+  }
+
+  document.querySelectorAll('.history-column-option').forEach(input => {
+    input.checked = visibleColumns.has(input.value);
+  });
+
+  const selectAll = document.getElementById('history-column-picker-select-all');
+  if (selectAll) {
+    selectAll.checked = visibleColumns.size === HISTORY_COLUMN_DEFINITIONS.length;
+    selectAll.indeterminate = visibleColumns.size > 0 && visibleColumns.size < HISTORY_COLUMN_DEFINITIONS.length;
+  }
+
+  const count = document.getElementById('history-column-picker-count');
+  if (count) count.textContent = `${visibleColumns.size}/${HISTORY_COLUMN_DEFINITIONS.length} cột`;
+}
+
+function setupHistoryColumnPicker() {
+  const picker = document.getElementById('history-column-picker');
+  const button = document.getElementById('btn-history-column-picker');
+  const popover = document.getElementById('history-column-picker-popover');
+  const closeButton = document.getElementById('btn-close-history-column-picker');
+  const options = document.getElementById('history-column-picker-options');
+  const selectAll = document.getElementById('history-column-picker-select-all');
+  const resetButton = document.getElementById('btn-reset-history-columns');
+  if (!picker || !button || !popover || !options) return;
+
+  options.innerHTML = HISTORY_COLUMN_DEFINITIONS.map(column => `
+    <label class="customer-column-option-label">
+      <input class="history-column-option" type="checkbox" value="${column.key}">
+      <span>${column.label}</span>
+    </label>
+  `).join('');
+
+  const setOpen = isOpen => {
+    popover.hidden = !isOpen;
+    button.setAttribute('aria-expanded', String(isOpen));
+  };
+
+  button.addEventListener('click', event => {
+    event.stopPropagation();
+    setOpen(popover.hidden);
+  });
+  closeButton?.addEventListener('click', () => setOpen(false));
+  picker.addEventListener('click', event => event.stopPropagation());
+  document.addEventListener('click', () => setOpen(false));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') setOpen(false);
+  });
+
+  options.addEventListener('change', () => {
+    const visibleColumns = new Set(
+      Array.from(options.querySelectorAll('.history-column-option:checked')).map(input => input.value)
+    );
+    saveVisibleHistoryColumns(visibleColumns);
+    applyHistoryColumnVisibility();
+  });
+
+  selectAll?.addEventListener('change', () => {
+    const visibleColumns = selectAll.checked
+      ? new Set(HISTORY_COLUMN_DEFINITIONS.map(column => column.key))
+      : new Set();
+    saveVisibleHistoryColumns(visibleColumns);
+    applyHistoryColumnVisibility();
+  });
+
+  resetButton?.addEventListener('click', () => {
+    localStorage.removeItem(HISTORY_COLUMN_STORAGE_KEY);
+    applyHistoryColumnVisibility();
+  });
+
+  applyHistoryColumnVisibility();
+}
+
 function localDateStart(value) {
   if (!value) return null;
   const date = new Date(`${value}T00:00:00`);
@@ -375,6 +494,7 @@ function orderMatchesHistoryBrand(order, brandName) {
 }
 
 export function setupHistoryPanel() {
+  setupHistoryColumnPicker();
   const searchInput = document.getElementById('history-search-input');
   
   const onFilterChange = () => {
@@ -887,39 +1007,42 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
         <tr class="history-order-row${isExpanded ? ' is-expanded' : ''}" data-order-id="${escapeHistoryHtml(orderId)}"
             tabindex="0" role="button" aria-expanded="${isExpanded}" aria-controls="${detailId}">
           <td style="text-align: center;"><input type="checkbox" class="history-export-checkbox" data-id="${escapeHistoryHtml(orderId)}" aria-label="Chọn đơn ${escapeHistoryHtml(displayOrderCode)}" ${selectedHistoryOrderIdsForExport.has(orderId) ? 'checked' : ''}></td>
-          <td style="text-align: center; font-weight: 600; color: var(--text-muted);">${indexNumber}</td>
-          <td>
+          <td data-history-column="index" style="text-align: center; font-weight: 600; color: var(--text-muted);">${indexNumber}</td>
+          <td data-history-column="code">
             <div title="${escapeHistoryHtml(orderId)}" style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; margin-bottom: 2px;">${escapeHistoryHtml(displayOrderCode)}</div>
             <div>${statusBadge}</div>
           </td>
-          <td style="white-space: nowrap; color: var(--text-secondary); font-size: 0.8rem;">
+          <td data-history-column="date" style="white-space: nowrap; color: var(--text-secondary); font-size: 0.8rem;">
             ${formatDateTime(order.date)}
           </td>
-          <td>
+          <td data-history-column="customer">
             <div style="font-weight: 600; color: var(--text-primary);">${escapeHistoryHtml(order.customerName)}</div>
             <div style="font-size: 0.78rem; color: var(--text-muted);">Nợ hiện tại: <span style="color: var(--color-danger); font-weight: 600;">${debtText}</span></div>
           </td>
-          <td>
+          <td data-history-column="manager">
             <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${escapeHistoryHtml(managerName)}</span>
           </td>
-          <td>
+          <td data-history-column="pricelist">
             <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${escapeHistoryHtml(plName)}</span>
           </td>
-          <td style="text-align: right;">
+          <td data-history-column="notes" class="history-order-note-cell" title="${escapeHistoryHtml(order.notes || 'Không có ghi chú')}">
+            ${escapeHistoryHtml(order.notes || '—')}
+          </td>
+          <td data-history-column="totalGoods" style="text-align: right;">
             <div class="history-money-cell">${formatNumber(amountBreakdown.totalBeforeDiscount)}</div>
           </td>
-          <td style="text-align: right;">
+          <td data-history-column="discount" style="text-align: right;">
             <div class="history-money-cell history-money-discount">${formatNumber(amountBreakdown.totalDiscountAmount)}</div>
           </td>
-          <td style="text-align: right;">
+          <td data-history-column="otherFee" style="text-align: right;">
             <div class="history-money-cell history-money-other-fee">${formatNumber(amountBreakdown.shippingFeeAmount)}</div>
           </td>
-          <td style="text-align: right;">
+          <td data-history-column="totalPayment" style="text-align: right;">
             <div class="history-money-cell history-money-total">${formatNumber(amountBreakdown.totalPayment)}</div>
           </td>
         </tr>
         <tr id="${detailId}" class="history-expanded-row${isExpanded ? ' is-expanded' : ''}" aria-hidden="${!isExpanded}">
-          <td colspan="11">
+          <td colspan="12">
             <div class="history-expanded-motion">
               <div class="history-expanded-motion-inner">
                 <section class="history-expanded-panel" aria-label="Chi tiết thao tác đơn ${escapeHistoryHtml(displayOrderCode)}" ${isExpanded ? '' : 'inert'}>
@@ -991,20 +1114,21 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
     ordersContentHtml = `
       <div class="table-responsive glass-panel" style="padding: 0.5rem; width: 100%; border-radius: 12px; grid-column: 1 / -1;">
-        <table class="table history-details-table" style="min-width: 1375px;">
+        <table class="table history-details-table">
           <thead>
             <tr>
               <th style="width: 42px; text-align: center;"><input type="checkbox" id="history-select-all-export" title="Chọn tất cả đơn trên trang"></th>
-              <th style="width: 45px; text-align: center;">STT</th>
-              <th style="width: 120px;">Mã đơn</th>
-              <th style="width: 135px;">Ngày lập</th>
-              <th style="width: 170px;">Khách hàng</th>
-              <th style="width: 150px;">KDQL</th>
-              <th style="width: 120px;">Bảng giá</th>
-              <th style="width: 140px; text-align: right;">Tổng tiền hàng</th>
-              <th style="width: 125px; text-align: right;">Giảm giá</th>
-              <th style="width: 120px; text-align: right;">Thu khác</th>
-              <th style="width: 145px; text-align: right;">Tổng thanh toán</th>
+              <th data-history-column="index" style="width: 45px; text-align: center;">STT</th>
+              <th data-history-column="code" style="width: 120px;">Mã đơn</th>
+              <th data-history-column="date" style="width: 135px;">Ngày lập</th>
+              <th data-history-column="customer" style="width: 170px;">Khách hàng</th>
+              <th data-history-column="manager" style="width: 150px;">KDQL</th>
+              <th data-history-column="pricelist" style="width: 120px;">Bảng giá</th>
+              <th data-history-column="notes" style="width: 220px;">Ghi chú</th>
+              <th data-history-column="totalGoods" style="width: 140px; text-align: right;">Tổng tiền hàng</th>
+              <th data-history-column="discount" style="width: 125px; text-align: right;">Giảm giá</th>
+              <th data-history-column="otherFee" style="width: 120px; text-align: right;">Thu khác</th>
+              <th data-history-column="totalPayment" style="width: 145px; text-align: right;">Tổng thanh toán</th>
             </tr>
           </thead>
           <tbody>
@@ -1179,6 +1303,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
   `;
 
   container.innerHTML = ordersContentHtml + paginationHtml;
+  applyHistoryColumnVisibility();
 
   const prevPageBtn = document.getElementById('history-prev-page');
   if (prevPageBtn) {

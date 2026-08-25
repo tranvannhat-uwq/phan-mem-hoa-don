@@ -1286,10 +1286,37 @@
                 </button>
               </div>
 
-                            <button class="btn btn-primary btn-sm" id="btn-open-history-export-modal" style="display: flex; align-items: center; gap: 0.5rem; height: 36px;">
+              <div class="customer-column-picker history-column-picker" id="history-column-picker">
+                <button class="btn btn-secondary btn-sm" id="btn-history-column-picker" type="button" aria-expanded="false" aria-controls="history-column-picker-popover">
+                  <i data-lucide="columns-3"></i> Cột hiển thị
+                </button>
+                <div class="customer-column-picker-popover history-column-picker-popover" id="history-column-picker-popover" hidden>
+                  <div class="customer-column-picker-header">
+                    <div>
+                      <strong>Cột lịch sử đơn</strong>
+                      <span id="history-column-picker-count">11/11 cột</span>
+                    </div>
+                    <button class="btn btn-secondary btn-sm btn-circle" id="btn-close-history-column-picker" type="button" title="Đóng">
+                      <i data-lucide="x"></i>
+                    </button>
+                  </div>
+                  <label class="customer-column-picker-all">
+                    <input type="checkbox" id="history-column-picker-select-all" checked>
+                    <span>Hiển thị tất cả</span>
+                  </label>
+                  <div class="customer-column-picker-grid" id="history-column-picker-options"></div>
+                  <div class="customer-column-picker-footer">
+                    <button class="btn btn-secondary btn-sm" id="btn-reset-history-columns" type="button">
+                      <i data-lucide="rotate-ccw"></i> Khôi phục mặc định
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button class="btn btn-primary btn-sm" id="btn-open-history-export-modal" style="display: flex; align-items: center; gap: 0.5rem; height: 36px;">
                 <i data-lucide="download"></i> Xu&#7845;t Excel
               </button>
-<button class="btn btn-secondary btn-sm" id="btn-refresh-history" style="background-color: var(--color-secondary-light); color: var(--color-secondary); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; gap: 0.5rem; height: 36px;">
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-history" style="background-color: var(--color-secondary-light); color: var(--color-secondary); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; gap: 0.5rem; height: 36px;">
                 <i data-lucide="refresh-cw"></i> Làm mới dữ liệu
               </button>
             </div>

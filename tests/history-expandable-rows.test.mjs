@@ -16,11 +16,22 @@ test('details table renders one accessible expandable row pair per order', () =>
   assert.match(tableBranch, /class="history-order-row\$\{isExpanded/);
   assert.match(tableBranch, /tabindex="0" role="button" aria-expanded="\$\{isExpanded\}" aria-controls="\$\{detailId\}"/);
   assert.match(tableBranch, /class="history-expanded-row\$\{isExpanded/);
-  assert.match(tableBranch, /<td colspan="11">/);
+  assert.match(tableBranch, /<td colspan="12">/);
   assert.doesNotMatch(tableBranch, />Thao tác<\/th>/);
   assert.doesNotMatch(tableBranch, /class="history-row-toggle"/);
   assert.match(tableBranch, />KDQL<\/th>/);
   assert.match(tableBranch, /getManagerDisplayName\(managerValue, state\.users\)/);
+});
+
+test('details table displays order notes and supports persisted column visibility', () => {
+  assert.match(tableBranch, /data-history-column="notes"[^>]*>Ghi chú<\/th>/);
+  assert.match(tableBranch, /class="history-order-note-cell"[^>]*title="\$\{escapeHistoryHtml\(order\.notes/);
+  assert.match(tableBranch, /escapeHistoryHtml\(order\.notes \|\| '—'\)/);
+  assert.match(history, /HISTORY_COLUMN_STORAGE_KEY = 'billing_history_visible_columns'/);
+  assert.match(history, /function setupHistoryColumnPicker\(\)/);
+  assert.match(history, /document\.querySelectorAll\('\[data-history-column\]'\)/);
+  assert.match(history, /setupHistoryColumnPicker\(\)/);
+  assert.match(styles, /\.history-order-note-cell\s*\{[\s\S]*text-overflow:\s*ellipsis/);
 });
 
 test('expanded panel uses real notes, payment fields and existing action handlers', () => {

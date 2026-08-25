@@ -2404,6 +2404,20 @@ select option {
   vertical-align: middle;
 }
 
+.history-order-note-cell {
+  max-width: 220px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-column-picker-popover {
+  right: 0;
+  left: auto;
+}
+
 .history-details-table tr:hover td {
   background-color: var(--bg-surface-hover);
 }
