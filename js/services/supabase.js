@@ -2,11 +2,11 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260822-order-time-v20';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260822-order-time-v20';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260828-user-dedupe-v21';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260828-user-dedupe-v21';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260822-order-time-v20';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260822-order-time-v20';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260828-user-dedupe-v21';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260828-user-dedupe-v21';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -1416,7 +1416,11 @@ export async function fetchCloudData(options = {}) {
             const hasNewAbs = merged.some(ru => ru.username === 'ctyabs@lendon.com');
             if (hasNewAbs) return;
           }
-          const isDup = uniqueUsers.some(uu => isSameUser(uu.username, u.username) || uu.displayName === u.displayName);
+          const isDup = uniqueUsers.some(uu =>
+            String(uu.id) === String(u.id) ||
+            isSameUser(uu.username, u.username) ||
+            (uu.authUserId && u.authUserId && String(uu.authUserId) === String(u.authUserId))
+          );
           if (!isDup) {
             uniqueUsers.push(u);
           }

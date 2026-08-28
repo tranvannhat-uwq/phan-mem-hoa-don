@@ -15,6 +15,8 @@ test('deactivated accounts stay hidden while historical profile data is retained
   assert.match(users, /function normalizeUserSearch/);
   assert.match(users, /normalize\('NFD'\)/);
   assert.match(users, /user\.isActive = true/);
+  assert.doesNotMatch(service, /uu\.displayName === u\.displayName/);
+  assert.match(service, /uu\.authUserId && u\.authUserId/);
   assert.match(deleteFunction, /\.update\(\{\s*is_active:\s*false/);
   assert.doesNotMatch(deleteFunction, /\.delete\(/);
   assert.match(users, /user\.role === 'admin'[\s\S]{0,160}u\.role === 'admin'/);

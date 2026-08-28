@@ -6,9 +6,9 @@ import {
   dbSavePriceListItems,
   dbDeletePriceListItem,
   persistAuthorizedPricingCache
-} from '../services/supabase.js?v=20260822-order-time-v20';
-import { renderAll } from '../main.js?v=20260822-order-time-v20';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20260822-order-time-v20';
+} from '../services/supabase.js?v=20260828-user-dedupe-v21';
+import { renderAll } from '../main.js?v=20260828-user-dedupe-v21';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20260828-user-dedupe-v21';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -19,8 +19,8 @@ import {
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
-} from '../domain/pricing.js?v=20260822-order-time-v20';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260822-order-time-v20';
+} from '../domain/pricing.js?v=20260828-user-dedupe-v21';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260828-user-dedupe-v21';
 
 const pendingChanges = new Map();
 const pendingDeletes = new Set();
