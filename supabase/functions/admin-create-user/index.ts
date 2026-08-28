@@ -60,6 +60,62 @@ Deno.serve(async (request) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    const { data: matchingProfiles, error: matchingError } = await adminClient
+      .from('profiles')
+      .select('id,auth_user_id,username,display_name,role,company_id,is_external,is_active')
+      .ilike('username', email)
+      .limit(2);
+    if (matchingError) return jsonResponse({ error: matchingError.message }, 500);
+
+    const existingProfile = matchingProfiles?.[0] || null;
+    if (existingProfile?.is_active === true) {
+      return jsonResponse({ error: 'Tên đăng nhập đã tồn tại trong hệ thống.' }, 409);
+    }
+
+    if (existingProfile) {
+      if (!existingProfile.auth_user_id) {
+        return jsonResponse({ error: 'Tài khoản cũ chưa được liên kết Supabase Auth. Vui lòng liên hệ quản trị hệ thống.' }, 409);
+      }
+
+      const { data: updatedAuth, error: authUpdateError } = await adminClient.auth.admin.updateUserById(
+        existingProfile.auth_user_id,
+        {
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { display_name: displayName },
+        },
+      );
+      if (authUpdateError || !updatedAuth.user) {
+        return jsonResponse({ error: authUpdateError?.message || 'Không thể kích hoạt lại Auth user.' }, 400);
+      }
+
+      const { data: reactivatedProfile, error: reactivateError } = await adminClient
+        .from('profiles')
+        .update({
+          username: email,
+          display_name: displayName,
+          role,
+          company_id: companyId,
+          is_external: false,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingProfile.id)
+        .select('id,auth_user_id,username,display_name,role,company_id,is_external,is_active')
+        .single();
+      if (reactivateError || !reactivatedProfile) {
+        return jsonResponse({ error: reactivateError?.message || 'Không thể kích hoạt lại profile.' }, 500);
+      }
+
+      return jsonResponse({
+        user: { id: updatedAuth.user.id, email: updatedAuth.user.email },
+        profile: reactivatedProfile,
+        reactivated: true,
+      });
+    }
+
     const { data: created, error: createError } = await adminClient.auth.admin.createUser({
       email,
       password,

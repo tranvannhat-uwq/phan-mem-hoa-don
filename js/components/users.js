@@ -226,7 +226,9 @@ export async function saveUser() {
   
   let user;
   if (!editId) {
-    const exists = state.users.some(u => isSameUser(u.username, username));
+    const exists = state.users.some(u =>
+      isSameUser(u.username, username) && u.isActive !== false && u.is_active !== false
+    );
     if (exists) {
       showToast('Tên đăng nhập đã tồn tại trong hệ thống!', 'danger');
       return;
