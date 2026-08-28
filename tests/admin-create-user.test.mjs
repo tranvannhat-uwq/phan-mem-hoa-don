@@ -31,6 +31,10 @@ test('a deleted login account can be reactivated with a new password', () => {
   assert.match(edge, /password,[\s\S]{0,120}email_confirm:\s*true/);
   assert.match(edge, /is_active:\s*true/);
   assert.match(edge, /reactivated:\s*true/);
+  assert.match(edge, /auth\.admin\.listUsers/);
+  assert.match(edge, /auth_user_id:\s*authUser\.id/);
+  assert.match(edge, /createdAuthForLegacyProfile/);
+  assert.doesNotMatch(edge, /Tài khoản cũ chưa được liên kết Supabase Auth/);
   assert.match(users, /isSameUser\(u\.username, username\)[\s\S]{0,120}u\.isActive !== false/);
 });
 

@@ -74,26 +74,88 @@ Deno.serve(async (request) => {
     }
 
     if (existingProfile) {
-      if (!existingProfile.auth_user_id) {
-        return jsonResponse({ error: 'Tài khoản cũ chưa được liên kết Supabase Auth. Vui lòng liên hệ quản trị hệ thống.' }, 409);
-      }
+      let authUser;
+      let createdAuthForLegacyProfile = false;
 
-      const { data: updatedAuth, error: authUpdateError } = await adminClient.auth.admin.updateUserById(
-        existingProfile.auth_user_id,
-        {
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { display_name: displayName },
-        },
-      );
-      if (authUpdateError || !updatedAuth.user) {
-        return jsonResponse({ error: authUpdateError?.message || 'Không thể kích hoạt lại Auth user.' }, 400);
+      if (existingProfile.auth_user_id) {
+        const { data: updatedAuth, error: authUpdateError } = await adminClient.auth.admin.updateUserById(
+          existingProfile.auth_user_id,
+          {
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { display_name: displayName },
+          },
+        );
+        if (authUpdateError || !updatedAuth.user) {
+          return jsonResponse({ error: authUpdateError?.message || 'Không thể kích hoạt lại Auth user.' }, 400);
+        }
+        authUser = updatedAuth.user;
+      } else {
+        const { data: listedAuth, error: listAuthError } = await adminClient.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000,
+        });
+        if (listAuthError) return jsonResponse({ error: listAuthError.message }, 500);
+
+        const existingAuth = listedAuth.users.find((user) => user.email?.toLowerCase() === email) || null;
+        if (existingAuth) {
+          const { data: linkedProfiles, error: linkedProfileError } = await adminClient
+            .from('profiles')
+            .select('id')
+            .eq('auth_user_id', existingAuth.id)
+            .limit(1);
+          if (linkedProfileError) return jsonResponse({ error: linkedProfileError.message }, 500);
+          if (linkedProfiles?.length) {
+            return jsonResponse({
+              error: 'Email này đã liên kết với một hồ sơ khác trong Supabase Auth.',
+            }, 409);
+          }
+
+          const { data: updatedAuth, error: authUpdateError } = await adminClient.auth.admin.updateUserById(
+            existingAuth.id,
+            {
+              email,
+              password,
+              email_confirm: true,
+              user_metadata: { display_name: displayName },
+            },
+          );
+          if (authUpdateError || !updatedAuth.user) {
+            return jsonResponse({ error: authUpdateError?.message || 'Không thể liên kết Auth user cũ.' }, 400);
+          }
+          authUser = updatedAuth.user;
+        } else {
+          const { data: createdAuth, error: createAuthError } = await adminClient.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { display_name: displayName },
+          });
+          if (createAuthError || !createdAuth.user) {
+            return jsonResponse({ error: createAuthError?.message || 'Không thể tạo Auth user cho tài khoản cũ.' }, 400);
+          }
+          authUser = createdAuth.user;
+          createdAuthForLegacyProfile = true;
+
+          // The auth trigger creates a temporary profile. Remove only that new row,
+          // then link Auth to the original profile so its business history is retained.
+          const { error: temporaryProfileError } = await adminClient
+            .from('profiles')
+            .delete()
+            .eq('auth_user_id', authUser.id)
+            .neq('id', existingProfile.id);
+          if (temporaryProfileError) {
+            await adminClient.auth.admin.deleteUser(authUser.id);
+            return jsonResponse({ error: 'Không thể chuẩn bị hồ sơ cũ để liên kết Supabase Auth.' }, 500);
+          }
+        }
       }
 
       const { data: reactivatedProfile, error: reactivateError } = await adminClient
         .from('profiles')
         .update({
+          auth_user_id: authUser.id,
           username: email,
           display_name: displayName,
           role,
@@ -106,11 +168,12 @@ Deno.serve(async (request) => {
         .select('id,auth_user_id,username,display_name,role,company_id,is_external,is_active')
         .single();
       if (reactivateError || !reactivatedProfile) {
+        if (createdAuthForLegacyProfile) await adminClient.auth.admin.deleteUser(authUser.id);
         return jsonResponse({ error: reactivateError?.message || 'Không thể kích hoạt lại profile.' }, 500);
       }
 
       return jsonResponse({
-        user: { id: updatedAuth.user.id, email: updatedAuth.user.email },
+        user: { id: authUser.id, email: authUser.email },
         profile: reactivatedProfile,
         reactivated: true,
       });
