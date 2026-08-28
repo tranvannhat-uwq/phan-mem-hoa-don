@@ -11,17 +11,27 @@ import {
   validateProfileRows
 } from '../domain/auth-profile.js';
 
+function normalizeUserSearch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
 export function renderUsersTable() {
   const tableBody = document.getElementById('users-table-body');
   if (!tableBody) return;
   
   const searchInput = document.getElementById('user-search-input');
-  const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const searchVal = normalizeUserSearch(searchInput?.value);
   
   const filtered = (state.users || []).filter(u => {
     if (!u || u.isActive === false || u.is_active === false) return false;
-    const uname = (u.username || u.code || '').toLowerCase();
-    const dname = (u.displayName || u.display_name || u.name || '').toLowerCase();
+    const uname = normalizeUserSearch(u.username || u.code);
+    const dname = normalizeUserSearch(u.displayName || u.display_name || u.name);
     return uname.includes(searchVal) || dname.includes(searchVal);
   });
   
@@ -270,6 +280,8 @@ export async function saveUser() {
   
   const saved = await dbSaveUser(user, { initialPassword });
   if (saved) {
+    user.isActive = true;
+    delete user.is_active;
     // Profile/role chỉ lấy từ database; không lưu bản sao quyền trong browser.
     const idx = state.users.findIndex(u => u.id === user.id);
     if (idx !== -1) {
