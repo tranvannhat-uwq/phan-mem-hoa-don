@@ -184,19 +184,3 @@ if (document.readyState === 'loading') {
 
 window.addEventListener('pagehide', () => cleanupLandingMotion(), { once: true });
 
-const WORKSPACE_REQUEST_STORAGE_KEY = 'sovie_workspace_requested';
-
-function setupRouteFreeLoginEntry() {
-  document.querySelectorAll('.js-open-login').forEach(button => {
-    button.addEventListener('click', () => {
-      sessionStorage.setItem(WORKSPACE_REQUEST_STORAGE_KEY, '1');
-      window.location.reload();
-    });
-  });
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setupRouteFreeLoginEntry, { once: true });
-} else {
-  setupRouteFreeLoginEntry();
-}

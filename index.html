@@ -26,7 +26,7 @@
       }, true);
     }());
   </script>
-  <title>SoVie | Quản lý bán hàng thông minh, vận hành nhẹ nhàng</title>
+  <title>SoVie | Chăm sóc khách hàng</title>
   <link rel="icon" type="image/png" href="sovie-favicon.png?v=20260815-sovie-icon-v1">
   <!-- Google Font: Inter is the system-wide product typeface -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,150 +42,92 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
   <link rel="stylesheet" href="style.css?v=20260828-navbar-logout-v4">
-  <link rel="stylesheet" href="ui-system.css?v=20260828-system-ui-sync-v1">
-  <link rel="stylesheet" href="landing.css?v=20260828-marketing-landing-v3">
 </head>
 <body>
 
-  <div class="landing-page" id="landing-page">
-    <div class="landing-topbar">
-      <div class="landing-topbar-inner">
-        <span class="landing-topbar-company"><i data-lucide="building-2"></i> Đơn vị quản lý: <strong>CÔNG TY CỔ PHẦN EMP HOA KỲ</strong></span>
-        <span class="landing-topbar-brand"><i data-lucide="globe-2"></i> SoVie · sovie.io.vn</span>
-        <span class="landing-topbar-phone"><i data-lucide="phone"></i> SĐT: <strong>0325.855.222</strong></span>
-      </div>
-    </div>
-    <header class="landing-header" data-motion-header>
-      <a class="landing-brand" href="#top" aria-label="SoVie - Trang chủ">
+  <div class="landing-page customer-care-landing" id="landing-page">
+    <header class="care-header">
+      <a class="care-brand" href="/" aria-label="SoVie - Chăm sóc khách hàng">
         <img src="sovie-logo.png?v=20260815-sovie-v2" alt="SoVie">
+        <span><strong>Chăm sóc khách hàng</strong><small>Không gian CRM nội bộ</small></span>
       </a>
-      <nav class="landing-nav" aria-label="Điều hướng trang giới thiệu">
-        <a href="#features">Tính năng</a>
-        <a href="#solutions">Giải pháp</a>
-        <a href="#benefits">Lợi ích</a>
-      </nav>
-      <button type="button" class="landing-login-button js-open-login">
-        <i data-lucide="log-in"></i>
-        Đăng nhập
+      <button type="button" class="care-header-status" id="care-private-data-access" aria-label="Trạng thái bảo mật">
+        <span class="care-status-dot"></span>
+        <span class="care-header-status-label">Dữ liệu riêng tư qua Google</span>
       </button>
+      <div class="care-header-actions">
+        <button type="button" class="care-icon-button" id="care-sheet-refresh" title="Tải lại dữ liệu Google Sheet">
+          <i data-lucide="refresh-cw"></i><span>Tải lại</span>
+        </button>
+        <button type="button" class="care-icon-button" id="care-sheet-settings" title="Chọn Google Sheet của nhân viên">
+          <i data-lucide="link-2"></i><span>Đổi bảng</span>
+        </button>
+        <a class="care-primary-link" id="care-sheet-open" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
+          <i data-lucide="external-link"></i><span>Mở Google Sheet</span>
+        </a>
+      </div>
     </header>
 
-    <main id="top">
-      <section class="landing-hero">
-        <div class="landing-hero-copy">
-          <div class="landing-eyebrow" data-hero-item="badge"><span></span> Nền tảng quản lý bán hàng dành cho doanh nghiệp Việt</div>
-          <h1><span class="hero-title-line" data-hero-line>Quản lý bán hàng</span><span class="hero-title-line" data-hero-line><em>gọn hơn mỗi ngày.</em></span></h1>
-          <p data-hero-item="description">SoVie giúp bạn quản lý sản phẩm, đơn hàng, khách hàng và dòng tiền trên một hệ thống duy nhất — trực quan, chính xác và dễ sử dụng.</p>
-          <div class="landing-hero-actions" data-hero-item="actions">
-            <button type="button" class="landing-primary-button js-open-login">Bắt đầu quản lý <i data-lucide="arrow-right"></i></button>
-            <a href="#features" class="landing-text-link">Khám phá tính năng <i data-lucide="arrow-down"></i></a>
+    <main class="care-main">
+      <section class="care-intro" aria-labelledby="care-title">
+        <div>
+          <span class="care-kicker"><i data-lucide="headphones"></i> Trung tâm chăm sóc khách hàng</span>
+          <h1 id="care-title">Theo dõi khách hàng cần chăm sóc</h1>
+          <p>Dữ liệu được hiển thị trực tiếp từ bảng CRM của doanh nghiệp. Người xem cần đăng nhập đúng tài khoản Google đã được cấp quyền.</p>
+        </div>
+        <div class="care-security-card">
+          <span class="care-security-icon"><i data-lucide="shield-check"></i></span>
+          <div><strong>Quyền truy cập được bảo vệ</strong><small>SoVie không lưu mật khẩu hoặc khóa Google trên website.</small></div>
+        </div>
+      </section>
+
+      <section class="care-sheet-card" aria-label="Bảng chăm sóc khách hàng">
+        <div class="care-sheet-toolbar">
+          <div class="care-sheet-title">
+            <span class="care-sheet-mark"><i data-lucide="table-2"></i></span>
+            <div><strong>CRM CỦA NHÂN VIÊN KINH DOANH</strong><small>Danh sách và lịch chăm sóc khách hàng</small></div>
           </div>
-          <div class="landing-trust-row" data-hero-item="stats">
-            <div><strong data-count="1" data-count-pad="2">01</strong><span>Nền tảng<br>vận hành</span></div>
-            <div><strong data-count="24" data-count-suffix="/7">24/7</strong><span>Dữ liệu<br>sẵn sàng</span></div>
-            <div><strong data-count="100" data-count-suffix="%">100%</strong><span>Đồng bộ<br>đám mây</span></div>
+          <div class="care-sheet-state" id="care-sheet-state" role="status">
+            <span></span> Đang kết nối Google Sheet...
           </div>
         </div>
-
-        <div class="landing-hero-visual" aria-label="Giao diện tổng quan SoVie">
-          <div class="hero-orbit orbit-one"></div>
-          <div class="hero-orbit orbit-two"></div>
-          <div class="hero-float-card hero-float-sales"><span class="float-icon"><i data-lucide="trending-up"></i></span><span>Doanh thu hôm nay<small>+18,6%</small></span></div>
-          <div class="hero-float-card hero-float-stock"><span class="float-icon green"><i data-lucide="package-check"></i></span><span>Kho hàng ổn định<small>1.248 sản phẩm</small></span></div>
-          <div class="product-preview" data-hero-dashboard>
-            <div class="preview-topbar">
-              <div class="preview-brandmark">S</div>
-              <span>Tổng quan kinh doanh</span>
-              <div class="preview-avatar"></div>
-            </div>
-            <div class="preview-body">
-              <aside class="preview-sidebar">
-                <span class="active"></span><span></span><span></span><span></span><span></span>
-              </aside>
-              <div class="preview-content">
-                <div class="preview-heading"><b>Xin chào!</b><span>Tháng này</span></div>
-                <div class="preview-stats">
-                  <div><small>Doanh thu</small><strong>2,48 tỷ</strong><i data-lucide="wallet-cards"></i></div>
-                  <div><small>Đơn hàng</small><strong>1.286</strong><i data-lucide="shopping-bag"></i></div>
-                  <div><small>Khách hàng</small><strong>842</strong><i data-lucide="users"></i></div>
-                </div>
-                <div class="preview-chart-card">
-                  <div class="chart-card-head"><span>Hiệu quả kinh doanh</span><small>7 ngày gần nhất</small></div>
-                  <div class="preview-chart">
-                    <div class="chart-grid"></div>
-                    <div class="chart-bars"><i style="--h:36%"></i><i style="--h:55%"></i><i style="--h:44%"></i><i style="--h:72%"></i><i style="--h:61%"></i><i style="--h:88%"></i><i style="--h:76%"></i></div>
-                  </div>
-                </div>
+        <div class="care-sheet-frame-wrap">
+          <div class="care-sheet-setup" id="care-sheet-setup">
+            <span class="care-sheet-setup-icon"><i data-lucide="table-properties"></i></span>
+            <strong>Chọn danh sách khách hàng của bạn</strong>
+            <p>Dán link Google Sheet được cấp cho nhân viên. Link chỉ được lưu trên trình duyệt này và sẽ tự tải ở những lần sau.</p>
+            <form class="care-sheet-config-form" id="care-sheet-config-form">
+              <label for="care-sheet-url">Link Google Sheet</label>
+              <div class="care-sheet-config-row">
+                <input type="url" id="care-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." required autocomplete="off">
+                <button type="submit">Lưu và mở danh sách</button>
               </div>
-            </div>
+              <span class="care-sheet-config-error" id="care-sheet-config-error" role="alert"></span>
+              <button type="button" class="care-sheet-config-cancel" id="care-sheet-config-cancel">Quay lại bảng đang dùng</button>
+            </form>
+            <small>Nếu bảng là riêng tư, Google sẽ yêu cầu đăng nhập đúng tài khoản đã được cấp quyền.</small>
           </div>
-        </div>
-      </section>
-
-      <section class="landing-feature-section" id="features">
-        <div class="section-kicker" data-reveal="up">Tất cả trong một</div>
-        <div class="section-heading-row" data-reveal="up" data-reveal-delay="70">
-          <h2>Mọi công cụ bạn cần<br>để bán hàng hiệu quả.</h2>
-          <p>Từ kho hàng đến công nợ, SoVie kết nối mọi nghiệp vụ và biến dữ liệu thành quyết định rõ ràng.</p>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card" data-reveal="scale" data-reveal-delay="0" tabindex="0">
-            <span class="feature-number">01</span><div class="feature-icon"><i data-lucide="receipt-text"></i></div>
-            <h3>Đơn hàng nhanh chóng</h3><p>Tạo đơn, áp dụng bảng giá và theo dõi trạng thái thanh toán chỉ trong vài thao tác.</p>
-            <div class="mini-order"><span><i></i> Đơn hàng #SV-2486</span><strong>12.680.000đ</strong><small>Đã thanh toán</small></div>
-          </article>
-          <article class="feature-card" data-reveal="scale" data-reveal-delay="70" tabindex="0">
-            <span class="feature-number">02</span><div class="feature-icon"><i data-lucide="boxes"></i></div>
-            <h3>Kho hàng chính xác</h3><p>Quản lý sản phẩm, biến thể, bảng giá và số lượng tồn kho theo thời gian thực.</p>
-          </article>
-          <article class="feature-card" data-reveal="scale" data-reveal-delay="140" tabindex="0">
-            <span class="feature-number">03</span><div class="feature-icon"><i data-lucide="hand-coins"></i></div>
-            <h3>Công nợ minh bạch</h3><p>Nắm rõ khoản phải thu, lịch sử thanh toán và dòng tiền của từng khách hàng.</p>
-          </article>
-          <article class="feature-card feature-card-wide" data-reveal="scale" data-reveal-delay="210" tabindex="0">
-            <div><span class="feature-number">04</span><div class="feature-icon"><i data-lucide="chart-no-axes-combined"></i></div><h3>Báo cáo trực quan</h3><p>Theo dõi doanh thu, hiệu suất bán hàng và sức khỏe kinh doanh bằng dữ liệu dễ hiểu.</p></div>
-            <div class="mini-report"><span style="--v:42%"></span><span style="--v:68%"></span><span style="--v:51%"></span><span style="--v:83%"></span><span style="--v:70%"></span><span style="--v:92%"></span></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="landing-solutions" id="solutions">
-        <div class="solution-panel">
-          <div class="solution-copy" data-reveal="left"><span class="section-kicker">Vận hành liền mạch</span><h2>Một Sổ Việt.<br>Nhiều quyết định tốt.</h2><p><strong>SoVie — Sổ Việt của doanh nghiệp.</strong> Mọi dữ liệu được tổ chức đồng bộ, bảo mật và luôn sẵn sàng để đội ngũ phối hợp hiệu quả ở bất cứ đâu.</p><ul><li><i data-lucide="check"></i> Phân quyền theo vai trò</li><li><i data-lucide="check"></i> Đồng bộ dữ liệu Cloud</li><li><i data-lucide="check"></i> Lịch sử hoạt động rõ ràng</li></ul></div>
-          <div class="solution-rings" data-reveal="right" data-reveal-delay="90">
-            <div class="solution-grid-glow" aria-hidden="true"></div>
-            <div class="ring ring-a"><span><i data-lucide="shopping-cart"></i> Bán hàng</span></div>
-            <div class="ring ring-b"><span><i data-lucide="database"></i> <b>SỔ VIỆT</b><small>SoVie · Trung tâm vận hành</small></span></div>
-            <div class="ring ring-c"><span><i data-lucide="users"></i> Khách hàng</span></div>
-            <div class="solution-data-node node-stock"><i data-lucide="package-check"></i><span>Kho hàng<small>Đang đồng bộ</small></span></div>
-            <div class="solution-data-node node-report"><i data-lucide="chart-spline"></i><span>Báo cáo<small>Cập nhật trực tiếp</small></span></div>
+          <div class="care-sheet-loading is-hidden" id="care-sheet-loading">
+            <span class="care-loading-spinner"></span>
+            <strong>Đang tải dữ liệu chăm sóc khách hàng</strong>
+            <small>Nếu Google yêu cầu, hãy đăng nhập bằng tài khoản đã được chia sẻ bảng tính.</small>
           </div>
+          <iframe
+            id="care-sheet-frame"
+            title="Google Sheet chăm sóc khách hàng"
+            loading="eager"
+            tabindex="-1"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allow="clipboard-read; clipboard-write"
+          ></iframe>
+          <noscript><p class="care-sheet-fallback">Cần bật JavaScript để hiển thị Google Sheet.</p></noscript>
         </div>
-      </section>
-
-      <section class="landing-benefits" id="benefits">
-        <div data-reveal="up"><span class="section-kicker">Đơn giản để bắt đầu</span><h2>Sẵn sàng nâng cấp cách<br>bạn vận hành?</h2></div>
-        <button type="button" class="landing-primary-button js-open-login" data-reveal="scale" data-reveal-delay="120">Dùng thử ngay <i data-lucide="arrow-up-right"></i></button>
       </section>
     </main>
 
-    <footer class="landing-footer" data-reveal="up">
-      <div class="landing-footer-main">
-        <div class="landing-footer-brand">
-          <img src="sovie-logo.png?v=20260815-sovie-v2" alt="SoVie">
-          <p>Quản lý bán hàng thông minh,<br>vận hành nhẹ nhàng.</p>
-        </div>
-        <div class="landing-footer-company">
-          <span class="landing-footer-label">Đơn vị quản lý</span>
-          <strong>CÔNG TY CỔ PHẦN EMP HOA KỲ</strong>
-          <p><i data-lucide="phone"></i> 0325.855.222 <span aria-hidden="true">·</span> 0985.769.689</p>
-        </div>
-        <div class="landing-footer-meta">
-          <div><span class="landing-footer-label">Thương hiệu</span><strong>SoVie — Sổ Việt</strong></div>
-          <div><span class="landing-footer-label">Website</span><strong>sovie.io.vn</strong></div>
-        </div>
-      </div>
-      <div class="landing-footer-bottom"><span>© 2026 SoVie. All rights reserved.</span><span>Một sản phẩm của EMP Hoa Kỳ</span></div>
+    <footer class="care-footer">
+      <span>© 2026 SoVie · CÔNG TY CỔ PHẦN EMP HOA KỲ</span>
+      <span><i data-lucide="lock-keyhole"></i> Khu vực dữ liệu nội bộ</span>
     </footer>
   </div>
 
@@ -4448,7 +4390,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/landing-motion.js?v=20260828-route-free-login-v1"></script>
-<script type="module" src="js/main.js?v=20260828-navbar-logout-v3"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20260828-personal-sheet-v3"></script>
+  <script type="module" src="js/main.js?v=20260828-navbar-logout-v3"></script>
 </body>
 </html>

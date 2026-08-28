@@ -18,8 +18,7 @@ test('all navigation targets exist exactly once', () => {
 });
 
 test('deferred payroll and legacy warehouse modules are not navigation destinations', () => {
-  const navigationStart = html.indexOf('<nav class="nav-menu">');
-  const visibleNavigation = html.slice(navigationStart, html.indexOf('</nav>', navigationStart));
+  const visibleNavigation = html.slice(html.indexOf('<nav class="nav-menu">'), html.indexOf('</nav>'));
   assert.match(visibleNavigation, /style="display: none;"[^>]*data-feature-status="deferred"[\s\S]*data-target="payroll-panel"/);
   assert.doesNotMatch(visibleNavigation, /goods-inventory-subpanel|goods-production-subpanel/);
 });

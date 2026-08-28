@@ -18,7 +18,11 @@ import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260822-order-time-v20';
 import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260822-order-time-v20';
 
-const WORKSPACE_REQUEST_STORAGE_KEY = 'sovie_workspace_requested';
+const SALES_WORKSPACE_HASH = '#/ban-hang';
+
+function isSalesWorkspaceRoute() {
+  return window.location.hash.toLowerCase().startsWith(SALES_WORKSPACE_HASH);
+}
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
   'invoice-panel': ['pricelists'],
@@ -454,13 +458,12 @@ async function initApp() {
   if (window.__app_initialized) return;
   window.__app_initialized = true;
 
-  const workspaceRequested = sessionStorage.getItem(WORKSPACE_REQUEST_STORAGE_KEY) === '1';
-  if (!workspaceRequested) {
+  const salesWorkspaceRequested = isSalesWorkspaceRoute();
+  if (!salesWorkspaceRequested) {
     showLoginGate();
     safeCreateIcons();
     return;
   }
-  sessionStorage.removeItem(WORKSPACE_REQUEST_STORAGE_KEY);
 
   const today = new Date();
   const dateLbl = document.getElementById('current-date-lbl');
@@ -572,10 +575,6 @@ async function initApp() {
 
   const landingPage = document.getElementById('landing-page');
   const loginScreen = document.getElementById('login-screen');
-  const openLoginScreen = () => {
-    if (loginScreen) loginScreen.style.display = 'flex';
-    document.getElementById('login-username')?.focus();
-  };
   try {
     const rememberedAccount = localStorage.getItem('sovie_remembered_login_account') || '';
     const usernameField = document.getElementById('login-username');
@@ -586,11 +585,13 @@ async function initApp() {
     // Private browsing can disable storage without blocking authentication.
   }
   document.querySelectorAll('.js-open-login').forEach(button => {
-    button.addEventListener('click', openLoginScreen);
+    button.addEventListener('click', () => {
+      if (loginScreen) loginScreen.style.display = 'flex';
+      document.getElementById('login-username')?.focus();
+    });
   });
   document.getElementById('btn-close-login')?.addEventListener('click', () => {
-    sessionStorage.removeItem(WORKSPACE_REQUEST_STORAGE_KEY);
-    if (loginScreen) loginScreen.style.display = 'none';
+    window.location.replace(`${window.location.pathname}${window.location.search}`);
   });
   loginScreen?.addEventListener('click', event => {
     if (event.target === loginScreen) loginScreen.style.display = 'none';
@@ -622,7 +623,10 @@ async function initApp() {
     startMaintenanceMonitor();
   } else {
     showLoginGate();
-    openLoginScreen();
+    if (loginScreen) {
+      loginScreen.style.display = 'flex';
+      document.getElementById('login-username')?.focus();
+    }
   }
 
   populatePricelistsDropdowns();

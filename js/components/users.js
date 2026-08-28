@@ -570,7 +570,6 @@ export async function handleLogin(e) {
 export async function handleLogout() {
   stopMaintenanceMonitor();
   // Remove obsolete pre-P0 markers; they are never read for authorization.
-  sessionStorage.removeItem('sovie_workspace_requested');
   await stopRealtimeSync();
   sessionStorage.removeItem('billing_system_auth');
   sessionStorage.removeItem('billing_system_username');
