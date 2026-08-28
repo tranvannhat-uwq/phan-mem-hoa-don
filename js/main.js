@@ -18,6 +18,12 @@ import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260822-order-time-v20';
 import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260822-order-time-v20';
 
+const SALES_WORKSPACE_HASH = '#/ban-hang';
+
+function isSalesWorkspaceRoute() {
+  return window.location.hash.toLowerCase().startsWith(SALES_WORKSPACE_HASH);
+}
+
 const PANEL_CLOUD_DOMAINS = Object.freeze({
   'invoice-panel': ['pricelists'],
   'pricelists-panel': ['pricelists'],
@@ -452,6 +458,13 @@ async function initApp() {
   if (window.__app_initialized) return;
   window.__app_initialized = true;
 
+  const salesWorkspaceRequested = isSalesWorkspaceRoute();
+  if (!salesWorkspaceRequested) {
+    showLoginGate();
+    safeCreateIcons();
+    return;
+  }
+
   const today = new Date();
   const dateLbl = document.getElementById('current-date-lbl');
   if (dateLbl) dateLbl.innerText = today.toLocaleDateString('vi-VN');
@@ -578,7 +591,7 @@ async function initApp() {
     });
   });
   document.getElementById('btn-close-login')?.addEventListener('click', () => {
-    if (loginScreen) loginScreen.style.display = 'none';
+    window.location.replace(`${window.location.pathname}${window.location.search}`);
   });
   loginScreen?.addEventListener('click', event => {
     if (event.target === loginScreen) loginScreen.style.display = 'none';
@@ -610,6 +623,10 @@ async function initApp() {
     startMaintenanceMonitor();
   } else {
     showLoginGate();
+    if (loginScreen) {
+      loginScreen.style.display = 'flex';
+      document.getElementById('login-username')?.focus();
+    }
   }
 
   populatePricelistsDropdowns();

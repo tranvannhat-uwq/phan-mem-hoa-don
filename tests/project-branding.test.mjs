@@ -9,7 +9,7 @@ test('SoVie is the primary project brand in navigation and login', () => {
   const logoReferences = html.match(/src="sovie-logo\.png\?v=20260815-sovie-v2"/g) || [];
 
   assert.equal(fs.existsSync(new URL('../sovie-logo.png', import.meta.url)), true);
-  assert.equal(logoReferences.length, 5);
+  assert.equal(logoReferences.length, 4);
   assert.match(html, /<title>SoVie \|/);
   assert.equal(fs.existsSync(new URL('../sovie-favicon.png', import.meta.url)), true);
   assert.match(html, /rel="icon"[^>]*href="sovie-favicon\.png\?v=20260815-sovie-icon-v1"/);
