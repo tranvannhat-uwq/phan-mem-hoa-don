@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260828-private-login-v2">
+  <link rel="stylesheet" href="style.css?v=20260828-personal-sheet-v3">
 </head>
 <body>
 
@@ -59,7 +59,10 @@
         <button type="button" class="care-icon-button" id="care-sheet-refresh" title="Tải lại dữ liệu Google Sheet">
           <i data-lucide="refresh-cw"></i><span>Tải lại</span>
         </button>
-        <a class="care-primary-link" id="care-sheet-open" href="https://docs.google.com/spreadsheets/d/1yC4VnrziHCUyvgaknSbcg2HkLqmMOp0ApM3mxo_jAGA/edit?gid=0#gid=0" target="_blank" rel="noopener noreferrer">
+        <button type="button" class="care-icon-button" id="care-sheet-settings" title="Chọn Google Sheet của nhân viên">
+          <i data-lucide="link-2"></i><span>Đổi bảng</span>
+        </button>
+        <a class="care-primary-link" id="care-sheet-open" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
           <i data-lucide="external-link"></i><span>Mở Google Sheet</span>
         </a>
       </div>
@@ -82,14 +85,29 @@
         <div class="care-sheet-toolbar">
           <div class="care-sheet-title">
             <span class="care-sheet-mark"><i data-lucide="table-2"></i></span>
-            <div><strong>CRM - TRẦN VĂN NHẤT</strong><small>Danh sách và lịch chăm sóc khách hàng</small></div>
+            <div><strong>CRM CỦA NHÂN VIÊN KINH DOANH</strong><small>Danh sách và lịch chăm sóc khách hàng</small></div>
           </div>
           <div class="care-sheet-state" id="care-sheet-state" role="status">
             <span></span> Đang kết nối Google Sheet...
           </div>
         </div>
         <div class="care-sheet-frame-wrap">
-          <div class="care-sheet-loading" id="care-sheet-loading">
+          <div class="care-sheet-setup" id="care-sheet-setup">
+            <span class="care-sheet-setup-icon"><i data-lucide="table-properties"></i></span>
+            <strong>Chọn danh sách khách hàng của bạn</strong>
+            <p>Dán link Google Sheet được cấp cho nhân viên. Link chỉ được lưu trên trình duyệt này và sẽ tự tải ở những lần sau.</p>
+            <form class="care-sheet-config-form" id="care-sheet-config-form">
+              <label for="care-sheet-url">Link Google Sheet</label>
+              <div class="care-sheet-config-row">
+                <input type="url" id="care-sheet-url" placeholder="https://docs.google.com/spreadsheets/d/..." required autocomplete="off">
+                <button type="submit">Lưu và mở danh sách</button>
+              </div>
+              <span class="care-sheet-config-error" id="care-sheet-config-error" role="alert"></span>
+              <button type="button" class="care-sheet-config-cancel" id="care-sheet-config-cancel">Quay lại bảng đang dùng</button>
+            </form>
+            <small>Nếu bảng là riêng tư, Google sẽ yêu cầu đăng nhập đúng tài khoản đã được cấp quyền.</small>
+          </div>
+          <div class="care-sheet-loading is-hidden" id="care-sheet-loading">
             <span class="care-loading-spinner"></span>
             <strong>Đang tải dữ liệu chăm sóc khách hàng</strong>
             <small>Nếu Google yêu cầu, hãy đăng nhập bằng tài khoản đã được chia sẻ bảng tính.</small>
@@ -97,7 +115,6 @@
           <iframe
             id="care-sheet-frame"
             title="Google Sheet chăm sóc khách hàng"
-            data-sheet-src="https://docs.google.com/spreadsheets/d/1yC4VnrziHCUyvgaknSbcg2HkLqmMOp0ApM3mxo_jAGA/preview?gid=0&amp;rm=minimal&amp;widget=true&amp;headers=false"
             loading="eager"
             tabindex="-1"
             referrerpolicy="strict-origin-when-cross-origin"
@@ -4375,7 +4392,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20260828-private-login-v2"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20260828-personal-sheet-v3"></script>
   <script type="module" src="js/main.js?v=20260828-login-close-route-v2"></script>
 </body>
 </html>

@@ -15,3 +15,13 @@ test('private Google data status opens the login route after five consecutive cl
 test('closing login removes the sales workspace hash and returns to customer care', () => {
   assert.match(main, /getElementById\('btn-close-login'\)[\s\S]{0,180}window\.location\.replace\(`\$\{window\.location\.pathname\}\$\{window\.location\.search\}`\)/);
 });
+
+test('each salesperson selects and reuses their own Google Sheet link', () => {
+  assert.match(html, /id="care-sheet-config-form"[\s\S]*id="care-sheet-url"[\s\S]*Lưu và mở danh sách/);
+  assert.match(html, /id="care-sheet-settings"[\s\S]*Đổi bảng/);
+  assert.doesNotMatch(html, /CRM - TRẦN VĂN NHẤT|1yC4VnrziHCUyvgaknSbcg2HkLqmMOp0ApM3mxo_jAGA/);
+  assert.match(landing, /CUSTOMER_CARE_SHEET_STORAGE_KEY = 'sovie_customer_care_sheet_url'/);
+  assert.match(landing, /localStorage\.setItem\(CUSTOMER_CARE_SHEET_STORAGE_KEY, parsed\.editUrl\)/);
+  assert.match(landing, /localStorage\.getItem\(CUSTOMER_CARE_SHEET_STORAGE_KEY\)/);
+  assert.match(landing, /url\.hostname !== 'docs\.google\.com'/);
+});
