@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const landing = readFileSync(new URL('../js/customer-care-landing.js', import.meta.url), 'utf8');
 const main = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
+const users = readFileSync(new URL('../js/components/users.js', import.meta.url), 'utf8');
 
 test('private Google data status opens the login route after five consecutive clicks', () => {
   assert.match(html, /<button[^>]+id="care-private-data-access"[^>]*>[\s\S]*?Dữ liệu riêng tư qua Google[\s\S]*?<\/button>/);
@@ -24,4 +25,13 @@ test('each salesperson selects and reuses their own Google Sheet link', () => {
   assert.match(landing, /localStorage\.setItem\(CUSTOMER_CARE_SHEET_STORAGE_KEY, parsed\.editUrl\)/);
   assert.match(landing, /localStorage\.getItem\(CUSTOMER_CARE_SHEET_STORAGE_KEY\)/);
   assert.match(landing, /url\.hostname !== 'docs\.google\.com'/);
+});
+
+test('logout is a direct navbar action and returns to the customer-care home', () => {
+  assert.match(html, /class="nav-logout-button" id="btn-logout"[^>]*>[\s\S]*?Đăng xuất[\s\S]*?<\/button>/);
+  assert.doesNotMatch(html, /class="dropdown-item" id="btn-logout"/);
+  const logoutFlow = users.slice(users.indexOf('export async function handleLogout'), users.indexOf('export function showLoginGate'));
+  assert.match(logoutFlow, /await supabaseClient\.auth\.signOut\(\)/);
+  assert.match(logoutFlow, /window\.location\.replace\(`\$\{window\.location\.pathname\}\$\{window\.location\.search\}`\)/);
+  assert.doesNotMatch(logoutFlow, /location\.reload\(\)/);
 });

@@ -1498,6 +1498,52 @@ body {
   overflow: visible;
 }
 
+.nav-logout-button {
+  appearance: none;
+  min-height: 36px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #b42318;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #efc8c4;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.nav-logout-button:hover,
+.nav-logout-button:focus-visible {
+  color: #ffffff;
+  background: #c9362b;
+  border-color: #c9362b;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.nav-logout-button svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+@media (max-width: 1050px) {
+  .nav-logout-button {
+    width: 36px;
+    padding: 0;
+  }
+
+  .nav-logout-button span {
+    display: none;
+  }
+}
+
 .sidebar-footer {
   display: none !important; /* Hide footer in horizontal header */
 }

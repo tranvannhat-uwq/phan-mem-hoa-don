@@ -584,7 +584,7 @@ export async function handleLogout() {
     }
   }
   clearSupabaseAuthStorage();
-  location.reload();
+  window.location.replace(`${window.location.pathname}${window.location.search}`);
 }
 
 export function showLoginGate() {

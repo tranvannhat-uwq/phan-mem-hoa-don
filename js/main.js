@@ -7,7 +7,7 @@ import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagemen
 import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260822-order-time-v20';
 import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260822-order-time-v20';
 import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260822-order-time-v20';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260822-order-time-v20';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260828-navbar-logout-v21';
 import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260822-order-time-v20';
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260822-order-time-v20';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260822-order-time-v20';

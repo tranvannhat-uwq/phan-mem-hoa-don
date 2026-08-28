@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260828-personal-sheet-v3">
+  <link rel="stylesheet" href="style.css?v=20260828-navbar-logout-v4">
 </head>
 <body>
 
@@ -262,13 +262,11 @@
               <i data-lucide="key-round" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
               Đổi mật khẩu cá nhân
             </button>
-            <div style="border-top: 1px solid var(--border-color); margin-top: 0.25rem; padding-top: 0.25rem;"></div>
-            <button class="dropdown-item" id="btn-logout" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--color-danger); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
-              <i data-lucide="log-out" style="width: 16px; height: 16px;"></i>
-              Đăng xuất
-            </button>
           </div>
         </div>
+        <button type="button" class="nav-logout-button" id="btn-logout" title="Đăng xuất và về trang chủ" style="display: none;">
+          <i data-lucide="log-out"></i><span>Đăng xuất</span>
+        </button>
       </div>
 
       <div class="sidebar-footer">
@@ -4393,6 +4391,6 @@
 
   <!-- App logic -->
   <script type="module" src="js/customer-care-landing.js?v=20260828-personal-sheet-v3"></script>
-  <script type="module" src="js/main.js?v=20260828-login-close-route-v2"></script>
+  <script type="module" src="js/main.js?v=20260828-navbar-logout-v3"></script>
 </body>
 </html>
