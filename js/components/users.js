@@ -19,7 +19,7 @@ export function renderUsersTable() {
   const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
   
   const filtered = (state.users || []).filter(u => {
-    if (!u) return false;
+    if (!u || u.isActive === false || u.is_active === false) return false;
     const uname = (u.username || u.code || '').toLowerCase();
     const dname = (u.displayName || u.display_name || u.name || '').toLowerCase();
     return uname.includes(searchVal) || dname.includes(searchVal);
@@ -298,11 +298,9 @@ export async function deleteUser(userId) {
     return;
   }
   
-  if (user.username === 'admin' || user.username === 'nhat') {
-    if (state.users.filter(u => u.role === 'admin').length <= 1) {
-      showToast('Phải giữ lại ít nhất một tài khoản Admin hệ thống!', 'danger');
-      return;
-    }
+  if (user.role === 'admin' && state.users.filter(u => u.role === 'admin' && u.isActive !== false).length <= 1) {
+    showToast('Phải giữ lại ít nhất một tài khoản Admin hệ thống!', 'danger');
+    return;
   }
   
   if (confirm(`Bạn có chắc chắn muốn xóa tài khoản "${user.displayName}" (${user.username})?`)) {
@@ -572,6 +570,7 @@ export async function handleLogin(e) {
 export async function handleLogout() {
   stopMaintenanceMonitor();
   // Remove obsolete pre-P0 markers; they are never read for authorization.
+  sessionStorage.removeItem('sovie_workspace_requested');
   await stopRealtimeSync();
   sessionStorage.removeItem('billing_system_auth');
   sessionStorage.removeItem('billing_system_username');
