@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, cacheOrdersLocally } from '../services/supabase.js?v=20260828-user-dedupe-v21';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20260828-user-dedupe-v21';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260828-user-dedupe-v21';
-import { openHistoryOrderExportModal } from './customers.js?v=20260828-user-dedupe-v21';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, cacheOrdersLocally } from '../services/supabase.js?v=20260829-active-users-v22';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20260829-active-users-v22';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260829-active-users-v22';
+import { openHistoryOrderExportModal } from './customers.js?v=20260829-active-users-v22';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260828-user-dedupe-v21';
+} from '../domain/order-financials.js?v=20260829-active-users-v22';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260828-user-dedupe-v21';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260829-active-users-v22';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';

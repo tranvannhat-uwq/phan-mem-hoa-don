@@ -1,14 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260828-user-dedupe-v21';
-import { renderAll } from '../main.js?v=20260828-user-dedupe-v21';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260828-user-dedupe-v21';
-import { addCashbookTransaction } from './so_quy.js?v=20260828-user-dedupe-v21';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260828-user-dedupe-v21';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260828-user-dedupe-v21';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260829-active-users-v22';
+import { renderAll } from '../main.js?v=20260829-active-users-v22';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260829-active-users-v22';
+import { addCashbookTransaction } from './so_quy.js?v=20260829-active-users-v22';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260829-active-users-v22';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260829-active-users-v22';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
+import { isActiveUser } from '../domain/user-status.js?v=20260829-active-users-v22';
 
 let pendingCustomerPaymentKey = '';
 
@@ -3096,7 +3097,7 @@ export function populateManagedByDropdown() {
   
   select.innerHTML = `
     <option value="">-- Chưa bàn giao / Trống --</option>
-    ${state.users.map(u => `
+    ${(state.users || []).filter(isActiveUser).map(u => `
       <option value="${u.username}">${u.displayName} (${u.isExternal ? 'Kinh doanh ngoài' : (u.role === 'admin' ? 'Admin' : u.role === 'accounting' ? 'Kế toán' : 'Sale')})</option>
     `).join('')}
   `;
@@ -3189,15 +3190,16 @@ function handleCustExcelFile(file) {
         // fallback, so "Mr Dương Hoàn" can match a profile named Dương Hoàn
         // instead of being forced to the legacy name Dương Như Hoàn.
         for (const target of targets) {
-          const exact = (state.users || []).filter(user =>
+          const exact = (state.users || []).filter(user => isActiveUser(user) && (
             normalizeExcelHeader(user.username) === target
             || normalizePersonName(user.displayName) === target
-          );
+          ));
           if (exact.length === 1) return exact[0];
         }
 
         for (const target of targets) {
           const partial = (state.users || []).filter(user => {
+            if (!isActiveUser(user)) return false;
             const display = normalizePersonName(user.displayName);
             return display.includes(target) || target.includes(display);
           });

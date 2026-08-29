@@ -11,7 +11,7 @@ test('deactivated accounts stay hidden while historical profile data is retained
   const service = read('js/services/supabase.js');
   const deleteFunction = service.match(/export async function dbDeleteUser[\s\S]*?\n\}/)?.[0] || '';
 
-  assert.match(users, /u\.isActive === false \|\| u\.is_active === false/);
+  assert.match(users, /if \(!isActiveUser\(u\)\) return false/);
   assert.match(users, /function normalizeUserSearch/);
   assert.match(users, /normalize\('NFD'\)/);
   assert.match(users, /user\.isActive = true/);

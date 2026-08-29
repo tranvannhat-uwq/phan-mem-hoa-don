@@ -1,15 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260828-user-dedupe-v21';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260828-user-dedupe-v21';
-import { renderAll, switchTab } from '../main.js?v=20260828-user-dedupe-v21';
-import { populateManagedByDropdown } from './customers.js?v=20260828-user-dedupe-v21';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260829-active-users-v22';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260829-active-users-v22';
+import { renderAll, switchTab } from '../main.js?v=20260829-active-users-v22';
+import { populateManagedByDropdown } from './customers.js?v=20260829-active-users-v22';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
+import { isActiveUser } from '../domain/user-status.js?v=20260829-active-users-v22';
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -29,7 +30,7 @@ export function renderUsersTable() {
   const searchVal = normalizeUserSearch(searchInput?.value);
   
   const filtered = (state.users || []).filter(u => {
-    if (!u || u.isActive === false || u.is_active === false) return false;
+    if (!isActiveUser(u)) return false;
     const uname = normalizeUserSearch(u.username || u.code);
     const dname = normalizeUserSearch(u.displayName || u.display_name || u.name);
     return uname.includes(searchVal) || dname.includes(searchVal);
@@ -684,7 +685,7 @@ export function applyUserPermissions(user) {
     if (role === 'admin' || role === 'accounting') {
       dashSaleFilterGroup.style.display = 'flex';
       
-      const saleUsers = state.users.filter(u => u.role === 'sale');
+      const saleUsers = state.users.filter(u => isActiveUser(u) && u.role === 'sale');
       dashSaleFilter.innerHTML = `
         <option value="all">-- Tất cả nhân viên --</option>
         ${saleUsers.map(u => `<option value="${u.username}">${u.displayName}</option>`).join('')}

@@ -1,10 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260828-user-dedupe-v21';
+import { switchTab } from '../main.js?v=20260829-active-users-v22';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260828-user-dedupe-v21';
+import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260829-active-users-v22';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
+import { isActiveUser } from '../domain/user-status.js?v=20260829-active-users-v22';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
@@ -1153,7 +1154,7 @@ function setupSaleAutocomplete() {
 
   const renderSuggestions = (query = '') => {
     const cleanQuery = removeVietnameseTones(query.trim().toLowerCase());
-    const sales = (state.users || []).filter(u => u.role === 'sale' || u.isExternal);
+    const sales = (state.users || []).filter(u => isActiveUser(u) && (u.role === 'sale' || u.isExternal));
     
     let filtered = sales;
     if (cleanQuery) {
