@@ -10424,22 +10424,26 @@ body.quick-customer-modal-open {
 }
 
 #landing-page .care-main {
-  width: min(1500px, calc(100% - 36px));
+  width: min(1920px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 28px 0 22px;
+  padding: 18px 0 14px;
 }
 
 #landing-page .care-intro {
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 28px;
+  align-items: center;
+  gap: 22px;
+}
+
+#landing-page .care-intro-copy {
+  min-width: 0;
 }
 
 #landing-page .care-kicker {
   width: fit-content;
-  margin-bottom: 9px;
+  margin-bottom: 5px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -10458,17 +10462,59 @@ body.quick-customer-modal-open {
 #landing-page .care-intro h1 {
   margin: 0;
   color: #102f49;
-  font-size: clamp(28px, 3vw, 42px);
-  line-height: 1.15;
+  font-size: clamp(24px, 2.4vw, 34px);
+  line-height: 1.12;
   letter-spacing: -0.045em;
 }
 
 #landing-page .care-intro p {
   max-width: 780px;
-  margin: 10px 0 0;
+  margin: 6px 0 0;
   color: var(--care-muted);
   font-size: 13px;
   line-height: 1.65;
+}
+
+#landing-page .care-overview-badges {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+#landing-page .care-overview-badges > span {
+  min-width: 132px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 9px;
+  border: 1px solid #d9e5ee;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 7px 20px rgba(42, 75, 104, 0.06);
+}
+
+#landing-page .care-overview-badges svg {
+  grid-row: 1 / 3;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  color: #08794b;
+  background: #e2f7ed;
+  border-radius: 9px;
+}
+
+#landing-page .care-overview-badges strong {
+  color: #23445e;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+#landing-page .care-overview-badges small {
+  color: #718699;
+  font-size: 9px;
+  line-height: 1.2;
 }
 
 #landing-page .care-security-card {
@@ -10511,20 +10557,72 @@ body.quick-customer-modal-open {
 #landing-page .care-sheet-card {
   overflow: hidden;
   border: 1px solid #ccdae6;
-  border-radius: 18px;
+  border-radius: 16px;
   background: #fff;
   box-shadow: 0 20px 55px rgba(36, 76, 110, 0.12);
 }
 
 #landing-page .care-sheet-toolbar {
-  min-height: 65px;
-  padding: 10px 17px;
+  min-height: 62px;
+  padding: 9px 13px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
   border-bottom: 1px solid #dce6ee;
   background: linear-gradient(180deg, #fff, #f8fbfd);
+}
+
+#landing-page .care-sheet-toolbar-right {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+#landing-page .care-sheet-view-controls {
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid #d5e1eb;
+  border-radius: 11px;
+  background: #eef4f8;
+}
+
+#landing-page .care-sheet-view-controls button {
+  min-height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #587187;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+#landing-page .care-sheet-view-controls button:hover {
+  color: #1d5e99;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+#landing-page .care-sheet-view-controls button.is-active {
+  color: #075bcf;
+  background: #fff;
+  box-shadow: 0 3px 9px rgba(37, 76, 111, 0.12);
+}
+
+#landing-page .care-sheet-view-controls svg {
+  width: 14px;
+  height: 14px;
 }
 
 #landing-page .care-sheet-title {
@@ -10575,13 +10673,15 @@ body.quick-customer-modal-open {
 
 #landing-page .care-sheet-frame-wrap {
   position: relative;
-  height: clamp(540px, calc(100vh - 268px), 900px);
-  min-height: 540px;
+  height: clamp(620px, calc(100vh - 226px), 1100px);
+  min-height: 620px;
+  overflow: hidden;
   background: #f8fafc;
 }
 
 #landing-page #care-sheet-frame {
-  position: relative;
+  position: absolute;
+  inset: 0 auto auto 0;
   z-index: 2;
   width: 100%;
   height: 100%;
@@ -10592,8 +10692,55 @@ body.quick-customer-modal-open {
   transition: opacity 0.25s ease;
 }
 
+#landing-page .care-sheet-frame-wrap.is-actual #care-sheet-frame {
+  position: relative;
+  inset: auto;
+}
+
 #landing-page #care-sheet-frame.is-loaded {
   opacity: 1;
+}
+
+#landing-page .care-sheet-view-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 3;
+  max-width: calc(100% - 24px);
+  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #526b80;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(198, 214, 226, 0.9);
+  border-radius: 9px;
+  box-shadow: 0 5px 18px rgba(32, 71, 104, 0.11);
+  font-size: 9px;
+  font-weight: 650;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+#landing-page .care-sheet-view-hint svg {
+  width: 13px;
+  height: 13px;
+  color: #0d6ce7;
+}
+
+#landing-page .care-sheet-card:fullscreen,
+#landing-page .care-sheet-card.is-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+
+#landing-page .care-sheet-card:fullscreen .care-sheet-frame-wrap,
+#landing-page .care-sheet-card.is-fullscreen .care-sheet-frame-wrap {
+  height: calc(100vh - 62px);
+  min-height: 0;
 }
 
 #landing-page .care-sheet-setup {
@@ -10799,6 +10946,15 @@ body.quick-customer-modal-open {
     align-items: start;
   }
 
+  #landing-page .care-overview-badges {
+    width: 100%;
+  }
+
+  #landing-page .care-overview-badges > span {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
   #landing-page .care-security-card {
     max-width: none;
   }
@@ -10841,11 +10997,19 @@ body.quick-customer-modal-open {
 
   #landing-page .care-main {
     width: calc(100% - 20px);
-    padding-top: 18px;
+    padding-top: 12px;
   }
 
   #landing-page .care-intro h1 {
-    font-size: 28px;
+    font-size: 25px;
+  }
+
+  #landing-page .care-intro p {
+    font-size: 11px;
+  }
+
+  #landing-page .care-overview-badges {
+    display: none;
   }
 
   #landing-page .care-security-card {
@@ -10853,8 +11017,10 @@ body.quick-customer-modal-open {
   }
 
   #landing-page .care-sheet-toolbar {
-    min-height: 58px;
+    min-height: 96px;
     padding: 9px 12px;
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   #landing-page .care-sheet-title small,
@@ -10862,9 +11028,24 @@ body.quick-customer-modal-open {
     display: none;
   }
 
+  #landing-page .care-sheet-toolbar-right,
+  #landing-page .care-sheet-view-controls {
+    width: 100%;
+  }
+
+  #landing-page .care-sheet-view-controls button {
+    flex: 1 1 0;
+    padding: 0 5px;
+  }
+
   #landing-page .care-sheet-frame-wrap {
-    height: calc(100vh - 242px);
-    min-height: 480px;
+    height: calc(100vh - 255px);
+    min-height: 540px;
+  }
+
+  #landing-page .care-sheet-view-hint {
+    right: 8px;
+    bottom: 8px;
   }
 
   #landing-page .care-sheet-setup {

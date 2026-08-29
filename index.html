@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260828-navbar-logout-v4">
+  <link rel="stylesheet" href="style.css?v=20260829-sheet-workspace-v5">
 </head>
 <body>
 
@@ -70,14 +70,15 @@
 
     <main class="care-main">
       <section class="care-intro" aria-labelledby="care-title">
-        <div>
+        <div class="care-intro-copy">
           <span class="care-kicker"><i data-lucide="headphones"></i> Trung tâm chăm sóc khách hàng</span>
           <h1 id="care-title">Theo dõi khách hàng cần chăm sóc</h1>
-          <p>Dữ liệu được hiển thị trực tiếp từ bảng CRM của doanh nghiệp. Người xem cần đăng nhập đúng tài khoản Google đã được cấp quyền.</p>
+          <p>Dữ liệu CRM trực tiếp, rõ ràng và luôn đồng bộ từ Google Sheet.</p>
         </div>
-        <div class="care-security-card">
-          <span class="care-security-icon"><i data-lucide="shield-check"></i></span>
-          <div><strong>Quyền truy cập được bảo vệ</strong><small>SoVie không lưu mật khẩu hoặc khóa Google trên website.</small></div>
+        <div class="care-overview-badges" aria-label="Thông tin bảng dữ liệu">
+          <span><i data-lucide="cloud"></i><strong>Trực tiếp</strong><small>Google Cloud</small></span>
+          <span><i data-lucide="shield-check"></i><strong>Riêng tư</strong><small>Theo tài khoản</small></span>
+          <span><i data-lucide="columns-3"></i><strong>Đủ cột</strong><small>Tự động thu vừa</small></span>
         </div>
       </section>
 
@@ -87,11 +88,24 @@
             <span class="care-sheet-mark"><i data-lucide="table-2"></i></span>
             <div><strong>CRM CỦA NHÂN VIÊN KINH DOANH</strong><small>Danh sách và lịch chăm sóc khách hàng</small></div>
           </div>
-          <div class="care-sheet-state" id="care-sheet-state" role="status">
-            <span></span> Đang kết nối Google Sheet...
+          <div class="care-sheet-toolbar-right">
+            <div class="care-sheet-state" id="care-sheet-state" role="status">
+              <span></span> Đang kết nối Google Sheet...
+            </div>
+            <div class="care-sheet-view-controls" aria-label="Chế độ hiển thị bảng">
+              <button type="button" class="is-active" id="care-sheet-fit" aria-pressed="true" title="Thu toàn bộ chiều rộng bảng vừa màn hình">
+                <i data-lucide="columns-3"></i><span>Vừa các cột</span>
+              </button>
+              <button type="button" id="care-sheet-actual" aria-pressed="false" title="Hiển thị Google Sheet ở kích thước thông thường">
+                <i data-lucide="scan-line"></i><span>100%</span>
+              </button>
+              <button type="button" id="care-sheet-fullscreen" title="Mở bảng toàn màn hình">
+                <i data-lucide="maximize-2"></i><span>Toàn màn hình</span>
+              </button>
+            </div>
           </div>
         </div>
-        <div class="care-sheet-frame-wrap">
+        <div class="care-sheet-frame-wrap is-fit" id="care-sheet-frame-wrap">
           <div class="care-sheet-setup" id="care-sheet-setup">
             <span class="care-sheet-setup-icon"><i data-lucide="table-properties"></i></span>
             <strong>Chọn danh sách khách hàng của bạn</strong>
@@ -120,6 +134,10 @@
             referrerpolicy="strict-origin-when-cross-origin"
             allow="clipboard-read; clipboard-write"
           ></iframe>
+          <div class="care-sheet-view-hint" id="care-sheet-view-hint">
+            <i data-lucide="move-horizontal"></i>
+            <span>Đang thu vừa chiều rộng để hiển thị nhiều cột hơn</span>
+          </div>
           <noscript><p class="care-sheet-fallback">Cần bật JavaScript để hiển thị Google Sheet.</p></noscript>
         </div>
       </section>
@@ -4390,7 +4408,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20260828-personal-sheet-v3"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20260829-sheet-workspace-v4"></script>
   <script type="module" src="js/main.js?v=20260829-active-users-v6"></script>
 </body>
 </html>

@@ -54,11 +54,58 @@ function initCustomerCareSheet() {
   const urlInput = document.getElementById('care-sheet-url');
   const configError = document.getElementById('care-sheet-config-error');
   const cancelButton = document.getElementById('care-sheet-config-cancel');
+  const frameWrap = document.getElementById('care-sheet-frame-wrap');
+  const sheetCard = frameWrap?.closest('.care-sheet-card');
+  const fitButton = document.getElementById('care-sheet-fit');
+  const actualButton = document.getElementById('care-sheet-actual');
+  const fullscreenButton = document.getElementById('care-sheet-fullscreen');
+  const viewHint = document.getElementById('care-sheet-view-hint');
   if (!frame) return;
 
   let loadTimer = null;
   let firstFrameLoad = true;
   let currentSheet = null;
+  let viewMode = 'fit';
+
+  const updateViewButtons = () => {
+    const isFit = viewMode === 'fit';
+    fitButton?.classList.toggle('is-active', isFit);
+    fitButton?.setAttribute('aria-pressed', String(isFit));
+    actualButton?.classList.toggle('is-active', !isFit);
+    actualButton?.setAttribute('aria-pressed', String(!isFit));
+    frameWrap?.classList.toggle('is-fit', isFit);
+    frameWrap?.classList.toggle('is-actual', !isFit);
+    if (viewHint) {
+      viewHint.querySelector('span').textContent = isFit
+        ? 'Đang thu vừa chiều rộng để hiển thị nhiều cột hơn'
+        : 'Chế độ 100% — kéo thanh ngang trong Google Sheet để xem thêm';
+    }
+  };
+
+  const applyFrameLayout = () => {
+    if (!frameWrap) return;
+    if (viewMode !== 'fit') {
+      frame.style.width = '100%';
+      frame.style.height = '100%';
+      frame.style.transform = 'none';
+      return;
+    }
+
+    const availableWidth = Math.max(320, frameWrap.clientWidth);
+    const availableHeight = Math.max(480, frameWrap.clientHeight);
+    const virtualWidth = availableWidth < 760 ? 1380 : 1800;
+    const scale = Math.min(1, availableWidth / virtualWidth);
+    frame.style.width = `${virtualWidth}px`;
+    frame.style.height = `${Math.ceil(availableHeight / scale)}px`;
+    frame.style.transform = `scale(${scale})`;
+    frame.style.transformOrigin = 'top left';
+  };
+
+  const setViewMode = mode => {
+    viewMode = mode === 'actual' ? 'actual' : 'fit';
+    updateViewButtons();
+    applyFrameLayout();
+  };
 
   const setState = (message, { error = false } = {}) => {
     state?.classList.toggle('is-error', error);
@@ -144,10 +191,22 @@ function initCustomerCareSheet() {
       firstFrameLoad = false;
       window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
     }
+    applyFrameLayout();
   });
 
   refreshButton?.addEventListener('click', () => loadSheet({ cacheBust: true }));
   settingsButton?.addEventListener('click', showSetup);
+  fitButton?.addEventListener('click', () => setViewMode('fit'));
+  actualButton?.addEventListener('click', () => setViewMode('actual'));
+  fullscreenButton?.addEventListener('click', async () => {
+    if (!sheetCard) return;
+    try {
+      if (document.fullscreenElement === sheetCard) await document.exitFullscreen();
+      else await sheetCard.requestFullscreen();
+    } catch (_) {
+      // Browsers that block fullscreen keep the sheet usable in the page.
+    }
+  });
   openLink?.addEventListener('click', event => {
     if (!currentSheet) {
       event.preventDefault();
@@ -172,6 +231,25 @@ function initCustomerCareSheet() {
     // First-time setup remains available when browser storage is unavailable.
   }
   if (!savedSheetUrl || !activateSheet(savedSheetUrl, { persist: false })) showSetup();
+
+  const frameResizeObserver = typeof ResizeObserver === 'function'
+    ? new ResizeObserver(() => applyFrameLayout())
+    : null;
+  frameResizeObserver?.observe(frameWrap);
+  window.addEventListener('resize', applyFrameLayout, { passive: true });
+  document.addEventListener('fullscreenchange', () => {
+    const isFullscreen = document.fullscreenElement === sheetCard;
+    sheetCard?.classList.toggle('is-fullscreen', isFullscreen);
+    if (fullscreenButton) {
+      fullscreenButton.innerHTML = isFullscreen
+        ? '<i data-lucide="minimize-2"></i><span>Thu nhỏ</span>'
+        : '<i data-lucide="maximize-2"></i><span>Toàn màn hình</span>';
+      window.lucide?.createIcons?.();
+    }
+    window.requestAnimationFrame(applyFrameLayout);
+  });
+  updateViewButtons();
+  applyFrameLayout();
 }
 
 function initSalesWorkspaceRoute() {
