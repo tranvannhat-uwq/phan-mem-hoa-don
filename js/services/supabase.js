@@ -1011,6 +1011,73 @@ export async function dbLoadOrdersForHistoryRange(startIso = null, endExclusiveI
   }
 }
 
+export async function dbSearchOrdersForHistory(
+  searchTerm,
+  startIso = null,
+  endExclusiveIso = null,
+  limit = 500
+) {
+  if (!isCloudActive || !supabaseClient) return false;
+  const query = String(searchTerm || '').trim();
+  if (!query) return [];
+
+  try {
+    const safeLimit = Math.min(500, Math.max(1, Number(limit) || 500));
+    const matchingCustomerIds = (state.customers || [])
+      .filter(customer => [customer.name, customer.code, customer.phone]
+        .some(value => String(value || '').toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi'))))
+      .map(customer => String(customer.id || '').trim())
+      .filter(Boolean);
+
+    const applyDateWindow = request => {
+      let scopedRequest = request;
+      if (startIso) scopedRequest = scopedRequest.gte('order_date', startIso);
+      if (endExclusiveIso) scopedRequest = scopedRequest.lt('order_date', endExclusiveIso);
+      return scopedRequest;
+    };
+    const createSearchQuery = (column) => applyDateWindow(supabaseClient
+      .from(tableOrdersName)
+      .select('*')
+      .ilike(column, `%${query}%`))
+      .order('order_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(safeLimit);
+    const requests = [
+      createSearchQuery('customer_name'),
+      createSearchQuery('id')
+    ];
+
+    if (matchingCustomerIds.length > 0) {
+      requests.push(applyDateWindow(supabaseClient
+        .from(tableOrdersName)
+        .select('*')
+        .in('customer_id', matchingCustomerIds))
+        .order('order_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(safeLimit));
+    }
+
+    const results = await Promise.all(requests);
+    const failed = results.find(result => result.error);
+    if (failed) throw failed.error;
+
+    const mapped = results
+      .flatMap(result => result.data || [])
+      .filter((order, index, rows) => rows.findIndex(item => String(item.id) === String(order.id)) === index)
+      .map(order => mapOrderRowForState(order, false));
+    const searchedIds = new Set(mapped.map(order => String(order.id)));
+    state.savedOrders = [
+      ...mapped,
+      ...(state.savedOrders || []).filter(order => !searchedIds.has(String(order.id)))
+    ].sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
+    cacheOrdersLocally(state.savedOrders);
+    return mapped;
+  } catch (error) {
+    console.warn('Không thể tìm đơn hàng trên toàn bộ lịch sử:', error);
+    return false;
+  }
+}
+
 // Realtime already carries the changed row. Applying it directly avoids a
 // second PostgREST download on every open browser after each order mutation.
 // Fall back to dbRefreshOrderById only when an installation sends an

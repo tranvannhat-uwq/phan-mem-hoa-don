@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, cacheOrdersLocally } from '../services/supabase.js?v=20260829-active-users-v22';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20260829-active-users-v22';
 import { ensurePanelCloudData, renderAll } from '../main.js?v=20260829-active-users-v22';
 import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260829-active-users-v22';
 import { openHistoryOrderExportModal } from './customers.js?v=20260829-active-users-v22';
@@ -21,6 +21,7 @@ let historyRenderCache = null;
 let historyFinancialCache = null;
 let expandedHistoryOrderId = null;
 let historyWindowRequestId = 0;
+let historySearchRequestId = 0;
 
 const HISTORY_COLUMN_STORAGE_KEY = 'billing_history_visible_columns';
 const HISTORY_COLUMN_DEFINITIONS = Object.freeze([
@@ -224,6 +225,22 @@ function scheduleHistoryFilter(onFilterChange) {
     historyFilterTimer = null;
     onFilterChange();
   }, 180);
+}
+
+async function reloadHistorySearch() {
+  const requestId = ++historySearchRequestId;
+  const searchTerm = document.getElementById('history-search-input')?.value.trim() || '';
+  if (!searchTerm) {
+    renderHistoryOrders();
+    return;
+  }
+
+  const window = getHistoryDateWindow();
+  await dbSearchOrdersForHistory(searchTerm, window.startIso, window.endExclusiveIso);
+  if (requestId !== historySearchRequestId) return;
+  historyRenderCache = null;
+  historyFinancialCache = null;
+  renderHistoryOrders();
 }
 
 function createHistoryLookups() {
@@ -507,7 +524,10 @@ export function setupHistoryPanel() {
   };
 
   if (searchInput) {
-    searchInput.addEventListener('input', () => scheduleHistoryFilter(onFilterChange));
+    searchInput.addEventListener('input', () => scheduleHistoryFilter(() => {
+      state.historyPage = 1;
+      void reloadHistorySearch();
+    }));
   }
   
   // Thiết lập các bộ lọc thời gian, công ty, nhãn sơn, nhân viên
@@ -858,9 +878,15 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     }
     
     // 2. Lọc theo tìm kiếm từ khóa
-    const matchesSearch = String(o.id || '').toLowerCase().includes(searchVal)
-      || getOrderDisplayCode(o).toLowerCase().includes(searchVal)
-      || String(o.customerName || '').toLowerCase().includes(searchVal);
+    const orderCustomer = getHistoryCustomer(o, lookups);
+    const matchesSearch = [
+      o.id,
+      getOrderDisplayCode(o),
+      o.customerName,
+      orderCustomer?.name,
+      orderCustomer?.code,
+      orderCustomer?.phone
+    ].some(value => String(value || '').toLocaleLowerCase('vi').includes(searchVal));
     if (!matchesSearch) return false;
 
     if (!orderMatchesHistoryCompany(o, selectedCompany)) return false;
