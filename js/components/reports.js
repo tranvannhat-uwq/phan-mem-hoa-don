@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode } from '../utils.js';
 import { dbFetchPhase5Report } from '../services/supabase.js';
-import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v24';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v25';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
@@ -151,7 +151,7 @@ window.viewCustomerDebtHistory = function(customerId) {
       <table class="table" style="width: 100%;">
         <thead>
           <tr>
-            <th>Thời gian ghi sổ</th>
+            <th>Thời gian chứng từ</th>
             <th>Loại biến động</th>
             <th style="text-align: right;">Ghi nợ / Phát sinh</th>
             <th style="text-align: right;">Số dư sau phát sinh</th>

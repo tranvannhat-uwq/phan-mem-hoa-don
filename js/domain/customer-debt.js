@@ -268,15 +268,22 @@ function getCustomerDebtEntryChange(entry = {}) {
  * Create the effective user-facing ledger. Technical cancellations are
  * removed and amendments are folded, so their stored snapshots cannot be
  * displayed verbatim. Rebuild the visible before/after chain backwards from
- * the authoritative customer balance to keep every adjacent row continuous.
+ * the authoritative customer balance in document-time order, so the order of
+ * the rows and their running balances both match the accounting timeline.
  */
 export function buildCustomerDebtDisplayHistory(history = [], currentDebt = 0) {
   const chronological = projectEffectiveCustomerDebtHistory(history)
     .map((entry, index) => ({ ...entry, __displayOrder: index }))
     .sort((left, right) => {
-      const timeDelta = new Date(getCustomerDebtPostingDate(left) || 0)
+      const documentTimeDelta = new Date(getCustomerDebtBusinessDate(left) || 0)
+        - new Date(getCustomerDebtBusinessDate(right) || 0);
+      if (documentTimeDelta) return documentTimeDelta;
+
+      // Documents with the same date/time stay deterministic without changing
+      // the visible accounting timeline.
+      const postingTimeDelta = new Date(getCustomerDebtPostingDate(left) || 0)
         - new Date(getCustomerDebtPostingDate(right) || 0);
-      return timeDelta || left.__displayOrder - right.__displayOrder;
+      return postingTimeDelta || left.__displayOrder - right.__displayOrder;
     });
 
   let balanceAfter = toDebtAmount(currentDebt);

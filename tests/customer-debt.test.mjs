@@ -26,9 +26,9 @@ assert.equal(
   'Accounting displays the document date instead of the later posting date'
 );
 const backdatedDisplay = buildCustomerDebtDisplayHistory(backdatedPostingSequence, 1840400).reverse();
-assert.deepEqual(backdatedDisplay.map(item => item.id), ['backdated-order', 'payment', 'import']);
+assert.deepEqual(backdatedDisplay.map(item => item.id), ['payment', 'import', 'backdated-order']);
 assert.equal(backdatedDisplay[0].debtAfter, 1840400, 'Newest posted snapshot equals authoritative current debt');
-assert.equal(backdatedDisplay[0].debtBefore, backdatedDisplay[1].debtAfter, 'Posting order keeps adjacent balances continuous');
+assert.equal(backdatedDisplay[0].debtBefore, backdatedDisplay[1].debtAfter, 'Document-time order keeps adjacent balances continuous');
 assert.equal(backdatedDisplay[1].debtBefore, backdatedDisplay[2].debtAfter, 'Earlier adjacent balances remain continuous');
 
 const amendedDisplay = buildCustomerDebtDisplayHistory([

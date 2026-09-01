@@ -1,15 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v24';
-import { renderAll } from '../main.js?v=20260901-order-amend-v24';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v24';
-import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v24';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v24';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v24';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v25';
+import { renderAll } from '../main.js?v=20260901-order-amend-v25';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v25';
+import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v25';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v25';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v25';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v24';
+import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v25';
 
 let pendingCustomerPaymentKey = '';
 
@@ -2995,9 +2995,8 @@ export async function openCustomerDetailModal(index) {
   if (historyBody) {
     const history = buildCustomerDebtDisplayHistory(cust.debtHistory || [], cust.debt);
     
-    // Sắp xếp theo ngày giờ mới nhất lên trên
-    // Balance snapshots follow server posting order. A backdated document must
-    // not be placed before rows that were already included in its debtBefore.
+    // Hiển thị mới → cũ theo đúng ngày/giờ chứng từ. Các số dư đã được dựng
+    // lại cùng trật tự này trong buildCustomerDebtDisplayHistory.
     const sortedHistory = history.reverse();
     
     if (sortedHistory.length === 0) {
