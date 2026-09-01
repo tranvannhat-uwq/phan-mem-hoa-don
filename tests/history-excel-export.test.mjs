@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
 
 const read = relative => fs.readFileSync(new URL(`../${relative}`, import.meta.url), 'utf8');
 
@@ -32,18 +33,65 @@ test('history Excel export keeps guest and legacy orders and reports failures', 
   assert.match(customers, /order\.items\.length > 0 \? order\.items : \[\{\}\]/);
 });
 
-test('history Excel export separates invoice totals from product lines for accounting', () => {
+test('history Excel export groups and sorts rows by product code instead of order code', () => {
   const customers = read('js/components/customers.js');
 
   assert.match(customers, /function createCustomerOrderExportWorksheet\(columns, rows, totalColumns = new Set\(\)\)/);
   assert.match(customers, /function sortOrdersForAccountingExport\(orders\)/);
-  assert.match(customers, /if \(isHistoryExport\)[\s\S]*?getHistoryOrderExportColumns\(selectedColumns\)/);
-  assert.match(customers, /'Tổng hợp đơn hàng'/);
-  assert.match(customers, /'Chi tiết hàng hóa'/);
-  assert.match(customers, /HISTORY_ORDER_EXPORT_TOTAL_COLUMNS/);
-  assert.match(customers, /HISTORY_ORDER_EXPORT_LINE_TOTAL_COLUMNS/);
+  assert.match(customers, /function buildHistoryProductSummaryRows\(rows\)/);
+  assert.match(customers, /const productCode = String\(row\['Mã sản phẩm'\]/);
+  assert.match(customers, /function sortHistoryProductExportRows\(rows\)/);
+  assert.match(customers, /if \(isHistoryExport\)[\s\S]*?getHistoryProductExportColumns\(selectedColumns\)/);
+  assert.match(customers, /'Tổng hợp theo mã SP'/);
+  assert.match(customers, /'Chi tiết theo mã SP'/);
+  assert.match(customers, /HISTORY_PRODUCT_EXPORT_SUM_COLUMNS/);
+  assert.match(customers, /HISTORY_PRODUCT_EXPORT_EXCLUDED_COLUMNS/);
+  assert.match(customers, /'Mã hóa đơn', 'Mã trả hàng'/);
+  assert.match(customers, /LichSuSanPham_/);
   assert.doesNotMatch(customers, /\.map\(row => row\[column\] \?\? ''\)\s*\.join\('\\n'\)/);
-  assert.match(customers, /Đã xuất \$\{orderContexts\.length\} đơn vào 2 trang/);
+  assert.match(customers, /Đã xuất \$\{historyProductCount\} mã sản phẩm vào 2 trang/);
+});
+
+test('product history summary combines matching product codes across orders', () => {
+  const customers = read('js/components/customers.js');
+  const helperStart = customers.indexOf('function uniqueExportColumns');
+  const helperEnd = customers.indexOf('function getExportColumnWidth', helperStart);
+  const helperSource = customers.slice(helperStart, helperEnd);
+  const sandbox = {};
+  vm.runInNewContext(`
+    function toExportNumber(value, fallback = 0) {
+      if (value === null || value === undefined || value === '') return fallback;
+      const normalized = typeof value === 'string' ? value.replace(/[^\\d.-]/g, '') : value;
+      const num = Number(normalized);
+      return Number.isFinite(num) ? num : fallback;
+    }
+    const HISTORY_PRODUCT_EXPORT_EXCLUDED_COLUMNS = new Set([
+      'Mã hóa đơn', 'Mã trả hàng', 'Tổng tiền hàng', 'Tổng giảm giá',
+      'Tổng sau giảm giá', 'Phí vận chuyển', 'Khách cọc', 'Còn phải thu'
+    ]);
+    ${helperSource}
+    this.exportHelpers = { buildHistoryProductSummaryRows, getHistoryProductExportColumns };
+  `, sandbox);
+
+  const rows = [
+    { 'Mã sản phẩm': 'SP02', 'Mã hóa đơn': 'D3', 'Số lượng': 1, 'Đơn giá': 50000, 'Giảm giá': 0, 'Thành tiền': 50000 },
+    { 'Mã sản phẩm': 'SP01', 'Mã hóa đơn': 'D1', 'Số lượng': 2, 'Đơn giá': 100000, 'Giảm giá': 20000, 'Thành tiền': 180000 },
+    { 'Mã sản phẩm': 'sp01', 'Mã hóa đơn': 'D2', 'Số lượng': 3, 'Đơn giá': 80000, 'Giảm giá': 24000, 'Thành tiền': 216000 }
+  ];
+  const summary = sandbox.exportHelpers.buildHistoryProductSummaryRows(rows);
+  assert.equal(summary.length, 2);
+  assert.equal(summary[0]['Mã sản phẩm'], 'SP01');
+  assert.equal(summary[0]['Số đơn hàng'], 2);
+  assert.equal(summary[0]['Số lượng'], 5);
+  assert.equal(summary[0]['Đơn giá bình quân'], 88000);
+  assert.equal(summary[0]['Giảm giá'], 44000);
+  assert.equal(summary[0]['Thành tiền'], 396000);
+
+  const columns = sandbox.exportHelpers.getHistoryProductExportColumns([
+    'Mã hóa đơn', 'Mã hàng', 'Tên hàng', 'Số lượng', 'Thành tiền'
+  ]);
+  assert.equal(columns.detailColumns[0], 'Mã sản phẩm');
+  assert.equal(columns.detailColumns.includes('Mã hóa đơn'), false);
 });
 
 test('history Excel export resolves creator and manager UUIDs to employee names', () => {

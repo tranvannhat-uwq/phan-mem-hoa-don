@@ -1,22 +1,22 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260901-order-amend-v26';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20260901-order-amend-v26';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260901-order-amend-v26';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260901-order-amend-v26';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260901-order-amend-v26';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260901-order-amend-v26';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260901-order-amend-v26';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260901-order-amend-v26';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260901-order-amend-v26';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260901-order-amend-v26';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260901-order-amend-v26';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260901-order-amend-v26';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260901-order-amend-v26';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260901-order-amend-v26';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260901-order-amend-v27';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20260901-order-amend-v27';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260901-order-amend-v27';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260901-order-amend-v27';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260901-order-amend-v27';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260901-order-amend-v27';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260901-order-amend-v27';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260901-order-amend-v27';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260901-order-amend-v27';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260901-order-amend-v27';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260901-order-amend-v27';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260901-order-amend-v27';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260901-order-amend-v27';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport } from './components/reports.js?v=20260901-order-amend-v27';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260901-order-amend-v26';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260901-order-amend-v26';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260901-order-amend-v27';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260901-order-amend-v27';
 
 const SALES_WORKSPACE_HASH = '#/ban-hang';
 

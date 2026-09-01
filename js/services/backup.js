@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast } from '../utils.js';
-import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260901-order-amend-v26';
-import { mapWithConcurrency } from '../domain/async-pool.js?v=20260901-order-amend-v26';
+import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260901-order-amend-v27';
+import { mapWithConcurrency } from '../domain/async-pool.js?v=20260901-order-amend-v27';
 import { 
   supabaseClient, 
   isCloudActive,
@@ -22,7 +22,7 @@ import {
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js?v=20260901-order-amend-v26';
+} from './supabase.js?v=20260901-order-amend-v27';
 
 async function deleteAllRows(tableName, key = 'id') {
   const { error } = await supabaseClient
