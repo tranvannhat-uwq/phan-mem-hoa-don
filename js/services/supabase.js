@@ -4870,18 +4870,24 @@ export async function dbAdjustCustomerDebt(customerId, newDebt, description, _cr
 
 // --- BỘ LỌC VÀ PHÂN TRANG HIỆU NĂNG CAO (SERVER-SIDE PAGINATION & LAZY LOADING) ---
 
-// Read only the ledger snapshot needed by the sales-invoice printout. This is
-// intentionally scoped to one order and does not refresh or mutate other pages.
+// Read only the latest ledger snapshot needed by the sales-invoice printout.
+// An edited finalized order keeps its original `order` charge and appends one
+// or more `order_amend` rows. Print the last such row so the invoice shows the
+// same balance as the customer's effective debt history, without refreshing or
+// mutating any shared customer state.
 export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
   if (!isCloudActive || !supabaseClient || !orderId || !customerId) return null;
   try {
     const { data, error } = await supabaseClient
       .from(tableCustomerDebtTransactionsName)
-      .select('order_id,customer_id,transaction_type,balance_before,balance_after,transaction_date')
+      .select('order_id,customer_id,transaction_type,balance_before,balance_after,created_at')
       .eq('order_id', orderId)
       .eq('customer_id', customerId)
-      .eq('transaction_type', 'order')
-      .order('transaction_date', { ascending: true })
+      .in('transaction_type', ['order', 'order_amend'])
+      // order_amend intentionally keeps the original business date, so the
+      // posting timestamp—not transaction_date—defines the latest snapshot.
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .limit(1);
     if (error) throw error;
     const row = data?.[0];

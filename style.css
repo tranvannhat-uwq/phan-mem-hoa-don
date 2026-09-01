@@ -4011,6 +4011,14 @@ select option {
 
 /* PRINT STYLES - Tối ưu in hóa đơn A4 */
 @media print {
+  /* Reserve the complete A4 sheet for our templates. This prevents the
+     browser's document title, URL, and page counter from being placed in the
+     printable margins for every invoice and return slip. */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
   html {
     height: auto !important;
     min-height: 0 !important;
@@ -4040,10 +4048,11 @@ select option {
 
   #print-invoice-template {
     display: block !important;
+    box-sizing: border-box;
     width: 100%;
     font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: #000 !important;
-    padding: 20px;
+    padding: 12mm;
     background-color: #fff;
   }
 
@@ -4057,10 +4066,11 @@ select option {
 
   body.printing-return #print-return-slip-template {
     display: block !important;
+    box-sizing: border-box;
     width: 100%;
     font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: #000 !important;
-    padding: 20px;
+    padding: 12mm;
     background-color: #fff;
   }
 
