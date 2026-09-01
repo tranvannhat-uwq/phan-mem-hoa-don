@@ -116,7 +116,9 @@ export function getNeutralizedOrderDebtEntryIds(history = []) {
 }
 
 const DEBT_CANCELLATION_TYPES = new Set(['payment_cancel', 'order_cancel', 'return_cancel']);
-const DEBT_AMENDMENT_TYPES = new Set(['payment_amend', 'payment_relink', 'sale_payment_amend', 'return_amend']);
+const DEBT_AMENDMENT_TYPES = new Set([
+  'payment_amend', 'payment_relink', 'sale_payment_amend', 'return_amend', 'order_amend'
+]);
 
 function debtTransactionType(entry = {}) {
   return String(entry.transactionType ?? entry.transaction_type ?? entry.type ?? '').toLowerCase();
@@ -187,7 +189,8 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
       if (orderEntry?.id) targetId = String(orderEntry.id);
     }
 
-    if (targetId && hiddenIds.has(targetId)) continue;
+    if (targetId && hiddenIds.has(targetId)
+      && !(type === 'order_amend' && projected.has(targetId))) continue;
     const target = targetId ? projected.get(targetId) : null;
     const amendmentChange = toDebtAmount(amendment.debtChange ?? amendment.debt_change);
     if (target) {
@@ -195,8 +198,15 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
       target.debtChange = effectiveChange;
       target.amount = Math.abs(effectiveChange);
       target.debtAfter = toDebtAmount(amendment.debtAfter ?? amendment.balance_after);
-      target.date = amendment.date || target.date;
-      target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
+      // An order amendment changes the original invoice, so it remains on the
+      // invoice business timestamp instead of appearing as today's new sale.
+      if (type !== 'order_amend') {
+        target.date = amendment.date || target.date;
+        target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
+      }
+      // Alias the hidden delta to its visible target so a later amendment can
+      // safely reference the immediately preceding amendment row.
+      if (amendmentId) projected.set(amendmentId, target);
       if (effectiveChange === 0) hiddenIds.add(targetId);
       continue;
     }
@@ -211,7 +221,11 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
         type: effectiveType,
         transactionType: effectiveType === 'charge' ? 'order' : effectiveType,
         amount: Math.abs(amendmentChange),
-        debtChange: amendmentChange
+        debtChange: amendmentChange,
+        ...(type === 'order_amend' ? {
+          postedAt: amendment.date || amendment.transactionDate || amendment.transaction_date
+            || getCustomerDebtPostingDate(amendment)
+        } : {})
       });
       hiddenIds.delete(amendmentId);
     }

@@ -110,4 +110,31 @@ assert.deepEqual(
   ]
 );
 
+const orderAmendmentHistory = projectEffectiveCustomerDebtHistory([
+  {
+    id: 'order-charge', type: 'charge', transactionType: 'order', orderId: 'HD-OLD',
+    amount: 288332, debtChange: 288332,
+    date: '2026-08-04T09:15:00+07:00', postedAt: '2026-08-04T09:15:00+07:00'
+  },
+  {
+    id: 'order-amend-1', transactionType: 'order_amend', orderId: 'HD-OLD',
+    amount: 50000, debtChange: 50000, amendsLedgerId: 'order-charge',
+    date: '2026-08-04T09:15:00+07:00', postedAt: '2026-09-01T09:15:00+07:00'
+  },
+  {
+    id: 'order-amend-2', transactionType: 'order_amend', orderId: 'HD-OLD',
+    amount: 10000, debtChange: -10000, amendsLedgerId: 'order-amend-1',
+    date: '2026-08-04T09:15:00+07:00', postedAt: '2026-09-02T09:15:00+07:00'
+  }
+]);
+assert.equal(orderAmendmentHistory.length, 1, 'Repeated order deltas remain one visible invoice');
+assert.equal(orderAmendmentHistory[0].id, 'order-charge');
+assert.equal(orderAmendmentHistory[0].orderId, 'HD-OLD');
+assert.equal(orderAmendmentHistory[0].debtChange, 328332);
+assert.equal(
+  getCustomerDebtPostingDate(orderAmendmentHistory[0]),
+  '2026-08-04T09:15:00+07:00',
+  'The effective debt history keeps the original invoice timestamp'
+);
+
 console.log('customer-debt.test.mjs: all assertions passed');

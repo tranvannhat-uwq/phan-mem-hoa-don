@@ -2,11 +2,11 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260829-active-users-v22';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260829-active-users-v22';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260901-order-amend-v23';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260901-order-amend-v23';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260829-active-users-v22';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260829-active-users-v22';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260901-order-amend-v23';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260901-order-amend-v23';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -701,7 +701,8 @@ function mapCustomerDebtTransaction(row) {
   const debtChange = Number(row.debt_change || 0);
   const typeMap = {
     order: 'charge', payment: 'payment', payment_cancel: 'payment_cancel',
-    order_cancel: 'order_cancel', return: 'return', return_cancel: 'return_cancel', adjust: 'adjust'
+    order_cancel: 'order_cancel', order_amend: 'adjust', return: 'return',
+    return_cancel: 'return_cancel', adjust: 'adjust'
   };
   return {
     id: row.id,
@@ -4525,7 +4526,7 @@ export async function dbConfirmOrder(order) {
 export async function dbAmendOrder(originalOrderId, order, reason) {
   const printOnlyList = findPrintOnlyOrderPriceList(order);
   if (printOnlyList) {
-    throw new Error('Bảng giá này chưa được Kế toán cho phép lưu; không thể lưu thành đơn thay thế.');
+    throw new Error('Bảng giá này chưa được Kế toán cho phép lưu; không thể cập nhật hóa đơn.');
   }
   if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
     throw new Error('Chỉ Admin hoặc Kế toán được sửa đơn đã chốt.');
@@ -4548,7 +4549,7 @@ export async function dbAmendOrder(originalOrderId, order, reason) {
     console.error('RPC amend order error:', err);
     const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_amend_order');
     throw new Error(missingRpc
-      ? 'Chưa có chức năng sửa đơn trên Supabase. Hãy chạy migration 0019 rồi thử lại.'
+      ? 'Chưa có chức năng sửa đơn tại chỗ trên Supabase. Hãy chạy migration 0057 rồi thử lại.'
       : 'Không thể sửa đơn đã chốt: ' + (err.message || 'Transaction thất bại'));
   }
 }

@@ -55,6 +55,26 @@ test('amending an order keeps its exact original timestamp and records the edit 
   assert.match(invoice, /removeAttribute\('data-original-order-date'\)/);
 });
 
+test('migration 0057 updates the original invoice and posts only accounting deltas', () => {
+  const sql = read('migrations/0057_in_place_order_amendment.sql');
+  const invoice = read('js/components/invoice.js');
+  const service = read('js/services/supabase.js');
+
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.order_amendments/);
+  assert.match(sql, /ALTER TABLE public\.order_amendments ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /UPDATE public\.orders sale[\s\S]*WHERE sale\.id = original_order\.id/);
+  assert.doesNotMatch(sql, /p19_reverse_order_for_amendment|rpc_confirm_order\(/);
+  assert.match(sql, /'order_amend'[\s\S]*original_order\.order_date/);
+  assert.match(sql, /debt_delta := debt_amount - COALESCE\(original_order\.debt_amount, 0\)/);
+  assert.match(sql, /'order_amend_reversal'/);
+  assert.match(sql, /commission_group\.salary_period/);
+  assert.match(sql, /amended_order\.order_date IS DISTINCT FROM original_order\.order_date/);
+  assert.match(sql, /amended_order\.created_by IS DISTINCT FROM original_order\.created_by/);
+  assert.match(sql, /'replacement_order_id', original_order\.id/);
+  assert.match(service, /migration 0057/);
+  assert.match(invoice, /Đã cập nhật trực tiếp đơn/);
+});
+
 test('customer receipts may exceed receivables and become advance credit', () => {
   const sql = read('migrations/0019_order_amendment_and_customer_advance.sql');
   const service = read('js/services/supabase.js');

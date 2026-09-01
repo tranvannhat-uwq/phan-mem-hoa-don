@@ -16,7 +16,7 @@ test('customer history shows only effective business transactions without an aud
   assert.doesNotMatch(html, /id="customer-debt-show-technical"/);
   assert.match(customers, /buildCustomerDebtDisplayHistory\(cust\.debtHistory \|\| \[\], cust\.debt\)/);
   assert.match(debt, /export function buildCustomerDebtDisplayHistory/);
-  assert.match(html, /<th>Thời gian ghi sổ<\/th>/);
+  assert.match(html, /<th>Thời gian chứng từ<\/th>/);
   assert.match(service, /postedAt:\s*row\.created_at \|\| row\.transaction_date/);
   assert.match(service, /\.order\('created_at', \{ ascending: true \}\)/);
   assert.doesNotMatch(customers, /customer-debt-neutralized-row|technicalHistoryToggle/);

@@ -27,7 +27,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260829-active-users-v22';
+} from './supabase.js?v=20260901-order-amend-v23';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

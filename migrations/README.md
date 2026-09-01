@@ -327,3 +327,10 @@ exact original order timestamp, including its time. The actual edit time and
 reason are recorded in Activity, together with the meaningful before/after
 values; financial reversal and replacement posting remain atomic and
 authoritative.
+
+Migration `0057` replaces finalized-order cancellation/replacement with an
+in-place amendment transaction. The original invoice id, business timestamp,
+creator and salesperson remain unchanged; products and authoritative prices
+are updated on that row, while customer debt and commission ledgers receive
+only the delta in the original business/salary period. A durable amendment
+record preserves idempotency and before/after audit data.
