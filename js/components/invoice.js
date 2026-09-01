@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260901-order-amend-v27';
-import { renderAll, switchTab } from '../main.js?v=20260901-order-amend-v27';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260901-order-amend-v28';
+import { renderAll, switchTab } from '../main.js?v=20260901-order-amend-v28';
 import { populatePricelistsDropdowns } from './pricelists.js';
-import { generateUniqueCustomerCode } from './customers.js?v=20260901-order-amend-v27';
-import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v27';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260901-order-amend-v27';
+import { generateUniqueCustomerCode } from './customers.js?v=20260901-order-amend-v28';
+import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v28';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260901-order-amend-v28';
 import { normalizeCustomerPhone } from '../domain/customer-query.js';
-import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260901-order-amend-v27';
+import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260901-order-amend-v28';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
-import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260901-order-amend-v27';
+import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260901-order-amend-v28';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { canAdjustOrderBusinessDate, currentBusinessDateInputValue, parseOrderBusinessDateInput } from '../domain/order-business-date.js';
 import { reorderOrderItems } from '../domain/order-edit.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v27';
+import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v28';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;

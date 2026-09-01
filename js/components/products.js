@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260901-order-amend-v27';
-import { renderAll } from '../main.js?v=20260901-order-amend-v27';
+import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260901-order-amend-v28';
+import { renderAll } from '../main.js?v=20260901-order-amend-v28';
 import {
   buildProductFamilies,
   getProductBaseCode,

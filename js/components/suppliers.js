@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260901-order-amend-v27';
-import { renderAll } from '../main.js?v=20260901-order-amend-v27';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20260901-order-amend-v28';
+import { renderAll } from '../main.js?v=20260901-order-amend-v28';
 
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return 0;

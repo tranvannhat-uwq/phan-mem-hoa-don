@@ -1,15 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v27';
-import { renderAll } from '../main.js?v=20260901-order-amend-v27';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v27';
-import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v27';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v27';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v27';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v28';
+import { renderAll } from '../main.js?v=20260901-order-amend-v28';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v28';
+import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v28';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v28';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v28';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v27';
+import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v28';
 
 let pendingCustomerPaymentKey = '';
 
@@ -2204,7 +2204,7 @@ function getLineAmount(item) {
 }
 
 function buildCustomerOrderExportRows(orders, customer) {
-  const provinceName = getProvinceNameByCode(customer.brandDiscounts && customer.brandDiscounts.province);
+  const provinceName = getProvinceNameByCode(customer.province || (customer.brandDiscounts && customer.brandDiscounts.province));
   return orders.flatMap(order => {
     // Keep the order visible in Excel even when an old/guest order has no
     // hydrated item rows. Product columns remain blank for that one row.
@@ -2246,7 +2246,7 @@ function buildCustomerOrderExportRows(orders, customer) {
           toExportNumber(order.paidAmount ?? order.paid_amount ?? order.otherFeeAmount ?? order.other_fee_amount)
         )),
         'Trạng thái': getOrderStatusLabel(order.status || 'settled'),
-        'Mã hàng': item.variantCode || item.productCode || item.code || item.variantId || item.productId || '',
+        'Mã hàng': item.variantCode || item.variantCodeSnapshot || item.productCode || item.productCodeSnapshot || item.code || item.variantId || item.productId || '',
         'Tên hàng': item.productName || item.name || item.product?.name || '',
         'Thương hiệu': item.productBrand || item.brand || '',
         'Thương hiệu/Nhãn sơn': item.productBrand || item.brand || '',
@@ -2257,7 +2257,7 @@ function buildCustomerOrderExportRows(orders, customer) {
         ].filter(value => value !== null && value !== undefined && value !== '').join(' '),
         'ĐVT': item.unitName || item.unit || item.packagingName || item.packageType || item.package || '',
         'Đơn vị tính': item.unitName || item.unit || item.packagingName || item.packageType || item.package || '',
-        'Ghi chú hàng hóa': item.note || item.notes || '',
+        'Ghi chú hàng hóa': [item.colorCode, item.note || item.notes].filter(Boolean).join(' - '),
         'Số lượng': qty,
         'Đơn giá': unitPrice,
         'Giảm giá %': discountPercent,
@@ -2269,214 +2269,207 @@ function buildCustomerOrderExportRows(orders, customer) {
   });
 }
 
-const HISTORY_PRODUCT_EXPORT_EXCLUDED_COLUMNS = new Set([
-  'Mã hóa đơn', 'Mã trả hàng', 'Tổng tiền hàng', 'Tổng giảm giá',
-  'Tổng sau giảm giá', 'Phí vận chuyển', 'Khách cọc', 'Còn phải thu'
+const HISTORY_DETAIL_EXPORT_COLUMNS = [
+  'Chi nhánh', 'Mã hóa đơn', 'Mã vận đơn', 'Địa chỉ lấy hàng', 'Mã đối soát',
+  'Phí trả ĐTGH', 'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Mã đặt hàng',
+  'Mã trả hàng', 'Mã khách hàng', 'Tên khách hàng', 'Email', 'Điện thoại',
+  'Địa chỉ (Khách hàng)', 'Khu vực (Khách hàng)', 'Phường/Xã (Khách hàng)',
+  'Ngày sinh', 'Bảng giá', 'Người bán', 'Kênh bán', 'Người tạo',
+  'Đối tác giao hàng', 'Người nhận', 'Điện thoại (Người nhận)',
+  'Địa chỉ (Người nhận)', 'Khu vực (Người nhận)', 'Phường/Xã (Người nhận)',
+  'Dịch vụ', 'Trọng lượng (gram)', 'Dài', 'Rộng', 'Cao',
+  'Ghi chú trạng thái giao hàng', 'Ghi chú giao hàng', 'Ghi chú',
+  'Tổng tiền hàng', 'Giảm giá hóa đơn', 'Thu khác', 'Khách cần trả',
+  'Khách đã trả', 'Tiền mặt', 'Thẻ', 'Ví', 'Chuyển khoản',
+  'Còn cần thu (COD)', 'Thời gian giao hàng', 'Trạng thái',
+  'Trạng thái giao hàng', 'Mã hàng', 'Tên hàng', 'Thương hiệu', 'ĐVT',
+  'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá',
+  'Giá bán', 'Thành tiền'
+];
+
+const HISTORY_DETAIL_EXPORT_DATE_COLUMNS = new Set([
+  'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Thời gian giao hàng'
 ]);
-const HISTORY_PRODUCT_EXPORT_SUM_COLUMNS = new Set(['Số đơn hàng', 'Số lượng', 'Giảm giá', 'Thành tiền']);
-const HISTORY_ORDER_EXPORT_CURRENCY_COLUMNS = new Set([
-  'Tổng tiền hàng', 'Tổng giảm giá', 'Tổng sau giảm giá', 'Phí vận chuyển',
-  'Khách cọc', 'Còn phải thu', 'Đơn giá', 'Đơn giá bình quân', 'Giảm giá',
-  'Giá bán', 'Giá bán bình quân', 'Thành tiền'
+const HISTORY_DETAIL_EXPORT_CURRENCY_COLUMNS = new Set([
+  'Phí trả ĐTGH', 'Tổng tiền hàng', 'Giảm giá hóa đơn', 'Thu khác',
+  'Khách cần trả', 'Khách đã trả', 'Tiền mặt', 'Thẻ', 'Ví', 'Chuyển khoản',
+  'Còn cần thu (COD)', 'Đơn giá', 'Giảm giá', 'Giá bán', 'Thành tiền'
 ]);
-const HISTORY_ORDER_EXPORT_COLUMN_WIDTHS = {
-  STT: 7,
-  'Mã hóa đơn': 24,
-  'Thời gian': 19,
-  'Ngày cập nhật': 19,
-  'Mã trả hàng': 20,
-  'Mã khách hàng': 16,
-  'Tên khách hàng': 28,
-  'Điện thoại': 16,
-  'Địa chỉ': 36,
-  'Khu vực': 18,
-  'Bảng giá': 20,
-  'Kinh doanh quản lý': 22,
-  'Người bán': 20,
-  'Người tạo': 20,
-  'Ghi chú': 32,
-  'Tổng tiền hàng': 16,
-  'Tổng giảm giá': 16,
-  'Tổng sau giảm giá': 18,
-  'Phí vận chuyển': 16,
-  'Khách cọc': 16,
-  'Còn phải thu': 16,
-  'Trạng thái': 18,
-  'Mã hàng': 22,
-  'Mã sản phẩm': 22,
-  'Tên hàng': 32,
-  'Tên sản phẩm': 32,
-  'Thương hiệu/Nhãn sơn': 24,
-  'Quy cách': 22,
-  'Đơn vị tính': 14,
-  'Ghi chú hàng hóa': 28,
-  'Số lượng': 12,
-  'Số đơn hàng': 12,
-  'Đơn giá': 16,
-  'Đơn giá bình quân': 18,
-  'Giảm giá %': 12,
-  'Giảm giá': 16,
-  'Giá bán': 16,
-  'Giá bán bình quân': 18,
-  'Thành tiền': 18
-};
+const HISTORY_DETAIL_EXPORT_WIDE_COLUMNS = new Set([
+  'Chi nhánh', 'Địa chỉ lấy hàng', 'Tên khách hàng', 'Địa chỉ (Khách hàng)',
+  'Bảng giá', 'Người bán', 'Người tạo', 'Địa chỉ (Người nhận)',
+  'Ghi chú trạng thái giao hàng', 'Ghi chú giao hàng', 'Ghi chú', 'Tên hàng',
+  'Ghi chú hàng hóa'
+]);
 
-function uniqueExportColumns(columns) {
-  return [...new Set(columns.filter(Boolean))];
+function toExportDateValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date;
 }
 
-function toHistoryProductExportColumn(column) {
-  if (column === 'Mã hàng') return 'Mã sản phẩm';
-  if (column === 'Tên hàng') return 'Tên sản phẩm';
-  return column;
-}
-
-function toHistoryProductExportRow(row) {
-  return {
-    ...row,
-    'Mã sản phẩm': row['Mã hàng'] || '',
-    'Tên sản phẩm': row['Tên hàng'] || ''
+function getHistoryDetailStatusLabel(status) {
+  const normalized = normalizeExportOrderStatus(status);
+  const labels = {
+    settled: 'Hoàn thành',
+    partially_returned: 'Trả một phần',
+    returned: 'Đã trả hàng',
+    draft: 'Phiếu tạm',
+    cancelled: 'Đã hủy'
   };
+  return labels[normalized] || getOrderStatusLabel(status);
 }
 
-function getHistoryProductExportColumns(selectedColumns) {
-  const allowedColumns = selectedColumns
-    .filter(column => !HISTORY_PRODUCT_EXPORT_EXCLUDED_COLUMNS.has(column))
-    .map(toHistoryProductExportColumn);
-  const productDescriptionColumns = [
-    'Tên sản phẩm', 'Thương hiệu/Nhãn sơn', 'Quy cách', 'Đơn vị tính'
-  ].filter(column => allowedColumns.includes(column));
-  const detailColumns = uniqueExportColumns([
-    'Mã sản phẩm',
-    ...productDescriptionColumns,
-    ...allowedColumns.filter(column => column !== 'Mã sản phẩm' && !productDescriptionColumns.includes(column))
-  ]);
-  return {
-    summaryColumns: [
-      'Mã sản phẩm', ...productDescriptionColumns, 'Số đơn hàng', 'Số lượng',
-      'Đơn giá bình quân', 'Giảm giá %', 'Giảm giá', 'Giá bán bình quân', 'Thành tiền'
-    ],
-    detailColumns
+function getOrderCompanyName(order) {
+  const companyId = normalizeCompanyId(order.companyId || order.company_id);
+  const company = (state.companies || []).find(item => normalizeCompanyId(item.id || item.code) === companyId);
+  return company?.name || order.companyName || order.company_name || companyId || '';
+}
+
+function getOrderPaymentBreakdown(order, paidAmount) {
+  const explicit = {
+    cash: toExportNumber(order.cashAmount ?? order.cash_amount),
+    card: toExportNumber(order.cardAmount ?? order.card_amount),
+    wallet: toExportNumber(order.walletAmount ?? order.wallet_amount),
+    bank: toExportNumber(order.bankAmount ?? order.bank_amount ?? order.transferAmount ?? order.transfer_amount)
   };
+  if (Object.values(explicit).some(value => value !== 0) || paidAmount <= 0) return explicit;
+  const method = String(order.paymentMethod || order.payment_method || '').toLowerCase();
+  if (['cash', 'tien_mat'].includes(method)) explicit.cash = paidAmount;
+  else if (['card', 'the'].includes(method)) explicit.card = paidAmount;
+  else if (['wallet', 'e_wallet', 'vi'].includes(method)) explicit.wallet = paidAmount;
+  else if (['bank', 'bank_transfer', 'transfer', 'chuyen_khoan'].includes(method)) explicit.bank = paidAmount;
+  return explicit;
 }
 
-function sortHistoryProductExportRows(rows) {
-  return [...rows].sort((left, right) => {
-    const leftCode = String(left['Mã sản phẩm'] || '').trim();
-    const rightCode = String(right['Mã sản phẩm'] || '').trim();
-    if (!leftCode && rightCode) return 1;
-    if (leftCode && !rightCode) return -1;
-    const codeOrder = leftCode.localeCompare(rightCode, 'vi', { numeric: true, sensitivity: 'base' });
-    if (codeOrder !== 0) return codeOrder;
-    return String(left['Thời gian'] || '').localeCompare(String(right['Thời gian'] || ''), 'vi');
+function getOrderInvoiceDiscountAmount(order, financials) {
+  const stored = order.discountAmount ?? order.discount_amount;
+  if (stored !== null && stored !== undefined && stored !== '') return toExportNumber(stored);
+  const lineDiscount = (order.items || []).reduce((sum, item) => {
+    const quantity = toExportNumber(item.quantity);
+    const unitPrice = toExportNumber(item.price ?? item.unitPrice ?? item.listPrice);
+    return sum + Math.max(0, Math.round(quantity * unitPrice - getLineAmount(item)));
+  }, 0);
+  return Math.max(0, financials.totalDiscountAmount - lineDiscount);
+}
+
+function buildHistoryDetailExportRows(orderContexts) {
+  return [...orderContexts].reverse().flatMap(({ order, customer, rows }) => {
+    const financials = getOrderFinancialBreakdown(order, state.salesReturns || []);
+    const paidAmount = toExportNumber(order.paidAmount ?? order.paid_amount);
+    const payment = getOrderPaymentBreakdown(order, paidAmount);
+    const provinceName = getProvinceNameByCode(customer.province || customer.brandDiscounts?.province) || '';
+    const otherCharge = financials.otherFeeAmount + financials.shippingFeeAmount;
+    const amountDue = toExportNumber(order.amountDue ?? order.debtAmount ?? order.debt_amount,
+      Math.max(0, financials.totalPayment - paidAmount));
+
+    return rows.map(row => ({
+      'Chi nhánh': getOrderCompanyName(order),
+      'Mã hóa đơn': order.id || '',
+      'Mã vận đơn': order.trackingCode || order.tracking_code || order.shippingCode || order.shipping_code || '',
+      'Địa chỉ lấy hàng': order.pickupAddress || order.pickup_address || '',
+      'Mã đối soát': order.reconciliationCode || order.reconciliation_code || '',
+      'Phí trả ĐTGH': toExportNumber(order.deliveryPartnerFee ?? order.delivery_partner_fee, ''),
+      'Thời gian': toExportDateValue(order.date || order.orderDate || order.createdAt || order.created_at),
+      'Thời gian tạo': toExportDateValue(order.createdAt || order.created_at || order.date),
+      'Ngày cập nhật': toExportDateValue(order.updatedAt || order.updated_at),
+      'Mã đặt hàng': order.bookingCode || order.booking_code || order.externalOrderCode || order.external_order_code || '',
+      'Mã trả hàng': row['Mã trả hàng'] || '',
+      'Mã khách hàng': row['Mã khách hàng'] || '',
+      'Tên khách hàng': row['Tên khách hàng'] || '',
+      'Email': customer.email || order.customerEmail || order.customer_email || '',
+      'Điện thoại': row['Điện thoại'] || '',
+      'Địa chỉ (Khách hàng)': row['Địa chỉ (Khách hàng)'] || '',
+      'Khu vực (Khách hàng)': provinceName,
+      'Phường/Xã (Khách hàng)': customer.ward || order.customerWard || order.customer_ward || '',
+      'Ngày sinh': toExportDateValue(customer.birthday),
+      'Bảng giá': row['Bảng giá'] || '',
+      'Người bán': row['Người bán'] || '',
+      'Kênh bán': order.salesChannel || order.sales_channel || 'Bán trực tiếp',
+      'Người tạo': row['Người tạo'] || '',
+      'Đối tác giao hàng': order.deliveryPartner || order.delivery_partner || '',
+      'Người nhận': order.recipientName || order.recipient_name || '',
+      'Điện thoại (Người nhận)': order.recipientPhone || order.recipient_phone || '',
+      'Địa chỉ (Người nhận)': order.recipientAddress || order.recipient_address || '',
+      'Khu vực (Người nhận)': order.recipientProvince || order.recipient_province || '',
+      'Phường/Xã (Người nhận)': order.recipientWard || order.recipient_ward || '',
+      'Dịch vụ': order.deliveryService || order.delivery_service || '',
+      'Trọng lượng (gram)': toExportNumber(order.weightGram ?? order.weight_gram, ''),
+      'Dài': toExportNumber(order.length ?? order.package_length, ''),
+      'Rộng': toExportNumber(order.width ?? order.package_width, ''),
+      'Cao': toExportNumber(order.height ?? order.package_height, ''),
+      'Ghi chú trạng thái giao hàng': order.deliveryStatusNote || order.delivery_status_note || '',
+      'Ghi chú giao hàng': order.deliveryNote || order.delivery_note || '',
+      'Ghi chú': row['Ghi chú'] || '',
+      'Tổng tiền hàng': financials.totalBeforeDiscount,
+      'Giảm giá hóa đơn': getOrderInvoiceDiscountAmount(order, financials),
+      'Thu khác': otherCharge,
+      'Khách cần trả': financials.totalPayment,
+      'Khách đã trả': paidAmount,
+      'Tiền mặt': payment.cash,
+      'Thẻ': payment.card,
+      'Ví': payment.wallet,
+      'Chuyển khoản': payment.bank,
+      'Còn cần thu (COD)': amountDue,
+      'Thời gian giao hàng': toExportDateValue(order.deliveryAt || order.delivery_at),
+      'Trạng thái': getHistoryDetailStatusLabel(order.status || 'settled'),
+      'Trạng thái giao hàng': order.deliveryStatus || order.delivery_status || '',
+      'Mã hàng': row['Mã hàng'] || '',
+      'Tên hàng': row['Tên hàng'] || '',
+      'Thương hiệu': row['Thương hiệu'] || row['Thương hiệu/Nhãn sơn'] || '',
+      'ĐVT': row['Quy cách'] || row['ĐVT'] || '',
+      'Ghi chú hàng hóa': row['Ghi chú hàng hóa'] || '',
+      'Số lượng': row['Số lượng'],
+      'Đơn giá': row['Đơn giá'],
+      'Giảm giá %': row['Giảm giá %'],
+      'Giảm giá': row['Giảm giá'],
+      'Giá bán': row['Giá bán'],
+      'Thành tiền': row['Thành tiền']
+    }));
   });
 }
 
-function buildHistoryProductSummaryRows(rows) {
-  const grouped = new Map();
-  rows.forEach(row => {
-    const productCode = String(row['Mã sản phẩm'] || '').trim();
-    const groupKey = productCode.toLocaleLowerCase('vi') || '__missing_product_code__';
-    if (!grouped.has(groupKey)) {
-      grouped.set(groupKey, {
-        'Mã sản phẩm': productCode || '(Chưa có mã sản phẩm)',
-        'Tên sản phẩm': row['Tên sản phẩm'] || '',
-        'Thương hiệu/Nhãn sơn': row['Thương hiệu/Nhãn sơn'] || '',
-        'Quy cách': row['Quy cách'] || '',
-        'Đơn vị tính': row['Đơn vị tính'] || '',
-        orderIds: new Set(),
-        quantity: 0,
-        grossAmount: 0,
-        discountAmount: 0,
-        lineAmount: 0
-      });
-    }
-    const group = grouped.get(groupKey);
-    const orderId = String(row['Mã hóa đơn'] || '').trim();
-    if (orderId) group.orderIds.add(orderId);
-    const quantity = toExportNumber(row['Số lượng']);
-    const unitPrice = toExportNumber(row['Đơn giá']);
-    group.quantity += quantity;
-    group.grossAmount += quantity * unitPrice;
-    group.discountAmount += toExportNumber(row['Giảm giá']);
-    group.lineAmount += toExportNumber(row['Thành tiền']);
-  });
-
-  return sortHistoryProductExportRows(Array.from(grouped.values()).map(group => ({
-    'Mã sản phẩm': group['Mã sản phẩm'],
-    'Tên sản phẩm': group['Tên sản phẩm'],
-    'Thương hiệu/Nhãn sơn': group['Thương hiệu/Nhãn sơn'],
-    'Quy cách': group['Quy cách'],
-    'Đơn vị tính': group['Đơn vị tính'],
-    'Số đơn hàng': group.orderIds.size,
-    'Số lượng': group.quantity,
-    'Đơn giá bình quân': group.quantity > 0 ? Math.round(group.grossAmount / group.quantity) : 0,
-    'Giảm giá %': group.grossAmount > 0 ? (group.discountAmount / group.grossAmount) * 100 : 0,
-    'Giảm giá': group.discountAmount,
-    'Giá bán bình quân': group.quantity > 0 ? Math.round(group.lineAmount / group.quantity) : 0,
-    'Thành tiền': group.lineAmount
-  })));
-}
-
-function getExportColumnWidth(column) {
-  return HISTORY_ORDER_EXPORT_COLUMN_WIDTHS[column] || Math.min(30, Math.max(12, String(column).length + 4));
-}
-
-function createCustomerOrderExportWorksheet(columns, rows, totalColumns = new Set()) {
-  const headers = ['STT', ...columns];
+function createHistoryDetailExportWorksheet(rows) {
   const sheetData = [
-    headers,
-    ...rows.map((row, index) => [index + 1, ...columns.map(column => row[column] ?? '')])
+    HISTORY_DETAIL_EXPORT_COLUMNS,
+    ...rows.map(row => HISTORY_DETAIL_EXPORT_COLUMNS.map(column => row[column] ?? ''))
   ];
-  const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+  const worksheet = XLSX.utils.aoa_to_sheet(sheetData, { cellDates: true });
   const dataRowCount = rows.length;
-  const lastDataRow = dataRowCount + 1;
-  const totalRowIndex = dataRowCount + 1;
-
   worksheet['!autofilter'] = {
-    ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: dataRowCount, c: headers.length - 1 } })
+    ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: dataRowCount, c: HISTORY_DETAIL_EXPORT_COLUMNS.length - 1 } })
   };
   worksheet['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
-  worksheet['!cols'] = headers.map(column => ({ wch: getExportColumnWidth(column) }));
+  worksheet['!cols'] = HISTORY_DETAIL_EXPORT_COLUMNS.map(column => ({
+    wch: HISTORY_DETAIL_EXPORT_WIDE_COLUMNS.has(column)
+      ? Math.min(36, Math.max(20, column.length + 5))
+      : Math.min(20, Math.max(11, column.length + 3))
+  }));
   worksheet['!rows'] = [{ hpt: 24 }];
 
-  headers.forEach((column, index) => {
-    const headerRef = XLSX.utils.encode_cell({ r: 0, c: index });
+  HISTORY_DETAIL_EXPORT_COLUMNS.forEach((column, columnIndex) => {
+    const headerRef = XLSX.utils.encode_cell({ r: 0, c: columnIndex });
     if (worksheet[headerRef]) {
       worksheet[headerRef].s = {
         font: { bold: true, color: { rgb: 'FFFFFF' } },
-        fill: { fgColor: { rgb: '1F4E78' } },
-        alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+        fill: { fgColor: { rgb: '4472C4' } },
+        alignment: { horizontal: 'center', vertical: 'center' }
       };
     }
     for (let rowIndex = 1; rowIndex <= dataRowCount; rowIndex += 1) {
-      const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: index });
+      const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
       const cell = worksheet[cellRef];
       if (!cell) continue;
-      if (HISTORY_ORDER_EXPORT_CURRENCY_COLUMNS.has(column)) cell.z = '#,##0;[Red]-#,##0';
+      if (HISTORY_DETAIL_EXPORT_DATE_COLUMNS.has(column)) cell.z = 'dd/MM/yyyy HH:mm:ss';
+      else if (column === 'Ngày sinh') cell.z = 'dd/MM/yyyy';
+      else if (HISTORY_DETAIL_EXPORT_CURRENCY_COLUMNS.has(column)) cell.z = '#,##0;[Red]-#,##0';
       else if (column === 'Số lượng') cell.z = '#,##0.##';
-      else if (column === 'Giảm giá %') cell.z = '0.0';
+      else if (column === 'Giảm giá %') cell.z = '0.##';
+      if (rowIndex % 2 === 0) {
+        cell.s = { ...(cell.s || {}), fill: { fgColor: { rgb: 'D9EAF7' } } };
+      }
     }
   });
-
-  const totalColumnIndexes = columns
-    .map((column, index) => ({ column, index: index + 1 }))
-    .filter(({ column }) => totalColumns.has(column));
-  if (dataRowCount > 0 && totalColumnIndexes.length > 0) {
-    worksheet[XLSX.utils.encode_cell({ r: totalRowIndex, c: 0 })] = { t: 's', v: 'TỔNG CỘNG', s: { font: { bold: true } } };
-    totalColumnIndexes.forEach(({ column, index }) => {
-      const cellRef = XLSX.utils.encode_cell({ r: totalRowIndex, c: index });
-      const columnRef = XLSX.utils.encode_col(index);
-      worksheet[cellRef] = {
-        t: 'n',
-        f: `SUM(${columnRef}2:${columnRef}${lastDataRow})`,
-        z: column === 'Số lượng' ? '#,##0.##' : '#,##0;[Red]-#,##0',
-        s: { font: { bold: true }, fill: { fgColor: { rgb: 'D9EAF7' } } }
-      };
-    });
-    worksheet['!rows'][totalRowIndex] = { hpt: 22 };
-    worksheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRowIndex, c: headers.length - 1 } });
-  }
   return worksheet;
 }
 
@@ -2505,23 +2498,14 @@ function renderCustomerOrderExportColumnOptions() {
   const container = document.getElementById('customer-order-export-columns');
   if (!container) return;
   const selected = new Set(getSavedCustomerOrderExportColumns());
-  const isHistoryExport = Array.isArray(activeExportOrders);
-  const columnGroups = isHistoryExport
-    ? CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS
-      .filter(group => group.title !== 'Thông tin thanh toán')
-      .map(group => ({
-        ...group,
-        columns: group.columns.filter(column => !['Mã hóa đơn', 'Mã trả hàng'].includes(column))
-      }))
-    : CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS;
-  container.innerHTML = columnGroups.map(group => `
+  container.innerHTML = CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS.map(group => `
     <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem;">
       <div style="font-weight: 600; color: #fff; margin-bottom: 0.5rem;">${group.title}</div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.45rem;">
         ${group.columns.map(col => `
           <label style="display: flex; gap: 0.4rem; align-items: center; font-size: 0.82rem; color: var(--text-secondary);">
             <input type="checkbox" class="customer-order-export-column" value="${col}" ${selected.has(col) ? 'checked' : ''}>
-            <span>${isHistoryExport ? toHistoryProductExportColumn(col) : col}</span>
+            <span>${col}</span>
           </label>
         `).join('')}
       </div>
@@ -2781,6 +2765,8 @@ function openCustomerOrderExportModal(customerId = null) {
   if (!modal) return;
   const title = document.getElementById('customer-order-export-title');
   if (title) title.innerText = 'Xuất Excel lịch sử đơn hàng';
+  const columnsSection = document.getElementById('customer-order-export-columns-section');
+  if (columnsSection) columnsSection.style.display = '';
   const relevantOrders = customerId
     ? (state.savedOrders || []).filter(order => String(order.customerId || '') === String(customerId))
     : (state.savedOrders || []);
@@ -2820,7 +2806,9 @@ export function openHistoryOrderExportModal(orders, selectedOrderIds = []) {
   const modal = document.getElementById('customer-order-export-modal');
   if (!modal) return;
   const title = document.getElementById('customer-order-export-title');
-  if (title) title.innerText = 'Xuất Excel lịch sử theo mã sản phẩm';
+  if (title) title.innerText = 'Xuất Excel chi tiết hóa đơn';
+  const columnsSection = document.getElementById('customer-order-export-columns-section');
+  if (columnsSection) columnsSection.style.display = 'none';
   const rangeMode = document.getElementById('customer-order-export-range-mode');
   // The history screen has already applied its date filter. Preserve that
   // exact result instead of silently resetting the export to last month.
@@ -2842,7 +2830,6 @@ export function openHistoryOrderExportModal(orders, selectedOrderIds = []) {
   populateCustomerOrderExportManagerFilter();
   populateCustomerOrderExportCustomerFilter();
   populateCustomerOrderExportStatusFilter(orders || []);
-  renderCustomerOrderExportColumnOptions();
   updateCustomerOrderExportScopeText();
   modal.classList.add('active');
 }
@@ -2863,12 +2850,14 @@ async function exportCustomerOrderHistoryExcel() {
     showToast('Thư viện Excel chưa tải xong. Vui lòng thử lại.', 'danger');
     return;
   }
-  const selectedColumns = getSelectedCustomerOrderExportColumns();
-  if (selectedColumns.length === 0) {
+  const selectedColumns = isHistoryExport ? HISTORY_DETAIL_EXPORT_COLUMNS : getSelectedCustomerOrderExportColumns();
+  if (!isHistoryExport && selectedColumns.length === 0) {
     showToast('Vui lòng chọn ít nhất một cột để xuất.', 'warning');
     return;
   }
-  localStorage.setItem(CUSTOMER_ORDER_EXPORT_COLUMNS_STORAGE_KEY, JSON.stringify(selectedColumns));
+  if (!isHistoryExport) {
+    localStorage.setItem(CUSTOMER_ORDER_EXPORT_COLUMNS_STORAGE_KEY, JSON.stringify(selectedColumns));
+  }
 
   const submitBtn = document.getElementById('btn-submit-customer-order-export');
   if (submitBtn) {
@@ -2942,7 +2931,10 @@ async function exportCustomerOrderHistoryExcel() {
         code: order.customerCode || order.customer_code || '',
         name: order.customerName || order.customer_name || 'Khách lẻ',
         phone: order.customerPhone || order.customer_phone || '',
+        email: order.customerEmail || order.customer_email || '',
         address: order.customerAddress || order.customer_address || '',
+        province: order.customerProvince || order.customer_province || '',
+        ward: order.customerWard || order.customer_ward || '',
         pricelistId: order.pricelistId || order.pricelist_id || '',
         managedBy: order.customerManagerId || order.customer_manager_id || '',
         brandDiscounts: {}
@@ -2956,27 +2948,14 @@ async function exportCustomerOrderHistoryExcel() {
     }
 
     const workbook = XLSX.utils.book_new();
-    let historyProductCount = 0;
+    let historyDetailRowCount = 0;
     if (isHistoryExport) {
-      // The history workbook is product-first: SKU is the grouping key, not
-      // the invoice number. Order totals are excluded because repeating them
-      // across product lines would overstate the exported figures.
-      const productRows = sortHistoryProductExportRows(exportRows.map(toHistoryProductExportRow));
-      const productSummaryRows = buildHistoryProductSummaryRows(productRows);
-      historyProductCount = productSummaryRows.length;
-      const { summaryColumns, detailColumns } = getHistoryProductExportColumns(selectedColumns);
-      const summaryWorksheet = createCustomerOrderExportWorksheet(
-        summaryColumns,
-        productSummaryRows,
-        HISTORY_PRODUCT_EXPORT_SUM_COLUMNS
-      );
-      const detailWorksheet = createCustomerOrderExportWorksheet(
-        detailColumns,
-        productRows,
-        HISTORY_PRODUCT_EXPORT_SUM_COLUMNS
-      );
-      XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Tổng hợp theo mã SP');
-      XLSX.utils.book_append_sheet(workbook, detailWorksheet, 'Chi tiết theo mã SP');
+      // Match the supplied detailed-invoice workbook: one sheet, one row per
+      // product line, with invoice and customer fields repeated on each row.
+      const historyDetailRows = buildHistoryDetailExportRows(orderContexts);
+      historyDetailRowCount = historyDetailRows.length;
+      const detailWorksheet = createHistoryDetailExportWorksheet(historyDetailRows);
+      XLSX.utils.book_append_sheet(workbook, detailWorksheet, 'DanhSachChiTietHoaDon');
     } else {
       // Preserve the existing non-history export layout and behavior.
       const sheetData = [
@@ -2997,13 +2976,13 @@ async function exportCustomerOrderHistoryExcel() {
     }
     const fileRange = range.label || `${fromDate}-${toDate}`;
     const fileName = isHistoryExport
-      ? `LichSuSanPham_${sanitizeFilePart(fileRange)}_${orderContexts.length}Don.xlsx`
+      ? `DanhSachChiTietHoaDon_${sanitizeFilePart(fileRange)}_${orderContexts.length}Don.xlsx`
       : `LichSuDonHang_${sanitizeFilePart(fileRange)}_${customers.length}Khach.xlsx`;
     XLSX.writeFile(workbook, fileName);
     closeCustomerOrderExportModal();
     showToast(
       isHistoryExport
-        ? `Đã xuất ${historyProductCount} mã sản phẩm vào 2 trang tổng hợp và chi tiết.`
+        ? `Đã xuất ${historyDetailRowCount} dòng hàng hóa theo đúng mẫu chi tiết hóa đơn.`
         : `Đã xuất ${exportRows.length} dòng chi tiết lịch sử đơn hàng.`,
       'success'
     );
