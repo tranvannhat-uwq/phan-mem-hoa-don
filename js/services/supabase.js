@@ -4870,11 +4870,11 @@ export async function dbAdjustCustomerDebt(customerId, newDebt, description, _cr
 
 // --- BỘ LỌC VÀ PHÂN TRANG HIỆU NĂNG CAO (SERVER-SIDE PAGINATION & LAZY LOADING) ---
 
-// Read only the latest ledger snapshot needed by the sales-invoice printout.
-// An edited finalized order keeps its original `order` charge and appends one
-// or more `order_amend` rows. Print the last such row so the invoice shows the
-// same balance as the customer's effective debt history, without refreshing or
-// mutating any shared customer state.
+// Read the immutable invoice balance range needed by the sales-invoice
+// printout. An edited finalized order keeps its original `order` charge and
+// appends one or more `order_amend` rows. The printed "Nợ cũ" must stay the
+// balance before the original charge, while "Tổng nợ hiện tại" is the balance
+// after the latest amendment. This does not refresh or mutate shared state.
 export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
   if (!isCloudActive || !supabaseClient || !orderId || !customerId) return null;
   try {
@@ -4885,17 +4885,18 @@ export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
       .eq('customer_id', customerId)
       .in('transaction_type', ['order', 'order_amend'])
       // order_amend intentionally keeps the original business date, so the
-      // posting timestamp—not transaction_date—defines the latest snapshot.
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(1);
+      // posting timestamp—not transaction_date—defines the ledger sequence.
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
     if (error) throw error;
-    const row = data?.[0];
-    if (!row) return null;
+    const rows = data || [];
+    const originalCharge = rows.find(row => row.transaction_type === 'order') || rows[0];
+    const latestChange = rows.at(-1);
+    if (!originalCharge || !latestChange) return null;
     return {
-      orderId: row.order_id,
-      debtBefore: Number(row.balance_before),
-      debtAfter: Number(row.balance_after)
+      orderId: originalCharge.order_id,
+      debtBefore: Number(originalCharge.balance_before),
+      debtAfter: Number(latestChange.balance_after)
     };
   } catch (error) {
     console.warn('Could not load order debt snapshot for printing:', error);
