@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260901-order-amend-v23';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260901-order-amend-v23';
-import { renderAll, switchTab } from '../main.js?v=20260901-order-amend-v23';
-import { populateManagedByDropdown } from './customers.js?v=20260901-order-amend-v23';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260901-order-amend-v24';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260901-order-amend-v24';
+import { renderAll, switchTab } from '../main.js?v=20260901-order-amend-v24';
+import { populateManagedByDropdown } from './customers.js?v=20260901-order-amend-v24';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v23';
+import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v24';
 
 function normalizeUserSearch(value) {
   return String(value || '')

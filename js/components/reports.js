@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode } from '../utils.js';
 import { dbFetchPhase5Report } from '../services/supabase.js';
-import { buildCustomerDebtDisplayHistory, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260901-order-amend-v23';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v24';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
@@ -167,7 +167,7 @@ window.viewCustomerDebtHistory = function(customerId) {
 
             return `
               <tr>
-                <td>${formatDateTime(getCustomerDebtPostingDate(item))}</td>
+                <td>${formatDateTime(getCustomerDebtBusinessDate(item))}</td>
                 <td><span style="font-weight: 600; color: ${colorClass};">${typeLabel}</span></td>
                 <td style="text-align: right; font-weight: 600; color: ${colorClass};">${isPay || item.type === 'return' ? '-' : '+'}${formatCurrency(item.amount)}</td>
                 <td style="text-align: right; font-weight: 700;">${formatCurrency(item.debtAfter)}</td>

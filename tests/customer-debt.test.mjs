@@ -3,6 +3,7 @@ import {
   buildCustomerDebtDisplayHistory,
   chargeCustomerDebt,
   collectCustomerDebt,
+  getCustomerDebtBusinessDate,
   getCustomerDebtPostingDate,
   getNeutralizedOrderDebtEntryIds,
   getOrderDebtSnapshot,
@@ -19,6 +20,11 @@ const backdatedPostingSequence = [
   { id: 'backdated-order', type: 'charge', debtChange: 1840000, date: '2026-08-05T07:12:00+07:00', postedAt: '2026-08-05T15:45:00+07:00', debtBefore: 400, debtAfter: 1840400 }
 ];
 assert.equal(getCustomerDebtPostingDate(backdatedPostingSequence[2]), '2026-08-05T15:45:00+07:00');
+assert.equal(
+  getCustomerDebtBusinessDate(backdatedPostingSequence[2]),
+  '2026-08-05T07:12:00+07:00',
+  'Accounting displays the document date instead of the later posting date'
+);
 const backdatedDisplay = buildCustomerDebtDisplayHistory(backdatedPostingSequence, 1840400).reverse();
 assert.deepEqual(backdatedDisplay.map(item => item.id), ['backdated-order', 'payment', 'import']);
 assert.equal(backdatedDisplay[0].debtAfter, 1840400, 'Newest posted snapshot equals authoritative current debt');

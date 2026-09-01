@@ -334,3 +334,7 @@ creator and salesperson remain unchanged; products and authoritative prices
 are updated on that row, while customer debt and commission ledgers receive
 only the delta in the original business/salary period. A durable amendment
 record preserves idempotency and before/after audit data.
+
+Migration `0058` repairs document timestamps on legacy order-ledger rows. The
+invoice date is used in accounting views, while the real posting timestamp is
+retained separately for audit and running-balance ordering.

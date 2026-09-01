@@ -28,6 +28,21 @@ export function getCustomerDebtPostingDate(entry = {}) {
     ?? '';
 }
 
+/**
+ * Return the original business timestamp shown on the document. This may be
+ * older than createdAt/postedAt when an existing invoice is amended today.
+ */
+export function getCustomerDebtBusinessDate(entry = {}) {
+  return entry.date
+    ?? entry.transactionDate
+    ?? entry.transaction_date
+    ?? entry.postedAt
+    ?? entry.posted_at
+    ?? entry.createdAt
+    ?? entry.created_at
+    ?? '';
+}
+
 export function getOrderOutstandingAmount(order = {}) {
   const explicitAmountDue = Number(order.amountDue ?? order.debtAmount ?? order.debt_amount);
   if (Number.isFinite(explicitAmountDue)) return Math.max(0, Math.round(explicitAmountDue));

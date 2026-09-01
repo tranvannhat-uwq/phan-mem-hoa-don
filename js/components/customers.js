@@ -1,15 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v23';
-import { renderAll } from '../main.js?v=20260901-order-amend-v23';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v23';
-import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v23';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v23';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260901-order-amend-v23';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v24';
+import { renderAll } from '../main.js?v=20260901-order-amend-v24';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v24';
+import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v24';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v24';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v24';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v23';
+import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v24';
 
 let pendingCustomerPaymentKey = '';
 
@@ -3042,7 +3042,9 @@ export async function openCustomerDetailModal(index) {
           debtBefore = h.debtBefore ?? (h.debtAfter - effectiveChange);
         }
         
-        const transactionDate = new Date(getCustomerDebtPostingDate(h));
+        // Show the invoice/receipt date. Posting order is still retained by
+        // buildCustomerDebtDisplayHistory for a continuous running balance.
+        const transactionDate = new Date(getCustomerDebtBusinessDate(h));
         const formattedDate = new Intl.DateTimeFormat('vi-VN', {
           year: 'numeric', month: '2-digit', day: '2-digit'
         }).format(transactionDate);
