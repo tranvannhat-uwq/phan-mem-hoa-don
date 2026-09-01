@@ -32,14 +32,18 @@ test('history Excel export keeps guest and legacy orders and reports failures', 
   assert.match(customers, /order\.items\.length > 0 \? order\.items : \[\{\}\]/);
 });
 
-test('history Excel export emits exactly one row per order', () => {
+test('history Excel export separates invoice totals from product lines for accounting', () => {
   const customers = read('js/components/customers.js');
 
-  assert.match(customers, /function buildHistoryOrderExportRow\(order, customer\)/);
-  assert.match(customers, /HISTORY_ORDER_ITEM_EXPORT_COLUMNS\.forEach/);
-  assert.match(customers, /\.map\(row => row\[column\] \?\? ''\)\s*\.join\('\\n'\)/);
-  assert.match(customers, /if \(isHistoryExport\)[\s\S]*?buildHistoryOrderExportRow\(order, customer\)/);
-  assert.match(customers, /Đã xuất \$\{exportRows\.length\} đơn hàng, mỗi đơn một dòng\./);
+  assert.match(customers, /function createCustomerOrderExportWorksheet\(columns, rows, totalColumns = new Set\(\)\)/);
+  assert.match(customers, /function sortOrdersForAccountingExport\(orders\)/);
+  assert.match(customers, /if \(isHistoryExport\)[\s\S]*?getHistoryOrderExportColumns\(selectedColumns\)/);
+  assert.match(customers, /'Tổng hợp đơn hàng'/);
+  assert.match(customers, /'Chi tiết hàng hóa'/);
+  assert.match(customers, /HISTORY_ORDER_EXPORT_TOTAL_COLUMNS/);
+  assert.match(customers, /HISTORY_ORDER_EXPORT_LINE_TOTAL_COLUMNS/);
+  assert.doesNotMatch(customers, /\.map\(row => row\[column\] \?\? ''\)\s*\.join\('\\n'\)/);
+  assert.match(customers, /Đã xuất \$\{orderContexts\.length\} đơn vào 2 trang/);
 });
 
 test('history Excel export resolves creator and manager UUIDs to employee names', () => {

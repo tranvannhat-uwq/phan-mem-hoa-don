@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260901-order-amend-v25';
+import { switchTab } from '../main.js?v=20260901-order-amend-v26';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260901-order-amend-v25';
+import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260901-order-amend-v26';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v25';
+import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v26';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;

@@ -1,15 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v25';
-import { renderAll } from '../main.js?v=20260901-order-amend-v25';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v25';
-import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v25';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v25';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v25';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260901-order-amend-v26';
+import { renderAll } from '../main.js?v=20260901-order-amend-v26';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260901-order-amend-v26';
+import { addCashbookTransaction } from './so_quy.js?v=20260901-order-amend-v26';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260901-order-amend-v26';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260901-order-amend-v26';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v25';
+import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v26';
 
 let pendingCustomerPaymentKey = '';
 
@@ -2275,20 +2275,143 @@ const HISTORY_ORDER_ITEM_EXPORT_COLUMNS = [
   'Đơn giá', 'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'
 ];
 
-function buildHistoryOrderExportRow(order, customer) {
-  const detailRows = buildCustomerOrderExportRows([order], customer);
-  if (detailRows.length === 0) return null;
-  if (detailRows.length === 1) return detailRows[0];
+const HISTORY_ORDER_EXPORT_LINK_COLUMNS = [
+  'Mã hóa đơn', 'Thời gian', 'Mã khách hàng', 'Tên khách hàng', 'Người bán', 'Trạng thái'
+];
+const HISTORY_ORDER_EXPORT_TOTAL_COLUMNS = new Set([
+  'Tổng tiền hàng', 'Tổng giảm giá', 'Tổng sau giảm giá',
+  'Phí vận chuyển', 'Khách cọc', 'Còn phải thu'
+]);
+const HISTORY_ORDER_EXPORT_LINE_TOTAL_COLUMNS = new Set(['Số lượng', 'Giảm giá', 'Thành tiền']);
+const HISTORY_ORDER_EXPORT_CURRENCY_COLUMNS = new Set([
+  'Tổng tiền hàng', 'Tổng giảm giá', 'Tổng sau giảm giá', 'Phí vận chuyển',
+  'Khách cọc', 'Còn phải thu', 'Đơn giá', 'Giảm giá', 'Giá bán', 'Thành tiền'
+]);
+const HISTORY_ORDER_EXPORT_COLUMN_WIDTHS = {
+  STT: 7,
+  'Mã hóa đơn': 24,
+  'Thời gian': 19,
+  'Ngày cập nhật': 19,
+  'Mã trả hàng': 20,
+  'Mã khách hàng': 16,
+  'Tên khách hàng': 28,
+  'Điện thoại': 16,
+  'Địa chỉ': 36,
+  'Khu vực': 18,
+  'Bảng giá': 20,
+  'Kinh doanh quản lý': 22,
+  'Người bán': 20,
+  'Người tạo': 20,
+  'Ghi chú': 32,
+  'Tổng tiền hàng': 16,
+  'Tổng giảm giá': 16,
+  'Tổng sau giảm giá': 18,
+  'Phí vận chuyển': 16,
+  'Khách cọc': 16,
+  'Còn phải thu': 16,
+  'Trạng thái': 18,
+  'Mã hàng': 22,
+  'Tên hàng': 32,
+  'Thương hiệu/Nhãn sơn': 24,
+  'Quy cách': 22,
+  'Đơn vị tính': 14,
+  'Ghi chú hàng hóa': 28,
+  'Số lượng': 12,
+  'Đơn giá': 16,
+  'Giảm giá %': 12,
+  'Giảm giá': 16,
+  'Giá bán': 16,
+  'Thành tiền': 18
+};
 
-  // The history screen promises an order list, so keep exactly one Excel row
-  // per order and combine its product values inside the corresponding cells.
-  const orderRow = { ...detailRows[0] };
-  HISTORY_ORDER_ITEM_EXPORT_COLUMNS.forEach(column => {
-    orderRow[column] = detailRows
-      .map(row => row[column] ?? '')
-      .join('\n');
+function uniqueExportColumns(columns) {
+  return [...new Set(columns.filter(Boolean))];
+}
+
+function getHistoryOrderExportColumns(selectedColumns) {
+  const summaryColumns = selectedColumns.filter(column => !HISTORY_ORDER_ITEM_EXPORT_COLUMNS.includes(column));
+  const detailProductColumns = selectedColumns.filter(column => HISTORY_ORDER_ITEM_EXPORT_COLUMNS.includes(column));
+  return {
+    summaryColumns: summaryColumns.length > 0 ? summaryColumns : [
+      'Mã hóa đơn', 'Thời gian', 'Tên khách hàng', 'Trạng thái', ...HISTORY_ORDER_EXPORT_TOTAL_COLUMNS
+    ],
+    detailColumns: uniqueExportColumns([
+      ...HISTORY_ORDER_EXPORT_LINK_COLUMNS,
+      ...detailProductColumns
+    ])
+  };
+}
+
+function getExportColumnWidth(column) {
+  return HISTORY_ORDER_EXPORT_COLUMN_WIDTHS[column] || Math.min(30, Math.max(12, String(column).length + 4));
+}
+
+function createCustomerOrderExportWorksheet(columns, rows, totalColumns = new Set()) {
+  const headers = ['STT', ...columns];
+  const sheetData = [
+    headers,
+    ...rows.map((row, index) => [index + 1, ...columns.map(column => row[column] ?? '')])
+  ];
+  const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+  const dataRowCount = rows.length;
+  const lastDataRow = dataRowCount + 1;
+  const totalRowIndex = dataRowCount + 1;
+
+  worksheet['!autofilter'] = {
+    ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: dataRowCount, c: headers.length - 1 } })
+  };
+  worksheet['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
+  worksheet['!cols'] = headers.map(column => ({ wch: getExportColumnWidth(column) }));
+  worksheet['!rows'] = [{ hpt: 24 }];
+
+  headers.forEach((column, index) => {
+    const headerRef = XLSX.utils.encode_cell({ r: 0, c: index });
+    if (worksheet[headerRef]) {
+      worksheet[headerRef].s = {
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '1F4E78' } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+      };
+    }
+    for (let rowIndex = 1; rowIndex <= dataRowCount; rowIndex += 1) {
+      const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: index });
+      const cell = worksheet[cellRef];
+      if (!cell) continue;
+      if (HISTORY_ORDER_EXPORT_CURRENCY_COLUMNS.has(column)) cell.z = '#,##0;[Red]-#,##0';
+      else if (column === 'Số lượng') cell.z = '#,##0.##';
+      else if (column === 'Giảm giá %') cell.z = '0.0';
+    }
   });
-  return orderRow;
+
+  const totalColumnIndexes = columns
+    .map((column, index) => ({ column, index: index + 1 }))
+    .filter(({ column }) => totalColumns.has(column));
+  if (dataRowCount > 0 && totalColumnIndexes.length > 0) {
+    worksheet[XLSX.utils.encode_cell({ r: totalRowIndex, c: 0 })] = { t: 's', v: 'TỔNG CỘNG', s: { font: { bold: true } } };
+    totalColumnIndexes.forEach(({ index }) => {
+      const cellRef = XLSX.utils.encode_cell({ r: totalRowIndex, c: index });
+      const columnRef = XLSX.utils.encode_col(index);
+      worksheet[cellRef] = {
+        t: 'n',
+        f: `SUM(${columnRef}2:${columnRef}${lastDataRow})`,
+        z: '#,##0;[Red]-#,##0',
+        s: { font: { bold: true }, fill: { fgColor: { rgb: 'D9EAF7' } } }
+      };
+    });
+    worksheet['!rows'][totalRowIndex] = { hpt: 22 };
+    worksheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRowIndex, c: headers.length - 1 } });
+  }
+  return worksheet;
+}
+
+function sortOrdersForAccountingExport(orders) {
+  return [...orders].sort((left, right) => {
+    const leftTime = new Date(left.date || left.orderDate || left.createdAt || left.created_at).getTime();
+    const rightTime = new Date(right.date || right.orderDate || right.createdAt || right.created_at).getTime();
+    const leftSortTime = Number.isFinite(leftTime) ? leftTime : Number.MAX_SAFE_INTEGER;
+    const rightSortTime = Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER;
+    return leftSortTime - rightSortTime || String(left.id || '').localeCompare(String(right.id || ''), 'vi');
+  });
 }
 
 function getSavedCustomerOrderExportColumns() {
@@ -2724,7 +2847,7 @@ async function exportCustomerOrderHistoryExcel() {
     } else {
       orders = await dbFetchCustomersOrderHistory(scopedCustomers.map(c => c.id), startIso, endExclusiveIso, status);
     }
-    const exportRows = orders.flatMap(order => {
+    const orderContexts = sortOrdersForAccountingExport(orders).map(order => {
       const customer = customerById.get(String(order.customerId || order.customer_id)) || {
         id: order.customerId || order.customer_id || '',
         code: order.customerCode || order.customer_code || '',
@@ -2735,39 +2858,60 @@ async function exportCustomerOrderHistoryExcel() {
         managedBy: order.customerManagerId || order.customer_manager_id || '',
         brandDiscounts: {}
       };
-      if (isHistoryExport) {
-        const row = buildHistoryOrderExportRow(order, customer);
-        return row ? [row] : [];
-      }
-      return buildCustomerOrderExportRows([order], customer);
+      return { order, customer, rows: buildCustomerOrderExportRows([order], customer) };
     });
+    const exportRows = orderContexts.flatMap(context => context.rows);
     if (exportRows.length === 0) {
       showToast('Không có đơn hàng phù hợp để xuất Excel.', 'warning');
       return;
     }
 
-    const sheetData = [
-      selectedColumns,
-      ...exportRows.map(row => selectedColumns.map(col => row[col] ?? ''))
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
-    worksheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sheetData.length - 1, c: selectedColumns.length - 1 } }) };
-    worksheet['!freeze'] = { xSplit: 0, ySplit: 1 };
-    worksheet['!cols'] = selectedColumns.map(col => ({ wch: Math.min(38, Math.max(12, col.length + 4)) }));
-    selectedColumns.forEach((_, idx) => {
-      const cellRef = XLSX.utils.encode_cell({ r: 0, c: idx });
-      if (worksheet[cellRef]) worksheet[cellRef].s = { font: { bold: true } };
-    });
-
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Lịch sử đơn hàng');
+    if (isHistoryExport) {
+      // Do not concatenate many SKUs, quantities or prices into one cell.
+      // Accounting gets a clean invoice summary plus a filterable line-item
+      // sheet where each product has its own typed numeric cells.
+      const { summaryColumns, detailColumns } = getHistoryOrderExportColumns(selectedColumns);
+      const summaryRows = orderContexts
+        .map(context => context.rows[0])
+        .filter(Boolean);
+      const summaryWorksheet = createCustomerOrderExportWorksheet(
+        summaryColumns,
+        summaryRows,
+        HISTORY_ORDER_EXPORT_TOTAL_COLUMNS
+      );
+      const detailWorksheet = createCustomerOrderExportWorksheet(
+        detailColumns,
+        exportRows,
+        HISTORY_ORDER_EXPORT_LINE_TOTAL_COLUMNS
+      );
+      XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Tổng hợp đơn hàng');
+      XLSX.utils.book_append_sheet(workbook, detailWorksheet, 'Chi tiết hàng hóa');
+    } else {
+      // Preserve the existing non-history export layout and behavior.
+      const sheetData = [
+        selectedColumns,
+        ...exportRows.map(row => selectedColumns.map(column => row[column] ?? ''))
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+      worksheet['!autofilter'] = {
+        ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: sheetData.length - 1, c: selectedColumns.length - 1 } })
+      };
+      worksheet['!freeze'] = { xSplit: 0, ySplit: 1 };
+      worksheet['!cols'] = selectedColumns.map(column => ({ wch: Math.min(38, Math.max(12, column.length + 4)) }));
+      selectedColumns.forEach((_, index) => {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c: index });
+        if (worksheet[cellRef]) worksheet[cellRef].s = { font: { bold: true } };
+      });
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Lịch sử đơn hàng');
+    }
     const fileRange = range.label || `${fromDate}-${toDate}`;
     const fileName = `LichSuDonHang_${sanitizeFilePart(fileRange)}_${customers.length}Khach.xlsx`;
     XLSX.writeFile(workbook, fileName);
     closeCustomerOrderExportModal();
     showToast(
       isHistoryExport
-        ? `Đã xuất ${exportRows.length} đơn hàng, mỗi đơn một dòng.`
+        ? `Đã xuất ${orderContexts.length} đơn vào 2 trang: Tổng hợp đơn hàng và Chi tiết hàng hóa.`
         : `Đã xuất ${exportRows.length} dòng chi tiết lịch sử đơn hàng.`,
       'success'
     );
