@@ -82,6 +82,33 @@ test('detailed invoice export keeps the exact 61-column sample order', () => {
   assert.match(customers, /'Thành tiền': row\['Thành tiền'\]/);
 });
 
+test('detailed invoice export applies section colors and shrinks columns without data', () => {
+  const customers = read('js/components/customers.js');
+  const sizingStart = customers.indexOf('const HISTORY_DETAIL_EXPORT_DATE_COLUMNS');
+  const sizingEnd = customers.indexOf('function toExportDateValue', sizingStart);
+  const sizingSource = customers.slice(sizingStart, sizingEnd);
+  const sandbox = { Intl, Date };
+  vm.runInNewContext(`
+    ${sizingSource}
+    this.getWidth = getHistoryDetailExportColumnWidth;
+    this.headerColors = HISTORY_DETAIL_EXPORT_HEADER_GROUPS.map(group => group.color);
+  `, sandbox);
+
+  const rows = [
+    { 'Mã vận đơn': '', 'Tên hàng': 'Sơn nội thất cao cấp', 'Số lượng': 12 },
+    { 'Mã vận đơn': null, 'Tên hàng': 'Sơn lót', 'Số lượng': 2 }
+  ];
+  assert.equal(sandbox.getWidth('Mã vận đơn', rows), 5);
+  assert.ok(sandbox.getWidth('Tên hàng', rows) >= 20);
+  assert.ok(sandbox.getWidth('Số lượng', rows) >= 11);
+  assert.deepEqual(Array.from(sandbox.headerColors), ['1F4E78', '0F6B78', '5B5EA6', '548235', 'C65911', '7030A0']);
+
+  assert.match(customers, /patternType: 'solid'/);
+  assert.match(customers, /HISTORY_DETAIL_EXPORT_STATUS_STYLES/);
+  assert.match(customers, /XLSX\.writeFile\(workbook, fileName, \{ cellStyles: true \}\)/);
+  assert.match(read('index.html'), /xlsx-js-style@1\.2\.0\/dist\/xlsx\.bundle\.js/);
+});
+
 test('detailed invoice export emits one repeated invoice row per product line', () => {
   const customers = read('js/components/customers.js');
   const helperStart = customers.indexOf('function toExportDateValue');

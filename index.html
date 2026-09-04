@@ -35,7 +35,7 @@
   <!-- Lucide Icons via CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- SheetJS CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Chart.js CDN -->
@@ -1944,13 +1944,14 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table" style="table-layout: fixed; min-width: 800px;">
+            <table class="table" style="table-layout: fixed; min-width: 1000px;">
               <colgroup>
                 <col style="width: 60px;">   <!-- STT -->
                 <col style="width: 240px;">  <!-- Tên đăng nhập -->
                 <col style="width: auto;">   <!-- Tên hiển thị -->
                 <col style="width: 150px;">  <!-- Quyền hạn -->
-                <col style="width: 150px;">  <!-- Thao tác -->
+                <col style="width: 240px;">  <!-- Công ty trực thuộc -->
+                <col style="width: 110px;">  <!-- Thao tác -->
               </colgroup>
               <thead>
                 <tr>
@@ -1958,6 +1959,7 @@
                   <th>Tên đăng nhập</th>
                   <th>Tên hiển thị</th>
                   <th>Quyền hạn</th>
+                  <th>Công ty trực thuộc</th>
                   <th style="text-align: center;">Thao tác</th>
                 </tr>
               </thead>
@@ -4409,6 +4411,6 @@
 
   <!-- App logic -->
   <script type="module" src="js/customer-care-landing.js?v=20260829-sheet-workspace-v4"></script>
-  <script type="module" src="js/main.js?v=20260901-order-amend-v28"></script>
+  <script type="module" src="js/main.js?v=20260903-excel-style-v29"></script>
 </body>
 </html>

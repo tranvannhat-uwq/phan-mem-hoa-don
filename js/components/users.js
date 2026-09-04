@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260901-order-amend-v28';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260901-order-amend-v28';
-import { renderAll, switchTab } from '../main.js?v=20260901-order-amend-v28';
-import { populateManagedByDropdown } from './customers.js?v=20260901-order-amend-v28';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260903-excel-style-v29';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260903-excel-style-v29';
+import { renderAll, switchTab } from '../main.js?v=20260903-excel-style-v29';
+import { populateManagedByDropdown } from './customers.js?v=20260903-excel-style-v29';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260901-order-amend-v28';
+import { isActiveUser } from '../domain/user-status.js?v=20260903-excel-style-v29';
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -39,7 +39,7 @@ export function renderUsersTable() {
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
           Không tìm thấy tài khoản người dùng nào
         </td>
       </tr>
@@ -65,7 +65,7 @@ export function renderUsersTable() {
         <td>
           <span style="color: ${roleColor}; font-weight: 500;">${roleText}</span>
         </td>
-        <td style="font-size: 0.8rem; color: var(--text-secondary);">${compName}</td>
+        <td style="font-size: 0.8rem; color: var(--text-secondary); overflow-wrap: anywhere;">${compName}</td>
         <td style="text-align: center;">
           <div style="display: inline-flex; gap: 0.5rem; justify-content: center;">
             <button class="btn btn-secondary btn-sm btn-circle edit-user-btn" data-id="${u.id}" title="Sửa">
