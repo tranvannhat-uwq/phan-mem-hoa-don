@@ -996,11 +996,11 @@
                   <div class="invoice-context-card-header">
                     <label class="invoice-context-title" id="invoice-date-card-title" for="invoice-business-date">
                       <span class="invoice-context-icon"><i data-lucide="calendar-days"></i></span>
-                      Ngày lên đơn
+                      Ngày giờ lên đơn
                     </label>
                   </div>
-                  <input type="date" class="form-control" id="invoice-business-date">
-                  <small>Dùng ngày khách thực tế mua/nhận hàng. Ngày này được dùng trong lịch sử, báo cáo và bản in.</small>
+                  <input type="datetime-local" class="form-control" id="invoice-business-date" step="60">
+                  <small>Dùng thời điểm khách thực tế mua/nhận hàng. Thời điểm này được dùng trong lịch sử, báo cáo và bản in.</small>
                 </section>
 
                 <section class="invoice-context-card invoice-notes-card form-group" aria-labelledby="invoice-notes-card-title">

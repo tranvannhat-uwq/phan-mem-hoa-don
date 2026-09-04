@@ -14,7 +14,7 @@ test('history exposes order copy in both table and card views', () => {
 
 test('copy mode cannot retain the source edit or amendment identity', () => {
   assert.match(historySource, /function loadDraftOrderIntoInvoice[\s\S]{0,500}resetInvoiceBuilder\(\)/);
-  assert.match(historySource, /isCopy \? currentBusinessDateInputValue\(\)/);
+  assert.match(historySource, /isCopy \? currentBusinessDate(?:Time)?InputValue\(\)/);
   assert.match(historySource, /const isAmendment = isFinalizedAmendment && !isCopy/);
 
   const copySaveBranch = historySource.slice(

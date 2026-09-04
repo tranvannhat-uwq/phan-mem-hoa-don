@@ -10,7 +10,7 @@ import {
 } from '../domain/order-financials.js?v=20260903-excel-style-v29';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
-import { currentBusinessDateInputValue, orderDateToInputValue } from '../domain/order-business-date.js';
+import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
 import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260903-excel-style-v29';
 
@@ -1563,8 +1563,8 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
   const isFinalizedAmendment = !isReadOnly && order.status === 'settled';
   const isAmendment = isFinalizedAmendment && !isCopy;
   syncInvoiceBusinessDateControl(
-    isCopy ? currentBusinessDateInputValue() : orderDateToInputValue(order.date),
-    isReadOnly || !isCopy
+    isCopy ? currentBusinessDateTimeInputValue() : orderDateToDateTimeInputValue(order.date),
+    isReadOnly
   );
   // Đồng bộ khách hàng
   const customerContext = resolveOrderCustomerForEditing(order, state.customers);

@@ -61,6 +61,10 @@ Run these files in order on a staging clone first:
 53. `0053_customer_assigned_price_list_trigger_repair.sql`
 54. `0054_quick_customer_manager_identity.sql`
 55. `0055_sales_return_deduction_percent.sql`
+56. `0056_preserve_order_time_on_amendment.sql`
+57. `0057_in_place_order_amendment.sql`
+58. `0058_customer_debt_business_date_backfill.sql`
+59. `0059_allow_order_date_amendment.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
