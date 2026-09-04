@@ -967,18 +967,44 @@ export async function dbLoadCashbookForRange(startIso, endExclusiveIso) {
   }
 }
 
+// Keep History aligned with Dashboard: legacy rows created before order_date was
+// mandatory are dated from created_at. The expression is used as raw PostgREST
+// syntax by Supabase's .or() API.
+export function buildHistoryOrderWindowFilter(startIso = null, endExclusiveIso = null) {
+  const orderDateFilters = [];
+  const legacyCreatedAtFilters = ['order_date.is.null'];
+
+  if (startIso) {
+    orderDateFilters.push(`order_date.gte.${startIso}`);
+    legacyCreatedAtFilters.push(`created_at.gte.${startIso}`);
+  }
+  if (endExclusiveIso) {
+    orderDateFilters.push(`order_date.lt.${endExclusiveIso}`);
+    legacyCreatedAtFilters.push(`created_at.lt.${endExclusiveIso}`);
+  }
+  if (orderDateFilters.length === 0) return '';
+
+  const orderDateClause = orderDateFilters.length === 1
+    ? orderDateFilters[0]
+    : `and(${orderDateFilters.join(',')})`;
+  return `${orderDateClause},and(${legacyCreatedAtFilters.join(',')})`;
+}
+
+function applyHistoryOrderWindow(query, startIso = null, endExclusiveIso = null) {
+  const filter = buildHistoryOrderWindowFilter(startIso, endExclusiveIso);
+  return filter ? query.or(filter) : query;
+}
+
 async function fetchOrderRowsForHistoryWindow(startIso = null, endExclusiveIso = null) {
-  let query = supabaseClient
-    .from(tableOrdersName)
-    .select('*')
-    .order('order_date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(500);
-  if (startIso) query = query.gte('order_date', startIso);
-  if (endExclusiveIso) query = query.lt('order_date', endExclusiveIso);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  return collectAllPages((offset, end) => {
+    const query = supabaseClient
+      .from(tableOrdersName)
+      .select('*', { count: 'exact' })
+      .order('order_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(offset, end);
+    return applyHistoryOrderWindow(query, startIso, endExclusiveIso);
+  }, 500);
 }
 
 function replaceLoadedOrderWindow(rawOrders, startIso = null, endExclusiveIso = null) {
@@ -1030,12 +1056,7 @@ export async function dbSearchOrdersForHistory(
       .map(customer => String(customer.id || '').trim())
       .filter(Boolean);
 
-    const applyDateWindow = request => {
-      let scopedRequest = request;
-      if (startIso) scopedRequest = scopedRequest.gte('order_date', startIso);
-      if (endExclusiveIso) scopedRequest = scopedRequest.lt('order_date', endExclusiveIso);
-      return scopedRequest;
-    };
+    const applyDateWindow = request => applyHistoryOrderWindow(request, startIso, endExclusiveIso);
     const createSearchQuery = (column) => applyDateWindow(supabaseClient
       .from(tableOrdersName)
       .select('*')
