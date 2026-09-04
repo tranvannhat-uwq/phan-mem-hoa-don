@@ -2230,7 +2230,9 @@ function buildCustomerOrderExportRows(orders, customer) {
         'Khu vực (Khách hàng)': provinceName || '',
         'Khu vực': provinceName || '',
         'Bảng giá': getPricelistName(order.pricelistId || customer.pricelistId),
-        'Kinh doanh quản lý': getDisplayUserName(customer.managedBy || customer.managed_by),
+        'Kinh doanh quản lý': getDisplayUserName(
+          customer.managedBy || customer.managed_by || order.customerManagerId || order.customer_manager_id
+        ),
         'Người bán': getDisplayUserName(order.salespersonId || order.createdBy),
         'Người tạo': getDisplayUserName(order.createdBy),
         'Ghi chú': order.notes || '',
@@ -2270,7 +2272,7 @@ function buildCustomerOrderExportRows(orders, customer) {
 }
 
 const HISTORY_DETAIL_EXPORT_COLUMNS = [
-  'Chi nhánh', 'Mã hóa đơn', 'Mã vận đơn', 'Địa chỉ lấy hàng', 'Mã đối soát',
+  'Chi nhánh', 'KD Quản lý', 'Mã hóa đơn', 'Mã vận đơn', 'Địa chỉ lấy hàng', 'Mã đối soát',
   'Phí trả ĐTGH', 'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Mã đặt hàng',
   'Mã trả hàng', 'Mã khách hàng', 'Tên khách hàng', 'Email', 'Điện thoại',
   'Địa chỉ (Khách hàng)', 'Khu vực (Khách hàng)', 'Phường/Xã (Khách hàng)',
@@ -2297,7 +2299,7 @@ const HISTORY_DETAIL_EXPORT_CURRENCY_COLUMNS = new Set([
 ]);
 const HISTORY_DETAIL_EXPORT_WIDE_COLUMNS = new Set([
   'Chi nhánh', 'Địa chỉ lấy hàng', 'Tên khách hàng', 'Địa chỉ (Khách hàng)',
-  'Bảng giá', 'Người bán', 'Người tạo', 'Địa chỉ (Người nhận)',
+  'KD Quản lý', 'Bảng giá', 'Người bán', 'Người tạo', 'Địa chỉ (Người nhận)',
   'Ghi chú trạng thái giao hàng', 'Ghi chú giao hàng', 'Ghi chú', 'Tên hàng',
   'Ghi chú hàng hóa'
 ]);
@@ -2310,12 +2312,12 @@ const HISTORY_DETAIL_EXPORT_NUMERIC_COLUMNS = new Set([
   'Rộng', 'Cao', 'Số lượng', 'Giảm giá %'
 ]);
 const HISTORY_DETAIL_EXPORT_HEADER_GROUPS = [
-  { lastColumnIndex: 10, color: '1F4E78' },
-  { lastColumnIndex: 22, color: '0F6B78' },
-  { lastColumnIndex: 36, color: '5B5EA6' },
-  { lastColumnIndex: 46, color: '548235' },
-  { lastColumnIndex: 49, color: 'C65911' },
-  { lastColumnIndex: 60, color: '7030A0' }
+  { lastColumnIndex: 11, color: '1F4E78' },
+  { lastColumnIndex: 23, color: '0F6B78' },
+  { lastColumnIndex: 37, color: '5B5EA6' },
+  { lastColumnIndex: 47, color: '548235' },
+  { lastColumnIndex: 50, color: 'C65911' },
+  { lastColumnIndex: 61, color: '7030A0' }
 ];
 const HISTORY_DETAIL_EXPORT_STATUS_STYLES = {
   'Hoàn thành': { fill: 'E2F0D9', font: '375623' },
@@ -2425,6 +2427,7 @@ function buildHistoryDetailExportRows(orderContexts) {
 
     return rows.map(row => ({
       'Chi nhánh': getOrderCompanyName(order),
+      'KD Quản lý': row['Kinh doanh quản lý'] || '',
       'Mã hóa đơn': order.id || '',
       'Mã vận đơn': order.trackingCode || order.tracking_code || order.shippingCode || order.shipping_code || '',
       'Địa chỉ lấy hàng': order.pickupAddress || order.pickup_address || '',

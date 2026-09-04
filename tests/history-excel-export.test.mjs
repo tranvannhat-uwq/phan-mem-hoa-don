@@ -46,7 +46,7 @@ test('history Excel export matches the supplied one-sheet detailed invoice layou
   assert.match(customers, /Đã xuất \$\{historyDetailRowCount\} dòng hàng hóa theo đúng mẫu chi tiết hóa đơn/);
 });
 
-test('detailed invoice export keeps the exact 61-column sample order', () => {
+test('detailed invoice export keeps the required 62-column order with managed salesperson', () => {
   const customers = read('js/components/customers.js');
   const columnsStart = customers.indexOf('const HISTORY_DETAIL_EXPORT_COLUMNS');
   const columnsEnd = customers.indexOf('const HISTORY_DETAIL_EXPORT_DATE_COLUMNS', columnsStart);
@@ -58,7 +58,7 @@ test('detailed invoice export keeps the exact 61-column sample order', () => {
   `, sandbox);
 
   const expectedColumns = [
-    'Chi nhánh', 'Mã hóa đơn', 'Mã vận đơn', 'Địa chỉ lấy hàng', 'Mã đối soát',
+    'Chi nhánh', 'KD Quản lý', 'Mã hóa đơn', 'Mã vận đơn', 'Địa chỉ lấy hàng', 'Mã đối soát',
     'Phí trả ĐTGH', 'Thời gian', 'Thời gian tạo', 'Ngày cập nhật', 'Mã đặt hàng',
     'Mã trả hàng', 'Mã khách hàng', 'Tên khách hàng', 'Email', 'Điện thoại',
     'Địa chỉ (Khách hàng)', 'Khu vực (Khách hàng)', 'Phường/Xã (Khách hàng)',
@@ -75,7 +75,7 @@ test('detailed invoice export keeps the exact 61-column sample order', () => {
     'Giá bán', 'Thành tiền'
   ];
   assert.deepEqual(Array.from(sandbox.columns), expectedColumns);
-  assert.equal(sandbox.columns.length, 61);
+  assert.equal(sandbox.columns.length, 62);
   assert.match(customers, /'Mã hàng': row\['Mã hàng'\]/);
   assert.match(customers, /'Tên hàng': row\['Tên hàng'\]/);
   assert.match(customers, /'Số lượng': row\['Số lượng'\]/);
@@ -147,12 +147,13 @@ test('detailed invoice export emits one repeated invoice row per product line', 
     order: { id: 'HD001', companyId: 'ABS_NORTH', date: '2026-09-01T10:00:00+07:00', status: 'settled', items: [] },
     customer: { code: 'KH01', name: 'Khách A', province: 'Thái Nguyên' },
     rows: [
-      { 'Mã hóa đơn': 'HD001', 'Mã khách hàng': 'KH01', 'Tên khách hàng': 'Khách A', 'Mã hàng': 'SP01', 'Tên hàng': 'Sơn A', 'Số lượng': 1, 'Đơn giá': 100000, 'Giảm giá %': 0, 'Giảm giá': 0, 'Giá bán': 100000, 'Thành tiền': 100000 },
+      { 'Kinh doanh quản lý': 'Mr Vui', 'Mã hóa đơn': 'HD001', 'Mã khách hàng': 'KH01', 'Tên khách hàng': 'Khách A', 'Mã hàng': 'SP01', 'Tên hàng': 'Sơn A', 'Số lượng': 1, 'Đơn giá': 100000, 'Giảm giá %': 0, 'Giảm giá': 0, 'Giá bán': 100000, 'Thành tiền': 100000 },
       { 'Mã hóa đơn': 'HD001', 'Mã khách hàng': 'KH01', 'Tên khách hàng': 'Khách A', 'Mã hàng': 'SP02', 'Tên hàng': 'Sơn B', 'Số lượng': 2, 'Đơn giá': 100000, 'Giảm giá %': 0, 'Giảm giá': 0, 'Giá bán': 100000, 'Thành tiền': 200000 }
     ]
   }]);
 
   assert.equal(rows.length, 2);
+  assert.deepEqual(Array.from(rows, row => row['KD Quản lý']), ['Mr Vui', '']);
   assert.deepEqual(Array.from(rows, row => row['Mã hóa đơn']), ['HD001', 'HD001']);
   assert.deepEqual(Array.from(rows, row => row['Mã hàng']), ['SP01', 'SP02']);
   assert.deepEqual(Array.from(rows, row => row['Thành tiền']), [100000, 200000]);
@@ -165,7 +166,7 @@ test('history Excel export resolves creator and manager UUIDs to employee names'
   const resolver = customers.slice(resolverStart, resolverEnd);
 
   assert.match(resolver, /getUserDisplayName\(userReference, String\(userReference\), state\.users \|\| \[\]\)/);
-  assert.match(customers, /'Kinh doanh quản lý': getDisplayUserName\(customer\.managedBy \|\| customer\.managed_by\)/);
+  assert.match(customers, /customer\.managedBy \|\| customer\.managed_by \|\| order\.customerManagerId \|\| order\.customer_manager_id/);
   assert.match(customers, /'Người bán': getDisplayUserName\(order\.salespersonId \|\| order\.createdBy\)/);
   assert.match(customers, /'Người tạo': getDisplayUserName\(order\.createdBy\)/);
 });
