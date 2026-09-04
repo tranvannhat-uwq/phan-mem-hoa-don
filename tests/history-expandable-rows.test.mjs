@@ -23,6 +23,10 @@ test('details table renders one accessible expandable row pair per order', () =>
   assert.match(history, /function getHistoryManagerName\(order, customer\)/);
   assert.match(history, /order\?\.customerManagerId/);
   assert.match(history, /getManagerDisplayName\(managerValue, state\.users\)/);
+  assert.ok(
+    tableBranch.indexOf('data-history-column="manager"') < tableBranch.indexOf('data-history-column="code"'),
+    'KD Quản lý should appear before Mã đơn'
+  );
 });
 
 test('details table displays order notes and supports persisted column visibility', () => {
@@ -30,6 +34,7 @@ test('details table displays order notes and supports persisted column visibilit
   assert.match(tableBranch, /class="history-order-note-cell"[^>]*title="\$\{escapeHistoryHtml\(order\.notes/);
   assert.match(tableBranch, /escapeHistoryHtml\(order\.notes \|\| '—'\)/);
   assert.match(history, /HISTORY_COLUMN_STORAGE_KEY = 'billing_history_visible_columns'/);
+  assert.match(history, /HISTORY_MANAGER_COLUMN_MIGRATION_KEY/);
   assert.match(history, /function setupHistoryColumnPicker\(\)/);
   assert.match(history, /document\.querySelectorAll\('\[data-history-column\]'\)/);
   assert.match(history, /setupHistoryColumnPicker\(\)/);

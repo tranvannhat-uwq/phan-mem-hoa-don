@@ -24,12 +24,13 @@ let historyWindowRequestId = 0;
 let historySearchRequestId = 0;
 
 const HISTORY_COLUMN_STORAGE_KEY = 'billing_history_visible_columns';
+const HISTORY_MANAGER_COLUMN_MIGRATION_KEY = 'billing_history_manager_column_v1';
 const HISTORY_COLUMN_DEFINITIONS = Object.freeze([
   { key: 'index', label: 'STT', width: 45 },
+  { key: 'manager', label: 'KD Quản lý', width: 170 },
   { key: 'code', label: 'Mã đơn', width: 120 },
   { key: 'date', label: 'Ngày lập', width: 135 },
   { key: 'customer', label: 'Khách hàng', width: 170 },
-  { key: 'manager', label: 'KD Quản lý', width: 170 },
   { key: 'pricelist', label: 'Bảng giá', width: 120 },
   { key: 'notes', label: 'Ghi chú', width: 220 },
   { key: 'totalGoods', label: 'Tổng tiền hàng', width: 140 },
@@ -42,7 +43,19 @@ function getVisibleHistoryColumns() {
   const allKeys = HISTORY_COLUMN_DEFINITIONS.map(column => column.key);
   try {
     const saved = JSON.parse(localStorage.getItem(HISTORY_COLUMN_STORAGE_KEY) || 'null');
-    if (Array.isArray(saved)) return new Set(saved.filter(key => allKeys.includes(key)));
+    if (Array.isArray(saved)) {
+      const visibleColumns = new Set(saved.filter(key => allKeys.includes(key)));
+      // Make this column visible once for browsers that saved an older layout.
+      if (!localStorage.getItem(HISTORY_MANAGER_COLUMN_MIGRATION_KEY)) {
+        visibleColumns.add('manager');
+        localStorage.setItem(HISTORY_MANAGER_COLUMN_MIGRATION_KEY, '1');
+        localStorage.setItem(
+          HISTORY_COLUMN_STORAGE_KEY,
+          JSON.stringify(HISTORY_COLUMN_DEFINITIONS.map(column => column.key).filter(key => visibleColumns.has(key)))
+        );
+      }
+      return visibleColumns;
+    }
   } catch (error) {
     console.warn('Không thể đọc cấu hình cột lịch sử đơn:', error);
   }
@@ -1043,6 +1056,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
             tabindex="0" role="button" aria-expanded="${isExpanded}" aria-controls="${detailId}">
           <td style="text-align: center;"><input type="checkbox" class="history-export-checkbox" data-id="${escapeHistoryHtml(orderId)}" aria-label="Chọn đơn ${escapeHistoryHtml(displayOrderCode)}" ${selectedHistoryOrderIdsForExport.has(orderId) ? 'checked' : ''}></td>
           <td data-history-column="index" style="text-align: center; font-weight: 600; color: var(--text-muted);">${indexNumber}</td>
+          <td data-history-column="manager">
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${escapeHistoryHtml(managerName)}</span>
+          </td>
           <td data-history-column="code">
             <div title="${escapeHistoryHtml(orderId)}" style="font-weight: 700; color: var(--text-primary); font-size: 0.9rem; margin-bottom: 2px;">${escapeHistoryHtml(displayOrderCode)}</div>
             <div>${statusBadge}</div>
@@ -1053,9 +1069,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
           <td data-history-column="customer">
             <div style="font-weight: 600; color: var(--text-primary);">${escapeHistoryHtml(order.customerName)}</div>
             <div style="font-size: 0.78rem; color: var(--text-muted);">Nợ hiện tại: <span style="color: var(--color-danger); font-weight: 600;">${debtText}</span></div>
-          </td>
-          <td data-history-column="manager">
-            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${escapeHistoryHtml(managerName)}</span>
           </td>
           <td data-history-column="pricelist">
             <span style="font-size: 0.8rem; font-weight: 500; color: var(--color-warning);">${escapeHistoryHtml(plName)}</span>
@@ -1154,10 +1167,10 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
             <tr>
               <th style="width: 42px; text-align: center;"><input type="checkbox" id="history-select-all-export" title="Chọn tất cả đơn trên trang"></th>
               <th data-history-column="index" style="width: 45px; text-align: center;">STT</th>
+              <th data-history-column="manager" style="width: 170px;">KD Quản lý</th>
               <th data-history-column="code" style="width: 120px;">Mã đơn</th>
               <th data-history-column="date" style="width: 135px;">Ngày lập</th>
               <th data-history-column="customer" style="width: 170px;">Khách hàng</th>
-              <th data-history-column="manager" style="width: 170px;">KD Quản lý</th>
               <th data-history-column="pricelist" style="width: 120px;">Bảng giá</th>
               <th data-history-column="notes" style="width: 220px;">Ghi chú</th>
               <th data-history-column="totalGoods" style="width: 140px; text-align: right;">Tổng tiền hàng</th>
