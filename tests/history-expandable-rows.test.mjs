@@ -19,8 +19,10 @@ test('details table renders one accessible expandable row pair per order', () =>
   assert.match(tableBranch, /<td colspan="12">/);
   assert.doesNotMatch(tableBranch, />Thao tác<\/th>/);
   assert.doesNotMatch(tableBranch, /class="history-row-toggle"/);
-  assert.match(tableBranch, />KDQL<\/th>/);
-  assert.match(tableBranch, /getManagerDisplayName\(managerValue, state\.users\)/);
+  assert.match(tableBranch, />KD Quản lý<\/th>/);
+  assert.match(history, /function getHistoryManagerName\(order, customer\)/);
+  assert.match(history, /order\?\.customerManagerId/);
+  assert.match(history, /getManagerDisplayName\(managerValue, state\.users\)/);
 });
 
 test('details table displays order notes and supports persisted column visibility', () => {

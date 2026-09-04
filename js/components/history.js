@@ -29,7 +29,7 @@ const HISTORY_COLUMN_DEFINITIONS = Object.freeze([
   { key: 'code', label: 'Mã đơn', width: 120 },
   { key: 'date', label: 'Ngày lập', width: 135 },
   { key: 'customer', label: 'Khách hàng', width: 170 },
-  { key: 'manager', label: 'KDQL', width: 150 },
+  { key: 'manager', label: 'KD Quản lý', width: 170 },
   { key: 'pricelist', label: 'Bảng giá', width: 120 },
   { key: 'notes', label: 'Ghi chú', width: 220 },
   { key: 'totalGoods', label: 'Tổng tiền hàng', width: 140 },
@@ -349,6 +349,17 @@ function getHistoryOrderAmountBreakdown(order, lookups) {
     historyFinancialCache.breakdownByOrderId.set(orderId, getOrderFinancialBreakdown(order, orderReturns));
   }
   return historyFinancialCache.breakdownByOrderId.get(orderId);
+}
+
+function getHistoryManagerName(order, customer) {
+  // The customer's current assignee is authoritative. Older orders can retain
+  // their manager snapshot even when that customer is unavailable locally.
+  const managerValue = customer?.managedBy
+    || customer?.managed_by
+    || order?.customerManagerId
+    || order?.customer_manager_id
+    || '';
+  return managerValue ? getManagerDisplayName(managerValue, state.users) : 'Chưa phân công';
 }
 
 function getHistoryOrderActionContext(order, lookups) {
@@ -1015,11 +1026,9 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       const cust = getHistoryCustomer(order, lookups);
       let plName = 'Nhập tay';
       let debtText = '0 ₫';
-      let managerName = 'Chưa phân công';
+      const managerName = getHistoryManagerName(order, cust);
       
       if (cust) {
-        const managerValue = cust.managedBy || cust.managed_by || '';
-        managerName = managerValue ? getManagerDisplayName(managerValue, state.users) : managerName;
         const pl = lookups.pricelistById.get(String(cust.pricelistId));
         plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
         debtText = formatCurrency(cust.debt || 0);
@@ -1148,7 +1157,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <th data-history-column="code" style="width: 120px;">Mã đơn</th>
               <th data-history-column="date" style="width: 135px;">Ngày lập</th>
               <th data-history-column="customer" style="width: 170px;">Khách hàng</th>
-              <th data-history-column="manager" style="width: 150px;">KDQL</th>
+              <th data-history-column="manager" style="width: 170px;">KD Quản lý</th>
               <th data-history-column="pricelist" style="width: 120px;">Bảng giá</th>
               <th data-history-column="notes" style="width: 220px;">Ghi chú</th>
               <th data-history-column="totalGoods" style="width: 140px; text-align: right;">Tổng tiền hàng</th>
@@ -1196,13 +1205,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
 
       const cust = getHistoryCustomer(order, lookups);
       
-      let managerName = 'Chưa phân công';
+      const managerName = getHistoryManagerName(order, cust);
       let plName = 'Nhập tay';
       let debtText = '0 ₫';
       
       if (cust) {
-        managerName = cust.managedBy ? getManagerDisplayName(cust.managedBy, state.users) : 'Chưa phân công';
-        
         const pl = lookups.pricelistById.get(String(cust.pricelistId));
         plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
         
