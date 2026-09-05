@@ -13,8 +13,9 @@ const migration = read('migrations/0030_cashbook_manual_transaction_edit.sql');
 const css = read('style.css');
 
 test('cashbook table and export place address immediately after partner', () => {
-  assert.match(html, /Người nộp\/nhận<\/th>\s*<th[^>]*>Địa chỉ<\/th>/);
+  assert.match(html, /Người nộp\/nhận<\/th>\s*<th[^>]*>Địa chỉ<\/th>\s*<th[^>]*>Ghi chú<\/th>/);
   assert.match(cashbookUi, /getTransactionPartnerAddress\(t\)[\s\S]*escapeCashbookHtml\(partnerAddress\)/);
+  assert.match(cashbookUi, /escapeCashbookHtml\(t\.note\)/);
   assert.match(cashbookUi, /"Người nộp\/nhận", "Địa chỉ"/);
 });
 

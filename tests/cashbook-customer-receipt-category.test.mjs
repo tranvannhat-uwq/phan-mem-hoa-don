@@ -58,3 +58,18 @@ test('existing unlinked customer receipts are reconciled safely and once', () =>
   assert.match(migration, /SET debt = round\(COALESCE\(customer\.debt, 0\) - totals\.receipt_total\)/);
   assert.doesNotMatch(migration, /DELETE FROM/);
 });
+
+test('receipt creation forwards selected category and preserves clean notes without forced codes', () => {
+  const service = fs.readFileSync(path.join(root, 'js/services/supabase.js'), 'utf8');
+  const migration0060 = fs.readFileSync(
+    path.join(root, 'migrations/0060_customer_receipt_category.sql'),
+    'utf8'
+  );
+
+  assert.match(receiptSubmit, /dbRecordCustomerPayment\([\s\S]*category\s*\)/);
+  assert.doesNotMatch(receiptSubmit, /\$\{category\}\s*-\s*\$\{finalCode\}/);
+  assert.match(service, /p_category:\s*category/);
+  assert.match(migration0060, /p_category\s+text\s+DEFAULT\s+'Thu tiền khách hàng'/);
+  assert.match(migration0060, /clean_notes.*NULLIF\(btrim\(p_notes\)/);
+});
+

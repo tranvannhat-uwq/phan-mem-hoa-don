@@ -787,6 +787,19 @@ async function fetchCustomerDebtRows(customerId) {
 function mapCashbookTransaction(t) {
   const rawNote = t.note || '';
   const supplierMeta = rawNote.match(/__supplierId=([^\s]+)/);
+  let cleanNote = rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim();
+  let category = t.category || t.transaction_type;
+
+  // Auto-heal corrupted receipt note & category from previous bug
+  const isReceipt = (t.type === 'thu' || t.direction === 'in' || (t.transaction_type || t.transactionType) === 'customer_payment');
+  if (isReceipt && /\s*-\s*TTM\d+$/i.test(cleanNote)) {
+    const extractedCategory = cleanNote.replace(/^HD:\s*/i, '').replace(/\s*-\s*TTM\d+$/i, '').trim();
+    if (extractedCategory) {
+      category = extractedCategory;
+      cleanNote = '';
+    }
+  }
+
   return {
     id: t.id, cloudId: t.id, date: t.date || t.transaction_date || t.transactionDate,
     type: t.type || (t.direction === 'out' ? 'chi' : 'thu'),
@@ -795,11 +808,11 @@ function mapCashbookTransaction(t) {
     operationType: t.operation_type || t.operationType || null,
     referenceType: t.reference_type || t.referenceType || null,
     referenceId: t.reference_id || t.referenceId || null,
-    category: t.category || t.transaction_type,
+    category: category,
     partner: t.partner, value: parseFloat(t.value || 0),
     method: t.method || t.payment_method || t.paymentMethod || 'cash', accounting: t.accounting,
     status: t.status, creator: t.creator || t.created_by || t.createdBy,
-    note: rawNote.replace(/\s*__supplierId=[^\s]+/g, '').trim(),
+    note: cleanNote,
     starred: t.starred, customerId: t.customer_id || t.customerId || null,
     debtImpact: (t.transaction_type || t.transactionType) === 'customer_payment',
     supplierId: t.supplier_id || t.supplierId || (supplierMeta ? supplierMeta[1] : null),
@@ -4603,23 +4616,62 @@ export async function dbUpdateOrderNotes(orderId, notes, isDraft = false) {
   }
 }
 
-export async function dbRecordCustomerPayment(customerId, amount, notes, paymentMethod = 'cash', idempotencyKey = '') {
+export async function dbRecordCustomerPayment(customerId, amount, notes, paymentMethod = 'cash', idempotencyKey = '', category = '') {
   if (isCloudActive && supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.rpc('rpc_record_customer_receipt', {
-        p_customer_id: customerId,
-        p_amount: amount,
-        p_notes: notes || 'Thu tiền khách hàng',
-        p_payment_method: paymentMethod || 'cash',
-        p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID()
-      });
-      if (error) throw error;
+      const cleanNotes = notes ? String(notes).trim() : '';
+      let data = null;
+      if (category) {
+        const attempt = await supabaseClient.rpc('rpc_record_customer_receipt', {
+          p_customer_id: customerId,
+          p_amount: amount,
+          p_notes: cleanNotes,
+          p_payment_method: paymentMethod || 'cash',
+          p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID(),
+          p_category: category
+        });
+        if (!attempt.error) {
+          data = attempt.data;
+        } else {
+          const isUnknownParam = attempt.error.code === 'PGRST202'
+            || String(attempt.error.message || '').includes('p_category')
+            || String(attempt.error.message || '').includes('schema cache');
+          if (!isUnknownParam) throw attempt.error;
+        }
+      }
+
+      if (!data) {
+        const attempt = await supabaseClient.rpc('rpc_record_customer_receipt', {
+          p_customer_id: customerId,
+          p_amount: amount,
+          p_notes: cleanNotes,
+          p_payment_method: paymentMethod || 'cash',
+          p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID()
+        });
+        if (attempt.error) throw attempt.error;
+        data = attempt.data;
+
+        if (data?.cashbook_id && category && category !== 'Thu tiền khách hàng') {
+          try {
+            await supabaseClient.rpc('rpc_amend_cashbook_transaction', {
+              p_cashbook_id: data.cashbook_id,
+              p_input: {
+                category: category,
+                note: cleanNotes,
+                reason: 'Cập nhật loại thu chi'
+              }
+            });
+          } catch (amendErr) {
+            console.warn('Could not amend receipt category fallback:', amendErr);
+          }
+        }
+      }
       return data || { success: true };
     } catch (err) {
       console.error('RPC customer receipt error:', err);
       const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_record_customer_receipt');
       showToast(missingRpc
-        ? 'Chưa có chức năng nhận tiền trả trước trên Supabase. Hãy chạy migration 0019.'
+        ? 'Chưa có chức năng nhận tiền trả trước trên Supabase. Hãy chạy migration 0019/0060.'
         : 'Lỗi ghi nhận thu tiền: ' + err.message, 'danger');
       return false;
     }

@@ -154,6 +154,27 @@ function setupCashbook24HourPicker(targetId) {
 }
 
 // Helper: load/save transactions from LocalStorage
+const syncedRepairIds = new Set();
+async function syncRepairedReceiptsToCloud(repairedList) {
+  if (!['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase())) {
+    return;
+  }
+  for (const item of repairedList) {
+    const id = item.cloudId || item.id;
+    if (!id || syncedRepairIds.has(id)) continue;
+    syncedRepairIds.add(id);
+    try {
+      await dbAmendCashbookTransaction(id, {
+        category: item.category,
+        note: item.note || '',
+        reason: 'Sửa lại loại thu chi các giao dịch trước đó'
+      });
+    } catch (err) {
+      console.warn('Could not sync repaired receipt to cloud:', id, err);
+    }
+  }
+}
+
 export function getCashbookTransactions() {
   const stored = localStorage.getItem('billing_system_cashbook_transactions');
   if (stored) {
@@ -173,9 +194,36 @@ export function getCashbookTransactions() {
       const isAutoOrderReceipt = t.note && t.note.startsWith('Thu tiền hàng cho hóa đơn');
       return !isAutoOrderReceipt;
     });
-    if (filtered.length !== txs.length) {
-      localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(filtered));
-      return filtered;
+
+    let hasRepaired = false;
+    const repairedForCloud = [];
+    const repaired = filtered.map(t => {
+      const rawNote = String(t.note || '').trim();
+      const isReceipt = t.type === 'thu' || t.direction === 'in' || t.transactionType === 'customer_payment';
+      if (isReceipt && /\s*-\s*TTM\d+$/i.test(rawNote)) {
+        const extractedCategory = rawNote.replace(/^HD:\s*/i, '').replace(/\s*-\s*TTM\d+$/i, '').trim();
+        if (extractedCategory) {
+          hasRepaired = true;
+          const updated = {
+            ...t,
+            category: extractedCategory,
+            note: ''
+          };
+          if (updated.cloudId || (updated.id && String(updated.id).startsWith('PT-'))) {
+            repairedForCloud.push(updated);
+          }
+          return updated;
+        }
+      }
+      return t;
+    });
+
+    if (hasRepaired || filtered.length !== txs.length) {
+      localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(repaired));
+      if (repairedForCloud.length > 0) {
+        void syncRepairedReceiptsToCloud(repairedForCloud);
+      }
+      return repaired;
     }
     return txs;
   }
@@ -358,7 +406,7 @@ async function reloadCashbookDateWindow() {
   const requestId = ++cashbookRangeRequestId;
   const tableBody = document.getElementById('so-quy-table-body');
   if (tableBody) {
-    tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-4">Đang tải dữ liệu sổ quỹ...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="9" class="text-center py-4">Đang tải dữ liệu sổ quỹ...</td></tr>';
   }
   await dbLoadCashbookForRange(range.startIso, range.endExclusiveIso);
   if (requestId !== cashbookRangeRequestId) return;
@@ -761,9 +809,10 @@ export function setupSoQuyPanel() {
         paymentResult = await dbRecordCustomerPayment(
           matchedCustomer.id,
           value,
-          note || `${category} - ${finalCode}`,
+          note,
           method,
-          pendingReceiptIdempotencyKey
+          pendingReceiptIdempotencyKey,
+          category
         );
         if (!paymentResult) return;
 
@@ -781,6 +830,11 @@ export function setupSoQuyPanel() {
           || state.customers.find(customer => String(customer.id) === String(matchedCustomer.id))
           || matchedCustomer;
 
+        if (paymentResult.cashbook_id) {
+          newTx.id = paymentResult.cashbook_id;
+          newTx.cloudId = paymentResult.cashbook_id;
+        }
+
         if (!refreshedCustomer) {
           currentCustomer.debt = newDebt;
           currentCustomer.lastPaymentAt = new Date().toISOString();
@@ -788,18 +842,17 @@ export function setupSoQuyPanel() {
         if (!refreshedCustomer && !paymentResult.already_recorded) {
           if (!currentCustomer.debtHistory) currentCustomer.debtHistory = [];
           currentCustomer.debtHistory.push({
-            id: paymentResult.ledger_id || `pay-${finalCode}`,
+            id: paymentResult.ledger_id || `pay-${newTx.id}`,
             date: new Date().toISOString(),
             type: 'payment',
             amount: value,
-            notes: note || `${category} - ${finalCode}`,
+            notes: note || category,
             debtAfter: newDebt
           });
         }
         localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
 
         newTx.customerId = currentCustomer.id;
-        newTx.cloudId = paymentResult.cashbook_id || null;
         newTx.debtImpact = true;
       } else {
         const savedToCloud = await dbSaveCashbookTransaction(newTx);
@@ -810,12 +863,17 @@ export function setupSoQuyPanel() {
         newTx.debtImpact = false;
       }
 
-      txs.unshift(newTx);
+      const existingIdx = txs.findIndex(t => t.id === newTx.id || (t.idempotencyKey && t.idempotencyKey === newTx.idempotencyKey));
+      if (existingIdx >= 0) {
+        txs[existingIdx] = newTx;
+      } else {
+        txs.unshift(newTx);
+      }
       saveCashbookTransactions(txs);
       
       // Update customer debt (subtract debt balance)
       
-      showToast(`Đã tạo phiếu thu ${finalCode} thành công!`, 'success');
+      showToast(`Đã tạo phiếu thu ${newTx.id} thành công!`, 'success');
       hideReceiptModal();
       renderAll();
     });
@@ -1390,7 +1448,7 @@ function renderCashbookInlineDetail(t) {
 
   return `
     <tr class="so-quy-inline-detail-row" data-id="${escapeCashbookHtml(t.id)}">
-      <td colspan="8">
+      <td colspan="9">
         <section class="so-quy-inline-detail" aria-label="Chi tiết ${isReceipt ? 'phiếu thu' : 'phiếu chi'} ${escapeCashbookHtml(t.id)}">
           <div class="so-quy-inline-tab">Thông tin</div>
           <div class="so-quy-inline-heading">
@@ -1505,7 +1563,7 @@ export function renderSoQuyTable() {
     expandedCashbookTransactionId = '';
     tableBody.innerHTML = `
       <tr>
-        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 3rem;">
           Không có giao dịch sổ quỹ nào phù hợp với bộ lọc hiện tại
         </td>
       </tr>
@@ -1554,10 +1612,12 @@ export function renderSoQuyTable() {
         </td>
         <td>
           <div style="font-weight: 500;">${escapeCashbookHtml(t.partner)}</div>
-          ${t.note ? `<div style="font-size: 0.75rem; color: var(--text-muted); word-break: break-all; margin-top: 0.15rem;">HD: ${escapeCashbookHtml(t.note)}</div>` : ''}
         </td>
         <td style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.4;">
           ${partnerAddress ? escapeCashbookHtml(partnerAddress) : '<span style="color: var(--text-muted);">-</span>'}
+        </td>
+        <td style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.4; word-break: break-word;">
+          ${t.note ? escapeCashbookHtml(t.note) : '<span style="color: var(--text-muted);">-</span>'}
         </td>
         <td style="text-align: right; ${valStyle}">
           ${valText}
