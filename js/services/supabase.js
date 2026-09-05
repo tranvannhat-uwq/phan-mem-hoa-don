@@ -6,6 +6,7 @@ import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, 
 import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260903-excel-style-v29';
 import { collectAllPages } from '../domain/pagination.js';
 import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260903-excel-style-v29';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260903-excel-style-v29';
 import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260903-excel-style-v29';
 
 export let supabaseClient = null;
@@ -923,7 +924,8 @@ function replaceLoadedCashbookWindow(rawTransactions, startIso, endExclusiveIso)
   const merged = [...mapped, ...retained]
     .filter((transaction, index, rows) => rows.findIndex(item => String(item.id) === String(transaction.id)) === index)
     .sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
-  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(merged));
+  const deduped = purgeGhostCustomerReceipts(merged);
+  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(deduped));
   return mapped;
 }
 
@@ -950,7 +952,7 @@ async function loadFullCashbookFallback() {
     .select('*')
     .order('date', { ascending: false });
   if (error) throw error;
-  const transactions = (data || []).map(mapCashbookTransaction);
+  const transactions = purgeGhostCustomerReceipts((data || []).map(mapCashbookTransaction));
   localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(transactions));
   state.cashbookOpeningNetByMethod = null;
   state.cashbookOpeningStartIso = '';
@@ -3072,7 +3074,7 @@ export async function dbFetchCashbookTransactions() {
       .select('*')
       .order('date', { ascending: false });
     if (error) throw error;
-    const transactions = (data || []).map(mapCashbookTransaction);
+    const transactions = purgeGhostCustomerReceipts((data || []).map(mapCashbookTransaction));
     localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(transactions));
     return transactions;
   } catch (error) {

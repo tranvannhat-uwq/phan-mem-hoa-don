@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
 import { renderAll } from '../main.js?v=20260903-excel-style-v29';
 import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260903-excel-style-v29';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction } from '../domain/cashbook.js?v=20260903-excel-style-v29';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260903-excel-style-v29';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -218,14 +218,16 @@ export function getCashbookTransactions() {
       return t;
     });
 
-    if (hasRepaired || filtered.length !== txs.length) {
-      localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(repaired));
+    const deduped = purgeGhostCustomerReceipts(repaired);
+
+    if (hasRepaired || deduped.length !== txs.length) {
+      localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(deduped));
       if (repairedForCloud.length > 0) {
         void syncRepairedReceiptsToCloud(repairedForCloud);
       }
-      return repaired;
+      return deduped;
     }
-    return txs;
+    return deduped;
   }
   localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify([]));
   return [];
@@ -718,164 +720,180 @@ export function setupSoQuyPanel() {
   if (closeReceiptBtn) closeReceiptBtn.addEventListener('click', hideReceiptModal);
   if (cancelReceiptBtn) cancelReceiptBtn.addEventListener('click', hideReceiptModal);
 
+  let isSubmittingReceipt = false;
   if (receiptForm) {
     receiptForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      
-      const code = document.getElementById('receipt-code').value.trim();
-      const time = document.getElementById('receipt-time').value;
-      const category = document.getElementById('receipt-category').value;
-      const payer = document.getElementById('receipt-payer').value.trim();
-      const value = parseCashbookCurrencyInput(receiptValueInput);
-      const method = document.getElementById('receipt-method').value;
-      const accounting = document.getElementById('receipt-accounting').checked;
-      const note = document.getElementById('receipt-note').value.trim();
-      if (!pendingReceiptIdempotencyKey) {
-        pendingReceiptIdempotencyKey = globalThis.crypto.randomUUID();
-      }
-      
-      // Auto-generate code if empty
-      let finalCode = code;
-      const txs = getCashbookTransactions();
-      if (!finalCode) {
-        let maxSeq = 0;
-        txs.forEach(t => {
-          if (t.id.startsWith('TTM')) {
-            const num = parseInt(t.id.slice(3));
-            if (!isNaN(num) && num > maxSeq) maxSeq = num;
-          }
-        });
-        finalCode = `TTM${String(maxSeq + 1).padStart(6, '0')}`;
-      } else {
-        // Verify unique code
-        if (txs.some(t => t.id.toLowerCase() === finalCode.toLowerCase())) {
-          showToast(`Mã phiếu ${finalCode} đã tồn tại! Vui lòng nhập mã khác.`, 'danger');
-          return;
+      if (isSubmittingReceipt) return;
+      isSubmittingReceipt = true;
+      const submitBtn = receiptForm.querySelector('.cashbook-create-submit');
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        const code = document.getElementById('receipt-code').value.trim();
+        const time = document.getElementById('receipt-time').value;
+        const category = document.getElementById('receipt-category').value;
+        const payer = document.getElementById('receipt-payer').value.trim();
+        const value = parseCashbookCurrencyInput(receiptValueInput);
+        const method = document.getElementById('receipt-method').value;
+        const accounting = document.getElementById('receipt-accounting').checked;
+        const note = document.getElementById('receipt-note').value.trim();
+        if (!pendingReceiptIdempotencyKey) {
+          pendingReceiptIdempotencyKey = globalThis.crypto.randomUUID();
         }
-      }
-      
-      const newTx = {
-        id: finalCode,
-        date: new Date(time).toISOString(),
-        type: 'thu',
-        category,
-        partner: payer,
-        value,
-        method,
-        accounting,
-        status: 'Đã thanh toán',
-        creator: state.currentUser ? state.currentUser.displayName : 'Administrator',
-        note,
-        starred: false,
-        idempotencyKey: pendingReceiptIdempotencyKey
-      };
-      
-      const selectedOption = Array.from(
-        document.getElementById('receipt-payer-list')?.options || []
-      ).find(option => option.value === payer);
-      const selectedCustomerId = selectedOption?.dataset.customerId || '';
-      const customerMatches = state.customers.filter(c =>
-        String(c.name || '').trim().toLowerCase() === payer.toLowerCase()
-      );
-      let matchedCustomer = selectedCustomerId
-        ? state.customers.find(c => String(c.id) === selectedCustomerId)
-        : (customerMatches.length === 1 ? customerMatches[0] : null);
-
-      const normalizedCategory = category.toLowerCase();
-      const isSalaryDeductionReceipt = normalizedCategory === 'thu tiền hàng trừ vào lương';
-      // Every receipt whose payer resolves to a customer is a customer receipt,
-      // regardless of its category (shipping support, penalties, other income,
-      // etc.). Free-text payers remain standalone cashbook receipts. Salary
-      // deductions are standalone unless the payer explicitly resolves to a customer.
-      const affectsCustomerDebt = Boolean(matchedCustomer)
-        || normalizedCategory.includes('nợ')
-        || (!isSalaryDeductionReceipt && normalizedCategory.includes('tiền hàng'))
-        || normalizedCategory.includes('tiền khách hàng')
-        || normalizedCategory.includes('trả trước');
-      let paymentResult = null;
-
-      if (affectsCustomerDebt) {
-        if (!matchedCustomer) {
-          showToast('Phiếu thu công nợ phải chọn đúng một khách hàng trong danh sách!', 'danger');
-          return;
-        }
-
-        newTx.partner = matchedCustomer.name;
-        if (value <= 0) {
-          showToast('Số tiền thu phải lớn hơn 0!', 'danger');
-          return;
-        }
-
-        paymentResult = await dbRecordCustomerPayment(
-          matchedCustomer.id,
-          value,
-          note,
-          method,
-          pendingReceiptIdempotencyKey,
-          category
-        );
-        if (!paymentResult) return;
-
-        const newDebt = Number(paymentResult.new_debt);
-        if (!Number.isFinite(newDebt)) {
-          showToast('Database không trả về số công nợ mới. Phiếu thu chưa được ghi nhận trên giao diện.', 'danger');
-          return;
-        }
-
-        // Re-read the authoritative balance after the transaction. Realtime can
-        // replace the customer object while the RPC is in flight, so mutating
-        // matchedCustomer here may otherwise update a detached, stale object.
-        const refreshedCustomer = await dbRefreshCustomerFinancialState(matchedCustomer.id, { includeHistory: false });
-        const currentCustomer = refreshedCustomer
-          || state.customers.find(customer => String(customer.id) === String(matchedCustomer.id))
-          || matchedCustomer;
-
-        if (paymentResult.cashbook_id) {
-          newTx.id = paymentResult.cashbook_id;
-          newTx.cloudId = paymentResult.cashbook_id;
-        }
-
-        if (!refreshedCustomer) {
-          currentCustomer.debt = newDebt;
-          currentCustomer.lastPaymentAt = new Date().toISOString();
-        }
-        if (!refreshedCustomer && !paymentResult.already_recorded) {
-          if (!currentCustomer.debtHistory) currentCustomer.debtHistory = [];
-          currentCustomer.debtHistory.push({
-            id: paymentResult.ledger_id || `pay-${newTx.id}`,
-            date: new Date().toISOString(),
-            type: 'payment',
-            amount: value,
-            notes: note || category,
-            debtAfter: newDebt
+        
+        // Auto-generate code if empty
+        let finalCode = code;
+        const txs = getCashbookTransactions();
+        if (!finalCode) {
+          let maxSeq = 0;
+          txs.forEach(t => {
+            if (t.id.startsWith('TTM')) {
+              const num = parseInt(t.id.slice(3));
+              if (!isNaN(num) && num > maxSeq) maxSeq = num;
+            }
           });
+          finalCode = `TTM${String(maxSeq + 1).padStart(6, '0')}`;
+        } else {
+          // Verify unique code
+          if (txs.some(t => t.id.toLowerCase() === finalCode.toLowerCase())) {
+            showToast(`Mã phiếu ${finalCode} đã tồn tại! Vui lòng nhập mã khác.`, 'danger');
+            return;
+          }
         }
-        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+        
+        const newTx = {
+          id: finalCode,
+          date: new Date(time).toISOString(),
+          type: 'thu',
+          category,
+          partner: payer,
+          value,
+          method,
+          accounting,
+          status: 'Đã thanh toán',
+          creator: state.currentUser ? state.currentUser.displayName : 'Administrator',
+          note,
+          starred: false,
+          idempotencyKey: pendingReceiptIdempotencyKey
+        };
+        
+        const selectedOption = Array.from(
+          document.getElementById('receipt-payer-list')?.options || []
+        ).find(option => option.value === payer);
+        const selectedCustomerId = selectedOption?.dataset.customerId || '';
+        const customerMatches = state.customers.filter(c =>
+          String(c.name || '').trim().toLowerCase() === payer.toLowerCase()
+        );
+        let matchedCustomer = selectedCustomerId
+          ? state.customers.find(c => String(c.id) === selectedCustomerId)
+          : (customerMatches.length === 1 ? customerMatches[0] : null);
 
-        newTx.customerId = currentCustomer.id;
-        newTx.debtImpact = true;
-      } else {
-        const savedToCloud = await dbSaveCashbookTransaction(newTx);
-        if (!savedToCloud) {
-          showToast('Không thể lưu phiếu thu lên Cloud. Dữ liệu trên form được giữ nguyên.', 'danger');
-          return;
+        const normalizedCategory = category.toLowerCase();
+        const isSalaryDeductionReceipt = normalizedCategory === 'thu tiền hàng trừ vào lương';
+        // Every receipt whose payer resolves to a customer is a customer receipt,
+        // regardless of its category (shipping support, penalties, other income,
+        // etc.). Free-text payers remain standalone cashbook receipts. Salary
+        // deductions are standalone unless the payer explicitly resolves to a customer.
+        const affectsCustomerDebt = Boolean(matchedCustomer)
+          || normalizedCategory.includes('nợ')
+          || (!isSalaryDeductionReceipt && normalizedCategory.includes('tiền hàng'))
+          || normalizedCategory.includes('tiền khách hàng')
+          || normalizedCategory.includes('trả trước');
+        let paymentResult = null;
+
+        if (affectsCustomerDebt) {
+          if (!matchedCustomer) {
+            showToast('Phiếu thu công nợ phải chọn đúng một khách hàng trong danh sách!', 'danger');
+            return;
+          }
+
+          newTx.partner = matchedCustomer.name;
+          if (value <= 0) {
+            showToast('Số tiền thu phải lớn hơn 0!', 'danger');
+            return;
+          }
+
+          paymentResult = await dbRecordCustomerPayment(
+            matchedCustomer.id,
+            value,
+            note,
+            method,
+            pendingReceiptIdempotencyKey,
+            category
+          );
+          if (!paymentResult) return;
+
+          const newDebt = Number(paymentResult.new_debt);
+          if (!Number.isFinite(newDebt)) {
+            showToast('Database không trả về số công nợ mới. Phiếu thu chưa được ghi nhận trên giao diện.', 'danger');
+            return;
+          }
+
+          // Re-read the authoritative balance after the transaction. Realtime can
+          // replace the customer object while the RPC is in flight, so mutating
+          // matchedCustomer here may otherwise update a detached, stale object.
+          const refreshedCustomer = await dbRefreshCustomerFinancialState(matchedCustomer.id, { includeHistory: false });
+          const currentCustomer = refreshedCustomer
+            || state.customers.find(customer => String(customer.id) === String(matchedCustomer.id))
+            || matchedCustomer;
+
+          if (paymentResult.cashbook_id) {
+            newTx.id = paymentResult.cashbook_id;
+            newTx.cloudId = paymentResult.cashbook_id;
+          }
+
+          if (!refreshedCustomer) {
+            currentCustomer.debt = newDebt;
+            currentCustomer.lastPaymentAt = new Date().toISOString();
+          }
+          if (!refreshedCustomer && !paymentResult.already_recorded) {
+            if (!currentCustomer.debtHistory) currentCustomer.debtHistory = [];
+            currentCustomer.debtHistory.push({
+              id: paymentResult.ledger_id || `pay-${newTx.id}`,
+              date: new Date().toISOString(),
+              type: 'payment',
+              amount: value,
+              notes: note || category,
+              debtAfter: newDebt
+            });
+          }
+          localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+
+          newTx.customerId = currentCustomer.id;
+          newTx.debtImpact = true;
+        } else {
+          const savedToCloud = await dbSaveCashbookTransaction(newTx);
+          if (!savedToCloud) {
+            showToast('Không thể lưu phiếu thu lên Cloud. Dữ liệu trên form được giữ nguyên.', 'danger');
+            return;
+          }
+          if (savedToCloud?.transaction?.id) {
+            newTx.id = savedToCloud.transaction.id;
+            newTx.cloudId = savedToCloud.transaction.id;
+          }
+          newTx.debtImpact = false;
         }
-        newTx.debtImpact = false;
-      }
 
-      const existingIdx = txs.findIndex(t => t.id === newTx.id || (t.idempotencyKey && t.idempotencyKey === newTx.idempotencyKey));
-      if (existingIdx >= 0) {
-        txs[existingIdx] = newTx;
-      } else {
-        txs.unshift(newTx);
+        const freshTxs = getCashbookTransactions();
+        const cleanedTxs = freshTxs.filter(t =>
+          t.id !== finalCode &&
+          t.id !== newTx.id &&
+          (!t.idempotencyKey || t.idempotencyKey !== newTx.idempotencyKey)
+        );
+        cleanedTxs.unshift(newTx);
+        const finalTxs = purgeGhostCustomerReceipts(cleanedTxs);
+        saveCashbookTransactions(finalTxs);
+        
+        // Update customer debt (subtract debt balance)
+        
+        showToast(`Đã tạo phiếu thu ${newTx.id} thành công!`, 'success');
+        hideReceiptModal();
+        renderAll();
+      } finally {
+        isSubmittingReceipt = false;
+        if (submitBtn) submitBtn.disabled = false;
       }
-      saveCashbookTransactions(txs);
-      
-      // Update customer debt (subtract debt balance)
-      
-      showToast(`Đã tạo phiếu thu ${newTx.id} thành công!`, 'success');
-      hideReceiptModal();
-      renderAll();
     });
   }
 
