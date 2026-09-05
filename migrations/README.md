@@ -65,6 +65,8 @@ Run these files in order on a staging clone first:
 57. `0057_in_place_order_amendment.sql`
 58. `0058_customer_debt_business_date_backfill.sql`
 59. `0059_allow_order_date_amendment.sql`
+60. `0060_customer_receipt_category.sql`
+61. `0061_repair_customer_receipt_categories.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the

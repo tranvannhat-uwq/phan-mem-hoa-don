@@ -2206,11 +2206,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
       wordsContainer.style.display = 'none';
     } else {
       wordsContainer.style.display = 'block';
-      const amountInWords = docSoTienBangChu(
-        order.amountDue !== undefined
-          ? order.amountDue
-          : Math.max(0, order.totalPayable - (order.paidAmount || 0))
-      );
+      const amountInWords = docSoTienBangChu(getOrderOutstandingAmount(order));
       const wordsTextEl = document.getElementById('print-amount-in-words');
       if (wordsTextEl) {
         wordsTextEl.innerText = amountInWords;

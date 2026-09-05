@@ -44,13 +44,21 @@ export function getCustomerDebtBusinessDate(entry = {}) {
 }
 
 export function getOrderOutstandingAmount(order = {}) {
-  const explicitAmountDue = Number(order.amountDue ?? order.debtAmount ?? order.debt_amount);
-  if (Number.isFinite(explicitAmountDue)) return Math.max(0, Math.round(explicitAmountDue));
-
-  const totalPayable = toDebtAmount(order.totalPayable ?? order.total_payable ?? order.totalAmount ?? order.total_amount);
+  // `totalPayable` is the invoice amount after its discount.  Some legacy
+  // order payloads kept `amountDue` as the pre-discount order total, so never
+  // let that compatibility field override an available post-discount total.
+  const rawTotalPayable = Number(order.totalPayable ?? order.total_payable);
+  const rawTotalAmount = Number(order.totalAmount ?? order.total_amount);
   const shippingFee = Math.max(0, toDebtAmount(order.shippingFeeAmount ?? order.shipping_fee_amount ?? order.shippingFeeValue ?? order.shipping_fee_value));
   const paidAmount = Math.max(0, toDebtAmount(order.paidAmount ?? order.paid_amount));
-  return Math.max(0, totalPayable + shippingFee - paidAmount);
+  if (Number.isFinite(rawTotalPayable)) {
+    return Math.max(0, toDebtAmount(rawTotalPayable) + shippingFee - paidAmount);
+  }
+  // totalAmount already includes shipping, unlike totalPayable.
+  if (Number.isFinite(rawTotalAmount)) return Math.max(0, toDebtAmount(rawTotalAmount) - paidAmount);
+
+  const explicitAmountDue = Number(order.debtAmount ?? order.debt_amount ?? order.amountDue);
+  return Number.isFinite(explicitAmountDue) ? Math.max(0, Math.round(explicitAmountDue)) : 0;
 }
 
 export function chargeCustomerDebt(balanceBefore, amount) {

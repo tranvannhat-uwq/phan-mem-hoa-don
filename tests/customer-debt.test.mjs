@@ -41,7 +41,10 @@ assert.equal(amendedDisplay[0].debtAfter, 6000000);
 assert.equal(amendedDisplay[0].debtBefore, amendedDisplay[1].debtAfter, 'Folded amendments keep the visible balance chain continuous');
 
 assert.equal(getOrderOutstandingAmount({ totalPayable: 100000, shippingFeeAmount: 15000, paidAmount: 20000 }), 95000);
-assert.equal(getOrderOutstandingAmount({ amountDue: 240000, totalPayable: 100000 }), 240000);
+assert.equal(getOrderOutstandingAmount({ amountDue: 300000, totalPayable: 291000 }), 291000,
+  'A legacy pre-discount amountDue must not override the post-discount total payable');
+assert.equal(getOrderOutstandingAmount({ amountDue: 240000 }), 240000,
+  'amountDue remains the compatibility fallback when no invoice total is available');
 
 let debt = 100000;
 debt = chargeCustomerDebt(debt, 250000);
