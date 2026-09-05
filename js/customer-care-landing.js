@@ -1,6 +1,6 @@
 const SALES_WORKSPACE_HASH = '#/ban-hang';
 const CUSTOMER_CARE_SHEET_STORAGE_KEY = 'sovie_customer_care_sheet_url';
-const PRIVATE_BADGE_REDIRECT_URL = 'https://quangcao24h.io.vn';
+const PRIVATE_BADGE_REDIRECT_URL = 'https://sovie.io.vn';
 
 function isSalesWorkspaceRoute() {
   return window.location.hash.toLowerCase().startsWith(SALES_WORKSPACE_HASH);
