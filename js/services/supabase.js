@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260903-excel-style-v29';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260903-excel-style-v29';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260905-debt-ledger-v30';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260905-debt-ledger-v30';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260903-excel-style-v29';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260903-excel-style-v29';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260903-excel-style-v29';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory, rebuildOrderDebtSnapshot } from '../domain/customer-debt.js?v=20260905-debt-ledger-v30';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260905-debt-ledger-v30';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260905-debt-ledger-v30';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -4955,7 +4955,7 @@ export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
   try {
     const { data, error } = await supabaseClient
       .from(tableCustomerDebtTransactionsName)
-      .select('order_id,customer_id,transaction_type,balance_before,balance_after,created_at')
+      .select('id,order_id,customer_id,transaction_type,debt_change,balance_before,balance_after,created_at')
       .eq('order_id', orderId)
       .eq('customer_id', customerId)
       .in('transaction_type', ['order', 'order_amend'])
@@ -4968,6 +4968,42 @@ export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
     const originalCharge = rows.find(row => row.transaction_type === 'order') || rows[0];
     const latestChange = rows.at(-1);
     if (!originalCharge || !latestChange) return null;
+
+    // Reflow the ledger up to this invoice and replace each legacy order
+    // charge with the persisted amount after order discount plus shipping.
+    // This keeps payments/returns/adjustments in their real posting order and
+    // fixes both the current invoice and older invoices printed from history.
+    try {
+      const ledgerRows = await collectAllPages((offset, end) => supabaseClient
+        .from(tableCustomerDebtTransactionsName)
+        .select('id,order_id,customer_id,transaction_type,debt_change,balance_before,balance_after,created_at')
+        .eq('customer_id', customerId)
+        .lte('created_at', latestChange.created_at)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(offset, end));
+      const orderIds = [...new Set(ledgerRows.map(row => row.order_id).filter(Boolean))];
+      const orderIdSet = new Set(orderIds.map(String));
+      const orderRows = (state.savedOrders || []).filter(order =>
+        orderIdSet.has(String(order.id)) && String(order.customerId || '') === String(customerId)
+      );
+      const loadedOrderIds = new Set(orderRows.map(order => String(order.id)));
+      for (let index = 0; index < orderIds.length; index += 100) {
+        const chunk = orderIds.slice(index, index + 100).filter(id => !loadedOrderIds.has(String(id)));
+        if (chunk.length === 0) continue;
+        const orderResult = await supabaseClient
+          .from(tableOrdersName)
+          .select('id,customer_id,status,total_payable,total_amount,shipping_fee_value,shipping_fee_amount')
+          .in('id', chunk);
+        if (orderResult.error) throw orderResult.error;
+        orderRows.push(...(orderResult.data || []));
+      }
+      const rebuilt = rebuildOrderDebtSnapshot(orderId, customerId, ledgerRows, orderRows);
+      if (rebuilt) return { orderId, ...rebuilt };
+    } catch (rebuildError) {
+      console.warn('Could not rebuild the post-discount order debt snapshot:', rebuildError);
+    }
+
     return {
       orderId: originalCharge.order_id,
       debtBefore: Number(originalCharge.balance_before),

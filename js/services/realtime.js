@@ -27,7 +27,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260903-excel-style-v29';
+} from './supabase.js?v=20260905-debt-ledger-v30';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

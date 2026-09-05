@@ -10,6 +10,7 @@ import {
   getOrderOutstandingAmount,
   mergeCustomerDebtHistory,
   projectEffectiveCustomerDebtHistory,
+  rebuildOrderDebtSnapshot,
   reduceCustomerDebtForReturn,
   restoreCustomerDebtForCancelledReturn
 } from '../js/domain/customer-debt.js';
@@ -80,6 +81,25 @@ assert.deepEqual(getOrderDebtSnapshot({ id: 'HD-001' }, { debtHistory: mergedHis
 assert.deepEqual(getOrderDebtSnapshot({ id: 'HD-002' }, { debtHistory: [] }, {
   orderId: 'HD-002', debtBefore: -13898778, debtAfter: -407803
 }), { debtBefore: -13898778, debtAfter: -407803 }, 'A targeted cloud snapshot is accepted without mutating customer state');
+
+const legacyDiscountLedger = [
+  { id: 'ledger-1', orderId: 'HD-DISCOUNT', transactionType: 'order', debtChange: 300000, debtBefore: 0, debtAfter: 300000, createdAt: '2026-09-05T07:55:00Z' },
+  { id: 'ledger-2', orderId: 'HD-NEXT', transactionType: 'order', debtChange: 75000, debtBefore: 300000, debtAfter: 375000, createdAt: '2026-09-05T08:38:00Z' }
+];
+const legacyDiscountOrders = [
+  { id: 'HD-DISCOUNT', customerId: 'KH-1', status: 'settled', totalPayable: 291000, shippingFeeAmount: 10000, totalAmount: 301000 },
+  { id: 'HD-NEXT', customerId: 'KH-1', status: 'settled', totalPayable: 75000, totalAmount: 75000 }
+];
+assert.deepEqual(
+  rebuildOrderDebtSnapshot('HD-NEXT', 'KH-1', legacyDiscountLedger, legacyDiscountOrders),
+  { debtBefore: 301000, debtAfter: 376000 },
+  'The next invoice rebuilds old debt from the previous post-discount total plus shipping'
+);
+assert.deepEqual(
+  rebuildOrderDebtSnapshot('HD-DISCOUNT', 'KH-1', legacyDiscountLedger, legacyDiscountOrders),
+  { debtBefore: 0, debtAfter: 301000 },
+  'Printing the older invoice retains its historical post-discount balance'
+);
 
 const compactedIds = getNeutralizedOrderDebtEntryIds([
   { id: 'charge-old', orderId: 'HD-OLD', transactionType: 'order', debtChange: 13490975 },

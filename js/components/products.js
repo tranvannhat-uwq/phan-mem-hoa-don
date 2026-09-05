@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260903-excel-style-v29';
-import { renderAll } from '../main.js?v=20260903-excel-style-v29';
+import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260905-debt-ledger-v30';
+import { renderAll } from '../main.js?v=20260905-debt-ledger-v30';
 import {
   buildProductFamilies,
   getProductBaseCode,

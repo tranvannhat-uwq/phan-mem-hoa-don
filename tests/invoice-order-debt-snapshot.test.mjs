@@ -15,6 +15,8 @@ test('agent invoice preserves original old debt and latest amended debt without 
   assert.match(invoice, /getOrderDebtSnapshot\(order, cust, orderDebtSnapshot\)/);
   assert.doesNotMatch(invoice, /debtHistory\.find\(h => h\.id === order\.id\)/);
   assert.match(service, /export async function dbFetchOrderDebtSnapshot/);
+  assert.match(service, /rebuildOrderDebtSnapshot\(orderId, customerId, ledgerRows, orderRows\)/);
+  assert.match(service, /\.select\('id,customer_id,status,total_payable,total_amount,shipping_fee_value,shipping_fee_amount'\)/);
   assert.match(service, /\.eq\('order_id', orderId\)[\s\S]*\.eq\('customer_id', customerId\)[\s\S]*\.in\('transaction_type', \['order', 'order_amend'\]\)/);
   assert.match(service, /\.order\('created_at', \{ ascending: true \}\)[\s\S]*\.order\('id', \{ ascending: true \}\)/);
   assert.match(service, /const originalCharge = rows\.find\(row => row\.transaction_type === 'order'\) \|\| rows\[0\]/);

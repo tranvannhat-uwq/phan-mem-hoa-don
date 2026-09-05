@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260903-excel-style-v29';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260903-excel-style-v29';
-import { renderAll, switchTab } from '../main.js?v=20260903-excel-style-v29';
-import { populateManagedByDropdown } from './customers.js?v=20260903-excel-style-v29';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260905-debt-ledger-v30';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260905-debt-ledger-v30';
+import { renderAll, switchTab } from '../main.js?v=20260905-debt-ledger-v30';
+import { populateManagedByDropdown } from './customers.js?v=20260905-debt-ledger-v30';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260903-excel-style-v29';
+import { isActiveUser } from '../domain/user-status.js?v=20260905-debt-ledger-v30';
 
 function normalizeUserSearch(value) {
   return String(value || '')

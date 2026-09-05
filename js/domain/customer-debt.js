@@ -103,6 +103,88 @@ export function getOrderDebtSnapshot(order = {}, customer = {}, ledgerSnapshot =
 }
 
 /**
+ * Rebuild an invoice balance from the customer's ledger sequence while using
+ * the persisted post-discount order total as the authoritative order charge.
+ * This repairs the print view for legacy rows whose stored debt_change used a
+ * pre-discount value, without mutating accounting history in the browser.
+ */
+export function rebuildOrderDebtSnapshot(orderId, customerId, history = [], orders = []) {
+  const targetOrderId = String(orderId || '');
+  const targetCustomerId = String(customerId || '');
+  if (!targetOrderId || !targetCustomerId || !Array.isArray(history) || history.length === 0) return null;
+
+  const entries = history
+    .map((entry, originalIndex) => ({ entry, originalIndex }))
+    .sort((left, right) => {
+      const timeDifference = new Date(getCustomerDebtPostingDate(left.entry) || 0)
+        - new Date(getCustomerDebtPostingDate(right.entry) || 0);
+      if (timeDifference !== 0) return timeDifference;
+      const idDifference = String(left.entry?.id || '').localeCompare(String(right.entry?.id || ''));
+      return idDifference || left.originalIndex - right.originalIndex;
+    })
+    .map(item => item.entry);
+
+  const orderRows = new Map((Array.isArray(orders) ? orders : [])
+    .filter(order => order?.id)
+    .map(order => [String(order.id), order]));
+  const orderTypes = new Set(['order', 'order_amend', 'order_cancel']);
+  const groups = new Map();
+
+  entries.forEach((entry, index) => {
+    const entryOrderId = String(entry?.orderId ?? entry?.order_id ?? '');
+    const transactionType = String(entry?.transactionType ?? entry?.transaction_type ?? '').toLowerCase();
+    if (!entryOrderId || !orderTypes.has(transactionType)) return;
+    const group = groups.get(entryOrderId) || { rawChange: 0, lastIndex: index, cancelled: false };
+    group.rawChange += toDebtAmount(entry?.debtChange ?? entry?.debt_change);
+    group.lastIndex = index;
+    group.cancelled ||= transactionType === 'order_cancel';
+    groups.set(entryOrderId, group);
+  });
+
+  const correctionByIndex = new Map();
+  groups.forEach((group, groupedOrderId) => {
+    const order = orderRows.get(groupedOrderId);
+    if (!order) return;
+    const orderCustomerId = String(order.customerId ?? order.customer_id ?? '');
+    const status = String(order.status || '').toLowerCase();
+    const cancelled = group.cancelled || status === 'cancelled' || status === 'canceled';
+    const rawTotalAmount = Number(order.totalAmount ?? order.total_amount);
+    const rawTotalPayable = Number(order.totalPayable ?? order.total_payable);
+    const shippingFee = Math.max(0, toDebtAmount(
+      order.shippingFeeAmount ?? order.shipping_fee_amount ?? order.shippingFeeValue ?? order.shipping_fee_value
+    ));
+    const expectedCharge = cancelled || (orderCustomerId && orderCustomerId !== targetCustomerId)
+      ? 0
+      : (Number.isFinite(rawTotalAmount)
+        ? toDebtAmount(rawTotalAmount)
+        : (Number.isFinite(rawTotalPayable) ? toDebtAmount(rawTotalPayable) + shippingFee : group.rawChange));
+    correctionByIndex.set(group.lastIndex, expectedCharge - group.rawChange);
+  });
+
+  const firstBalance = Number(entries[0]?.debtBefore ?? entries[0]?.balance_before);
+  let runningBalance = Number.isFinite(firstBalance) ? toDebtAmount(firstBalance) : 0;
+  let debtBefore = null;
+  let debtAfter = null;
+
+  entries.forEach((entry, index) => {
+    const entryOrderId = String(entry?.orderId ?? entry?.order_id ?? '');
+    const transactionType = String(entry?.transactionType ?? entry?.transaction_type ?? '').toLowerCase();
+    const change = toDebtAmount(entry?.debtChange ?? entry?.debt_change)
+      + toDebtAmount(correctionByIndex.get(index));
+    const balanceBeforeEntry = runningBalance;
+    runningBalance = toDebtAmount(runningBalance + change);
+
+    if (entryOrderId === targetOrderId && (transactionType === 'order' || transactionType === 'order_amend')) {
+      if (debtBefore === null) debtBefore = balanceBeforeEntry;
+      debtAfter = runningBalance;
+    }
+  });
+
+  if (debtBefore === null || debtAfter === null) return null;
+  return { debtBefore: toDebtAmount(debtBefore), debtAfter: toDebtAmount(debtAfter) };
+}
+
+/**
  * Return the ids of order-charge rows and their exact cancellation/amendment
  * reversals. They remain in the ledger for audit, but the customer history UI
  * may hide these zero-net pairs by default.
