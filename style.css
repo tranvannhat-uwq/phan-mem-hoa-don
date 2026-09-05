@@ -10491,7 +10491,12 @@ body.quick-customer-modal-open {
   gap: 8px;
 }
 
-#landing-page .care-overview-badges > span {
+#landing-page .care-overview-badges > span,
+#landing-page .care-overview-badge {
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   min-width: 132px;
   padding: 10px 12px;
   display: grid;
@@ -10960,7 +10965,8 @@ body.quick-customer-modal-open {
     width: 100%;
   }
 
-  #landing-page .care-overview-badges > span {
+  #landing-page .care-overview-badges > span,
+  #landing-page .care-overview-badge {
     flex: 1 1 0;
     min-width: 0;
   }

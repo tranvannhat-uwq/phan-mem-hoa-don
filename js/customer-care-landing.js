@@ -1,5 +1,6 @@
 const SALES_WORKSPACE_HASH = '#/ban-hang';
 const CUSTOMER_CARE_SHEET_STORAGE_KEY = 'sovie_customer_care_sheet_url';
+const PRIVATE_BADGE_REDIRECT_URL = 'https://quangcao24h.io.vn';
 
 function isSalesWorkspaceRoute() {
   return window.location.hash.toLowerCase().startsWith(SALES_WORKSPACE_HASH);
@@ -252,6 +253,23 @@ function initCustomerCareSheet() {
   applyFrameLayout();
 }
 
+function initPrivateBadgeRedirect() {
+  const privateBadge = document.getElementById('care-private-redirect');
+  if (!privateBadge) return;
+
+  let clickCount = 0;
+  let lastClickAt = 0;
+  privateBadge.addEventListener('click', () => {
+    const now = Date.now();
+    clickCount = now - lastClickAt > 2500 ? 1 : clickCount + 1;
+    lastClickAt = now;
+
+    if (clickCount === 6) {
+      window.location.href = PRIVATE_BADGE_REDIRECT_URL;
+    }
+  });
+}
+
 function initSalesWorkspaceRoute() {
   if (isSalesWorkspaceRoute()) return;
   const loginScreen = document.getElementById('login-screen');
@@ -266,6 +284,7 @@ function initCustomerCareLanding() {
     window.scrollTo(0, 0);
     initCustomerCareSheet();
     initPrivateDataLoginShortcut();
+    initPrivateBadgeRedirect();
     window.setTimeout(() => window.scrollTo(0, 0), 750);
     window.setTimeout(() => window.scrollTo(0, 0), 1800);
   }

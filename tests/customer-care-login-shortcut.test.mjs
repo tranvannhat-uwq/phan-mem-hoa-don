@@ -13,6 +13,13 @@ test('private Google data status opens the login route after five consecutive cl
   assert.match(landing, /clickCount === 5[\s\S]*window\.location\.hash = SALES_WORKSPACE_HASH/);
 });
 
+test('private account badge redirects to quangcao24h.io.vn after six consecutive clicks', () => {
+  assert.match(html, /<button[^>]+id="care-private-redirect"[^>]*>[\s\S]*?Riêng tư[\s\S]*?Theo tài khoản[\s\S]*?<\/button>/);
+  assert.match(landing, /getElementById\('care-private-redirect'\)/);
+  assert.match(landing, /clickCount === 6[\s\S]*window\.location\.href = PRIVATE_BADGE_REDIRECT_URL/);
+  assert.match(landing, /PRIVATE_BADGE_REDIRECT_URL = 'https:\/\/quangcao24h\.io\.vn'/);
+});
+
 test('closing login removes the sales workspace hash and returns to customer care', () => {
   assert.match(main, /getElementById\('btn-close-login'\)[\s\S]{0,180}window\.location\.replace\(`\$\{window\.location\.pathname\}\$\{window\.location\.search\}`\)/);
 });
