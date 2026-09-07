@@ -754,6 +754,11 @@ export function setupSoQuyPanel() {
         const method = document.getElementById('receipt-method').value;
         const accounting = document.getElementById('receipt-accounting').checked;
         const note = document.getElementById('receipt-note').value.trim();
+        const selectedTime = new Date(time);
+        if (Number.isNaN(selectedTime.getTime())) {
+          showToast('Vui lòng chọn ngày giờ lập phiếu thu hợp lệ.', 'danger');
+          return;
+        }
         if (!pendingReceiptIdempotencyKey) {
           pendingReceiptIdempotencyKey = globalThis.crypto.randomUUID();
         }
@@ -780,7 +785,7 @@ export function setupSoQuyPanel() {
         
         const newTx = {
           id: finalCode,
-          date: new Date(time).toISOString(),
+          date: selectedTime.toISOString(),
           type: 'thu',
           category,
           partner: payer,
@@ -836,7 +841,8 @@ export function setupSoQuyPanel() {
             note,
             method,
             pendingReceiptIdempotencyKey,
-            category
+            category,
+            newTx.date
           );
           if (!paymentResult) return;
 
@@ -963,6 +969,11 @@ export function setupSoQuyPanel() {
       const accounting = document.getElementById('payment-accounting').checked;
       const note = document.getElementById('payment-note').value.trim();
       const matchedSupplier = findSupplierByInput(recipient);
+      const selectedTime = new Date(time);
+      if (Number.isNaN(selectedTime.getTime())) {
+        showToast('Vui lòng chọn ngày giờ lập phiếu chi hợp lệ.', 'danger');
+        return;
+      }
       
       // Auto-generate code if empty
       let finalCode = code;
@@ -986,7 +997,7 @@ export function setupSoQuyPanel() {
       
       const newTx = {
         id: finalCode,
-        date: new Date(time).toISOString(),
+        date: selectedTime.toISOString(),
         type: 'chi',
         category,
         partner: matchedSupplier ? matchedSupplier.name : recipient,

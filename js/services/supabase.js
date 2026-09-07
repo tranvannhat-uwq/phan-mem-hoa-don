@@ -4620,62 +4620,35 @@ export async function dbUpdateOrderNotes(orderId, notes, isDraft = false) {
   }
 }
 
-export async function dbRecordCustomerPayment(customerId, amount, notes, paymentMethod = 'cash', idempotencyKey = '', category = '') {
+export async function dbRecordCustomerPayment(customerId, amount, notes, paymentMethod = 'cash', idempotencyKey = '', category = '', transactionDate = '') {
   if (isCloudActive && supabaseClient) {
     try {
       const cleanNotes = notes ? String(notes).trim() : '';
-      let data = null;
-      if (category) {
-        const attempt = await supabaseClient.rpc('rpc_record_customer_receipt', {
-          p_customer_id: customerId,
-          p_amount: amount,
-          p_notes: cleanNotes,
-          p_payment_method: paymentMethod || 'cash',
-          p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID(),
-          p_category: category
-        });
-        if (!attempt.error) {
-          data = attempt.data;
-        } else {
-          const isUnknownParam = attempt.error.code === 'PGRST202'
-            || String(attempt.error.message || '').includes('p_category')
-            || String(attempt.error.message || '').includes('schema cache');
-          if (!isUnknownParam) throw attempt.error;
+      const attempt = await supabaseClient.rpc('rpc_record_customer_receipt', {
+        p_customer_id: customerId,
+        p_amount: amount,
+        p_notes: cleanNotes,
+        p_payment_method: paymentMethod || 'cash',
+        p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID(),
+        p_category: category || 'Thu tiền khách hàng',
+        p_transaction_date: transactionDate || new Date().toISOString()
+      });
+      if (attempt.error) {
+        const migrationMissing = attempt.error.code === 'PGRST202'
+          || String(attempt.error.message || '').includes('p_transaction_date')
+          || String(attempt.error.message || '').includes('schema cache');
+        if (migrationMissing) {
+          throw new Error('Cloud chưa hỗ trợ ngày giờ phiếu thu đã chọn. Hãy chạy migration 0068 rồi lưu lại; phiếu chưa được tạo.');
         }
+        throw attempt.error;
       }
-
-      if (!data) {
-        const attempt = await supabaseClient.rpc('rpc_record_customer_receipt', {
-          p_customer_id: customerId,
-          p_amount: amount,
-          p_notes: cleanNotes,
-          p_payment_method: paymentMethod || 'cash',
-          p_idempotency_key: idempotencyKey || globalThis.crypto.randomUUID()
-        });
-        if (attempt.error) throw attempt.error;
-        data = attempt.data;
-
-        if (data?.cashbook_id && category && category !== 'Thu tiền khách hàng') {
-          try {
-            await supabaseClient.rpc('rpc_amend_cashbook_transaction', {
-              p_cashbook_id: data.cashbook_id,
-              p_input: {
-                category: category,
-                note: cleanNotes,
-                reason: 'Cập nhật loại thu chi'
-              }
-            });
-          } catch (amendErr) {
-            console.warn('Could not amend receipt category fallback:', amendErr);
-          }
-        }
-      }
+      const data = attempt.data;
       return data || { success: true };
     } catch (err) {
       console.error('RPC customer receipt error:', err);
       const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_record_customer_receipt');
       showToast(missingRpc
-        ? 'Chưa có chức năng nhận tiền trả trước trên Supabase. Hãy chạy migration 0019/0060.'
+        ? 'Cloud chưa hỗ trợ ngày giờ phiếu thu đã chọn. Hãy chạy migration 0068.'
         : 'Lỗi ghi nhận thu tiền: ' + err.message, 'danger');
       return false;
     }

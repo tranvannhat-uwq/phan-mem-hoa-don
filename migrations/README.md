@@ -73,6 +73,7 @@ Run these files in order on a staging clone first:
 65. `0065_fix_employee_business_report_employee_id.sql`
 66. `0066_attribute_employee_report_to_customer_manager.sql`
 67. `0067_employee_business_report_egress_optimization.sql`
+68. `0068_preserve_customer_receipt_transaction_time.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -371,3 +372,7 @@ Migration `0067` keeps the same authorization and financial definitions while
 allowing the client to omit unused summary/chart aggregates and page drill-down
 documents. This reduces Cloud egress without exposing raw data or changing any
 business row.
+
+Migration `0068` preserves the selected business timestamp for new customer
+receipts in the cashbook and debt ledger. It does not rewrite historical
+receipts; the audit posting timestamp remains the actual save time.
