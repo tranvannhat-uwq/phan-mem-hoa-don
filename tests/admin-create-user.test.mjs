@@ -62,8 +62,9 @@ test('an Admin can reset an existing employee password without changing their pr
   assert.match(edge, /requestedOperation/);
   assert.match(edge, /operation === 'reset_password'/);
   assert.match(edge, /targetProfile\.auth_user_id/);
-  assert.match(edge, /auth\.admin\.updateUserById\([\s\S]*\{ password \}/);
+  assert.match(edge, /operation === 'reset_password'[\s\S]*auth\.admin\.updateUserById\([\s\S]*email,[\s\S]*password,[\s\S]*email_confirm:\s*true/);
   assert.match(edge, /reset_employee_password/);
+  assert.match(edge, /login_email_synchronized:\s*true/);
   assert.doesNotMatch(edge, /password_reset:\s*true[^\n]*password/);
   assert.match(users, /Đã cấp lại mật khẩu đăng nhập thành công/);
 });

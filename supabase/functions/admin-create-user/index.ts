@@ -58,6 +58,7 @@ Deno.serve(async (request) => {
     const targetProfileId = String(payload?.profileId || '').trim();
 
     if (password.length < 8) return jsonResponse({ error: 'Mật khẩu phải có ít nhất 8 ký tự.' }, 400);
+    if (!/^\S+@\S+\.\S+$/.test(email)) return jsonResponse({ error: 'Email đăng nhập không hợp lệ.' }, 400);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -82,7 +83,12 @@ Deno.serve(async (request) => {
 
       const { data: updatedAuth, error: authUpdateError } = await adminClient.auth.admin.updateUserById(
         targetProfile.auth_user_id,
-        { password },
+        {
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { display_name: displayName || targetProfile.display_name },
+        },
       );
       if (authUpdateError || !updatedAuth.user) {
         return jsonResponse({ error: authUpdateError?.message || 'Không thể cấp lại mật khẩu.' }, 400);
@@ -103,18 +109,21 @@ Deno.serve(async (request) => {
         target_name: targetProfile.display_name || targetProfile.username,
         description: `reset_employee_password:${targetProfile.id}`,
         changes: {},
-        metadata: { source: 'admin-create-user', password_reset: true },
+        metadata: {
+          source: 'admin-create-user',
+          password_reset: true,
+          login_email_synchronized: true,
+        },
       });
       if (auditError) console.error('Password reset audit failed:', auditError.message);
 
       return jsonResponse({
         user: { id: updatedAuth.user.id, email: updatedAuth.user.email },
-        profile: targetProfile,
+        profile: { ...targetProfile, username: email },
         password_reset: true,
       });
     }
 
-    if (!/^\S+@\S+\.\S+$/.test(email)) return jsonResponse({ error: 'Email đăng nhập không hợp lệ.' }, 400);
     if (!displayName) return jsonResponse({ error: 'Tên hiển thị là bắt buộc.' }, 400);
     if (!['admin', 'accounting', 'sale'].includes(role)) return jsonResponse({ error: 'Vai trò không hợp lệ.' }, 400);
     if (!companyId) return jsonResponse({ error: 'Công ty trực thuộc là bắt buộc.' }, 400);
