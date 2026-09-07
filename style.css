@@ -8225,6 +8225,78 @@ table tbody tr:hover td {
   background: var(--color-primary-light);
 }
 
+/* Employee report drill-down must use the actual viewport width.  A fixed
+ * pixel max-width becomes unreadably narrow when the browser is zoomed out. */
+#employee-business-detail-modal.employee-business-detail-overlay {
+  align-items: center;
+  padding: clamp(8px, 1.5vw, 24px);
+}
+
+#employee-business-detail-modal .employee-business-detail-modal-content {
+  display: flex;
+  flex-direction: column;
+  width: 96vw;
+  max-width: none;
+  max-height: calc(100vh - clamp(16px, 3vw, 48px));
+  overflow: hidden;
+}
+
+#employee-business-detail-modal .modal-header {
+  flex: 0 0 auto;
+  gap: 1rem;
+  padding: clamp(.75rem, 1.2vw, 1.25rem) clamp(1rem, 1.8vw, 1.5rem);
+}
+
+#employee-business-detail-modal .modal-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#employee-business-detail-modal .table-responsive {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-width: 0;
+  border-radius: 0;
+}
+
+#employee-business-detail-modal .table {
+  min-width: 860px;
+}
+
+#employee-business-detail-modal .table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+#employee-business-detail-modal .table th,
+#employee-business-detail-modal .table td {
+  padding: .8rem 1rem;
+}
+
+#employee-business-detail-modal .table td:nth-child(1),
+#employee-business-detail-modal .table td:nth-child(2),
+#employee-business-detail-modal .table td:nth-child(3),
+#employee-business-detail-modal .table td:nth-child(5) {
+  white-space: nowrap;
+}
+
+#employee-business-detail-modal .table td:nth-child(4) {
+  min-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  #employee-business-detail-modal.employee-business-detail-overlay { padding: 0; }
+  #employee-business-detail-modal .employee-business-detail-modal-content { width: 100vw; max-height: 100vh; height: 100vh; border-radius: 0; }
+  #employee-business-detail-modal .table { min-width: 760px; }
+}
+
 /* Login workspace: visual overview on the left, authentication form on the right. */
 .login-overlay {
   overflow: auto;

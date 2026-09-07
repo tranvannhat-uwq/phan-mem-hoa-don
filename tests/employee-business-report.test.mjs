@@ -60,5 +60,8 @@ test('browser displays and exports the Cloud report without local financial reco
   assert.match(reports, /globalThis\.XLSX/);
   assert.match(html, /data-subtab="employee"/);
   assert.match(html, /employee-business-detail-modal/);
+  assert.match(html, /employee-business-detail-modal-content/);
+  assert.match(read('style.css'), /#employee-business-detail-modal \.employee-business-detail-modal-content[\s\S]*width: 96vw[\s\S]*max-width: none/);
+  assert.match(read('style.css'), /#employee-business-detail-modal \.table-responsive[\s\S]*overflow: auto/);
   assert.doesNotMatch(reports.slice(reports.indexOf('renderEmployeeBusinessReport'), reports.indexOf('function renderReturnsReportLegacy')), /state\.(?:savedOrders|salesReturns|cashbookTransactions)/);
 });
