@@ -32,6 +32,9 @@ test('realtime client batches events and applies changed records without full-ta
   assert.match(service, /export async function dbRefreshOrderById/);
   assert.match(service, /if \(!onlyDomains\)[\s\S]{0,300}\.delete\(\)/);
   assert.doesNotMatch(realtime, /document\.addEventListener\('visibilitychange'/);
+  assert.match(realtime, /let hasEstablishedRealtimeSubscription = false/);
+  assert.match(realtime, /if \(hasEstablishedRealtimeSubscription\) queueVisiblePanelCatchup\(\)/);
+  assert.match(realtime, /hasEstablishedRealtimeSubscription = true/);
 });
 
 test('realtime lifecycle follows authentication and disconnect paths', () => {

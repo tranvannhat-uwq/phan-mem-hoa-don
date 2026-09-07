@@ -161,14 +161,20 @@ async function syncRepairedReceiptsToCloud(repairedList) {
   }
   for (const item of repairedList) {
     const id = item.cloudId || item.id;
-    if (!id || syncedRepairIds.has(id)) continue;
+    // This is a best-effort presentation repair for data written by an older
+    // client. Do not turn a read/render into an invalid financial amendment:
+    // cancelled, reversal, and zero-value vouchers are deliberately rejected
+    // by the authoritative RPC.
+    if (!isEligibleForCloudReceiptRepair(item) || !id || syncedRepairIds.has(id)) continue;
     syncedRepairIds.add(id);
     try {
-      await dbAmendCashbookTransaction(id, {
+      const amended = await dbAmendCashbookTransaction(id, {
         category: item.category,
         note: item.note || '',
+        value: Number(item.value),
         reason: 'Sửa lại loại thu chi các giao dịch trước đó'
-      });
+      }, { silent: true });
+      if (!amended) console.warn('Could not sync repaired receipt to cloud:', id);
     } catch (err) {
       console.warn('Could not sync repaired receipt to cloud:', id, err);
     }
@@ -249,6 +255,16 @@ function isPaidStatus(status) {
 function isCancelledStatus(status) {
   const clean = normalizeText(status);
   return clean === 'cancelled' || clean === 'canceled' || clean.includes('hủy') || clean.includes('huy') || clean.includes('cancel');
+}
+
+function isEligibleForCloudReceiptRepair(transaction = {}) {
+  const value = Number(transaction.value);
+  const transactionType = normalizeText(transaction.transactionType);
+  return Number.isFinite(value)
+    && value > 0
+    && !isCancelledStatus(transaction.status)
+    && !transaction.reversalOfId
+    && !transactionType.includes('reversal');
 }
 
 function findCustomerByInput(input) {

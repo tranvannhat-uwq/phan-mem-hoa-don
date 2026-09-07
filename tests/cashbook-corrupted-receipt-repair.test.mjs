@@ -15,10 +15,15 @@ test('mapCashbookTransaction repairs corrupted receipt note and category', () =>
   assert.match(service, /cleanNote\.replace\(\/\^HD:\\s\*\/\i, ''\)\.replace\(\/\\s\*-\\s\*TTM\\d\+\$\/i, ''\)\.trim\(\)/);
 });
 
-test('getCashbookTransactions repairs stored transactions and syncs to cloud', () => {
+test('getCashbookTransactions repairs stored transactions and only syncs eligible vouchers quietly', () => {
   assert.match(cashbook, /repairedForCloud\.push\(updated\)/);
   assert.match(cashbook, /syncRepairedReceiptsToCloud/);
-  assert.match(cashbook, /dbAmendCashbookTransaction\(id,\s*\{[\s\S]*category:\s*item\.category/);
+  assert.match(cashbook, /isEligibleForCloudReceiptRepair\(item\)/);
+  assert.match(cashbook, /value:\s*Number\(item\.value\)/);
+  assert.match(cashbook, /\}, \{ silent: true \}\)/);
+  assert.match(cashbook, /!isCancelledStatus\(transaction\.status\)/);
+  assert.match(cashbook, /value > 0/);
+  assert.match(service, /dbAmendCashbookTransaction\(cashbookId, input, \{ silent = false \} = \{\}\)/);
 });
 
 test('migration 0061 restores category and cleans note in database', () => {

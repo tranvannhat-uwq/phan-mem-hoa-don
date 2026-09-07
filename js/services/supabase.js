@@ -4821,13 +4821,13 @@ export async function dbUpdateManualCashbookTransaction(cashbookId, input) {
   }
 }
 
-export async function dbAmendCashbookTransaction(cashbookId, input) {
+export async function dbAmendCashbookTransaction(cashbookId, input, { silent = false } = {}) {
   if (!isCloudActive || !supabaseClient) {
-    showToast('Sổ quỹ chỉ được sửa khi đã kết nối và xác thực với Cloud.', 'danger');
+    if (!silent) showToast('Sổ quỹ chỉ được sửa khi đã kết nối và xác thực với Cloud.', 'danger');
     return false;
   }
   if (!['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase())) {
-    showToast('Chỉ Admin hoặc Kế toán được sửa phiếu thu/chi.', 'danger');
+    if (!silent) showToast('Chỉ Admin hoặc Kế toán được sửa phiếu thu/chi.', 'danger');
     return false;
   }
   try {
@@ -4852,7 +4852,7 @@ export async function dbAmendCashbookTransaction(cashbookId, input) {
     return data || { success: true };
   } catch (err) {
     console.error('RPC amend cashbook error:', err);
-    showToast(err.message || 'Không thể sửa phiếu thu/chi. Dữ liệu chưa thay đổi.', 'danger');
+    if (!silent) showToast(err.message || 'Không thể sửa phiếu thu/chi. Dữ liệu chưa thay đổi.', 'danger');
     return false;
   }
 }

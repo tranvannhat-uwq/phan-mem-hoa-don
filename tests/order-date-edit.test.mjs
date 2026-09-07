@@ -12,6 +12,7 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migration0059 = fs.readFileSync(path.join(root, 'migrations/0059_allow_order_date_amendment.sql'), 'utf8');
+const migration0062 = fs.readFileSync(path.join(root, 'migrations/0062_fix_draft_timestamp_trigger_auth_helper.sql'), 'utf8');
 const invoiceSource = fs.readFileSync(path.join(root, 'js/components/invoice.js'), 'utf8');
 const historySource = fs.readFileSync(path.join(root, 'js/components/history.js'), 'utf8');
 const supabaseSource = fs.readFileSync(path.join(root, 'js/services/supabase.js'), 'utf8');
@@ -95,6 +96,15 @@ test('migration 0059 allows order_date amendment in rpc_amend_order', () => {
 
   // Records migration
   assert.match(migration0059, /VALUES \('0059',/);
+});
+
+test('migration 0062 restores the draft timestamp trigger with the supported profile helper', () => {
+  assert.match(migration0062, /CREATE OR REPLACE FUNCTION public\.p56_preserve_draft_order_created_at\(\)/);
+  assert.match(migration0062, /actor := public\.require_authenticated_profile\(\)/);
+  assert.doesNotMatch(migration0062, /get_authenticated_profile/);
+  assert.match(migration0062, /IF actor\.role IN \('admin', 'accounting'\) THEN\s*RETURN NEW;/);
+  assert.match(migration0062, /NEW\.created_at := OLD\.created_at;/);
+  assert.match(migration0062, /VALUES \('0062',/);
 });
 
 test('supabase dbSaveOrder sends date for draft and settled orders', () => {

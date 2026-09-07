@@ -67,7 +67,8 @@ const migrationNames = [
   '0058_customer_debt_business_date_backfill.sql',
   '0059_allow_order_date_amendment.sql',
   '0060_customer_receipt_category.sql',
-  '0061_repair_customer_receipt_categories.sql'
+  '0061_repair_customer_receipt_categories.sql',
+  '0062_fix_draft_timestamp_trigger_auth_helper.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 

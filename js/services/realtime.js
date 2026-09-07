@@ -189,6 +189,7 @@ export async function startRealtimeSync(renderCallback) {
   realtimeClient = supabaseClient;
   realtimeRender = renderCallback;
   let channel = realtimeClient.channel(`billing-live-${state.currentUser.authUserId || state.currentUser.id}`);
+  let hasEstablishedRealtimeSubscription = false;
 
   channel = subscribeTable(channel, tableOrdersName,
     payload => queueRealtimeEvent({ kind: 'order', isDraft: false, payload }));
@@ -221,6 +222,12 @@ export async function startRealtimeSync(renderCallback) {
     realtimeStatus = status;
     if (status === 'SUBSCRIBED') {
       updateDbStatusUI('cloud', 'Đám mây • Trực tiếp');
+      // PostgreSQL Realtime can reconnect after a temporary network loss
+      // without replaying rows changed while this client was away. The initial
+      // page load is already authoritative; only a later subscription needs a
+      // narrow, read-only catch-up for the panel currently on screen.
+      if (hasEstablishedRealtimeSubscription) queueVisiblePanelCatchup();
+      hasEstablishedRealtimeSubscription = true;
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
       updateDbStatusUI('connecting', 'Đang nối lại dữ liệu trực tiếp...');
     }
