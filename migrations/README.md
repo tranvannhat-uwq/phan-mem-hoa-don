@@ -68,6 +68,7 @@ Run these files in order on a staging clone first:
 60. `0060_customer_receipt_category.sql`
 61. `0061_repair_customer_receipt_categories.sql`
 62. `0062_fix_draft_timestamp_trigger_auth_helper.sql`
+63. `0063_align_customer_receipt_ledger_dates.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
