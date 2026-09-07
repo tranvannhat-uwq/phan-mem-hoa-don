@@ -2089,6 +2089,9 @@
             <button class="btn btn-secondary report-subtab-btn" data-subtab="returns">
               <i data-lucide="rotate-ccw"></i> Báo cáo Trả hàng
             </button>
+            <button class="btn btn-secondary report-subtab-btn" data-subtab="employee">
+              <i data-lucide="users-round"></i> Hiệu suất nhân viên
+            </button>
             <button class="btn btn-secondary report-subtab-btn" data-subtab="kpi" style="display: none;" aria-hidden="true" data-feature-status="deferred">
               <i data-lucide="award"></i> Báo cáo KPI & Hiệu suất
             </button>
@@ -2166,6 +2169,31 @@
             </div>
           </div>
 
+          <!-- Subtab 3: Employee business report (server-authoritative) -->
+          <div id="report-subtab-employee" class="report-subtab-content" style="display: none;">
+            <div class="glass-panel" style="padding: 1rem; margin-bottom: 1rem;">
+              <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;">
+                <label class="filter-group" style="min-width:150px;flex:1"><span class="filter-label">Từ ngày</span><input id="employee-business-from" class="form-control" type="date"></label>
+                <label class="filter-group" style="min-width:150px;flex:1"><span class="filter-label">Đến ngày</span><input id="employee-business-to" class="form-control" type="date"></label>
+                <label class="filter-group" style="min-width:190px;flex:1"><span class="filter-label">Nhân viên</span><select id="employee-business-employee" class="form-control"><option value="all">Tất cả nhân viên</option></select></label>
+                <label class="filter-group" style="min-width:190px;flex:1"><span class="filter-label">Công ty</span><select id="employee-business-company" class="form-control"><option value="all">Tất cả công ty</option></select></label>
+                <button id="employee-business-apply-filter" class="btn btn-primary" type="button"><i data-lucide="filter"></i> Áp dụng</button>
+                <button id="employee-business-export" class="btn btn-success" type="button"><i data-lucide="file-spreadsheet"></i> Xuất Excel</button>
+              </div>
+              <p class="text-muted" style="margin:.75rem 0 0;font-size:.8rem;">Số tiền và chứng từ được đối soát trực tiếp từ Cloud; ngày nghiệp vụ dùng múi giờ Việt Nam.</p>
+            </div>
+            <div class="widgets-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1rem;margin-bottom:1rem;">
+              <div class="widget-card"><div class="widget-info"><span class="widget-label">Đơn hợp lệ</span><span id="employee-business-order-count" class="widget-value">0</span></div><div class="widget-icon-wrapper widget-icon-primary"><i data-lucide="receipt-text"></i></div></div>
+              <div class="widget-card"><div class="widget-info"><span class="widget-label">Doanh số ròng</span><span id="employee-business-net-sales" class="widget-value">0 ₫</span></div><div class="widget-icon-wrapper widget-icon-emerald"><i data-lucide="badge-dollar-sign"></i></div></div>
+              <div class="widget-card"><div class="widget-info"><span class="widget-label">Tiền đã thu</span><span id="employee-business-collected" class="widget-value">0 ₫</span></div><div class="widget-icon-wrapper widget-icon-primary"><i data-lucide="wallet"></i></div></div>
+              <div class="widget-card"><div class="widget-info"><span class="widget-label">Công nợ cuối kỳ</span><span id="employee-business-debt-balance" class="widget-value">0 ₫</span></div><div class="widget-icon-wrapper widget-icon-danger"><i data-lucide="credit-card"></i></div></div>
+              <div class="widget-card"><div class="widget-info"><span class="widget-label">Hoa hồng phát sinh</span><span id="employee-business-commission" class="widget-value">0 ₫</span></div><div class="widget-icon-wrapper widget-icon-indigo"><i data-lucide="award"></i></div></div>
+            </div>
+            <div class="glass-panel" style="padding:1rem;margin-bottom:1rem;"><div class="panel-header"><h3 class="panel-title" style="font-size:1rem"><i data-lucide="chart-line"></i> Xu hướng doanh số và thu tiền</h3></div><div style="height:260px;position:relative"><canvas id="employee-business-chart" aria-label="Biểu đồ xu hướng hiệu suất nhân viên"></canvas><p id="employee-business-chart-empty" class="text-muted" style="display:none;text-align:center;padding-top:100px">Chưa có dữ liệu biểu đồ trong kỳ.</p></div></div>
+            <div class="table-responsive"><table class="table"><thead><tr><th>Nhân viên</th><th style="text-align:right">Đơn</th><th style="text-align:right">SL SP</th><th style="text-align:right">Doanh số ròng</th><th style="text-align:right">Trả hàng</th><th style="text-align:right">Đã thu</th><th style="text-align:right">Công nợ cuối kỳ</th><th style="text-align:right">Hoa hồng</th><th style="text-align:right">KPI</th><th style="text-align:center">Chi tiết</th></tr></thead><tbody id="employee-business-table-body"><tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--text-muted)">Chọn khoảng thời gian để xem báo cáo.</td></tr></tbody></table></div>
+            <div style="display:flex;justify-content:flex-end;gap:.75rem;align-items:center;margin-top:1rem"><span id="employee-business-page-label" class="text-muted">0 nhân viên</span><button id="employee-business-prev" class="btn btn-secondary btn-sm" type="button">Trước</button><button id="employee-business-next" class="btn btn-secondary btn-sm" type="button">Sau</button></div>
+          </div>
+
           <!-- Subtab 3: Báo cáo KPI & Hiệu suất -->
           <div id="report-subtab-kpi" class="report-subtab-content" style="display: none;" aria-hidden="true" data-feature-status="deferred">
             <div class="widgets-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
@@ -2229,6 +2257,13 @@
           </div>
         </div>
       </section>
+
+      <div class="modal-overlay" id="employee-business-detail-modal" role="dialog" aria-modal="true" aria-labelledby="employee-business-detail-title">
+        <div class="modal-content" style="max-width:980px;width:95%;">
+          <div class="modal-header"><h3 class="modal-title" id="employee-business-detail-title">Chi tiết nghiệp vụ</h3><button id="employee-business-detail-close" class="modal-close" type="button" aria-label="Đóng"><i data-lucide="x"></i></button></div>
+          <div class="table-responsive"><table class="table"><thead><tr><th>Thời gian</th><th>Loại</th><th>Mã chứng từ</th><th>Diễn giải</th><th style="text-align:right">Giá trị</th></tr></thead><tbody id="employee-business-detail-table-body"></tbody></table></div>
+        </div>
+      </div>
 
       <!-- Màn hình Tính Lương (Payroll Panel) -->
       <section id="payroll-panel" class="panel" style="display: none;" aria-hidden="true" data-feature-status="deferred">
@@ -4412,6 +4447,6 @@
 
   <!-- App logic -->
   <script type="module" src="js/customer-care-landing.js?v=20260829-sheet-workspace-v4"></script>
-  <script type="module" src="js/main.js?v=20260905-debt-ledger-v30"></script>
+  <script type="module" src="js/main.js?v=20260907-employee-report-v1"></script>
 </body>
 </html>

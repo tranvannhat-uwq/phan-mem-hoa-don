@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260905-debt-ledger-v30';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260905-debt-ledger-v30';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260907-employee-report-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260907-employee-report-v1';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory, rebuildOrderDebtSnapshot } from '../domain/customer-debt.js?v=20260905-debt-ledger-v30';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260905-debt-ledger-v30';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260905-debt-ledger-v30';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory, rebuildOrderDebtSnapshot } from '../domain/customer-debt.js?v=20260907-employee-report-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260907-employee-report-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260907-employee-report-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -5043,6 +5043,16 @@ export async function dbFetchOrderActivity(orderId, limit = 50) {
 export async function dbFetchPhase5Report(input = {}) {
   if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải báo cáo chính xác.');
   const { data, error } = await supabaseClient.rpc('rpc_get_phase5_report', { p_input: input });
+  if (error) throw error;
+  return data;
+}
+
+// Employee business metrics are calculated only by the read-only Cloud RPC.
+// The browser uses this payload for display/export and never reconstructs money
+// figures from cached orders or local storage.
+export async function dbFetchEmployeeBusinessReport(input = {}) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải báo cáo nghiệp vụ chính xác.');
+  const { data, error } = await supabaseClient.rpc('rpc_get_employee_business_report', { p_input: input });
   if (error) throw error;
   return data;
 }

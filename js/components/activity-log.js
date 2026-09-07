@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260905-debt-ledger-v30';
-import { switchTab } from '../main.js?v=20260905-debt-ledger-v30';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20260905-debt-ledger-v30';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260907-employee-report-v1';
+import { switchTab } from '../main.js?v=20260907-employee-report-v1';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20260907-employee-report-v1';
 import { safeCreateIcons, showToast, makeSelectSearchable } from '../utils.js';
 
 const PAGE_SIZE = 20;

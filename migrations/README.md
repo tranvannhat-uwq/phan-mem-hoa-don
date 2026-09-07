@@ -69,6 +69,7 @@ Run these files in order on a staging clone first:
 61. `0061_repair_customer_receipt_categories.sql`
 62. `0062_fix_draft_timestamp_trigger_auth_helper.sql`
 63. `0063_align_customer_receipt_ledger_dates.sql`
+64. `0064_employee_business_report.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -346,3 +347,9 @@ record preserves idempotency and before/after audit data.
 Migration `0058` repairs document timestamps on legacy order-ledger rows. The
 invoice date is used in accounting views, while the real posting timestamp is
 retained separately for audit and running-balance ordering.
+
+Migration `0064` adds a read-only, server-authoritative employee business
+report RPC. It scopes Sale users to their authenticated profile, applies
+Vietnam business dates, and returns only aggregate/detail report data; it does
+not update orders, cashbook, debt, returns, payroll, KPI, commission or any
+historical business row.

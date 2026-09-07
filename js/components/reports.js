@@ -1,9 +1,13 @@
 import { state } from '../state.js';
-import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode } from '../utils.js';
-import { dbFetchPhase5Report } from '../services/supabase.js?v=20260905-debt-ledger-v30';
-import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260905-debt-ledger-v30';
+import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode, showToast } from '../utils.js';
+import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20260907-employee-report-v1';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260907-employee-report-v1';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+let employeeBusinessChart = null;
+let employeeBusinessPage = 0;
+let employeeBusinessRequestId = 0;
+let employeeBusinessLastReport = null;
 
 export function setupReportsPanel() {
   const tabBtns = document.querySelectorAll('.report-subtab-btn');
@@ -23,10 +27,29 @@ export function setupReportsPanel() {
   if (returnFilter) {
     returnFilter.addEventListener('change', () => renderReturnsReport());
   }
+
+  const employeeBusinessApply = document.getElementById('employee-business-apply-filter');
+  if (employeeBusinessApply) employeeBusinessApply.addEventListener('click', () => {
+    employeeBusinessPage = 0;
+    renderEmployeeBusinessReport();
+  });
+  document.getElementById('employee-business-export')?.addEventListener('click', exportEmployeeBusinessReport);
+  document.getElementById('employee-business-prev')?.addEventListener('click', () => {
+    if (employeeBusinessPage > 0) {
+      employeeBusinessPage -= 1;
+      renderEmployeeBusinessReport();
+    }
+  });
+  document.getElementById('employee-business-next')?.addEventListener('click', () => {
+    if (employeeBusinessLastReport && (employeeBusinessPage + 1) * 25 < Number(employeeBusinessLastReport.total || 0)) {
+      employeeBusinessPage += 1;
+      renderEmployeeBusinessReport();
+    }
+  });
+  document.getElementById('employee-business-detail-close')?.addEventListener('click', closeEmployeeBusinessDetail);
 }
 
 export function switchReportSubtab(subtab) {
-  if (subtab === 'kpi') subtab = 'debt';
   document.querySelectorAll('.report-subtab-btn').forEach(btn => {
     if (btn.getAttribute('data-subtab') === subtab) btn.classList.add('active');
     else btn.classList.remove('active');
@@ -43,6 +66,7 @@ export function switchReportSubtab(subtab) {
 function renderActiveReportSubtab(subtab) {
   if (subtab === 'debt') renderDebtReport();
   else if (subtab === 'returns') renderReturnsReport();
+  else if (subtab === 'employee') renderEmployeeBusinessReport();
   else if (subtab === 'kpi') renderKpiReport();
 }
 
@@ -211,6 +235,206 @@ export async function renderReturnsReport() {
   } catch (error) {
     console.error('Returns report RPC error:', error);
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được báo cáo trả hàng. Kiểm tra migration 0012.</td></tr>';
+  }
+}
+
+function vietnamDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function firstDayOfVietnamMonth() {
+  const date = vietnamDateParts();
+  return `${date.slice(0, 7)}-01`;
+}
+
+function addVietnamDays(dateValue, days) {
+  const [year, month, day] = String(dateValue || '').split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+function populateEmployeeBusinessFilters() {
+  const employeeSelect = document.getElementById('employee-business-employee');
+  const companySelect = document.getElementById('employee-business-company');
+  const fromInput = document.getElementById('employee-business-from');
+  const toInput = document.getElementById('employee-business-to');
+  if (fromInput && !fromInput.value) fromInput.value = firstDayOfVietnamMonth();
+  if (toInput && !toInput.value) toInput.value = vietnamDateParts();
+
+  if (employeeSelect) {
+    const selected = employeeSelect.value;
+    const users = (state.users || []).filter(user => user.isActive !== false && user.is_active !== false);
+    employeeSelect.innerHTML = '<option value="all">Tất cả nhân viên</option>' + users.map(user =>
+      `<option value="${escapeHtml(user.id)}">${escapeHtml(user.displayName || user.display_name || user.username)}</option>`
+    ).join('');
+    employeeSelect.value = [...employeeSelect.options].some(option => option.value === selected) ? selected : 'all';
+    const isSale = state.currentUser?.role === 'sale';
+    employeeSelect.disabled = isSale;
+    if (isSale) employeeSelect.value = state.currentUser.id || 'all';
+  }
+  if (companySelect) {
+    const selected = companySelect.value;
+    companySelect.innerHTML = '<option value="all">Tất cả công ty</option>' + (state.companies || []).map(company =>
+      `<option value="${escapeHtml(company.id)}">${escapeHtml(company.name || company.id)}</option>`
+    ).join('');
+    companySelect.value = [...companySelect.options].some(option => option.value === selected) ? selected : 'all';
+  }
+}
+
+function employeeBusinessFilters({ limit = 25, offset = employeeBusinessPage * 25, employeeId } = {}) {
+  populateEmployeeBusinessFilters();
+  const from = document.getElementById('employee-business-from')?.value;
+  const to = document.getElementById('employee-business-to')?.value;
+  if (!from || !to || to < from) throw new Error('Khoảng ngày báo cáo không hợp lệ.');
+  return {
+    start: `${from}T00:00:00+07:00`,
+    end: `${addVietnamDays(to, 1)}T00:00:00+07:00`,
+    employee_id: employeeId || document.getElementById('employee-business-employee')?.value || 'all',
+    company_id: document.getElementById('employee-business-company')?.value || 'all',
+    limit,
+    offset
+  };
+}
+
+function setEmployeeBusinessSummary(summary = {}) {
+  const values = {
+    'employee-business-order-count': Number(summary.order_count || 0).toLocaleString('vi-VN'),
+    'employee-business-net-sales': formatCurrency(summary.net_sales),
+    'employee-business-collected': formatCurrency(summary.collected),
+    'employee-business-debt-balance': formatCurrency(summary.debt_balance),
+    'employee-business-commission': formatCurrency(summary.commission_amount)
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  });
+}
+
+function renderEmployeeBusinessChart(series = []) {
+  const canvas = document.getElementById('employee-business-chart');
+  const empty = document.getElementById('employee-business-chart-empty');
+  if (!canvas || !globalThis.Chart) return;
+  if (employeeBusinessChart) {
+    employeeBusinessChart.destroy();
+    employeeBusinessChart = null;
+  }
+  if (!series.length) {
+    canvas.style.display = 'none';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  canvas.style.display = 'block';
+  if (empty) empty.style.display = 'none';
+  employeeBusinessChart = new globalThis.Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: series.map(row => row.date),
+      datasets: [
+        { label: 'Doanh số ròng', data: series.map(row => Number(row.net_sales || 0)), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.14)', fill: true, tension: .3, borderWidth: 2 },
+        { label: 'Tiền đã thu', data: series.map(row => Number(row.collected || 0)), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)', fill: false, tension: .3, borderWidth: 2 }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#64748b' } } }, scales: { x: { ticks: { color: '#64748b', maxTicksLimit: 8 } }, y: { ticks: { color: '#64748b', callback: value => `${Number(value || 0).toLocaleString('vi-VN')} ₫` } } } }
+  });
+}
+
+function renderEmployeeBusinessRows(report) {
+  const tbody = document.getElementById('employee-business-table-body');
+  if (!tbody) return;
+  const rows = report.rows || [];
+  tbody.innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td><strong>${escapeHtml(row.employee_name)}</strong><br><small>${escapeHtml(row.employee_code)}</small></td>
+      <td style="text-align:right">${Number(row.order_count || 0).toLocaleString('vi-VN')}</td>
+      <td style="text-align:right">${Number(row.sold_quantity || 0).toLocaleString('vi-VN')}</td>
+      <td style="text-align:right">${formatCurrency(row.net_sales)}</td>
+      <td style="text-align:right;color:var(--color-danger)">${formatCurrency(row.return_amount)}</td>
+      <td style="text-align:right;color:var(--color-success)">${formatCurrency(row.collected)}</td>
+      <td style="text-align:right">${formatCurrency(row.debt_balance)}</td>
+      <td style="text-align:right">${formatCurrency(row.commission_amount)}</td>
+      <td style="text-align:right">${row.kpi_target > 0 ? `${Number(row.kpi_completion_percent || 0).toLocaleString('vi-VN')}%` : 'Chưa giao'}</td>
+      <td style="text-align:center"><button class="btn btn-secondary btn-sm employee-business-detail" type="button" data-employee-id="${escapeHtml(row.employee_id)}" data-employee-name="${escapeHtml(row.employee_name)}">Chi tiết</button></td>
+    </tr>`).join('') : '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu nghiệp vụ trong kỳ đã chọn.</td></tr>';
+  document.querySelectorAll('.employee-business-detail').forEach(button => button.addEventListener('click', () =>
+    openEmployeeBusinessDetail(button.dataset.employeeId, button.dataset.employeeName)
+  ));
+  const total = Number(report.total || 0);
+  const from = total ? employeeBusinessPage * 25 + 1 : 0;
+  const to = Math.min((employeeBusinessPage + 1) * 25, total);
+  const pager = document.getElementById('employee-business-page-label');
+  if (pager) pager.textContent = total ? `${from}–${to} / ${total} nhân viên` : '0 nhân viên';
+  const previous = document.getElementById('employee-business-prev');
+  const next = document.getElementById('employee-business-next');
+  if (previous) previous.disabled = employeeBusinessPage === 0;
+  if (next) next.disabled = to >= total;
+}
+
+export async function renderEmployeeBusinessReport() {
+  const tbody = document.getElementById('employee-business-table-body');
+  if (!tbody) return;
+  const requestId = ++employeeBusinessRequestId;
+  try {
+    const filters = employeeBusinessFilters();
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem">Đang đối soát số liệu từ máy chủ...</td></tr>';
+    const report = await dbFetchEmployeeBusinessReport(filters);
+    if (requestId !== employeeBusinessRequestId) return;
+    employeeBusinessLastReport = report;
+    setEmployeeBusinessSummary(report.summary);
+    renderEmployeeBusinessChart(report.series);
+    renderEmployeeBusinessRows(report);
+    safeCreateIcons();
+  } catch (error) {
+    console.error('Employee business report RPC error:', error);
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--color-danger)">${escapeHtml(error.message || 'Không tải được báo cáo nghiệp vụ.')}</td></tr>`;
+  }
+}
+
+async function openEmployeeBusinessDetail(employeeId, employeeName) {
+  const modal = document.getElementById('employee-business-detail-modal');
+  const tbody = document.getElementById('employee-business-detail-table-body');
+  if (!modal || !tbody) return;
+  document.getElementById('employee-business-detail-title').textContent = `Chi tiết nghiệp vụ: ${employeeName}`;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem">Đang tải chi tiết từ máy chủ...</td></tr>';
+  modal.classList.add('active');
+  try {
+    const report = await dbFetchEmployeeBusinessReport(employeeBusinessFilters({ limit: 1, offset: 0, employeeId }));
+    const details = report.details || [];
+    tbody.innerHTML = details.length ? details.map(detail => `<tr>
+      <td>${detail.document_date ? formatDateTime(detail.document_date) : '—'}</td><td>${escapeHtml(detail.document_type)}</td>
+      <td>${escapeHtml(detail.document_id)}</td><td>${escapeHtml(detail.description)}</td>
+      <td style="text-align:right;${Number(detail.amount) < 0 ? 'color:var(--color-danger)' : ''}">${formatCurrency(detail.amount)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có chứng từ chi tiết trong kỳ.</td></tr>';
+  } catch (error) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-danger)">${escapeHtml(error.message || 'Không tải được chi tiết.')}</td></tr>`;
+  }
+}
+
+function closeEmployeeBusinessDetail() {
+  document.getElementById('employee-business-detail-modal')?.classList.remove('active');
+}
+
+async function exportEmployeeBusinessReport() {
+  if (!globalThis.XLSX) return;
+  try {
+    const report = await dbFetchEmployeeBusinessReport(employeeBusinessFilters({ limit: 100, offset: 0 }));
+    const rows = (report.rows || []).map(row => ({
+      'Nhân viên': row.employee_name, 'Mã tài khoản': row.employee_code, 'Số đơn': Number(row.order_count || 0),
+      'Số lượng SP': Number(row.sold_quantity || 0), 'Doanh số gốc': Number(row.gross_sales || 0),
+      'Chiết khấu': Number(row.discount_amount || 0), 'Doanh số ròng': Number(row.net_sales || 0),
+      'Trả hàng': Number(row.return_amount || 0), 'Đã thu': Number(row.collected || 0),
+      'Công nợ cuối kỳ': Number(row.debt_balance || 0), 'Hoa hồng': Number(row.commission_amount || 0),
+      'KPI mục tiêu': Number(row.kpi_target || 0), 'Hoàn thành KPI (%)': row.kpi_completion_percent ?? ''
+    }));
+    const sheet = globalThis.XLSX.utils.json_to_sheet(rows);
+    const workbook = globalThis.XLSX.utils.book_new();
+    globalThis.XLSX.utils.book_append_sheet(workbook, sheet, 'Bao cao nhan vien');
+    globalThis.XLSX.writeFile(workbook, `Bao_cao_nghiep_vu_${vietnamDateParts()}.xlsx`);
+  } catch (error) {
+    console.error('Employee business export error:', error);
+    showToast(error.message || 'Không thể xuất báo cáo nghiệp vụ.', 'danger');
   }
 }
 

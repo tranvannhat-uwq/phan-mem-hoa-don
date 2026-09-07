@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20260905-debt-ledger-v30';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20260905-debt-ledger-v30';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260905-debt-ledger-v30';
-import { openHistoryOrderExportModal } from './customers.js?v=20260905-debt-ledger-v30';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20260907-employee-report-v1';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20260907-employee-report-v1';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20260907-employee-report-v1';
+import { openHistoryOrderExportModal } from './customers.js?v=20260907-employee-report-v1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary
-} from '../domain/order-financials.js?v=20260905-debt-ledger-v30';
+} from '../domain/order-financials.js?v=20260907-employee-report-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
 import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260905-debt-ledger-v30';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20260907-employee-report-v1';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
