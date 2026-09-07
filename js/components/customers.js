@@ -1,15 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260907-employee-report-v1';
-import { renderAll } from '../main.js?v=20260907-employee-report-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260907-employee-report-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20260907-employee-report-v1';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260907-employee-report-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260907-employee-report-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260907-password-reset-v2';
+import { renderAll } from '../main.js?v=20260907-password-reset-v2';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260907-password-reset-v2';
+import { addCashbookTransaction } from './so_quy.js?v=20260907-password-reset-v2';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260907-password-reset-v2';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260907-password-reset-v2';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260907-employee-report-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20260907-password-reset-v2';
 
 let pendingCustomerPaymentKey = '';
 

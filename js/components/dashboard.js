@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260907-employee-report-v1';
+import { switchTab } from '../main.js?v=20260907-password-reset-v2';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260907-employee-report-v1';
+import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260907-password-reset-v2';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260907-employee-report-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20260907-password-reset-v2';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
@@ -824,7 +824,10 @@ export async function updateDashboardStats({ force = false } = {}) {
       ['stat-total-revenue', 'stat-total-orders', 'stat-total-debt', 'stat-total-sold-products'].forEach(id => {
         const element = document.getElementById(id); if (element) element.innerText = '—';
       });
-      showToast('Không tải được dashboard từ cơ sở dữ liệu. Kiểm tra migration 0012.', 'danger');
+      const reason = String(error?.message || '').trim();
+      showToast(reason
+        ? `Không tải được dashboard từ Cloud: ${reason}`
+        : 'Không tải được dashboard từ Cloud. Vui lòng thử tải lại trang.', 'danger');
       return null;
     }
   })();

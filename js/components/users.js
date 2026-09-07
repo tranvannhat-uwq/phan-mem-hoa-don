@@ -3,14 +3,14 @@ import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectS
 import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260907-password-reset-v2';
 import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260907-password-reset-v2';
 import { renderAll, switchTab } from '../main.js?v=20260907-password-reset-v2';
-import { populateManagedByDropdown } from './customers.js?v=20260907-employee-report-v1';
+import { populateManagedByDropdown } from './customers.js?v=20260907-password-reset-v2';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260907-employee-report-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20260907-password-reset-v2';
 
 function normalizeUserSearch(value) {
   return String(value || '')

@@ -5,6 +5,10 @@ import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+const readSourceTree = (directory) => fs.readdirSync(path.join(root, directory), { recursive: true })
+  .filter(file => String(file).endsWith('.js'))
+  .map(file => read(path.join(directory, String(file))))
+  .join('\n');
 
 test('employee account creation stays behind an authenticated admin Edge Function', () => {
   const edge = read('supabase/functions/admin-create-user/index.ts');
@@ -74,6 +78,7 @@ test('password-reset code uses a fresh browser module version', () => {
   const main = read('js/main.js');
   const users = read('js/components/users.js');
   const realtime = read('js/services/realtime.js');
+  const moduleGraph = readSourceTree('js');
   const version = '20260907-password-reset-v2';
 
   assert.match(html, new RegExp(`main\\.js\\?v=${version}`));
@@ -82,4 +87,5 @@ test('password-reset code uses a fresh browser module version', () => {
   assert.match(users, new RegExp(`services/supabase\\.js\\?v=${version}`));
   assert.match(users, new RegExp(`main\\.js\\?v=${version}`));
   assert.match(realtime, new RegExp(`supabase\\.js\\?v=${version}`));
+  assert.doesNotMatch(`${html}\n${moduleGraph}`, /20260907-employee-report-v1/);
 });
