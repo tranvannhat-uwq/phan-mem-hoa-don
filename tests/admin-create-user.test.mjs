@@ -47,3 +47,22 @@ test('new login accounts require an initial password without storing it in the p
   assert.match(users, /initialPassword\.length < 8/);
   assert.doesNotMatch(service.match(/const dbRow = \{[\s\S]*?\n\s*\};/)?.[0] || '', /password/);
 });
+
+test('an Admin can reset an existing employee password without changing their profile', () => {
+  const html = read('index.html');
+  const edge = read('supabase/functions/admin-create-user/index.ts');
+  const users = read('js/components/users.js');
+  const service = read('js/services/supabase.js');
+
+  assert.match(html, /id="user-password-label"/);
+  assert.match(users, /Cấp lại mật khẩu \(tùy chọn\)/);
+  assert.match(users, /Mật khẩu cấp lại phải có ít nhất 8 ký tự/);
+  assert.match(service, /operation: isNew \? 'create' : 'reset_password'/);
+  assert.match(service, /profileId: isNew \? undefined : user\.id/);
+  assert.match(edge, /requestedOperation/);
+  assert.match(edge, /operation === 'reset_password'/);
+  assert.match(edge, /targetProfile\.auth_user_id/);
+  assert.match(edge, /auth\.admin\.updateUserById\([\s\S]*\{ password \}/);
+  assert.match(edge, /reset_employee_password/);
+  assert.doesNotMatch(edge, /password_reset:\s*true[^\n]*password/);
+});

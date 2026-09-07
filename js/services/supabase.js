@@ -3533,9 +3533,11 @@ async function getEdgeFunctionError(error, fallback) {
 
 export async function authRegisterOrUpdateUser(user, isNew, initialPassword = '') {
   if (!isCloudActive || !supabaseClient) return false;
-  if (isNew && !user.isExternal) {
+  if (!user.isExternal && (isNew || initialPassword)) {
     const { data, error } = await supabaseClient.functions.invoke('admin-create-user', {
       body: {
+        operation: isNew ? 'create' : 'reset_password',
+        profileId: isNew ? undefined : user.id,
         email: user.username,
         password: initialPassword,
         displayName: user.displayName,
@@ -3547,9 +3549,9 @@ export async function authRegisterOrUpdateUser(user, isNew, initialPassword = ''
       throw new Error(await getEdgeFunctionError(error, 'Không thể tạo tài khoản đăng nhập.'));
     }
     if (!data?.user?.id || !data?.profile?.id) {
-      throw new Error('Supabase không trả về tài khoản vừa tạo.');
+      throw new Error(isNew ? 'Supabase không trả về tài khoản vừa tạo.' : 'Supabase không xác nhận cấp lại mật khẩu.');
     }
-    user.id = data.profile.id;
+    if (isNew) user.id = data.profile.id;
     user.authUserId = data.user.id;
   }
   return true;

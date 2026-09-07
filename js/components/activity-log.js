@@ -14,7 +14,7 @@ const ACTION_LABELS = {
   cancel_order: 'Đã hủy đơn hàng', delete_order: 'Đã xóa đơn hàng', update_order_notes: 'Đã cập nhật ghi chú đơn hàng',
   confirm_payment: 'Đã xác nhận thanh toán', change_payment_status: 'Đã thay đổi trạng thái thanh toán', update_payment: 'Đã cập nhật thanh toán',
   create_customer: 'Đã tạo khách hàng', update_customer: 'Đã chỉnh sửa khách hàng', delete_customer: 'Đã xóa khách hàng',
-  create_employee: 'Đã tạo nhân viên', update_employee: 'Đã chỉnh sửa nhân viên', delete_employee: 'Đã xóa nhân viên',
+  create_employee: 'Đã tạo nhân viên', update_employee: 'Đã chỉnh sửa nhân viên', delete_employee: 'Đã xóa nhân viên', reset_employee_password: 'Đã cấp lại mật khẩu nhân viên',
   change_employee_role: 'Đã thay đổi vai trò nhân viên', change_employee_status: 'Đã khóa/mở tài khoản',
   create_sales_return: 'Đã tạo phiếu trả hàng', update_sales_return: 'Đã cập nhật phiếu trả hàng', cancel_sales_return: 'Đã hủy phiếu trả hàng',
   create_cashbook_transaction: 'Đã tạo giao dịch sổ quỹ', update_cashbook_transaction: 'Đã chỉnh sửa giao dịch sổ quỹ', cancel_cashbook_transaction: 'Đã hủy giao dịch sổ quỹ',

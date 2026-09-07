@@ -104,6 +104,7 @@ export function openUserModal(userId = '') {
   const usernameInput = document.getElementById('user-username');
   const passwordInput = document.getElementById('user-password');
   const passwordHelp = document.getElementById('user-password-help');
+  const passwordLabel = document.getElementById('user-password-label');
   const isExternalSelect = document.getElementById('user-is-external');
   const roleSelect = document.getElementById('user-role');
   
@@ -121,6 +122,9 @@ export function openUserModal(userId = '') {
     document.getElementById('user-edit-id').value = '';
     usernameInput.removeAttribute('disabled');
     passwordInput.setAttribute('required', '');
+    passwordInput.placeholder = 'Ít nhất 8 ký tự';
+    if (passwordLabel) passwordLabel.textContent = 'Mật khẩu khởi tạo *';
+    if (passwordHelp) passwordHelp.textContent = 'Dùng một lần để tạo tài khoản Supabase Auth; mật khẩu không được lưu trong profile hoặc trình duyệt.';
     passwordHelp.style.display = 'block';
     
     if (isExternalSelect) isExternalSelect.value = 'false';
@@ -150,7 +154,10 @@ export function openUserModal(userId = '') {
         if (roleSelect) roleSelect.disabled = true;
         passwordHelp.style.display = 'none';
       } else {
-        passwordInput.disabled = true;
+        passwordInput.disabled = false;
+        passwordInput.placeholder = 'Để trống nếu không cấp lại';
+        if (passwordLabel) passwordLabel.textContent = 'Cấp lại mật khẩu (tùy chọn)';
+        if (passwordHelp) passwordHelp.textContent = 'Nhập tối thiểu 8 ký tự để cấp lại mật khẩu đăng nhập. Mật khẩu chỉ được gửi tới Supabase Auth, không lưu trong profile hoặc trình duyệt.';
         if (roleSelect) roleSelect.disabled = false;
         passwordHelp.style.display = 'block';
       }
@@ -269,6 +276,10 @@ export async function saveUser() {
     }
     
     const companyId = document.getElementById('user-company') ? document.getElementById('user-company').value : 'ABS_NORTH';
+    if (!isExternal && initialPassword && initialPassword.length < 8) {
+      showToast('Mật khẩu cấp lại phải có ít nhất 8 ký tự.', 'warning');
+      return;
+    }
     user = {
       ...existingUser,
       username,
@@ -788,7 +799,17 @@ export function setupUserManagement() {
           if (isNew) passwordInput.setAttribute('required', '');
           else passwordInput.removeAttribute('required');
           passwordInput.value = '';
-          passwordInput.disabled = !isNew;
+          passwordInput.disabled = false;
+          passwordInput.placeholder = isNew ? 'Ít nhất 8 ký tự' : 'Để trống nếu không cấp lại';
+          const passwordLabel = document.getElementById('user-password-label');
+          const passwordHelp = document.getElementById('user-password-help');
+          if (passwordLabel) passwordLabel.textContent = isNew ? 'Mật khẩu khởi tạo *' : 'Cấp lại mật khẩu (tùy chọn)';
+          if (passwordHelp) {
+            passwordHelp.textContent = isNew
+              ? 'Dùng một lần để tạo tài khoản Supabase Auth; mật khẩu không được lưu trong profile hoặc trình duyệt.'
+              : 'Nhập tối thiểu 8 ký tự để cấp lại mật khẩu đăng nhập. Mật khẩu chỉ được gửi tới Supabase Auth, không lưu trong profile hoặc trình duyệt.';
+            passwordHelp.style.display = 'block';
+          }
         }
         if (roleSelect) roleSelect.disabled = false;
       }

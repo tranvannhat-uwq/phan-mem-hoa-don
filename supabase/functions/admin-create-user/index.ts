@@ -37,7 +37,7 @@ Deno.serve(async (request) => {
 
     const { data: callerProfile, error: profileError } = await callerClient
       .from('profiles')
-      .select('role,is_active')
+      .select('id,username,display_name,role,is_active')
       .eq('auth_user_id', authData.user.id)
       .single();
     if (profileError || callerProfile?.role !== 'admin' || callerProfile?.is_active !== true) {
@@ -45,21 +45,79 @@ Deno.serve(async (request) => {
     }
 
     const payload = await request.json();
+    const requestedOperation = String(payload?.operation || 'create');
+    if (!['create', 'reset_password'].includes(requestedOperation)) {
+      return jsonResponse({ error: 'Thao tác tài khoản không hợp lệ.' }, 400);
+    }
+    const operation = requestedOperation as 'create' | 'reset_password';
     const email = String(payload?.email || '').trim().toLowerCase();
     const password = String(payload?.password || '');
     const displayName = String(payload?.displayName || '').trim();
     const role = String(payload?.role || 'sale');
     const companyId = String(payload?.companyId || 'ABS_NORTH').trim();
+    const targetProfileId = String(payload?.profileId || '').trim();
 
-    if (!/^\S+@\S+\.\S+$/.test(email)) return jsonResponse({ error: 'Email đăng nhập không hợp lệ.' }, 400);
     if (password.length < 8) return jsonResponse({ error: 'Mật khẩu phải có ít nhất 8 ký tự.' }, 400);
-    if (!displayName) return jsonResponse({ error: 'Tên hiển thị là bắt buộc.' }, 400);
-    if (!['admin', 'accounting', 'sale'].includes(role)) return jsonResponse({ error: 'Vai trò không hợp lệ.' }, 400);
-    if (!companyId) return jsonResponse({ error: 'Công ty trực thuộc là bắt buộc.' }, 400);
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    if (operation === 'reset_password') {
+      if (!targetProfileId) return jsonResponse({ error: 'Thiếu hồ sơ nhân viên cần cấp lại mật khẩu.' }, 400);
+      const { data: targetProfile, error: targetProfileError } = await adminClient
+        .from('profiles')
+        .select('id,auth_user_id,username,display_name,is_external,is_active')
+        .eq('id', targetProfileId)
+        .single();
+      if (targetProfileError || !targetProfile) {
+        return jsonResponse({ error: targetProfileError?.message || 'Không tìm thấy hồ sơ nhân viên.' }, 404);
+      }
+      if (targetProfile.is_external || !targetProfile.auth_user_id) {
+        return jsonResponse({ error: 'Hồ sơ này không có tài khoản phần mềm để cấp lại mật khẩu.' }, 400);
+      }
+      if (targetProfile.is_active !== true) {
+        return jsonResponse({ error: 'Tài khoản đã ngừng hoạt động; hãy kích hoạt lại thay vì cấp lại mật khẩu.' }, 400);
+      }
+
+      const { data: updatedAuth, error: authUpdateError } = await adminClient.auth.admin.updateUserById(
+        targetProfile.auth_user_id,
+        { password },
+      );
+      if (authUpdateError || !updatedAuth.user) {
+        return jsonResponse({ error: authUpdateError?.message || 'Không thể cấp lại mật khẩu.' }, 400);
+      }
+
+      // Record the sensitive operation without recording the password itself.
+      const { error: auditError } = await adminClient.from('activity_logs').insert({
+        operation_key: `reset_employee_password:${crypto.randomUUID()}`,
+        actor_id: authData.user.id,
+        actor_profile_id: callerProfile.id,
+        actor_username: callerProfile.username,
+        actor_name: callerProfile.display_name || callerProfile.username || 'Admin',
+        actor_role: callerProfile.role,
+        action: 'reset_employee_password',
+        module: 'employees',
+        target_type: 'employee',
+        target_id: targetProfile.id,
+        target_name: targetProfile.display_name || targetProfile.username,
+        description: `reset_employee_password:${targetProfile.id}`,
+        changes: {},
+        metadata: { source: 'admin-create-user', password_reset: true },
+      });
+      if (auditError) console.error('Password reset audit failed:', auditError.message);
+
+      return jsonResponse({
+        user: { id: updatedAuth.user.id, email: updatedAuth.user.email },
+        profile: targetProfile,
+        password_reset: true,
+      });
+    }
+
+    if (!/^\S+@\S+\.\S+$/.test(email)) return jsonResponse({ error: 'Email đăng nhập không hợp lệ.' }, 400);
+    if (!displayName) return jsonResponse({ error: 'Tên hiển thị là bắt buộc.' }, 400);
+    if (!['admin', 'accounting', 'sale'].includes(role)) return jsonResponse({ error: 'Vai trò không hợp lệ.' }, 400);
+    if (!companyId) return jsonResponse({ error: 'Công ty trực thuộc là bắt buộc.' }, 400);
 
     const { data: matchingProfiles, error: matchingError } = await adminClient
       .from('profiles')
