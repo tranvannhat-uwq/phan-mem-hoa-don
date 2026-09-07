@@ -27,7 +27,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260907-employee-report-v1';
+} from './supabase.js?v=20260907-password-reset-v2';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

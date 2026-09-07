@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260907-employee-report-v1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260907-employee-report-v1';
-import { renderAll, switchTab } from '../main.js?v=20260907-employee-report-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260907-password-reset-v2';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260907-password-reset-v2';
+import { renderAll, switchTab } from '../main.js?v=20260907-password-reset-v2';
 import { populateManagedByDropdown } from './customers.js?v=20260907-employee-report-v1';
 import {
   LOGIN_ERROR,
@@ -311,7 +311,9 @@ export async function saveUser() {
     
     closeUserModal();
     renderAll();
-    showToast('Lưu thông tin tài khoản thành công!', 'success');
+    showToast(editId && !isExternal && initialPassword
+      ? 'Đã cấp lại mật khẩu đăng nhập thành công!'
+      : 'Lưu thông tin tài khoản thành công!', 'success');
   }
 }
 

@@ -65,4 +65,20 @@ test('an Admin can reset an existing employee password without changing their pr
   assert.match(edge, /auth\.admin\.updateUserById\([\s\S]*\{ password \}/);
   assert.match(edge, /reset_employee_password/);
   assert.doesNotMatch(edge, /password_reset:\s*true[^\n]*password/);
+  assert.match(users, /Đã cấp lại mật khẩu đăng nhập thành công/);
+});
+
+test('password-reset code uses a fresh browser module version', () => {
+  const html = read('index.html');
+  const main = read('js/main.js');
+  const users = read('js/components/users.js');
+  const realtime = read('js/services/realtime.js');
+  const version = '20260907-password-reset-v2';
+
+  assert.match(html, new RegExp(`main\\.js\\?v=${version}`));
+  assert.match(main, new RegExp(`services/supabase\\.js\\?v=${version}`));
+  assert.match(main, new RegExp(`components/users\\.js\\?v=${version}`));
+  assert.match(users, new RegExp(`services/supabase\\.js\\?v=${version}`));
+  assert.match(users, new RegExp(`main\\.js\\?v=${version}`));
+  assert.match(realtime, new RegExp(`supabase\\.js\\?v=${version}`));
 });
