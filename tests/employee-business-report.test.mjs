@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const migration = read('migrations/0064_employee_business_report.sql');
+const hotfix = read('migrations/0065_fix_employee_business_report_employee_id.sql');
 const service = read('js/services/supabase.js');
 const reports = read('js/components/reports.js');
 const html = read('index.html');
@@ -31,6 +32,13 @@ test('report uses Vietnam dates, server-side sale scope and excludes invalid doc
   assert.match(migration, /transaction_type IN \('payment', 'payment_amend'\) AND debt_change < 0/);
   assert.match(migration, /NOT EXISTS \(SELECT 1 FROM public\.customer_debt_transactions reversed WHERE reversed\.reversal_of_id = ledger_rows\.id\)/);
   assert.match(migration, /tx\.status NOT IN \('cancelled', 'canceled'\)/);
+});
+
+test('ledger identity is normalized without shadowing the source employee column', () => {
+  assert.match(hotfix, /AS report_employee_id/);
+  assert.match(hotfix, /AS report_employee_name/);
+  assert.match(hotfix, /SELECT report_employee_id AS employee_id/);
+  assert.match(hotfix, /GROUP BY report_employee_id/);
 });
 
 test('browser displays and exports the Cloud report without local financial reconstruction', () => {

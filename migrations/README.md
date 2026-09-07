@@ -70,6 +70,7 @@ Run these files in order on a staging clone first:
 62. `0062_fix_draft_timestamp_trigger_auth_helper.sql`
 63. `0063_align_customer_receipt_ledger_dates.sql`
 64. `0064_employee_business_report.sql`
+65. `0065_fix_employee_business_report_employee_id.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -353,3 +354,7 @@ report RPC. It scopes Sale users to their authenticated profile, applies
 Vietnam business dates, and returns only aggregate/detail report data; it does
 not update orders, cashbook, debt, returns, payroll, KPI, commission or any
 historical business row.
+
+Migration `0065` replaces only the report RPC definition to disambiguate the
+ledger's source employee id from its normalized report employee id. It does not
+change any business data or report metric definition.
