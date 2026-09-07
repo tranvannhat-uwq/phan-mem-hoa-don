@@ -8263,6 +8263,22 @@ table tbody tr:hover td {
   border-radius: 0;
 }
 
+#employee-business-detail-modal .employee-business-detail-pager {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  border-top: 1px solid var(--border-color);
+  background: #ffffff;
+}
+
+#employee-business-detail-modal .employee-business-detail-pager > div {
+  display: flex;
+  gap: .5rem;
+}
+
 #employee-business-detail-modal .table {
   min-width: 860px;
 }

@@ -9,6 +9,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const migration = read('migrations/0064_employee_business_report.sql');
 const hotfix = read('migrations/0065_fix_employee_business_report_employee_id.sql');
 const attributionHotfix = read('migrations/0066_attribute_employee_report_to_customer_manager.sql');
+const egressHotfix = read('migrations/0067_employee_business_report_egress_optimization.sql');
 const service = read('js/services/supabase.js');
 const reports = read('js/components/reports.js');
 const html = read('index.html');
@@ -53,14 +54,28 @@ test('employee performance follows customer management and receipts come from ca
   assert.match(attributionHotfix, /COALESCE\(cashbook\.collected, 0\) AS collected/);
 });
 
+test('employee report bounds detail egress and allows unused aggregates to be omitted', () => {
+  assert.match(egressHotfix, /detail_limit integer := LEAST\(GREATEST/);
+  assert.match(egressHotfix, /detail_offset integer := GREATEST/);
+  assert.match(egressHotfix, /include_summary boolean/);
+  assert.match(egressHotfix, /include_series boolean/);
+  assert.match(egressHotfix, /LIMIT detail_limit OFFSET detail_offset/);
+  assert.match(egressHotfix, /'detail_total', \(SELECT count\(\*\) FROM detail_rows\)/);
+  assert.match(reports, /EMPLOYEE_BUSINESS_CACHE_TTL_MS = 30_000/);
+  assert.match(reports, /employeeBusinessReportInFlight/);
+  assert.match(reports, /detailLimit: detail\.limit, detailOffset: page \* detail\.limit/);
+  assert.match(reports, /includeSummary: false, includeSeries: false/);
+});
+
 test('browser displays and exports the Cloud report without local financial reconstruction', () => {
   assert.match(service, /rpc_get_employee_business_report/);
-  assert.match(reports, /await dbFetchEmployeeBusinessReport/);
+  assert.match(reports, /await fetchEmployeeBusinessReport/);
   assert.match(reports, /employee-business-export/);
   assert.match(reports, /globalThis\.XLSX/);
   assert.match(html, /data-subtab="employee"/);
   assert.match(html, /employee-business-detail-modal/);
   assert.match(html, /employee-business-detail-modal-content/);
+  assert.match(html, /employee-business-detail-page-label/);
   assert.match(read('style.css'), /#employee-business-detail-modal \.employee-business-detail-modal-content[\s\S]*width: 96vw[\s\S]*max-width: none/);
   assert.match(read('style.css'), /#employee-business-detail-modal \.table-responsive[\s\S]*overflow: auto/);
   assert.doesNotMatch(reports.slice(reports.indexOf('renderEmployeeBusinessReport'), reports.indexOf('function renderReturnsReportLegacy')), /state\.(?:savedOrders|salesReturns|cashbookTransactions)/);

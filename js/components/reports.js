@@ -8,6 +8,34 @@ let employeeBusinessChart = null;
 let employeeBusinessPage = 0;
 let employeeBusinessRequestId = 0;
 let employeeBusinessLastReport = null;
+let employeeBusinessOverview = null;
+let employeeBusinessDetail = null;
+let employeeBusinessDetailRequestId = 0;
+const EMPLOYEE_BUSINESS_CACHE_TTL_MS = 30_000;
+const employeeBusinessReportCache = new Map();
+const employeeBusinessReportInFlight = new Map();
+
+function employeeBusinessCacheKey(input) {
+  return JSON.stringify(Object.keys(input).sort().reduce((result, key) => ({ ...result, [key]: input[key] }), {}));
+}
+
+// The cache contains only the bounded, already-authorized RPC response.  It
+// never derives financial figures in the browser and expires quickly so a user
+// can always force an up-to-date Cloud read through the filter action.
+async function fetchEmployeeBusinessReport(input, { force = false } = {}) {
+  const key = employeeBusinessCacheKey(input);
+  const cached = employeeBusinessReportCache.get(key);
+  if (!force && cached && Date.now() - cached.cachedAt < EMPLOYEE_BUSINESS_CACHE_TTL_MS) return cached.payload;
+  if (!force && employeeBusinessReportInFlight.has(key)) return employeeBusinessReportInFlight.get(key);
+  const request = dbFetchEmployeeBusinessReport(input)
+    .then(payload => {
+      employeeBusinessReportCache.set(key, { payload, cachedAt: Date.now() });
+      return payload;
+    })
+    .finally(() => employeeBusinessReportInFlight.delete(key));
+  employeeBusinessReportInFlight.set(key, request);
+  return request;
+}
 
 export function setupReportsPanel() {
   const tabBtns = document.querySelectorAll('.report-subtab-btn');
@@ -31,7 +59,8 @@ export function setupReportsPanel() {
   const employeeBusinessApply = document.getElementById('employee-business-apply-filter');
   if (employeeBusinessApply) employeeBusinessApply.addEventListener('click', () => {
     employeeBusinessPage = 0;
-    renderEmployeeBusinessReport();
+    employeeBusinessOverview = null;
+    renderEmployeeBusinessReport({ force: true });
   });
   document.getElementById('employee-business-export')?.addEventListener('click', exportEmployeeBusinessReport);
   document.getElementById('employee-business-prev')?.addEventListener('click', () => {
@@ -47,6 +76,14 @@ export function setupReportsPanel() {
     }
   });
   document.getElementById('employee-business-detail-close')?.addEventListener('click', closeEmployeeBusinessDetail);
+  document.getElementById('employee-business-detail-prev')?.addEventListener('click', () => {
+    if (employeeBusinessDetail?.page > 0) loadEmployeeBusinessDetail(employeeBusinessDetail.page - 1);
+  });
+  document.getElementById('employee-business-detail-next')?.addEventListener('click', () => {
+    if (employeeBusinessDetail && (employeeBusinessDetail.page + 1) * employeeBusinessDetail.limit < employeeBusinessDetail.total) {
+      loadEmployeeBusinessDetail(employeeBusinessDetail.page + 1);
+    }
+  });
 }
 
 export function switchReportSubtab(subtab) {
@@ -284,12 +321,12 @@ function populateEmployeeBusinessFilters() {
   }
 }
 
-function employeeBusinessFilters({ limit = 25, offset = employeeBusinessPage * 25, employeeId } = {}) {
+function employeeBusinessFilters({ limit = 25, offset = employeeBusinessPage * 25, employeeId, detailLimit, detailOffset, includeSummary, includeSeries } = {}) {
   populateEmployeeBusinessFilters();
   const from = document.getElementById('employee-business-from')?.value;
   const to = document.getElementById('employee-business-to')?.value;
   if (!from || !to || to < from) throw new Error('Khoảng ngày báo cáo không hợp lệ.');
-  return {
+  const filters = {
     start: `${from}T00:00:00+07:00`,
     end: `${addVietnamDays(to, 1)}T00:00:00+07:00`,
     employee_id: employeeId || document.getElementById('employee-business-employee')?.value || 'all',
@@ -297,6 +334,11 @@ function employeeBusinessFilters({ limit = 25, offset = employeeBusinessPage * 2
     limit,
     offset
   };
+  if (detailLimit !== undefined) filters.detail_limit = detailLimit;
+  if (detailOffset !== undefined) filters.detail_offset = detailOffset;
+  if (includeSummary !== undefined) filters.include_summary = includeSummary;
+  if (includeSeries !== undefined) filters.include_series = includeSeries;
+  return filters;
 }
 
 function setEmployeeBusinessSummary(summary = {}) {
@@ -372,15 +414,28 @@ function renderEmployeeBusinessRows(report) {
   if (next) next.disabled = to >= total;
 }
 
-export async function renderEmployeeBusinessReport() {
+export async function renderEmployeeBusinessReport({ force = false } = {}) {
   const tbody = document.getElementById('employee-business-table-body');
   if (!tbody) return;
   const requestId = ++employeeBusinessRequestId;
   try {
-    const filters = employeeBusinessFilters();
+    const baseFilters = employeeBusinessFilters();
+    const overviewKey = employeeBusinessCacheKey({
+      start: baseFilters.start, end: baseFilters.end, employee_id: baseFilters.employee_id, company_id: baseFilters.company_id
+    });
+    const needsOverview = !employeeBusinessOverview
+      || employeeBusinessOverview.key !== overviewKey
+      || Date.now() - employeeBusinessOverview.cachedAt >= EMPLOYEE_BUSINESS_CACHE_TTL_MS;
+    const filters = {
+      ...baseFilters,
+      include_summary: needsOverview,
+      include_series: needsOverview
+    };
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem">Đang đối soát số liệu từ máy chủ...</td></tr>';
-    const report = await dbFetchEmployeeBusinessReport(filters);
+    const response = await fetchEmployeeBusinessReport(filters, { force });
     if (requestId !== employeeBusinessRequestId) return;
+    if (needsOverview) employeeBusinessOverview = { key: overviewKey, summary: response.summary, series: response.series, cachedAt: Date.now() };
+    const report = needsOverview ? response : { ...response, summary: employeeBusinessOverview.summary, series: employeeBusinessOverview.series };
     employeeBusinessLastReport = report;
     setEmployeeBusinessSummary(report.summary);
     renderEmployeeBusinessChart(report.series);
@@ -394,32 +449,67 @@ export async function renderEmployeeBusinessReport() {
 
 async function openEmployeeBusinessDetail(employeeId, employeeName) {
   const modal = document.getElementById('employee-business-detail-modal');
-  const tbody = document.getElementById('employee-business-detail-table-body');
-  if (!modal || !tbody) return;
+  if (!modal) return;
   document.getElementById('employee-business-detail-title').textContent = `Chi tiết nghiệp vụ: ${employeeName}`;
-  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem">Đang tải chi tiết từ máy chủ...</td></tr>';
+  employeeBusinessDetail = { employeeId, employeeName, page: 0, limit: 50, total: 0 };
   modal.classList.add('active');
+  await loadEmployeeBusinessDetail(0);
+}
+
+function updateEmployeeBusinessDetailPager() {
+  const label = document.getElementById('employee-business-detail-page-label');
+  const previous = document.getElementById('employee-business-detail-prev');
+  const next = document.getElementById('employee-business-detail-next');
+  const detail = employeeBusinessDetail;
+  if (!detail) return;
+  const from = detail.total ? detail.page * detail.limit + 1 : 0;
+  const to = Math.min((detail.page + 1) * detail.limit, detail.total);
+  if (label) label.textContent = detail.total ? `${from}–${to} / ${detail.total} chứng từ` : '0 chứng từ';
+  if (previous) previous.disabled = detail.page === 0;
+  if (next) next.disabled = to >= detail.total;
+}
+
+async function loadEmployeeBusinessDetail(page) {
+  const tbody = document.getElementById('employee-business-detail-table-body');
+  const detail = employeeBusinessDetail;
+  if (!tbody || !detail) return;
+  const requestId = ++employeeBusinessDetailRequestId;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem">Đang tải chi tiết từ máy chủ...</td></tr>';
   try {
-    const report = await dbFetchEmployeeBusinessReport(employeeBusinessFilters({ limit: 1, offset: 0, employeeId }));
+    const report = await fetchEmployeeBusinessReport(employeeBusinessFilters({
+      limit: 1, offset: 0, employeeId: detail.employeeId,
+      detailLimit: detail.limit, detailOffset: page * detail.limit,
+      includeSummary: false, includeSeries: false
+    }));
+    if (requestId !== employeeBusinessDetailRequestId || !employeeBusinessDetail || employeeBusinessDetail.employeeId !== detail.employeeId) return;
+    employeeBusinessDetail.page = page;
+    employeeBusinessDetail.total = Number(report.metadata?.detail_total || 0);
     const details = report.details || [];
     tbody.innerHTML = details.length ? details.map(detail => `<tr>
       <td>${detail.document_date ? formatDateTime(detail.document_date) : '—'}</td><td>${escapeHtml(detail.document_type)}</td>
       <td>${escapeHtml(detail.document_id)}</td><td>${escapeHtml(detail.description)}</td>
       <td style="text-align:right;${Number(detail.amount) < 0 ? 'color:var(--color-danger)' : ''}">${formatCurrency(detail.amount)}</td>
     </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có chứng từ chi tiết trong kỳ.</td></tr>';
+    updateEmployeeBusinessDetailPager();
   } catch (error) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--color-danger)">${escapeHtml(error.message || 'Không tải được chi tiết.')}</td></tr>`;
+    employeeBusinessDetail.total = 0;
+    updateEmployeeBusinessDetailPager();
   }
 }
 
 function closeEmployeeBusinessDetail() {
+  employeeBusinessDetailRequestId += 1;
+  employeeBusinessDetail = null;
   document.getElementById('employee-business-detail-modal')?.classList.remove('active');
 }
 
 async function exportEmployeeBusinessReport() {
   if (!globalThis.XLSX) return;
   try {
-    const report = await dbFetchEmployeeBusinessReport(employeeBusinessFilters({ limit: 100, offset: 0 }));
+    const report = await fetchEmployeeBusinessReport(employeeBusinessFilters({
+      limit: 100, offset: 0, includeSummary: false, includeSeries: false
+    }), { force: true });
     const rows = (report.rows || []).map(row => ({
       'Nhân viên': row.employee_name, 'Mã tài khoản': row.employee_code, 'Số đơn': Number(row.order_count || 0),
       'Số lượng SP': Number(row.sold_quantity || 0), 'Doanh số gốc': Number(row.gross_sales || 0),

@@ -72,7 +72,8 @@ const migrationNames = [
   '0063_align_customer_receipt_ledger_dates.sql',
   '0064_employee_business_report.sql',
   '0065_fix_employee_business_report_employee_id.sql',
-  '0066_attribute_employee_report_to_customer_manager.sql'
+  '0066_attribute_employee_report_to_customer_manager.sql',
+  '0067_employee_business_report_egress_optimization.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
