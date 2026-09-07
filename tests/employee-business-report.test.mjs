@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const migration = read('migrations/0064_employee_business_report.sql');
 const hotfix = read('migrations/0065_fix_employee_business_report_employee_id.sql');
+const attributionHotfix = read('migrations/0066_attribute_employee_report_to_customer_manager.sql');
 const service = read('js/services/supabase.js');
 const reports = read('js/components/reports.js');
 const html = read('index.html');
@@ -39,6 +40,17 @@ test('ledger identity is normalized without shadowing the source employee column
   assert.match(hotfix, /AS report_employee_name/);
   assert.match(hotfix, /SELECT report_employee_id AS employee_id/);
   assert.match(hotfix, /GROUP BY report_employee_id/);
+});
+
+test('employee performance follows customer management and receipts come from cashbook', () => {
+  assert.match(attributionHotfix, /customer\.managed_by/);
+  assert.match(attributionHotfix, /sale\.customer_manager_id/);
+  assert.match(attributionHotfix, /FROM public\.cashbook_transactions cashbook/);
+  assert.match(attributionHotfix, /lower\(COALESCE\(cashbook\.type, ''\)\) = 'thu'/);
+  assert.match(attributionHotfix, /cashbook\.reversal_of_id IS NULL/);
+  assert.match(attributionHotfix, /cashbook\.transaction_type, ''\)\) NOT LIKE '%reversal%'/);
+  assert.match(attributionHotfix, /cashbook_metrics[\s\S]*AS collected/);
+  assert.match(attributionHotfix, /COALESCE\(cashbook\.collected, 0\) AS collected/);
 });
 
 test('browser displays and exports the Cloud report without local financial reconstruction', () => {

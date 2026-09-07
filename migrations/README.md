@@ -71,6 +71,7 @@ Run these files in order on a staging clone first:
 63. `0063_align_customer_receipt_ledger_dates.sql`
 64. `0064_employee_business_report.sql`
 65. `0065_fix_employee_business_report_employee_id.sql`
+66. `0066_attribute_employee_report_to_customer_manager.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -358,3 +359,9 @@ historical business row.
 Migration `0065` replaces only the report RPC definition to disambiguate the
 ledger's source employee id from its normalized report employee id. It does not
 change any business data or report metric definition.
+
+Migration `0066` replaces only that read-only RPC. Sales, returns and debt are
+attributed to the salesperson who manages the customer (the same canonical
+rule as Dashboard); “Đã thu” is summed from valid incoming customer receipts
+in Sổ quỹ, excluding cancelled and reversal vouchers. It does not update
+business data.
