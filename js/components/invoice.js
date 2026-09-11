@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260907-password-reset-v2';
-import { renderAll, switchTab } from '../main.js?v=20260907-password-reset-v2';
-import { populatePricelistsDropdowns } from './pricelists.js?v=20260907-password-reset-v2';
-import { generateUniqueCustomerCode } from './customers.js?v=20260907-password-reset-v2';
-import { addCashbookTransaction } from './so_quy.js?v=20260907-password-reset-v2';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260907-password-reset-v2';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260911-debt-snapshot-v1';
+import { renderAll, switchTab } from '../main.js?v=20260911-debt-snapshot-v1';
+import { populatePricelistsDropdowns } from './pricelists.js?v=20260911-debt-snapshot-v1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260911-debt-snapshot-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20260911-debt-snapshot-v1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260911-debt-snapshot-v1';
 import { normalizeCustomerPhone } from '../domain/customer-query.js';
-import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260907-password-reset-v2';
+import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260911-debt-snapshot-v1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
-import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260907-password-reset-v2';
+import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260911-debt-snapshot-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, parseOrderBusinessDateTimeInput } from '../domain/order-business-date.js';
 import { reorderOrderItems } from '../domain/order-edit.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260907-password-reset-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20260911-debt-snapshot-v1';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;
@@ -1701,6 +1701,10 @@ export async function renderAndPrintOrder(order, type = 'retail') {
   const orderDebtSnapshot = type === 'agent' && order?.status === 'settled' && order?.customerId
     ? await dbFetchOrderDebtSnapshot(order.id, order.customerId)
     : null;
+  if (type === 'agent' && order?.status === 'settled' && order?.customerId && !orderDebtSnapshot) {
+    showToast('Không tải được snapshot công nợ của hóa đơn. Đã dừng in để tránh hiển thị sai Nợ cũ.', 'danger');
+    return false;
+  }
   // Cập nhật tiêu đề hóa đơn và kích thước logo theo loại bản in
   const titleEl = document.querySelector('#print-invoice-template h1');
   const printLogoImg = document.querySelector('.print-logo-container img');
@@ -2090,8 +2094,9 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           oldDebt = debtSnapshot.debtBefore;
           newDebt = debtSnapshot.debtAfter;
         } else {
-          newDebt = cust.debt || 0;
-          oldDebt = newDebt - getOrderOutstandingAmount(order);
+          // A finalized agent invoice is guarded before rendering. Never
+          // infer its historical debt from mutable customer/browser state.
+          hasDebtInfo = false;
         }
       }
     }
@@ -2104,7 +2109,7 @@ export async function renderAndPrintOrder(order, type = 'retail') {
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(oldDebt)}</td>
         </tr>
         <tr>
-          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Tổng nợ hiện tại</td>
+          <td colspan="${summaryLabelColspan}" style="font-weight: bold; text-align: left; padding: 4px 8px;">Nợ sau hóa đơn</td>
           <td style="text-align: right; font-weight: bold; padding: 4px 8px;">${formatNumber(newDebt)}</td>
         </tr>
       `;

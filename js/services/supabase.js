@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260907-password-reset-v2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260907-password-reset-v2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260911-debt-snapshot-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260911-debt-snapshot-v1';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory, rebuildOrderDebtSnapshot } from '../domain/customer-debt.js?v=20260907-password-reset-v2';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260907-password-reset-v2';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260907-password-reset-v2';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260911-debt-snapshot-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260911-debt-snapshot-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260911-debt-snapshot-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -896,6 +896,12 @@ function mapOrderRowForState(order, isDraft = false) {
     salespersonId: order.salesperson_id || order.salespersonId || order.created_by || order.createdBy || 'admin',
     customerManagerId: order.customer_manager_id || order.customerManagerId || '',
     companyId: order.company_id || order.companyId || 'ABS_NORTH',
+    debtBeforeSnapshot: order.debt_before_snapshot == null ? null : Number(order.debt_before_snapshot),
+    debtAfterSnapshot: order.debt_after_snapshot == null ? null : Number(order.debt_after_snapshot),
+    debtSnapshotCustomerId: order.debt_snapshot_customer_id || null,
+    debtSnapshotLedgerId: order.debt_snapshot_ledger_id || null,
+    debtSnapshotPostedAt: order.debt_snapshot_posted_at || null,
+    debtSnapshotBasis: order.debt_snapshot_basis || '',
     status: isDraft ? 'draft' : (order.status || 'settled')
   };
 }
@@ -4920,72 +4926,26 @@ export async function dbAdjustCustomerDebt(customerId, newDebt, description, _cr
 
 // --- BỘ LỌC VÀ PHÂN TRANG HIỆU NĂNG CAO (SERVER-SIDE PAGINATION & LAZY LOADING) ---
 
-// Read the immutable invoice balance range needed by the sales-invoice
-// printout. An edited finalized order keeps its original `order` charge and
-// appends one or more `order_amend` rows. The printed "Nợ cũ" must stay the
-// balance before the original charge, while "Tổng nợ hiện tại" is the balance
-// after the latest amendment. This does not refresh or mutate shared state.
+// Read the database-owned immutable debt snapshot for a finalized invoice.
+// Printing must fail closed when this RPC is unavailable: reconstructing a
+// historical balance from the current customer cache can silently change an
+// already-issued invoice after a backdated transaction is posted.
 export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
   if (!isCloudActive || !supabaseClient || !orderId || !customerId) return null;
   try {
-    const { data, error } = await supabaseClient
-      .from(tableCustomerDebtTransactionsName)
-      .select('id,order_id,customer_id,transaction_type,debt_change,balance_before,balance_after,created_at')
-      .eq('order_id', orderId)
-      .eq('customer_id', customerId)
-      .in('transaction_type', ['order', 'order_amend'])
-      // order_amend intentionally keeps the original business date, so the
-      // posting timestamp—not transaction_date—defines the ledger sequence.
-      .order('created_at', { ascending: true })
-      .order('id', { ascending: true });
+    const { data, error } = await supabaseClient.rpc('rpc_get_order_debt_snapshot', {
+      p_order_id: orderId,
+      p_customer_id: customerId
+    });
     if (error) throw error;
-    const rows = data || [];
-    const originalCharge = rows.find(row => row.transaction_type === 'order') || rows[0];
-    const latestChange = rows.at(-1);
-    if (!originalCharge || !latestChange) return null;
-
-    // Reflow the ledger up to this invoice and replace each legacy order
-    // charge with the persisted amount after order discount plus shipping.
-    // This keeps payments/returns/adjustments in their real posting order and
-    // fixes both the current invoice and older invoices printed from history.
-    try {
-      const ledgerRows = await collectAllPages((offset, end) => supabaseClient
-        .from(tableCustomerDebtTransactionsName)
-        .select('id,order_id,customer_id,transaction_type,debt_change,balance_before,balance_after,created_at')
-        .eq('customer_id', customerId)
-        .lte('created_at', latestChange.created_at)
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true })
-        .range(offset, end));
-      const orderIds = [...new Set(ledgerRows.map(row => row.order_id).filter(Boolean))];
-      const orderIdSet = new Set(orderIds.map(String));
-      const orderRows = (state.savedOrders || []).filter(order =>
-        orderIdSet.has(String(order.id)) && String(order.customerId || '') === String(customerId)
-      );
-      const loadedOrderIds = new Set(orderRows.map(order => String(order.id)));
-      for (let index = 0; index < orderIds.length; index += 100) {
-        const chunk = orderIds.slice(index, index + 100).filter(id => !loadedOrderIds.has(String(id)));
-        if (chunk.length === 0) continue;
-        const orderResult = await supabaseClient
-          .from(tableOrdersName)
-          .select('id,customer_id,status,total_payable,total_amount,shipping_fee_value,shipping_fee_amount')
-          .in('id', chunk);
-        if (orderResult.error) throw orderResult.error;
-        orderRows.push(...(orderResult.data || []));
-      }
-      const rebuilt = rebuildOrderDebtSnapshot(orderId, customerId, ledgerRows, orderRows);
-      if (rebuilt) return { orderId, ...rebuilt };
-    } catch (rebuildError) {
-      console.warn('Could not rebuild the post-discount order debt snapshot:', rebuildError);
-    }
-
-    return {
-      orderId: originalCharge.order_id,
-      debtBefore: Number(originalCharge.balance_before),
-      debtAfter: Number(latestChange.balance_after)
-    };
+    const debtBefore = Number(data?.debtBefore);
+    const debtAfter = Number(data?.debtAfter);
+    if (!data || String(data.orderId || '') !== String(orderId)
+      || String(data.customerId || '') !== String(customerId)
+      || !Number.isFinite(debtBefore) || !Number.isFinite(debtAfter)) return null;
+    return { ...data, debtBefore, debtAfter };
   } catch (error) {
-    console.warn('Could not load order debt snapshot for printing:', error);
+    console.warn('Could not load authoritative order debt snapshot for printing:', error);
     return null;
   }
 }

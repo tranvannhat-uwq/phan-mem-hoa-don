@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260907-password-reset-v2';
-import { switchTab } from '../main.js?v=20260907-password-reset-v2';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20260907-password-reset-v2';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20260911-debt-snapshot-v1';
+import { switchTab } from '../main.js?v=20260911-debt-snapshot-v1';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20260911-debt-snapshot-v1';
 import { safeCreateIcons, showToast, makeSelectSearchable } from '../utils.js';
 
 const PAGE_SIZE = 20;

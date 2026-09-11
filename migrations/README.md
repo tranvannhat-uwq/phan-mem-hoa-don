@@ -376,3 +376,10 @@ business row.
 Migration `0068` preserves the selected business timestamp for new customer
 receipts in the cashbook and debt ledger. It does not rewrite historical
 receipts; the audit posting timestamp remains the actual save time.
+
+Migration `0069` persists the customer-debt balance before and after each
+finalized dealer invoice, backfills legacy orders from immutable ledger posting
+snapshots, and maintains later in-place amendments through a database trigger.
+Its scoped read RPC prevents invoice printing from reconstructing historical
+debt from mutable browser state; backdated document timestamps cannot silently
+rewrite an already-issued invoice.

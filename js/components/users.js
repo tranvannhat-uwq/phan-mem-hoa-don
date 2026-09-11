@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260907-password-reset-v2';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260907-password-reset-v2';
-import { renderAll, switchTab } from '../main.js?v=20260907-password-reset-v2';
-import { populateManagedByDropdown } from './customers.js?v=20260907-password-reset-v2';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260911-debt-snapshot-v1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260911-debt-snapshot-v1';
+import { renderAll, switchTab } from '../main.js?v=20260911-debt-snapshot-v1';
+import { populateManagedByDropdown } from './customers.js?v=20260911-debt-snapshot-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260907-password-reset-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20260911-debt-snapshot-v1';
 
 function normalizeUserSearch(value) {
   return String(value || '')

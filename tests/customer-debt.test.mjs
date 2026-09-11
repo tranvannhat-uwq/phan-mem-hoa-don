@@ -10,7 +10,6 @@ import {
   getOrderOutstandingAmount,
   mergeCustomerDebtHistory,
   projectEffectiveCustomerDebtHistory,
-  rebuildOrderDebtSnapshot,
   reduceCustomerDebtForReturn,
   restoreCustomerDebtForCancelledReturn
 } from '../js/domain/customer-debt.js';
@@ -27,10 +26,29 @@ assert.equal(
   'Accounting displays the document date instead of the later posting date'
 );
 const backdatedDisplay = buildCustomerDebtDisplayHistory(backdatedPostingSequence, 1840400).reverse();
-assert.deepEqual(backdatedDisplay.map(item => item.id), ['payment', 'import', 'backdated-order']);
+assert.deepEqual(backdatedDisplay.map(item => item.id), ['backdated-order', 'payment', 'import']);
 assert.equal(backdatedDisplay[0].debtAfter, 1840400, 'Newest posted snapshot equals authoritative current debt');
-assert.equal(backdatedDisplay[0].debtBefore, backdatedDisplay[1].debtAfter, 'Document-time order keeps adjacent balances continuous');
+assert.equal(backdatedDisplay[0].debtBefore, backdatedDisplay[1].debtAfter, 'Posting order keeps adjacent balances continuous');
 assert.equal(backdatedDisplay[1].debtBefore, backdatedDisplay[2].debtAfter, 'Earlier adjacent balances remain continuous');
+
+const reportedIncident = buildCustomerDebtDisplayHistory([
+  {
+    id: 'target-order', type: 'charge', transactionType: 'order',
+    debtChange: 8026144, debtBefore: -1075815, debtAfter: 6950329,
+    date: '2026-09-11T08:38:00+07:00', postedAt: '2026-09-11T08:38:10+07:00'
+  },
+  {
+    id: 'later-posted-backdated-net', type: 'adjust', transactionType: 'adjust',
+    debtChange: 1086012, debtBefore: 6950329, debtAfter: 8036341,
+    date: '2026-09-10T08:00:00+07:00', postedAt: '2026-09-11T09:00:00+07:00'
+  }
+], 8036341);
+const reportedOrder = reportedIncident.find(entry => entry.id === 'target-order');
+assert.deepEqual(
+  { debtBefore: reportedOrder.debtBefore, debtAfter: reportedOrder.debtAfter },
+  { debtBefore: -1075815, debtAfter: 6950329 },
+  'A later-posted backdated entry must not rewrite the issued invoice balance'
+);
 
 const amendedDisplay = buildCustomerDebtDisplayHistory([
   { id: 'payment-original', type: 'payment', transactionType: 'payment', amount: 5000000, debtChange: -5000000, postedAt: '2026-08-01T08:00:00Z' },
@@ -81,25 +99,6 @@ assert.deepEqual(getOrderDebtSnapshot({ id: 'HD-001' }, { debtHistory: mergedHis
 assert.deepEqual(getOrderDebtSnapshot({ id: 'HD-002' }, { debtHistory: [] }, {
   orderId: 'HD-002', debtBefore: -13898778, debtAfter: -407803
 }), { debtBefore: -13898778, debtAfter: -407803 }, 'A targeted cloud snapshot is accepted without mutating customer state');
-
-const legacyDiscountLedger = [
-  { id: 'ledger-1', orderId: 'HD-DISCOUNT', transactionType: 'order', debtChange: 300000, debtBefore: 0, debtAfter: 300000, createdAt: '2026-09-05T07:55:00Z' },
-  { id: 'ledger-2', orderId: 'HD-NEXT', transactionType: 'order', debtChange: 75000, debtBefore: 300000, debtAfter: 375000, createdAt: '2026-09-05T08:38:00Z' }
-];
-const legacyDiscountOrders = [
-  { id: 'HD-DISCOUNT', customerId: 'KH-1', status: 'settled', totalPayable: 291000, shippingFeeAmount: 10000, totalAmount: 301000 },
-  { id: 'HD-NEXT', customerId: 'KH-1', status: 'settled', totalPayable: 75000, totalAmount: 75000 }
-];
-assert.deepEqual(
-  rebuildOrderDebtSnapshot('HD-NEXT', 'KH-1', legacyDiscountLedger, legacyDiscountOrders),
-  { debtBefore: 301000, debtAfter: 376000 },
-  'The next invoice rebuilds old debt from the previous post-discount total plus shipping'
-);
-assert.deepEqual(
-  rebuildOrderDebtSnapshot('HD-DISCOUNT', 'KH-1', legacyDiscountLedger, legacyDiscountOrders),
-  { debtBefore: 0, debtAfter: 301000 },
-  'Printing the older invoice retains its historical post-discount balance'
-);
 
 const compactedIds = getNeutralizedOrderDebtEntryIds([
   { id: 'charge-old', orderId: 'HD-OLD', transactionType: 'order', debtChange: 13490975 },

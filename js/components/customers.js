@@ -1,15 +1,15 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260907-password-reset-v2';
-import { renderAll } from '../main.js?v=20260907-password-reset-v2';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260907-password-reset-v2';
-import { addCashbookTransaction } from './so_quy.js?v=20260907-password-reset-v2';
-import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260907-password-reset-v2';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20260907-password-reset-v2';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260911-debt-snapshot-v1';
+import { renderAll } from '../main.js?v=20260911-debt-snapshot-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260911-debt-snapshot-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20260911-debt-snapshot-v1';
+import { getOrderFinancialBreakdown } from '../domain/order-financials.js?v=20260911-debt-snapshot-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260911-debt-snapshot-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260907-password-reset-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20260911-debt-snapshot-v1';
 
 let pendingCustomerPaymentKey = '';
 
@@ -3302,8 +3302,8 @@ export async function openCustomerDetailModal(index) {
   if (historyBody) {
     const history = buildCustomerDebtDisplayHistory(cust.debtHistory || [], cust.debt);
     
-    // Hiển thị mới → cũ theo đúng ngày/giờ chứng từ. Các số dư đã được dựng
-    // lại cùng trật tự này trong buildCustomerDebtDisplayHistory.
+    // Hiển thị mới → cũ theo thứ tự ghi sổ bất biến. Ngày/giờ trong
+    // cột bên dưới vẫn là ngày chứng từ do người dùng chọn.
     const sortedHistory = history.reverse();
     
     if (sortedHistory.length === 0) {
@@ -3357,10 +3357,18 @@ export async function openCustomerDetailModal(index) {
         const formattedTime = new Intl.DateTimeFormat('vi-VN', {
           hour: '2-digit', minute: '2-digit'
         }).format(transactionDate);
+        const postingDate = new Date(getCustomerDebtPostingDate(h));
+        const postingDateDiffers = Number.isFinite(postingDate.getTime())
+          && Math.abs(postingDate.getTime() - transactionDate.getTime()) >= 60000;
+        const postingHint = postingDateDiffers
+          ? `<small style="display:block;color:var(--text-muted);font-size:0.65rem;white-space:nowrap;" title="Thứ tự số dư được tính theo thời điểm ghi sổ">Ghi sổ ${new Intl.DateTimeFormat('vi-VN', {
+            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+          }).format(postingDate)}</small>`
+          : '';
         
         return `
           <tr>
-            <td class="customer-debt-time-cell"><strong>${formattedDate}</strong><span>${formattedTime}</span></td>
+            <td class="customer-debt-time-cell"><strong>${formattedDate}</strong><span>${formattedTime}</span>${postingHint}</td>
             <td class="customer-debt-source-cell">${sourceCell}</td>
             <td style="text-align: center;">${typeBadge}</td>
             <td style="text-align: right;">${formatCurrency(debtBefore)}</td>
