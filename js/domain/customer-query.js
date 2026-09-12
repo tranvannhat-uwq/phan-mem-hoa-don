@@ -15,12 +15,40 @@ export function normalizeCustomerPhone(value) {
   return String(value ?? '').replace(/\D/g, '');
 }
 
-function matchesCustomerQuickSearch(customer, rawSearch) {
+function matchesCustomerQuickSearch(customer, rawSearch, searchScope = 'all') {
   const search = normalizeCustomerSearch(rawSearch);
   if (!search) return true;
 
+  const scope = searchScope || 'all';
+
+  if (scope === 'address') {
+    return normalizeCustomerSearch([
+      customer.address,
+      customer.provinceName,
+      customer.provinceCode
+    ].join(' ')).includes(search);
+  }
+
+  if (scope === 'general') {
+    const textMatches = normalizeCustomerSearch([
+      customer.code, customer.name, customer.phone
+    ].join(' ')).includes(search);
+    if (textMatches) return true;
+
+    const raw = String(rawSearch ?? '').trim();
+    if (!/^[+\d\s()./-]+$/.test(raw)) return false;
+    const phoneQuery = normalizeCustomerPhone(raw);
+    return Boolean(phoneQuery) && normalizeCustomerPhone(customer.phone).includes(phoneQuery);
+  }
+
+  // scope === 'all': search across code, name, phone, address, and province
   const textMatches = normalizeCustomerSearch([
-    customer.code, customer.name, customer.phone
+    customer.code,
+    customer.name,
+    customer.phone,
+    customer.address,
+    customer.provinceName,
+    customer.provinceCode
   ].join(' ')).includes(search);
   if (textMatches) return true;
 
@@ -233,7 +261,7 @@ export function filterCustomerRows(rows, query = {}, now = new Date()) {
   const debtMax = finiteCustomerNumber(query.debtMax);
 
   return rows.filter(customer => {
-    if (!matchesCustomerQuickSearch(customer, query.q)) return false;
+    if (!matchesCustomerQuickSearch(customer, query.q, query.searchScope)) return false;
 
     const createdAt = customer.createdAt;
     if (query.createdPreset === 'missing' && createdAt) return false;

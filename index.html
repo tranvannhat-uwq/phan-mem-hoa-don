@@ -1583,9 +1583,16 @@
           </div>
 
           <div class="customer-query-toolbar">
-            <div class="search-wrapper" style="flex: 1; min-width: 250px;">
-              <i data-lucide="search" class="search-icon"></i>
-              <input type="text" class="form-control-search" id="customer-search-input" placeholder="Tìm theo mã, tên hoặc số điện thoại đại lý...">
+            <div class="customer-search-group">
+              <select class="form-control customer-search-scope" id="customer-search-scope" aria-label="Mục tìm kiếm" title="Chọn mục tìm kiếm">
+                <option value="all">Tất cả</option>
+                <option value="general">Tên, mã, SĐT</option>
+                <option value="address">Địa chỉ</option>
+              </select>
+              <div class="search-wrapper">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" class="form-control-search" id="customer-search-input" placeholder="Tìm theo mã, tên, số điện thoại hoặc địa chỉ...">
+              </div>
             </div>
             <div class="filter-wrapper customer-legacy-manager-filter" id="cust-managed-filter-wrapper">
               <select class="form-control" id="customer-managed-filter" aria-label="Lọc theo nhân viên">

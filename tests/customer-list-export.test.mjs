@@ -16,7 +16,7 @@ test('customer screen and Excel export share one filtered and sorted row pipelin
   assert.match(customers, /if \(scope === 'selected'\) return customerFilteredRows\.filter/);
   assert.match(customers, /return \[\.\.\.customerFilteredRows\]/);
   assert.doesNotMatch(customers, /customerFilteredRows\.sort\(/);
-  for (const id of ['customer-search-input', 'customer-advanced-filter-panel', 'customer-sort-key',
+  for (const id of ['customer-search-input', 'customer-search-scope', 'customer-advanced-filter-panel', 'customer-sort-key',
     'customer-status', 'customer-page-size', 'customer-list-export-modal',
     'customer-filter-drawer-backdrop', 'btn-close-customer-filter',
     'btn-reset-customer-filter-modal', 'btn-apply-customer-filter-modal']) {

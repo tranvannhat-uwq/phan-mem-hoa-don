@@ -22,7 +22,7 @@ let activeExportOrders = null;
 let activeExportOrderIds = null;
 
 const DEFAULT_CUSTOMER_QUERY = Object.freeze({
-  q: '', sortKey: 'lastTransactionAt', sortDirection: 'desc', nulls: 'last', pageSize: 20,
+  q: '', searchScope: 'all', sortKey: 'lastTransactionAt', sortDirection: 'desc', nulls: 'last', pageSize: 20,
   createdPreset: '', createdFrom: '', createdTo: '', lastPreset: '', lastFrom: '', lastTo: '',
   salesMetric: 'netSales', salesPreset: '', salesMin: '', salesMax: '',
   debtPreset: '', debtMin: '', debtMax: '', brands: [], pricelists: [], managers: [], provinces: [],
@@ -35,6 +35,7 @@ let customerSearchDebounce = null;
 let customerFilterOptionSignature = null;
 
 const CUSTOMER_QUERY_CONTROL_MAP = Object.freeze({
+  searchScope: 'customer-search-scope',
   nulls: 'customer-sort-nulls',
   createdPreset: 'customer-created-preset', createdFrom: 'customer-created-from', createdTo: 'customer-created-to',
   lastPreset: 'customer-last-preset', lastFrom: 'customer-last-from', lastTo: 'customer-last-to',
@@ -489,6 +490,37 @@ function selectedValues(select) {
   return select ? [...select.selectedOptions].map(option => option.value).filter(Boolean) : [];
 }
 
+const CUSTOMER_PROVINCE_SEARCH_ALIASES = Object.freeze({
+  HCM: 'sai gon saigon tphcm hcm ho chi minh thanh pho ho chi minh tp.hcm',
+  HN: 'ha noi hanoi hn thu do thanh pho ha noi',
+  DN: 'da nang danang dn thanh pho da nang',
+  HP: 'hai phong haiphong hp thanh pho hai phong',
+  CT: 'can tho cantho ct thanh pho can tho',
+  BRVT: 'ba ria vung tau bariavungtau brvt vung tau vungtau',
+  BD: 'binh duong binhduong bd',
+  BP: 'binh phuoc binhphuoc bp',
+  BTH: 'binh thuan binhthuan phan thiet phanthiet',
+  DNai: 'dong nai dongnai bien hoa bienhoa',
+  DT: 'dong thap dongthap cao lanh caolanh sa dec sadec',
+  GL: 'gia lai gialai pleiku',
+  KH: 'khanh hoa khanhhoa nha trang nhatrang',
+  KT: 'kon tum kontum kt',
+  LD: 'lam dong lamdong da lat dalat bao loc baoloc',
+  LA: 'long an longan tan an tanan',
+  NA: 'nghe an nghean vinh',
+  PY: 'phu yen phuyen tuy hoa tuyhoa',
+  QB: 'quang binh quangbinh dong hoi donghoi',
+  QNa: 'quang nam quangnam hoi an hoian tam ky tamky',
+  QNg: 'quang ngai quangngai',
+  QN: 'quang ninh quangninh ha long halong bai chay baichay',
+  QT: 'quang tri quangtri dong ha dongha',
+  TH: 'thanh hoa thanhhoa sam son samson',
+  TTH: 'thua thien hue hue tth',
+  TG: 'tien giang tiengiang my tho mytho',
+  AG: 'an giang angiang long xuyen longxuyen chau doc chaudoc',
+  KG: 'kien giang kiengiang rach gia rachgia phu quoc phuquoc'
+});
+
 const CUSTOMER_MULTI_SELECT_CONFIG = Object.freeze({
   'customer-filter-brands': 'Chọn nhãn sơn',
   'customer-filter-pricelists': 'Chọn bảng giá',
@@ -501,13 +533,21 @@ function syncCustomerMultiSelectVisual(select) {
   if (!root) return;
   const selected = [...select.selectedOptions];
   const label = root.querySelector('.customer-multi-select-value');
+  const trigger = root.querySelector('.customer-multi-select-trigger');
   if (label) label.textContent = selected.length === 0
     ? root.dataset.placeholder
     : (selected.length === 1 ? selected[0].textContent : `${selected.length} mục đã chọn`);
+  if (trigger) {
+    trigger.title = selected.length > 0 ? selected.map(option => option.textContent).join(', ') : '';
+  }
   root.classList.toggle('has-value', selected.length > 0);
-  root.querySelectorAll('.customer-multi-select-option input').forEach(input => {
+  root.querySelectorAll('.customer-multi-select-option').forEach(item => {
+    const input = item.querySelector('input');
+    if (!input) return;
     const option = select.options[Number(input.dataset.optionIndex)];
-    input.checked = Boolean(option?.selected);
+    const isChecked = Boolean(option?.selected);
+    input.checked = isChecked;
+    item.classList.toggle('selected', isChecked);
   });
 }
 
@@ -552,7 +592,16 @@ function renderCustomerMultiSelect(selectId, placeholder, shellOnly = false) {
       root.classList.toggle('open', open);
       dropdown.hidden = !open;
       trigger.setAttribute('aria-expanded', String(open));
-      if (open) root.querySelector('.customer-multi-select-search').focus();
+      if (open) {
+        const searchInput = root.querySelector('.customer-multi-select-search');
+        if (searchInput) {
+          if (searchInput.value) {
+            searchInput.value = '';
+            searchInput.dispatchEvent(new Event('input'));
+          }
+          searchInput.focus();
+        }
+      }
     });
     root.addEventListener('click', event => event.stopPropagation());
     document.addEventListener('click', () => {
@@ -560,15 +609,38 @@ function renderCustomerMultiSelect(selectId, placeholder, shellOnly = false) {
       dropdown.hidden = true;
       trigger.setAttribute('aria-expanded', 'false');
     });
-    root.querySelector('.customer-multi-select-search').addEventListener('input', event => {
-      const query = normalizeCustomerSearch(event.target.value);
+    const searchInput = root.querySelector('.customer-multi-select-search');
+    searchInput.addEventListener('input', event => {
+      const rawVal = event.target.value;
+      const query = normalizeCustomerSearch(rawVal);
+      const compactQuery = query.replace(/[^a-z0-9]/g, '');
       let visible = 0;
       root.querySelectorAll('.customer-multi-select-option').forEach(item => {
-        const show = !query || item.dataset.search.includes(query);
+        const searchTarget = item.dataset.search || '';
+        const show = !query || searchTarget.includes(query) || (Boolean(compactQuery) && searchTarget.replace(/[^a-z0-9]/g, '').includes(compactQuery));
         item.hidden = !show;
+        item.style.display = show ? '' : 'none';
         if (show) visible += 1;
       });
-      root.querySelector('.customer-multi-select-empty').hidden = visible > 0;
+      const emptyEl = root.querySelector('.customer-multi-select-empty');
+      if (emptyEl) {
+        emptyEl.hidden = visible > 0;
+        emptyEl.textContent = 'Không tìm thấy kết quả';
+      }
+    });
+    searchInput.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        if (searchInput.value) {
+          searchInput.value = '';
+          searchInput.dispatchEvent(new Event('input'));
+        } else {
+          root.classList.remove('open');
+          dropdown.hidden = true;
+          trigger.setAttribute('aria-expanded', 'false');
+          trigger.focus();
+        }
+      }
     });
     root.querySelector('.customer-multi-select-clear').addEventListener('click', () => {
       [...select.options].forEach(option => { option.selected = false; });
@@ -585,11 +657,24 @@ function renderCustomerMultiSelect(selectId, placeholder, shellOnly = false) {
   }
 
   const options = root.querySelector('.customer-multi-select-options');
-  options.innerHTML = [...select.options].map((option, index) => `
-    <label class="customer-multi-select-option" data-search="${escapeCustomerHtml(normalizeCustomerSearch(option.textContent))}">
+  options.innerHTML = [...select.options].map((option, index) => {
+    const text = option.textContent || '';
+    const val = option.value || '';
+    const normText = normalizeCustomerSearch(text);
+    const normVal = normalizeCustomerSearch(val);
+    const compactText = normText.replace(/[^a-z0-9]/g, '');
+    const searchTerms = [normText, normVal, compactText];
+    if (selectId === 'customer-filter-provinces') {
+      const alias = CUSTOMER_PROVINCE_SEARCH_ALIASES[val] || '';
+      if (alias) searchTerms.push(alias);
+    }
+    const searchAttr = searchTerms.filter(Boolean).join(' ');
+    return `
+    <label class="customer-multi-select-option" data-search="${escapeCustomerHtml(searchAttr)}">
       <input type="checkbox" data-option-index="${index}" ${option.selected ? 'checked' : ''}>
-      <span title="${escapeCustomerHtml(option.textContent)}">${escapeCustomerHtml(option.textContent)}</span>
-    </label>`).join('');
+      <span title="${escapeCustomerHtml(text)}">${escapeCustomerHtml(text)}</span>
+    </label>`;
+  }).join('');
   options.querySelectorAll('input').forEach(input => input.addEventListener('change', () => {
     const option = select.options[Number(input.dataset.optionIndex)];
     if (option) option.selected = input.checked;
@@ -643,6 +728,18 @@ function restoreCustomerQueryFromUrl() {
   state.customersPage = Math.max(1, Number(params.get('cust_page')) || 1);
 }
 
+function updateCustomerSearchPlaceholder(scope) {
+  const search = document.getElementById('customer-search-input');
+  if (!search) return;
+  if (scope === 'address') {
+    search.placeholder = 'Tìm theo địa chỉ, tỉnh thành đại lý...';
+  } else if (scope === 'general') {
+    search.placeholder = 'Tìm theo mã, tên hoặc số điện thoại đại lý...';
+  } else {
+    search.placeholder = 'Tìm theo mã, tên, số điện thoại hoặc địa chỉ...';
+  }
+}
+
 function syncCustomerQueryControls() {
   const search = document.getElementById('customer-search-input');
   const sort = document.getElementById('customer-sort-key');
@@ -662,6 +759,7 @@ function syncCustomerQueryControls() {
     if (control.multiple) [...control.options].forEach(option => { option.selected = customerViewQuery[key].includes(option.value); });
     else control.value = customerViewQuery[key] || '';
   });
+  updateCustomerSearchPlaceholder(customerViewQuery.searchScope || 'all');
   const direction = document.getElementById('btn-customer-sort-direction');
   if (direction) {
     direction.innerHTML = `<i data-lucide="arrow-${customerViewQuery.sortDirection === 'asc' ? 'up' : 'down'}"></i>`;
@@ -731,7 +829,7 @@ function refreshCustomerQueryOptionsIfNeeded() {
 
 function getActiveCustomerFilterCount() {
   return Object.entries(customerViewQuery).reduce((count, [key, value]) => {
-    if (['q', 'sortKey', 'sortDirection', 'nulls', 'pageSize', 'salesMetric'].includes(key)) return count;
+    if (['q', 'searchScope', 'sortKey', 'sortDirection', 'nulls', 'pageSize', 'salesMetric'].includes(key)) return count;
     return count + (Array.isArray(value) ? (value.length ? 1 : 0) : (value ? 1 : 0));
   }, 0);
 }
@@ -1692,6 +1790,11 @@ export function setupCustomerManagement() {
     clearTimeout(customerSearchDebounce);
     customerSearchDebounce = setTimeout(() => applyCustomerQueryChange(), 350);
   });
+  const searchScope = document.getElementById('customer-search-scope');
+  if (searchScope) searchScope.addEventListener('change', () => {
+    updateCustomerSearchPlaceholder(searchScope.value);
+    applyCustomerQueryChange();
+  });
 
   const sortKey = document.getElementById('customer-sort-key');
   if (sortKey) sortKey.addEventListener('change', () => applyCustomerQueryChange());
@@ -1731,6 +1834,14 @@ export function setupCustomerManagement() {
     filterBackdrop?.setAttribute('aria-hidden', String(!open));
     filterButton.setAttribute('aria-expanded', String(open));
     document.body.classList.toggle('customer-filter-drawer-open', open);
+    if (!open) {
+      document.querySelectorAll('.customer-multi-select.open').forEach(item => {
+        item.classList.remove('open');
+        const dropdown = item.querySelector('.customer-multi-select-dropdown');
+        if (dropdown) dropdown.hidden = true;
+        item.querySelector('.customer-multi-select-trigger')?.setAttribute('aria-expanded', 'false');
+      });
+    }
     if (open) closeFilterButton?.focus();
     else filterButton.focus();
   };

@@ -9,7 +9,7 @@ const rows = [
   { id: '3', code: 'KH003', name: 'Trần Lan', phone: '', address: 'Vĩnh Phúc', provinceName: 'Vĩnh Phúc', provinceCode: 'VP', brand: 'NANO10', pricelistId: 'p2', pricelistName: 'Bảng giá 02', managerId: 'thuy', managerName: 'Thanh Thụy', notes: 'Theo dõi', createdAt: '', lastTransactionAt: '2026-04-01T12:00:00Z', grossSales: 50000000, totalReturns: 5000000, netSales: 45000000, debt: 0, debtDays: 30, status: 'inactive' }
 ];
 
-test('quick search is accent-insensitive and limited to customer code, name and phone', () => {
+test('quick search supports all, general (code, name, phone) and address scopes', () => {
   assert.equal(normalizeCustomerSearch('  ĐƯỜNG   hoàn '), 'duong hoan');
   assert.equal(normalizeCustomerPhone('0912.000 001'), '0912000001');
   assert.equal(normalizeCustomerPhone('0912,000,001'), '0912000001');
@@ -20,9 +20,25 @@ test('quick search is accent-insensitive and limited to customer code, name and 
   assert.deepEqual(filterCustomerRows(rows, { q: '0912000001' }, now).map(row => row.id), ['1']);
   assert.deepEqual(filterCustomerRows(rows, { q: '0988.000.002' }, now).map(row => row.id), ['2']);
   assert.deepEqual(filterCustomerRows(rows, { q: 'kh003' }, now).map(row => row.id), ['3']);
-  for (const excludedValue of ['duong hoan', 'ha noi', 'nano10', 'bang gia 01', 'khach vip']) {
+
+  // By default (or scope: 'all'), address is searchable
+  assert.deepEqual(filterCustomerRows(rows, { q: 'ha noi' }, now).map(row => row.id), ['1']);
+  assert.deepEqual(filterCustomerRows(rows, { q: 'vinh phuc' }, now).map(row => row.id), ['3']);
+
+  // Other unrelated fields remain excluded from quick search
+  for (const excludedValue of ['duong hoan', 'nano10', 'bang gia 01', 'khach vip']) {
     assert.deepEqual(filterCustomerRows(rows, { q: excludedValue }, now), []);
   }
+
+  // Explicit scope: 'address' only matches address fields
+  assert.deepEqual(filterCustomerRows(rows, { q: 'ha noi', searchScope: 'address' }, now).map(row => row.id), ['1']);
+  assert.deepEqual(filterCustomerRows(rows, { q: 'vinh phuc', searchScope: 'address' }, now).map(row => row.id), ['3']);
+  assert.deepEqual(filterCustomerRows(rows, { q: 'nguyen thanh', searchScope: 'address' }, now), []);
+  assert.deepEqual(filterCustomerRows(rows, { q: 'kh001', searchScope: 'address' }, now), []);
+
+  // Explicit scope: 'general' only matches code, name, phone and excludes address
+  assert.deepEqual(filterCustomerRows(rows, { q: 'nguyen thanh', searchScope: 'general' }, now).map(row => row.id), ['1']);
+  assert.deepEqual(filterCustomerRows(rows, { q: 'ha noi', searchScope: 'general' }, now), []);
 });
 
 test('date keys do not swap day/month or drift through UTC', () => {
