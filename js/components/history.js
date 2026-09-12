@@ -6,7 +6,9 @@ import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl
 import { openHistoryOrderExportModal } from './customers.js?v=20260911-debt-snapshot-v1';
 import {
   getOrderFinancialBreakdown,
-  isOrderIncludedInFinancialSummary
+  isOrderIncludedInFinancialSummary,
+  calculateHistoryFinancialSummary,
+  isSalesReturnActive
 } from '../domain/order-financials.js?v=20260911-debt-snapshot-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
@@ -256,7 +258,7 @@ async function reloadHistorySearch() {
   renderHistoryOrders();
 }
 
-function createHistoryLookups() {
+function createHistoryLookups(activeWindow = null) {
   const customerById = new Map();
   const customerByName = new Map();
   (state.customers || []).forEach(customer => {
@@ -270,18 +272,40 @@ function createHistoryLookups() {
   const pricelistById = new Map((state.pricelists || []).map(item => [String(item.id), item]));
   const returnsByOrderId = new Map();
   const activeReturnsByOrderId = new Map();
+  const periodActiveReturnsByOrderId = new Map();
+  const fromDate = activeWindow?.start || null;
+  const endExclusiveDate = activeWindow?.endExclusive || null;
+  const dateMode = activeWindow?.mode || 'all';
+
   (state.salesReturns || []).forEach(item => {
     const orderId = String(item.saleId || item.orderId || item.sale_id || item.order_id || '');
     if (!orderId) return;
     if (!returnsByOrderId.has(orderId)) returnsByOrderId.set(orderId, []);
     returnsByOrderId.get(orderId).push(item);
-    if (!['cancelled', 'canceled', 'draft'].includes(String(item.status || 'completed').toLowerCase())) {
+    if (isSalesReturnActive(item)) {
       if (!activeReturnsByOrderId.has(orderId)) activeReturnsByOrderId.set(orderId, []);
       activeReturnsByOrderId.get(orderId).push(item);
+
+      if (dateMode !== 'all' && (fromDate || endExclusiveDate)) {
+        const retDate = new Date(item.returnDate || item.createdAt || item.date);
+        if (Number.isFinite(retDate.getTime())) {
+          if (fromDate && retDate < fromDate) return;
+          if (endExclusiveDate && retDate >= endExclusiveDate) return;
+        }
+      }
+      if (!periodActiveReturnsByOrderId.has(orderId)) periodActiveReturnsByOrderId.set(orderId, []);
+      periodActiveReturnsByOrderId.get(orderId).push(item);
     }
   });
 
-  return { customerById, customerByName, pricelistById, returnsByOrderId, activeReturnsByOrderId };
+  return {
+    customerById,
+    customerByName,
+    pricelistById,
+    returnsByOrderId,
+    activeReturnsByOrderId,
+    periodActiveReturnsByOrderId
+  };
 }
 
 function getHistoryCustomer(order, lookups) {
@@ -322,15 +346,8 @@ function updateHistorySummary(orders, lookups) {
   const countEl = document.getElementById('history-total-settled-count');
   if (!beforeDiscountEl || !discountEl || !otherFeeEl || !payableEl || !countEl) return;
 
-  const settledOrders = (orders || []).filter(isOrderIncludedInFinancialSummary);
-  const totals = settledOrders.reduce((summary, order) => {
-    const breakdown = getHistoryOrderAmountBreakdown(order, lookups);
-    summary.totalBeforeDiscount += breakdown.totalBeforeDiscount;
-    summary.totalDiscountAmount += breakdown.totalDiscountAmount;
-    summary.shippingFeeAmount += breakdown.shippingFeeAmount;
-    summary.totalPayment += breakdown.totalPayment;
-    return summary;
-  }, { totalBeforeDiscount: 0, totalDiscountAmount: 0, shippingFeeAmount: 0, totalPayment: 0 });
+  const allActiveReturns = Array.from(lookups.periodActiveReturnsByOrderId.values()).flat();
+  const { settledOrders, totals } = calculateHistoryFinancialSummary(orders, allActiveReturns);
 
   beforeDiscountEl.innerText = formatNumber(totals.totalBeforeDiscount);
   discountEl.innerText = formatNumber(totals.totalDiscountAmount);
@@ -884,16 +901,16 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     // A normal render may follow an in-place order edit. Rebuild financial
     // values for correctness; page/view changes explicitly reuse this cache.
     historyFinancialCache = null;
-    lookups = createHistoryLookups();
+    const activeWindow = getHistoryDateWindow();
+    const fromDate = activeWindow.start;
+    const endExclusiveDate = activeWindow.endExclusive;
+    lookups = createHistoryLookups(activeWindow);
     const filterLower = selectedCreator.toLowerCase().trim();
     const matchingUsers = filterLower
       ? (state.users || []).filter(u =>
         (u.displayName || '').toLowerCase().includes(filterLower)
         || (u.username || '').toLowerCase().includes(filterLower))
       : [];
-    const activeWindow = getHistoryDateWindow();
-    const fromDate = activeWindow.start;
-    const endExclusiveDate = activeWindow.endExclusive;
 
     const filtered = (state.savedOrders || []).filter(o => {
     // 1. Phân quyền hiển thị đơn của Sale
