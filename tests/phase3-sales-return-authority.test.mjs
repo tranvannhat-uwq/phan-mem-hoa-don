@@ -26,7 +26,7 @@ test('return deduction is per item, optional and calculated authoritatively', ()
   assert.match(markup, /Khấu trừ %/);
   assert.match(history, /class="form-control return-deduction-percent-input"/);
   assert.match(history, /deductionPercent = parseFloat/);
-  assert.match(history, /unitPrice \* qty \* \(1 - deductionPercent \/ 100\)/);
+  assert.match(history, /refundableUnitPrice \* qty \* \(1 - deductionPercent \/ 100\)/);
   assert.match(service, /deductionPercent: Number\(item\.deductionPercent \|\| 0\)/);
   assert.match(deductionMigration, /item_deduction_percent < 0 OR item_deduction_percent > 100/);
   assert.match(deductionMigration, /line_refund := round\(line_refund \* \(100 - item_deduction_percent\) \/ 100\)/);

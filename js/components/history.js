@@ -1813,12 +1813,17 @@ export function openSalesReturnModal(orderId) {
 
   const orderItemsSubtotal = (order.items || []).reduce((sum, item) => {
     const qty = Number(item.quantity || 0);
-    const price = Number(item.price || 0);
-    const discountPercent = Number(item.discountPercent || 0);
-    return sum + Math.max(0, qty * price * (1 - discountPercent / 100));
+    const listedUnitPrice = Number(item.unitPrice ?? item.listPrice ?? item.price ?? 0);
+    const discountPercent = Number(item.discountPercent ?? item.discount ?? 0);
+    const calculatedUnitPrice = listedUnitPrice * (1 - Math.max(0, discountPercent) / 100);
+    const saleUnitPrice = Number(item.finalUnitPrice ?? item.salePrice ?? item.finalPrice ?? calculatedUnitPrice);
+    const storedLineTotal = Number(item.lineTotal ?? item.total);
+    return sum + Math.max(0, Number.isFinite(storedLineTotal) ? storedLineTotal : qty * saleUnitPrice);
   }, 0);
-  const orderDiscountRatio = orderItemsSubtotal > 0 && Number(order.totalPayable || 0) > 0
-    ? Math.min(1, Number(order.totalPayable || 0) / orderItemsSubtotal)
+  const storedOrderSubtotal = Number(order.subtotal ?? orderItemsSubtotal);
+  const storedTotalPayable = Number(order.totalPayable ?? order.total_payable);
+  const orderDiscountRatio = storedOrderSubtotal > 0 && Number.isFinite(storedTotalPayable)
+    ? Math.min(1, Math.max(0, storedTotalPayable / storedOrderSubtotal))
     : 1;
 
   tbody.innerHTML = (order.items || []).map((item, idx) => {
@@ -1834,17 +1839,21 @@ export function openSalesReturnModal(orderId) {
     const soldQty = Number(item.quantity || 0);
     const prevReturned = returnedMap[itemKey] || 0;
     const maxReturnable = Math.max(0, soldQty - prevReturned);
-    const basePrice = Number(item.price || 0);
-    const discountPercent = Number(item.discountPercent || 0);
-    const unitPrice = Math.round(Math.max(0, basePrice * (1 - discountPercent / 100) * orderDiscountRatio));
+    const orderUnitPrice = Math.round(Math.max(0, Number(item.unitPrice ?? item.listPrice ?? item.price ?? 0)));
+    const discountPercent = Number(item.discountPercent ?? item.discount ?? 0);
+    const calculatedSaleUnitPrice = orderUnitPrice * (1 - Math.max(0, discountPercent) / 100);
+    const saleUnitPrice = Math.round(Math.max(0, Number(
+      item.finalUnitPrice ?? item.salePrice ?? item.finalPrice ?? calculatedSaleUnitPrice
+    )));
+    const refundableUnitPrice = Math.round(saleUnitPrice * orderDiscountRatio);
     const prodName = item.productName || (item.product && item.product.name) || item.name || 'Sản phẩm';
 
     return `
-      <tr class="return-item-row" data-key="${itemKey}" data-sale-item-id="${item.id || ''}" data-product-id="${variantCode}" data-variant-id="${variantId}" data-variant-code="${variantCode}" data-product-name="${prodName}" data-package="${packagingName}" data-specification="${specification}" data-unit-price="${unitPrice}" data-sold-qty="${soldQty}" data-prev-returned="${prevReturned}" data-max-returnable="${maxReturnable}" data-product-brand="${item.productBrand || item.brand || ''}" data-agency-brand="${item.agencyBrand || ''}" data-revenue-brand="${item.revenueBrand || ''}" data-revenue-company="${item.revenueCompany || order.companyId || ''}">
+      <tr class="return-item-row" data-key="${itemKey}" data-sale-item-id="${item.id || ''}" data-product-id="${variantCode}" data-variant-id="${variantId}" data-variant-code="${variantCode}" data-product-name="${prodName}" data-package="${packagingName}" data-specification="${specification}" data-order-unit-price="${orderUnitPrice}" data-refund-unit-price="${refundableUnitPrice}" data-sold-qty="${soldQty}" data-prev-returned="${prevReturned}" data-max-returnable="${maxReturnable}" data-product-brand="${item.productBrand || item.brand || ''}" data-agency-brand="${item.agencyBrand || ''}" data-revenue-brand="${item.revenueBrand || ''}" data-revenue-company="${item.revenueCompany || order.companyId || ''}">
         <td>${idx + 1}</td>
         <td style="font-weight: 600; color: #fff;">${prodName}<br><small>${variantCode}</small></td>
         <td>${specification || packagingName || 'Cái'}</td>
-        <td style="text-align: right;">${formatCurrency(unitPrice)}</td>
+        <td style="text-align: right;" title="Đơn giá đã lưu trên đơn hàng gốc">${formatCurrency(orderUnitPrice)}</td>
         <td style="text-align: center; font-weight: 600;">${soldQty}</td>
         <td style="text-align: center; color: var(--color-warning);">${prevReturned}</td>
         <td style="text-align: center;">
@@ -1853,7 +1862,7 @@ export function openSalesReturnModal(orderId) {
         <td style="text-align: center;">
           <input type="number" class="form-control return-deduction-percent-input" min="0" max="100" step="0.01" value="0" ${maxReturnable === 0 ? 'disabled' : ''} aria-label="Phần trăm khấu trừ khi trả ${prodName}" style="width: 72px; text-align: center; font-weight: 700; height: 32px; padding: 2px;">
         </td>
-        <td style="text-align: right; font-weight: 600; color: var(--color-primary);" class="return-refund-price-lbl">${formatCurrency(unitPrice)}</td>
+        <td style="text-align: right; font-weight: 600; color: var(--color-primary);" class="return-refund-price-lbl">${formatCurrency(refundableUnitPrice)}</td>
         <td style="text-align: right; font-weight: 700; color: #f59e0b;" class="return-subtotal-lbl">0 ₫</td>
       </tr>
     `;
@@ -1862,7 +1871,7 @@ export function openSalesReturnModal(orderId) {
   const recalculateTotals = () => {
     let totalRefund = 0;
     document.querySelectorAll('.return-item-row').forEach(row => {
-      const unitPrice = parseFloat(row.getAttribute('data-unit-price')) || 0;
+      const refundableUnitPrice = parseFloat(row.getAttribute('data-refund-unit-price')) || 0;
       const maxReturnable = parseFloat(row.getAttribute('data-max-returnable')) || 0;
       
       const qtyInput = row.querySelector('.return-qty-input');
@@ -1882,8 +1891,8 @@ export function openSalesReturnModal(orderId) {
         deductionInput.value = 100;
       }
 
-      const refundPrice = Math.round(unitPrice * (1 - deductionPercent / 100));
-      const subtotal = Math.round(unitPrice * qty * (1 - deductionPercent / 100));
+      const refundPrice = Math.round(refundableUnitPrice * (1 - deductionPercent / 100));
+      const subtotal = Math.round(refundableUnitPrice * qty * (1 - deductionPercent / 100));
 
       row.querySelector('.return-refund-price-lbl').innerText = formatCurrency(refundPrice);
       row.querySelector('.return-subtotal-lbl').innerText = formatCurrency(subtotal);
