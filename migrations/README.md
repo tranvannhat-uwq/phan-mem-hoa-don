@@ -383,3 +383,8 @@ snapshots, and maintains later in-place amendments through a database trigger.
 Its scoped read RPC prevents invoice printing from reconstructing historical
 debt from mutable browser state; backdated document timestamps cannot silently
 rewrite an already-issued invoice.
+
+Migration `0070` makes the saved order-item unit price the gross value of a
+sales return. Original order discounts and shipping support are not deducted
+automatically; only the per-line deduction percentage entered by Accounting is
+applied. It also caps commission reversals at the commission originally posted.

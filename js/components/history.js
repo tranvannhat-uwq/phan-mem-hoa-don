@@ -1139,8 +1139,8 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                       </button>
                     ` : ''}
                     ${financeRole ? activeOrderReturns.map(item => `
-                      <button class="history-detail-action history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" type="button" title="In phiếu trả ${escapeHistoryHtml(item.id)}">
-                        <i data-lucide="file-text"></i> In ${escapeHistoryHtml(item.id)}
+                      <button class="history-detail-action history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" type="button" title="Xem/In phiếu trả ${escapeHistoryHtml(item.id)}">
+                        <i data-lucide="file-text"></i> Xem phiếu trả
                       </button>
                       <button class="history-detail-action history-action-delete history-return-cancel-btn" data-return-id="${escapeHistoryHtml(item.id)}" type="button" title="Hủy phiếu trả ${escapeHistoryHtml(item.id)}">
                         <i data-lucide="ban"></i> Hủy phiếu trả
@@ -1319,8 +1319,8 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                   </button>
                 ` : ''}
                 ${['admin', 'accounting'].includes(state.currentUser?.role) ? activeOrderReturns.map(item => `
-                  <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" title="In phiếu trả ${escapeHistoryHtml(item.id)}" aria-label="In phiếu trả ${escapeHistoryHtml(item.id)}">
-                    <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> In phiếu
+                  <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" title="Xem/In phiếu trả ${escapeHistoryHtml(item.id)}" aria-label="Xem/In phiếu trả ${escapeHistoryHtml(item.id)}">
+                    <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> Xem phiếu
                   </button>
                   <button class="btn btn-danger btn-sm history-return-cancel-btn" data-return-id="${escapeHistoryHtml(item.id)}" title="Hủy phiếu trả ${escapeHistoryHtml(item.id)}" aria-label="Hủy phiếu trả ${escapeHistoryHtml(item.id)}">
                     <i data-lucide="ban" style="width: 13px; height: 13px;"></i>
@@ -1811,21 +1811,6 @@ export function openSalesReturnModal(orderId) {
   const tbody = document.getElementById('sales-return-items-body');
   if (!tbody) return;
 
-  const orderItemsSubtotal = (order.items || []).reduce((sum, item) => {
-    const qty = Number(item.quantity || 0);
-    const listedUnitPrice = Number(item.unitPrice ?? item.listPrice ?? item.price ?? 0);
-    const discountPercent = Number(item.discountPercent ?? item.discount ?? 0);
-    const calculatedUnitPrice = listedUnitPrice * (1 - Math.max(0, discountPercent) / 100);
-    const saleUnitPrice = Number(item.finalUnitPrice ?? item.salePrice ?? item.finalPrice ?? calculatedUnitPrice);
-    const storedLineTotal = Number(item.lineTotal ?? item.total);
-    return sum + Math.max(0, Number.isFinite(storedLineTotal) ? storedLineTotal : qty * saleUnitPrice);
-  }, 0);
-  const storedOrderSubtotal = Number(order.subtotal ?? orderItemsSubtotal);
-  const storedTotalPayable = Number(order.totalPayable ?? order.total_payable);
-  const orderDiscountRatio = storedOrderSubtotal > 0 && Number.isFinite(storedTotalPayable)
-    ? Math.min(1, Math.max(0, storedTotalPayable / storedOrderSubtotal))
-    : 1;
-
   tbody.innerHTML = (order.items || []).map((item, idx) => {
     const variantId = item.variantId || item.productId || '';
     const variantCode = item.variantCode || item.variantCodeSnapshot || item.productCode || item.code || '';
@@ -1840,12 +1825,7 @@ export function openSalesReturnModal(orderId) {
     const prevReturned = returnedMap[itemKey] || 0;
     const maxReturnable = Math.max(0, soldQty - prevReturned);
     const orderUnitPrice = Math.round(Math.max(0, Number(item.unitPrice ?? item.listPrice ?? item.price ?? 0)));
-    const discountPercent = Number(item.discountPercent ?? item.discount ?? 0);
-    const calculatedSaleUnitPrice = orderUnitPrice * (1 - Math.max(0, discountPercent) / 100);
-    const saleUnitPrice = Math.round(Math.max(0, Number(
-      item.finalUnitPrice ?? item.salePrice ?? item.finalPrice ?? calculatedSaleUnitPrice
-    )));
-    const refundableUnitPrice = Math.round(saleUnitPrice * orderDiscountRatio);
+    const refundableUnitPrice = orderUnitPrice;
     const prodName = item.productName || (item.product && item.product.name) || item.name || 'Sản phẩm';
 
     return `
@@ -1869,6 +1849,8 @@ export function openSalesReturnModal(orderId) {
   }).join('');
 
   const recalculateTotals = () => {
+    let grossReturnTotal = 0;
+    let totalDeduction = 0;
     let totalRefund = 0;
     document.querySelectorAll('.return-item-row').forEach(row => {
       const refundableUnitPrice = parseFloat(row.getAttribute('data-refund-unit-price')) || 0;
@@ -1892,14 +1874,29 @@ export function openSalesReturnModal(orderId) {
       }
 
       const refundPrice = Math.round(refundableUnitPrice * (1 - deductionPercent / 100));
+      const grossSubtotal = Math.round(refundableUnitPrice * qty);
       const subtotal = Math.round(refundableUnitPrice * qty * (1 - deductionPercent / 100));
 
       row.querySelector('.return-refund-price-lbl').innerText = formatCurrency(refundPrice);
       row.querySelector('.return-subtotal-lbl').innerText = formatCurrency(subtotal);
 
+      grossReturnTotal += grossSubtotal;
+      totalDeduction += grossSubtotal - subtotal;
       totalRefund += subtotal;
     });
 
+    const effectiveDeductionPercent = grossReturnTotal > 0
+      ? totalDeduction * 100 / grossReturnTotal
+      : 0;
+    const formattedDeductionPercent = effectiveDeductionPercent.toLocaleString('vi-VN', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+    document.getElementById('return-gross-total-lbl').innerText = formatCurrency(grossReturnTotal);
+    document.getElementById('return-deduction-percent-lbl').innerText = `${formattedDeductionPercent}%`;
+    document.getElementById('return-deduction-amount-lbl').innerText = totalDeduction > 0
+      ? `-${formatCurrency(totalDeduction)}`
+      : formatCurrency(0);
     document.getElementById('return-total-refund-lbl').innerText = formatCurrency(totalRefund);
 
     const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;

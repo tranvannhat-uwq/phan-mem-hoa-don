@@ -9,6 +9,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const migration = read('migrations/0008_authoritative_sales_returns_and_reversals.sql');
 const conflictFix = read('migrations/0014_sales_return_variable_conflict_fix.sql');
 const deductionMigration = read('migrations/0055_sales_return_deduction_percent.sql');
+const unitPriceReturnMigration = read('migrations/0070_sales_return_order_unit_price.sql');
 const service = read('js/services/supabase.js');
 const history = read('js/components/history.js');
 const markup = read('index.html');
@@ -34,6 +35,23 @@ test('return deduction is per item, optional and calculated authoritatively', ()
   assert.match(deductionMigration, /sum\(other_item\.subtotal\).*INTO remaining_amount/s);
   assert.match(deductionMigration, /active_item\.quantity > 0/);
   assert.match(deductionMigration, /VALUES \('0055'/);
+});
+
+test('latest return rule starts from order unit price and applies no automatic order discount', () => {
+  assert.match(history, /refundableUnitPrice = orderUnitPrice/);
+  assert.doesNotMatch(
+    history.slice(history.indexOf('export function openSalesReturnModal'), history.indexOf('export async function processSalesReturnSubmit')),
+    /orderDiscountRatio|storedTotalPayable|calculatedSaleUnitPrice/
+  );
+  assert.match(unitPriceReturnMigration, /item_cap := round\(GREATEST\(0, COALESCE\(order_item\.unit_price, 0\)\) \*/);
+  assert.match(unitPriceReturnMigration, /IF new_order_returned > order_return_cap THEN/);
+  assert.match(unitPriceReturnMigration, /COALESCE\(order_item\.unit_price, 0\),/);
+  assert.match(unitPriceReturnMigration, /line_refund := round\(line_refund \* \(100 - item_deduction_percent\) \/ 100\)/);
+  assert.match(unitPriceReturnMigration, /WHEN new_order_returned >= sale\.total_payable THEN/);
+  assert.match(unitPriceReturnMigration, /procedure\.prosrc NOT LIKE '%sale\.total_payable \/ sale\.subtotal%'/);
+  assert.match(unitPriceReturnMigration, /strpos\(current_definition, chr\(13\) \|\| chr\(10\)\) > 0 THEN chr\(13\) \|\| chr\(10\)/);
+  assert.match(unitPriceReturnMigration, /existing_returned \+ v_total_refund;' \|\| line_break \|\|/);
+  assert.match(unitPriceReturnMigration, /VALUES \('0070'/);
 });
 
 test('return idempotency and database actors cannot be supplied by the browser', () => {
@@ -79,10 +97,10 @@ test('frontend exposes return actions only to finance roles and uses canonical r
   assert.match(history, /cancelResult\.order_status/);
   assert.match(history, /history-return-cancel-btn/);
   assert.match(history, /history-return-print-btn/);
-  assert.match(history, /history-return-print-btn[^>]*aria-label="In phiếu trả[^>]*>[\s\S]*In phiếu/);
+  assert.match(history, /history-return-print-btn[^>]*aria-label="Xem\/In phiếu trả[^>]*>[\s\S]*Xem phiếu/);
   assert.doesNotMatch(history, /history-return-print-btn[^>]*>[\s\S]{0,120}\$\{item\.id\}/);
   assert.match(read('style.css'), /\.order-actions \.history-return-print-btn[\s\S]*overflow: hidden/);
-  assert.match(markup, /Database sẽ tính lại từ snapshot giá của đơn gốc/);
+  assert.match(markup, /Giá hoàn mặc định bằng đơn giá gốc; chỉ giảm theo % khấu trừ do kế toán nhập/);
   assert.doesNotMatch(markup, /class="form-control return-disc-type"/);
 });
 

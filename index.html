@@ -4134,11 +4134,19 @@
               <textarea class="form-control" id="return-reason-input" rows="3" placeholder="Nhập lý do trả hàng (ví dụ: Hàng lỗi bao bì, Khách đổi ý, Trả lại hàng thừa...)" required style="width: 100%; font-family: inherit; font-size: 0.85rem; padding: 0.5rem;"></textarea>
             </div>
             <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.75rem;">
-              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;">
-                <span>Tổng hoàn dự kiến:</span>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                <span>Tổng giá trị hàng trả:</span>
+                <strong id="return-gross-total-lbl">0 ₫</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                <span>Chiết khấu (<span id="return-deduction-percent-lbl">0%</span>):</span>
+                <strong id="return-deduction-amount-lbl">0 ₫</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding-top: 0.65rem; border-top: 1px solid var(--border-color);">
+                <span>Tổng tiền hoàn:</span>
                 <strong id="return-total-refund-lbl" style="font-size: 1.2rem; color: #f59e0b;">0 ₫</strong>
               </div>
-              <small style="color: var(--text-muted);">Database sẽ tính lại từ snapshot giá của đơn gốc.</small>
+              <small style="color: var(--text-muted);">Giá hoàn mặc định bằng đơn giá gốc; chỉ giảm theo % khấu trừ do kế toán nhập.</small>
               <div class="form-group" style="margin: 0;">
                 <label class="form-label" for="return-refund-method" style="font-size: 0.78rem;">Phương thức hoàn phần tiền thừa</label>
                 <select class="form-control" id="return-refund-method" style="height: 34px;">
