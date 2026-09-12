@@ -153,7 +153,7 @@ test('calculateHistoryFinancialSummary correctly matches net revenue after retur
   assert.equal(summary.totalPayable, 1602400);
 });
 
-test('detailed invoice export accurately breaks down return lines with original price, discount, and net refund amount', () => {
+test('detailed invoice export reconciles a deducted return with the history goods total', () => {
   const customers = read('js/components/customers.js');
   const helperStart = customers.indexOf('function toExportDateValue');
   const helperEnd = customers.indexOf('function createHistoryDetailExportWorksheet', helperStart);
@@ -163,19 +163,20 @@ test('detailed invoice export accurately breaks down return lines with original 
     const state = {
       companies: [{ id: 'ABS_NORTH', name: 'Công ty ABS' }],
       salesReturns: [{
-        id: 'RET3-001',
-        saleId: 'HD-0388',
+        id: 'RET-00699',
+        saleId: 'HD-20260818-00000699',
         status: 'completed',
-        returnDate: '2026-09-12T09:04:00+07:00',
-        totalRefund: 1704678,
+        returnDate: '2026-08-18T14:00:00+07:00',
+        totalRefund: 608100,
         items: [{
           saleItemId: 'item-01',
-          variantCode: 'H2-1-1-THUNG',
-          productName: 'Sơn chống thấm trộn xi măng',
-          quantity: 2,
-          importPrice: 878700,
-          refundPrice: 852339,
-          subtotal: 1704678
+          variantCode: 'NX-B1-THUNG',
+          productName: 'Sơn siêu bóng nội thất đặc biệt',
+          quantity: 1,
+          importPrice: 1216200,
+          refundPrice: 608100,
+          subtotal: 608100,
+          deductionPercent: 50
         }]
       }]
     };
@@ -191,11 +192,11 @@ test('detailed invoice export accurately breaks down return lines with original 
     function getLineAmount(item) { return Number(item.subtotal || 0); }
     function getOrderFinancialBreakdown(order, returns) {
       return {
-        totalBeforeDiscount: 8391580,
-        totalDiscountAmount: 251747,
+        totalBeforeDiscount: 589293,
+        totalDiscountAmount: 17679,
         otherFeeAmount: 0,
         shippingFeeAmount: 0,
-        totalPayment: 8139833
+        totalPayment: 571614
       };
     }
     function isSalesReturnActive(ret) {
@@ -212,37 +213,35 @@ test('detailed invoice export accurately breaks down return lines with original 
 
   const orderRows = sandbox.buildRows([{
     order: {
-      id: 'HD-0388',
+      id: 'HD-20260818-00000699',
       companyId: 'ABS_NORTH',
-      date: '2026-08-12T09:31:00+07:00',
+      date: '2026-08-18T13:49:00+07:00',
       status: 'partially_returned',
       items: [{
         id: 'item-01',
-        variantCode: 'H2-1-1-THUNG',
-        productName: 'Sơn chống thấm trộn xi măng',
-        quantity: 2,
-        unitPrice: 878700
+        variantCode: 'NX-B1-THUNG',
+        productName: 'Sơn siêu bóng nội thất đặc biệt',
+        quantity: 1,
+        unitPrice: 1216200
       }]
     },
-    customer: { code: 'KH-CUONG', name: 'Nguyễn Văn Cường', province: 'Bắc Ninh' },
+    customer: { code: 'KH-UNG-THE', name: 'Triệu Ứng Thế', province: 'Thái Nguyên' },
     rows: [
       {
-        'Kinh doanh quản lý': 'Ms Dung',
-        'Mã hóa đơn': 'HD-0388',
-        'Mã trả hàng': '',
-        'Mã khách hàng': 'KH-CUONG',
-        'Tên khách hàng': 'Nguyễn Văn Cường',
-        'Mã hàng': 'H2-1-1-THUNG',
-        'Tên hàng': 'Sơn chống thấm trộn xi măng',
-        'Thương hiệu': 'Nano10*',
-        'Quy cách': 'Thùng 20,5 kg',
-        'Ghi chú hàng hóa': '',
-        'Số lượng': 2,
-        'Đơn giá': 878700,
+        'Kinh doanh quản lý': 'Ms01 - Lê Dung',
+        'Mã hóa đơn': 'HD-20260818-00000699',
+        'Mã khách hàng': 'KH-UNG-THE',
+        'Tên khách hàng': 'Triệu Ứng Thế',
+        'Mã hàng': 'NX-B1-THUNG',
+        'Tên hàng': 'Sơn siêu bóng nội thất đặc biệt',
+        'Thương hiệu': 'NANO10 MB',
+        'Quy cách': 'Thùng 19 kg',
+        'Số lượng': 1,
+        'Đơn giá': 1216200,
         'Giảm giá %': 0,
         'Giảm giá': 0,
-        'Giá bán': 878700,
-        'Thành tiền': 1757400
+        'Giá bán': 1216200,
+        'Thành tiền': 1216200
       }
     ]
   }]);
@@ -250,25 +249,19 @@ test('detailed invoice export accurately breaks down return lines with original 
   assert.equal(orderRows.length, 2);
   const returnRow = orderRows[1];
 
-  // Gross goods amount of the return: 2 * 878.700 = -1.757.400
-  assert.equal(returnRow['Tổng tiền hàng'], -1757400);
+  assert.equal(returnRow['Tổng tiền hàng'], -626907);
+  assert.equal(returnRow['Giảm giá hóa đơn'], -18807);
+  assert.equal(returnRow['Khách cần trả'], -608100);
+  assert.equal(
+    returnRow['Tổng tiền hàng'] - returnRow['Giảm giá hóa đơn'],
+    returnRow['Khách cần trả']
+  );
+  assert.equal(returnRow['Số lượng'], -1);
+  assert.equal(returnRow['Đơn giá'], 1216200);
+  assert.equal(returnRow['Giá bán'], 626907);
+  assert.equal(returnRow['Thành tiền'], -626907);
 
-  // Return discount (reversal): -(1.757.400 - 1.704.678) = -52.722
-  assert.equal(returnRow['Giảm giá hóa đơn'], -52722);
-
-  // Net amount payable / refund: -1.704.678
-  assert.equal(returnRow['Khách cần trả'], -1704678);
-
-  // Product line detail matches the gross product line so SUM(Thành tiền) matches Tổng tiền hàng
-  assert.equal(returnRow['Số lượng'], -2);
-  assert.equal(returnRow['Đơn giá'], 878700);
-  assert.equal(returnRow['Giảm giá %'], 0);
-  assert.equal(returnRow['Giảm giá'], 0);
-  assert.equal(returnRow['Giá bán'], 878700);
-  assert.equal(returnRow['Thành tiền'], -1757400);
-
-  // Net goods amount in Excel is exactly 0 after returning 2 items:
+  // 1.216.200 - 626.907 = 589.293, exactly the value shown in history.
   const excelNetSum = orderRows.reduce((sum, r) => sum + r['Thành tiền'], 0);
-  assert.equal(excelNetSum, 0);
+  assert.equal(excelNetSum, 589293);
 });
-

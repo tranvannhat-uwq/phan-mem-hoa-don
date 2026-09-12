@@ -2419,6 +2419,25 @@ function getOrderInvoiceDiscountAmount(order, financials) {
   return Math.max(0, financials.totalDiscountAmount - lineDiscount);
 }
 
+function allocateRoundedExportTotal(total, weights) {
+  const roundedTotal = Math.max(0, Math.round(toExportNumber(total)));
+  if (!Array.isArray(weights) || weights.length === 0) return [];
+
+  const normalizedWeights = weights.map(weight => Math.max(0, toExportNumber(weight)));
+  let remainingTotal = roundedTotal;
+  let remainingWeight = normalizedWeights.reduce((sum, weight) => sum + weight, 0);
+
+  return normalizedWeights.map((weight, index) => {
+    if (index === normalizedWeights.length - 1) return remainingTotal;
+    const allocated = remainingWeight > 0
+      ? Math.round(remainingTotal * weight / remainingWeight)
+      : 0;
+    remainingTotal -= allocated;
+    remainingWeight -= weight;
+    return allocated;
+  });
+}
+
 function buildHistoryDetailExportRows(orderContexts) {
   const exportedReturnIds = new Set();
   return [...orderContexts].reverse().flatMap(({ order, customer, rows }) => {
@@ -2636,6 +2655,44 @@ function buildHistoryDetailExportRows(orderContexts) {
         };
       });
     });
+
+    if (returnDetailRows.length > 0) {
+      const originalExportGoodsTotal = orderRows.reduce(
+        (sum, row) => sum + toExportNumber(row['Thành tiền']),
+        0
+      );
+      const historyGoodsReduction = Math.max(
+        0,
+        Math.round(originalExportGoodsTotal - financials.totalBeforeDiscount)
+      );
+      const refundWeights = returnDetailRows.map(row => Math.abs(toExportNumber(row['Khách cần trả'])));
+      const fallbackWeights = returnDetailRows.map(row => Math.abs(toExportNumber(row['Thành tiền'])));
+      const weights = refundWeights.some(weight => weight > 0) ? refundWeights : fallbackWeights;
+      const allocatedGoodsReductions = allocateRoundedExportTotal(historyGoodsReduction, weights);
+
+      returnDetailRows.forEach((row, index) => {
+        const goodsReduction = allocatedGoodsReductions[index] || 0;
+        const refundAmount = Math.abs(toExportNumber(row['Khách cần trả']));
+        const quantity = Math.abs(toExportNumber(row['Số lượng']));
+        const originalUnitPrice = Math.abs(toExportNumber(row['Đơn giá']));
+        const originalGrossAmount = quantity > 0
+          ? Math.round(quantity * originalUnitPrice)
+          : Math.abs(toExportNumber(row['Thành tiền']));
+        const lineDiscountAmount = Math.max(0, originalGrossAmount - goodsReduction);
+
+        // The history screen prorates the remaining pre-discount goods value
+        // after a return. Export the same gross reduction so SUM(Thành tiền)
+        // reconciles exactly with the history "Tổng tiền hàng" value.
+        row['Tổng tiền hàng'] = -goodsReduction;
+        row['Giảm giá hóa đơn'] = refundAmount - goodsReduction;
+        row['Giảm giá %'] = originalGrossAmount > 0
+          ? Math.round((lineDiscountAmount / originalGrossAmount) * 10000) / 100
+          : 0;
+        row['Giảm giá'] = lineDiscountAmount > 0 ? -lineDiscountAmount : 0;
+        row['Giá bán'] = quantity > 0 ? goodsReduction / quantity : goodsReduction;
+        row['Thành tiền'] = -goodsReduction;
+      });
+    }
 
     return [...orderRows, ...returnDetailRows];
   });
