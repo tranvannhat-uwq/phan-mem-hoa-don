@@ -276,9 +276,9 @@ function getCustomerDebtEntryChange(entry = {}) {
 /**
  * Create the effective user-facing ledger. Technical cancellations are
  * removed and amendments are folded, so their stored snapshots cannot always
- * be displayed verbatim. Rebuild the visible before/after chain backwards from
- * the authoritative customer balance in immutable posting order. The business
- * timestamp remains display metadata and must never rewrite an issued
+ * be displayed verbatim. Preserve immutable before/after snapshots whenever
+ * they exist; only legacy rows without snapshots are reconstructed. The
+ * business timestamp remains display metadata and must never rewrite an issued
  * invoice's historical balance.
  */
 export function buildCustomerDebtDisplayHistory(history = [], currentDebt = 0) {
@@ -290,16 +290,50 @@ export function buildCustomerDebtDisplayHistory(history = [], currentDebt = 0) {
       return postingTimeDelta || left.__displayOrder - right.__displayOrder;
     });
 
-  let balanceAfter = toDebtAmount(currentDebt);
-  for (let index = chronological.length - 1; index >= 0; index -= 1) {
-    const entry = chronological[index];
-    const debtChange = getCustomerDebtEntryChange(entry);
-    entry.debtChange = debtChange;
-    entry.debtAfter = balanceAfter;
-    entry.debtBefore = balanceAfter - debtChange;
-    balanceAfter = entry.debtBefore;
-    delete entry.__displayOrder;
+  const hasSnapshot = entry => Number.isFinite(Number(entry.debtBefore))
+    && Number.isFinite(Number(entry.debtAfter));
+
+  chronological.forEach(entry => {
+    entry.debtChange = getCustomerDebtEntryChange(entry);
+    entry.__hasDebtSnapshot = hasSnapshot(entry);
+    if (entry.__hasDebtSnapshot) {
+      entry.debtBefore = toDebtAmount(entry.debtBefore);
+      entry.debtAfter = toDebtAmount(entry.debtAfter);
+    }
+  });
+
+  const firstSnapshotIndex = chronological.findIndex(entry => entry.__hasDebtSnapshot);
+  if (firstSnapshotIndex === -1) {
+    // Old browser/local rows may have no immutable snapshots at all.
+    let balanceAfter = toDebtAmount(currentDebt);
+    for (let index = chronological.length - 1; index >= 0; index -= 1) {
+      const entry = chronological[index];
+      entry.debtAfter = balanceAfter;
+      entry.debtBefore = balanceAfter - entry.debtChange;
+      balanceAfter = entry.debtBefore;
+    }
+  } else {
+    // Fill only legacy gaps between authoritative snapshots from the nearest
+    // known side. Existing snapshots are never shifted by currentDebt.
+    for (let index = firstSnapshotIndex - 1; index >= 0; index -= 1) {
+      const next = chronological[index + 1];
+      const entry = chronological[index];
+      entry.debtAfter = next.debtBefore;
+      entry.debtBefore = entry.debtAfter - entry.debtChange;
+    }
+    for (let index = firstSnapshotIndex + 1; index < chronological.length; index += 1) {
+      const previous = chronological[index - 1];
+      const entry = chronological[index];
+      if (entry.__hasDebtSnapshot) continue;
+      entry.debtBefore = previous.debtAfter;
+      entry.debtAfter = entry.debtBefore + entry.debtChange;
+    }
   }
+
+  chronological.forEach(entry => {
+    delete entry.__hasDebtSnapshot;
+    delete entry.__displayOrder;
+  });
   return chronological;
 }
 

@@ -50,6 +50,19 @@ assert.deepEqual(
   'A later-posted backdated entry must not rewrite the issued invoice balance'
 );
 
+const importedOpeningBalance = buildCustomerDebtDisplayHistory([
+  { id: 'opening', type: 'adjust', debtChange: 17881866, debtBefore: 2609785, debtAfter: 20491651, postedAt: '2026-08-04T00:00:00Z' },
+  { id: 'sep-10-payment', type: 'payment', debtChange: -8000000, debtBefore: 35443843, debtAfter: 27443843, postedAt: '2026-09-10T10:10:00Z' }
+], 36218317);
+assert.deepEqual(
+  importedOpeningBalance.map(entry => ({ id: entry.id, debtBefore: entry.debtBefore, debtAfter: entry.debtAfter })),
+  [
+    { id: 'opening', debtBefore: 2609785, debtAfter: 20491651 },
+    { id: 'sep-10-payment', debtBefore: 35443843, debtAfter: 27443843 }
+  ],
+  'A later current balance must not shift immutable historical snapshots'
+);
+
 const amendedDisplay = buildCustomerDebtDisplayHistory([
   { id: 'payment-original', type: 'payment', transactionType: 'payment', amount: 5000000, debtChange: -5000000, postedAt: '2026-08-01T08:00:00Z' },
   { id: 'order-between', type: 'charge', transactionType: 'order', amount: 3000000, debtChange: 3000000, postedAt: '2026-08-01T09:00:00Z' },
