@@ -4555,6 +4555,9 @@ export async function dbConfirmOrder(order) {
       if (/Order date cannot be in the future/i.test(message)) {
         throw new Error('Không thể chốt đơn: Ngày lên đơn không được lớn hơn ngày hiện tại.');
       }
+      if (/Customer debt chain mismatch/i.test(message)) {
+        throw new Error('Không thể chốt đơn: Công nợ khách đang lệch với lịch sử giao dịch. Hãy đối soát/điều chỉnh công nợ trước khi chốt đơn.');
+      }
       const missingPrice = message.match(/SKU\s+([^\s]+)\s+has no effective database price/i);
       if (missingPrice) {
         const product = (state.products || []).find(item => String(item.id) === missingPrice[1]);

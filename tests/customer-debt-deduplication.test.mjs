@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { mergeCustomerDebtHistory } from '../js/domain/customer-debt.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -20,4 +21,13 @@ test('customer refresh merges the authoritative ledger and removes its legacy or
   const service = read('js/services/supabase.js');
   assert.match(service, /mergeCustomerDebtHistory\(/);
   assert.match(service, /if \(ledgerRows\)[\s\S]*ledgerRows\.map\(mapCustomerDebtTransaction\)/);
+});
+
+test('customer refresh removes an optimistic return-cancellation twin', () => {
+  const history = mergeCustomerDebtHistory([
+    { id: 'return-cancel-RET-1', transactionType: 'return_cancel', salesReturnId: 'RET-1', debtChange: 1000 }
+  ], [
+    { id: 'DTX-RET3-VOID-ledger-1', transactionType: 'return_cancel', salesReturnId: 'RET-1', debtChange: 1000 }
+  ]);
+  assert.deepEqual(history.map(item => item.id), ['DTX-RET3-VOID-ledger-1']);
 });

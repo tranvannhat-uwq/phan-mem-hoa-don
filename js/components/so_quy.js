@@ -876,8 +876,9 @@ export function setupSoQuyPanel() {
               date: new Date().toISOString(),
               type: 'payment',
               amount: value,
+              debtBefore: newDebt + value,
+              debtAfter: newDebt,
               notes: note || category,
-              debtAfter: newDebt
             });
           }
           localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));

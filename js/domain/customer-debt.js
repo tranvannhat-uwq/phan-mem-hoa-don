@@ -354,6 +354,14 @@ export function mergeCustomerDebtHistory(existingHistory = [], ledgerHistory = [
     const orderId = item?.orderId;
     const isOrderCharge = item?.transactionType === 'order' || item?.type === 'charge';
     if (orderId && isOrderCharge) merged.delete(String(orderId));
+    for (const [existingKey, existing] of merged) {
+      const sameReturnCancellation = item?.transactionType === 'return_cancel'
+        && existing?.transactionType === 'return_cancel'
+        && item?.salesReturnId
+        && String(item.salesReturnId) === String(existing.salesReturnId)
+        && String(existing.id || '').startsWith('return-cancel-');
+      if (sameReturnCancellation) merged.delete(existingKey);
+    }
     const key = String(item?.id || `ledger:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
     merged.set(key, item);
   }

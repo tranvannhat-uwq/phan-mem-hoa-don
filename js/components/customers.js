@@ -1552,8 +1552,9 @@ export async function handlePayDebtSubmit(e) {
       date: new Date().toISOString(),
       type: 'payment',
       amount: amountPaid,
+      debtBefore,
+      debtAfter: currentCustomer.debt,
       notes: notes,
-      debtAfter: currentCustomer.debt
     });
   }
   

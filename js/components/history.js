@@ -2023,6 +2023,7 @@ export async function processSalesReturnSubmit(e) {
   if (order.customerId) {
     const cust = state.customers.find(c => c.id === order.customerId);
     if (cust) {
+      const debtBefore = Number(cust.debt) || 0;
       cust.debt = Number(returnResult.new_debt);
       cust.totalReturn = Number(returnResult.new_total_return);
       cust.netRevenue = Number(returnResult.new_net_revenue);
@@ -2035,7 +2036,10 @@ export async function processSalesReturnSubmit(e) {
           type: 'return',
           id: localLedgerId,
           amount: Number(returnResult.debt_reduction || 0),
+          debtBefore,
           debtAfter: cust.debt,
+          salesReturnId: persistedReturn.id,
+          orderId: persistedReturn.saleId,
           note: `Phiếu trả hàng ${persistedReturn.id} cho đơn ${order.id}: ${reason}`
         });
       }
@@ -2075,6 +2079,7 @@ export async function cancelSalesReturn(returnId) {
   if (ret.customerId) {
     const cust = state.customers.find(c => c.id === ret.customerId);
     if (cust) {
+      const debtBefore = Number(cust.debt) || 0;
       cust.debt = Number(cancelResult.new_debt);
       cust.totalReturn = Number(cancelResult.new_total_return);
       cust.netRevenue = Number(cancelResult.new_net_revenue);
@@ -2086,7 +2091,10 @@ export async function cancelSalesReturn(returnId) {
           date: new Date().toISOString(),
           type: 'return_cancel',
           amount: Number(ret.debtReductionAmount || 0),
+          debtBefore,
           debtAfter: cust.debt,
+          salesReturnId: ret.id,
+          orderId: ret.saleId,
           note: `Hủy phiếu trả hàng ${ret.id} của đơn ${ret.saleId}`
         });
       }
