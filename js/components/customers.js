@@ -16,6 +16,7 @@ import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCust
 import { isActiveUser } from '../domain/user-status.js?v=20260911-debt-snapshot-v1';
 
 let pendingCustomerPaymentKey = '';
+let customerDebtAdjustmentsHidden = false;
 
 const selectedCustomerIdsForExport = new Set();
 let activeExportOrders = null;
@@ -3541,6 +3542,7 @@ export async function openCustomerDetailModal(index) {
   }
   const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id);
   if (refreshedCustomer) cust = refreshedCustomer;
+  modal.dataset.customerId = cust.id;
 
   // Điền thông tin cơ bản
   const modalTitle = document.getElementById('customer-detail-modal-title');
@@ -3618,7 +3620,9 @@ export async function openCustomerDetailModal(index) {
   // Vẽ danh sách lịch sử biến động công nợ
   const historyBody = document.getElementById('detail-debt-history-body');
   if (historyBody) {
-    const history = buildCustomerDebtDisplayHistory(cust.debtHistory || [], cust.debt);
+    const history = buildCustomerDebtDisplayHistory(cust.debtHistory || [], cust.debt)
+      .filter(entry => !customerDebtAdjustmentsHidden
+        || (entry.type !== 'adjust' && entry.transactionType !== 'adjust'));
     
     // Hiển thị mới → cũ theo thứ tự ghi sổ bất biến. Ngày/giờ trong
     // cột bên dưới vẫn là ngày chứng từ do người dùng chọn.
@@ -3718,6 +3722,22 @@ export async function openCustomerDetailModal(index) {
 
   safeCreateIcons();
 }
+
+window.toggleCustomerDebtAdjustments = async function() {
+  const modal = document.getElementById('customer-detail-modal');
+  const customerId = modal?.dataset.customerId;
+  if (!customerId) return;
+  customerDebtAdjustmentsHidden = !customerDebtAdjustmentsHidden;
+  const index = state.customers.findIndex(customer => String(customer.id) === String(customerId));
+  if (index >= 0) await openCustomerDetailModal(index);
+  const button = document.getElementById('btn-toggle-customer-debt-adjustments');
+  if (button) {
+    button.querySelector('span').textContent = customerDebtAdjustmentsHidden ? 'Hiện điều chỉnh' : 'Ẩn điều chỉnh';
+    button.title = customerDebtAdjustmentsHidden
+      ? 'Hiện lại các dòng điều chỉnh'
+      : 'Ẩn các dòng điều chỉnh, không xóa dữ liệu';
+  }
+};
 
 export function closeCustomerDetailModal() {
   const modal = document.getElementById('customer-detail-modal');
