@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260911-debt-snapshot-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260911-debt-snapshot-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260915-debt-date-order-v2';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260915-debt-date-order-v2';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260911-debt-snapshot-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260911-debt-snapshot-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260911-debt-snapshot-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260915-debt-date-order-v2';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260915-debt-date-order-v2';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260915-debt-date-order-v2';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -4594,10 +4594,14 @@ export async function dbAmendOrder(originalOrderId, order, reason) {
     return data || { success: true };
   } catch (err) {
     console.error('RPC amend order error:', err);
-    const missingRpc = err?.code === 'PGRST202' || String(err?.message || '').includes('rpc_amend_order');
+    const message = String(err?.message || 'Transaction thất bại');
+    const missingRpc = err?.code === 'PGRST202' || message.includes('rpc_amend_order');
+    if (/Customer debt chain mismatch|Customer debt ledger row .* internally inconsistent/i.test(message)) {
+      throw new Error('Không thể sửa đơn đã chốt: Công nợ khách đang lệch với lịch sử giao dịch. Hãy đối soát/điều chỉnh công nợ trước khi thử lại.');
+    }
     throw new Error(missingRpc
       ? 'Chưa có chức năng sửa đơn tại chỗ trên Supabase. Hãy chạy migration 0057 rồi thử lại.'
-      : 'Không thể sửa đơn đã chốt: ' + (err.message || 'Transaction thất bại'));
+      : 'Không thể sửa đơn đã chốt: ' + message);
   }
 }
 

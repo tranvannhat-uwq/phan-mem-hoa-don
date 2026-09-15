@@ -27,7 +27,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260911-debt-snapshot-v1';
+} from './supabase.js?v=20260915-debt-date-order-v2';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

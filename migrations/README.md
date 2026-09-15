@@ -388,3 +388,14 @@ Migration `0070` makes the saved order-item unit price the gross value of a
 sales return. Original order discounts and shipping support are not deducted
 automatically; only the per-line deduction percentage entered by Accounting is
 applied. It also caps commission reversals at the commission originally posted.
+
+Migration `0071` blocks order debt postings when the customer's stored balance
+does not equal the immutable ledger opening balance plus every posted debt
+change. This prevents a new sale from compounding an existing reconciliation
+error without relying on mutable historical display snapshots.
+
+Migration `0072` moves that consistency guard to a deferred constraint trigger.
+New-order confirmation and in-place amendment write the customer aggregate and
+ledger in opposite orders, so the invariant is checked only after both atomic
+writes are complete. Genuine final-state mismatches and malformed ledger rows
+still abort and roll back the transaction.

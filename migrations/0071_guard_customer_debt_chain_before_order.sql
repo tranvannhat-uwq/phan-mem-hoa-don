@@ -2,8 +2,10 @@ BEGIN;
 
 -- Do not compound an existing customer-balance mismatch when a new order is
 -- finalized. The order RPC uses customers.debt as its atomic starting point;
--- this guard makes sure that value still agrees with the last immutable ledger
--- snapshot before the order is allowed to create the next snapshot.
+-- this guard makes sure that value agrees with the ledger's opening balance
+-- plus every posted debt change before the order creates the next snapshot.
+-- Do not compare with the physically latest balance_after: metadata-only
+-- payment amendments intentionally retain the original document snapshot.
 CREATE OR REPLACE FUNCTION public.p71_guard_customer_debt_chain_before_order()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -12,8 +14,10 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   customer_balance numeric;
-  last_ledger_balance numeric;
-  last_ledger_id text;
+  ledger_opening_balance numeric;
+  ledger_change_total numeric;
+  ledger_calculated_balance numeric;
+  ledger_count bigint;
 BEGIN
   IF NEW.transaction_type NOT IN ('order', 'order_amend')
      OR NEW.customer_id IS NULL THEN
@@ -25,20 +29,28 @@ BEGIN
   FROM public.customers customer
   WHERE customer.id = NEW.customer_id;
 
-  SELECT round(ledger.balance_after), ledger.id
-  INTO last_ledger_balance, last_ledger_id
+  SELECT count(*), round(COALESCE(sum(ledger.debt_change), 0))
+  INTO ledger_count, ledger_change_total
   FROM public.customer_debt_transactions ledger
-  WHERE ledger.customer_id = NEW.customer_id
-  ORDER BY ledger.created_at DESC, ledger.id DESC
-  LIMIT 1;
+  WHERE ledger.customer_id = NEW.customer_id;
+
+  IF ledger_count > 0 THEN
+    SELECT round(COALESCE(ledger.balance_before, 0))
+    INTO STRICT ledger_opening_balance
+    FROM public.customer_debt_transactions ledger
+    WHERE ledger.customer_id = NEW.customer_id
+    ORDER BY ledger.created_at, ledger.id
+    LIMIT 1;
+    ledger_calculated_balance := ledger_opening_balance + ledger_change_total;
+  END IF;
 
   -- A legacy customer may have a non-zero balance without any ledger rows;
   -- preserve that compatibility. Once a ledger exists, the chain must agree.
-  IF last_ledger_id IS NOT NULL
-     AND customer_balance IS DISTINCT FROM last_ledger_balance THEN
+  IF ledger_count > 0
+     AND customer_balance IS DISTINCT FROM ledger_calculated_balance THEN
     RAISE EXCEPTION
-      'Customer debt chain mismatch for %: customers.debt=% but latest ledger % ends at %. Reconcile before confirming a new order.',
-      NEW.customer_id, customer_balance, last_ledger_id, last_ledger_balance
+      'Customer debt chain mismatch for %: customers.debt=% but ledger arithmetic yields %. Reconcile before confirming a new order.',
+      NEW.customer_id, customer_balance, ledger_calculated_balance
       USING ERRCODE = 'P0001';
   END IF;
 

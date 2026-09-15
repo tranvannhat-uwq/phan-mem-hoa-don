@@ -72,6 +72,34 @@ assert.deepEqual(amendedDisplay.map(item => item.id), ['payment-original', 'orde
 assert.equal(amendedDisplay[0].debtAfter, 6000000);
 assert.equal(amendedDisplay[0].debtBefore, amendedDisplay[1].debtAfter, 'Folded amendments keep the visible balance chain continuous');
 
+const dateOnlyPaymentAmendmentDisplay = buildCustomerDebtDisplayHistory([
+  {
+    id: 'order-opening', type: 'charge', transactionType: 'order', debtChange: 35549750,
+    debtBefore: 0, debtAfter: 35549750, date: '2026-09-05T07:08:00+07:00', postedAt: '2026-09-05T07:08:01+07:00'
+  },
+  {
+    id: 'payment-date-edited', type: 'payment', transactionType: 'payment', debtChange: -5000000,
+    debtBefore: 35549750, debtAfter: 30549750, date: '2026-09-04T17:42:00+07:00', postedAt: '2026-09-05T08:00:00+07:00'
+  },
+  {
+    id: 'payment-newer', type: 'payment', transactionType: 'payment', debtChange: -29200000,
+    debtBefore: 30549750, debtAfter: 1349750, date: '2026-09-05T13:11:00+07:00', postedAt: '2026-09-05T13:11:01+07:00'
+  },
+  {
+    id: 'date-only-amendment', transactionType: 'payment_amend', debtChange: 0,
+    debtBefore: 30549750, debtAfter: 30549750, amendsLedgerId: 'payment-date-edited',
+    date: '2026-09-04T17:42:00+07:00', postedAt: '2026-09-07T08:26:00+07:00'
+  }
+], 1349750).reverse();
+assert.deepEqual(
+  dateOnlyPaymentAmendmentDisplay.map(item => item.id),
+  ['payment-newer', 'payment-date-edited', 'order-opening'],
+  'A date-only payment amendment must not move an old receipt above newer financial events'
+);
+assert.equal(dateOnlyPaymentAmendmentDisplay[0].debtAfter, 1349750);
+assert.equal(dateOnlyPaymentAmendmentDisplay[0].debtBefore, dateOnlyPaymentAmendmentDisplay[1].debtAfter);
+assert.equal(dateOnlyPaymentAmendmentDisplay[1].debtBefore, dateOnlyPaymentAmendmentDisplay[2].debtAfter);
+
 assert.equal(getOrderOutstandingAmount({ totalPayable: 100000, shippingFeeAmount: 15000, paidAmount: 20000 }), 95000);
 assert.equal(getOrderOutstandingAmount({ amountDue: 300000, totalPayable: 291000 }), 291000,
   'A legacy pre-discount amountDue must not override the post-discount total payable');

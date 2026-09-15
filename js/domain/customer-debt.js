@@ -226,7 +226,13 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
       // invoice business timestamp instead of appearing as today's new sale.
       if (type !== 'order_amend') {
         target.date = amendment.date || target.date;
-        target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
+        // A date-only amendment is metadata, not a new financial event. Keep
+        // the original posting position so changing the voucher date cannot
+        // move an old payment above newer transactions and break the visible
+        // running-balance sequence.
+        if (amendmentChange !== 0) {
+          target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
+        }
       }
       // Alias the hidden delta to its visible target so a later amendment can
       // safely reference the immediately preceding amendment row.

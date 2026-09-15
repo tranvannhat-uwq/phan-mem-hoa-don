@@ -35,6 +35,8 @@ test('history and invoice expose a dedicated finalized-order amendment path', ()
   assert.doesNotMatch(invoice, /await fetchCloudData\(\)/);
   assert.match(invoice, /removeAttribute\('data-amend-order-id'\)/);
   assert.match(service, /supabaseClient\.rpc\('rpc_amend_order'/);
+  assert.match(service, /Customer debt chain mismatch\|Customer debt ledger row/);
+  assert.match(service, /Không thể sửa đơn đã chốt: Công nợ khách đang lệch với lịch sử giao dịch/);
 });
 
 test('amending an order keeps its exact original timestamp and records the edit time only as activity', () => {
