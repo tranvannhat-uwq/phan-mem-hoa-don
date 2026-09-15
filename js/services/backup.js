@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast } from '../utils.js';
-import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260915-debt-date-order-v2';
-import { mapWithConcurrency } from '../domain/async-pool.js?v=20260915-debt-date-order-v2';
+import { deserializeBackupRows, serializeBackupRows } from './backup-serialization.js?v=20260915-payroll-product-group-v1';
+import { mapWithConcurrency } from '../domain/async-pool.js?v=20260915-payroll-product-group-v1';
 import { 
   supabaseClient, 
   isCloudActive,
@@ -22,7 +22,7 @@ import {
   tableUsersName,
   tableBrandsName,
   fetchCloudData
-} from './supabase.js?v=20260915-debt-date-order-v2';
+} from './supabase.js?v=20260915-payroll-product-group-v1';
 
 async function deleteAllRows(tableName, key = 'id') {
   const { error } = await supabaseClient
@@ -172,6 +172,7 @@ const PHASE6_BACKUP_VERSION = 'phase6-v1';
 const BACKUP_FETCH_CONCURRENCY = 3;
 let activeBackupExport = null;
 const PHASE6_BACKUP_TABLES = [
+  { sheet: 'Nhom_SP_Tinh_Luong', table: 'payroll_product_groups', cursor: 'code' },
   { sheet: 'San_Pham', table: 'products' },
   { sheet: 'Khach_Hang', table: 'customers' },
   { sheet: 'Don_Hang', table: 'orders' },

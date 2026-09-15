@@ -117,6 +117,7 @@ export function buildProductFamilies(products, { includeInactive = false } = {})
         categoryId: variant.categoryId || null,
         description: variant.description || '',
         group: variant.group || '',
+        payrollProductGroupId: variant.payrollProductGroupId || null,
         isActive: variant.isActive !== false,
         variants: []
       });

@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260915-debt-date-order-v2';
-import { renderAll } from '../main.js?v=20260915-debt-date-order-v2';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260915-debt-date-order-v2';
-import { addCashbookTransaction } from './so_quy.js?v=20260915-debt-date-order-v2';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260915-payroll-product-group-v1';
+import { renderAll } from '../main.js?v=20260915-payroll-product-group-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260915-payroll-product-group-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20260915-payroll-product-group-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20260915-debt-date-order-v2';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260915-debt-date-order-v2';
+} from '../domain/order-financials.js?v=20260915-payroll-product-group-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260915-payroll-product-group-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260915-debt-date-order-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20260915-payroll-product-group-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -2219,7 +2219,7 @@ const CUSTOMER_ORDER_EXPORT_COLUMNS = [
   'Khu vực (Khách hàng)', 'Bảng giá', 'Kinh doanh quản lý',
   'Người bán', 'Người tạo', 'Ghi chú', 'Tổng tiền hàng', 'Tổng giảm giá',
   'Tổng sau giảm giá', 'Phí vận chuyển', 'Khách cọc', 'Còn phải thu',
-  'Trạng thái', 'Mã hàng', 'Tên hàng', 'Thương hiệu', 'Quy cách', 'ĐVT',
+  'Trạng thái', 'Mã hàng', 'Tên hàng', 'Nhóm sản phẩm', 'Thương hiệu', 'Quy cách', 'ĐVT',
   'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá',
   'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'
 ];
@@ -2228,7 +2228,7 @@ const CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS = [
   { title: 'Thông tin hóa đơn', columns: ['Mã hóa đơn', 'Thời gian', 'Ngày cập nhật', 'Mã trả hàng', 'Trạng thái', 'Người bán', 'Người tạo', 'Ghi chú'] },
   { title: 'Thông tin khách hàng', columns: ['Mã khách hàng', 'Tên khách hàng', 'Điện thoại', 'Địa chỉ', 'Khu vực', 'Bảng giá', 'Kinh doanh quản lý'] },
   { title: 'Thông tin thanh toán', columns: ['Tổng tiền hàng', 'Tổng giảm giá', 'Tổng sau giảm giá', 'Phí vận chuyển', 'Khách cọc', 'Còn phải thu'] },
-  { title: 'Thông tin sản phẩm', columns: ['Mã hàng', 'Tên hàng', 'Thương hiệu/Nhãn sơn', 'Quy cách', 'Đơn vị tính', 'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'] }
+  { title: 'Thông tin sản phẩm', columns: ['Mã hàng', 'Tên hàng', 'Nhóm sản phẩm', 'Thương hiệu/Nhãn sơn', 'Quy cách', 'Đơn vị tính', 'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá', 'Giá bán', 'Thành tiền'] }
 ];
 
 const DEFAULT_CUSTOMER_ORDER_EXPORT_COLUMNS = CUSTOMER_ORDER_EXPORT_COLUMN_GROUPS.flatMap(g => g.columns);
@@ -2367,6 +2367,7 @@ function buildCustomerOrderExportRows(orders, customer) {
         'Trạng thái': getOrderStatusLabel(order.status || 'settled'),
         'Mã hàng': item.variantCode || item.variantCodeSnapshot || item.productCode || item.productCodeSnapshot || item.code || item.variantId || item.productId || '',
         'Tên hàng': item.productName || item.name || item.product?.name || '',
+        'Nhóm sản phẩm': getItemPayrollProductGroupName(item),
         'Thương hiệu': item.productBrand || item.brand || '',
         'Thương hiệu/Nhãn sơn': item.productBrand || item.brand || '',
         'Quy cách': item.specificationSnapshot || item.weightOrVolumeSnapshot || item.displaySpecification || [
@@ -2401,7 +2402,7 @@ const HISTORY_DETAIL_EXPORT_COLUMNS = [
   'Tổng tiền hàng', 'Giảm giá hóa đơn', 'Thu khác', 'Khách cần trả',
   'Khách đã trả', 'Tiền mặt', 'Thẻ', 'Ví', 'Chuyển khoản',
   'Còn cần thu (COD)', 'Thời gian giao hàng', 'Trạng thái',
-  'Trạng thái giao hàng', 'Mã hàng', 'Tên hàng', 'Thương hiệu', 'ĐVT',
+  'Trạng thái giao hàng', 'Mã hàng', 'Tên hàng', 'Nhóm sản phẩm', 'Thương hiệu', 'ĐVT',
   'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá',
   'Giá bán', 'Thành tiền'
 ];
@@ -2418,7 +2419,7 @@ const HISTORY_DETAIL_EXPORT_WIDE_COLUMNS = new Set([
   'Chi nhánh', 'Địa chỉ lấy hàng', 'Tên khách hàng', 'Địa chỉ (Khách hàng)',
   'KD Quản lý', 'Bảng giá', 'Người bán', 'Người tạo', 'Địa chỉ (Người nhận)',
   'Ghi chú trạng thái giao hàng', 'Ghi chú giao hàng', 'Ghi chú', 'Tên hàng',
-  'Ghi chú hàng hóa'
+  'Nhóm sản phẩm', 'Ghi chú hàng hóa'
 ]);
 const HISTORY_DETAIL_EXPORT_CENTER_COLUMNS = new Set([
   ...HISTORY_DETAIL_EXPORT_DATE_COLUMNS, 'Ngày sinh', 'Trạng thái',
@@ -2434,7 +2435,7 @@ const HISTORY_DETAIL_EXPORT_HEADER_GROUPS = [
   { lastColumnIndex: 37, color: '5B5EA6' },
   { lastColumnIndex: 47, color: '548235' },
   { lastColumnIndex: 50, color: 'C65911' },
-  { lastColumnIndex: 61, color: '7030A0' }
+  { lastColumnIndex: 62, color: '7030A0' }
 ];
 const HISTORY_DETAIL_EXPORT_STATUS_STYLES = {
   'Hoàn thành': { fill: 'E2F0D9', font: '375623' },
@@ -2532,6 +2533,21 @@ function getOrderInvoiceDiscountAmount(order, financials) {
   return Math.max(0, financials.totalDiscountAmount - lineDiscount);
 }
 
+function getItemPayrollProductGroupName(item = {}) {
+  const itemCode = String(item.variantCode || item.variantCodeSnapshot || item.productCode || item.productCodeSnapshot || item.code || '').trim().toUpperCase();
+  const itemId = String(item.variantId || item.productId || item.id || '');
+  const itemBrand = String(item.productBrand || item.brand || '').trim().toLowerCase();
+  const product = (state.products || []).find(candidate =>
+    (itemId && String(candidate.id) === itemId) ||
+    (itemCode && String(candidate.code || candidate.variantCode || '').trim().toUpperCase() === itemCode &&
+      (!itemBrand || String(candidate.brand || '').trim().toLowerCase() === itemBrand))
+  );
+  const groupId = product?.payrollProductGroupId || item.payrollProductGroupId || item.payroll_product_group_id || '';
+  const group = (state.payrollProductGroups || []).find(candidate => String(candidate.id) === String(groupId));
+  if (!groupId) return '';
+  return group?.name || product?.group || item.payrollProductGroupName || item.payroll_product_group_name || '';
+}
+
 function allocateRoundedExportTotal(total, weights) {
   const roundedTotal = Math.max(0, Math.round(toExportNumber(total)));
   if (!Array.isArray(weights) || weights.length === 0) return [];
@@ -2616,6 +2632,7 @@ function buildHistoryDetailExportRows(orderContexts) {
       'Trạng thái giao hàng': order.deliveryStatus || order.delivery_status || '',
       'Mã hàng': row['Mã hàng'] || '',
       'Tên hàng': row['Tên hàng'] || '',
+      'Nhóm sản phẩm': row['Nhóm sản phẩm'] || '',
       'Thương hiệu': row['Thương hiệu'] || row['Thương hiệu/Nhãn sơn'] || '',
       'ĐVT': row['Quy cách'] || row['ĐVT'] || '',
       'Ghi chú hàng hóa': row['Ghi chú hàng hóa'] || '',
@@ -2756,6 +2773,7 @@ function buildHistoryDetailExportRows(orderContexts) {
           'Trạng thái giao hàng': '',
           'Mã hàng': item.variantCode || item.variantCodeSnapshot || item.productCode || item.productCodeSnapshot || item.code || item.variantId || item.productId || '',
           'Tên hàng': item.productName || item.name || item.product?.name || (ret.reason || 'Hàng trả lại'),
+          'Nhóm sản phẩm': getItemPayrollProductGroupName(orderItem || item),
           'Thương hiệu': item.productBrand || item.brand || '',
           'ĐVT': item.specificationSnapshot || item.packagingName || item.packageType || item.unitName || item.unit || '',
           'Ghi chú hàng hóa': [item.note || item.notes, ret.reason].filter(Boolean).join(' - ') || 'Hàng trả lại',

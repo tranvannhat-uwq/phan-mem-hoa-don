@@ -6,6 +6,7 @@ import {
   applyCustomerRealtimePayload,
   applyCustomerDebtRealtimePayload,
   applyOrderRealtimePayload,
+  applyPayrollProductGroupRealtimePayload,
   applyPricingRealtimePayload,
   applyProductRealtimePayload,
   applyStartingBalanceRealtimePayload,
@@ -21,13 +22,14 @@ import {
   tableCustomersName,
   tableDraftOrdersName,
   tableOrdersName,
+  tablePayrollProductGroupsName,
   tablePriceListItemsName,
   tablePricelistsName,
   tableProductsName,
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260915-debt-date-order-v2';
+} from './supabase.js?v=20260915-payroll-product-group-v1';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;
@@ -85,6 +87,8 @@ async function flushRealtimeEvents() {
         applyStartingBalanceRealtimePayload(event.payload);
       } else if (event.kind === 'product') {
         applyProductRealtimePayload(event.payload);
+      } else if (event.kind === 'payrollProductGroup') {
+        applyPayrollProductGroupRealtimePayload(event.payload);
       } else if (event.kind === 'priceList') {
         applyPricingRealtimePayload('priceList', event.payload);
       } else if (event.kind === 'priceListItem') {
@@ -137,7 +141,7 @@ async function flushRealtimeEvents() {
 function queueVisiblePanelCatchup() {
   if (!state.currentUser || document.visibilityState === 'hidden') return;
   const domainsByPanel = {
-    'products-panel': ['products'],
+    'products-panel': ['products', 'payrollProductGroups'],
     'pricelists-panel': ['pricelists'],
     'invoice-panel': ['products', 'customers', 'pricelists'],
     'history-panel': ['orders', 'salesReturns'],
@@ -209,6 +213,8 @@ export async function startRealtimeSync(renderCallback) {
     payload => queueRealtimeEvent({ kind: 'salesReturnItem', payload }));
   channel = subscribeTable(channel, tableProductsName,
     payload => queueRealtimeEvent({ kind: 'product', payload }));
+  channel = subscribeTable(channel, tablePayrollProductGroupsName,
+    payload => queueRealtimeEvent({ kind: 'payrollProductGroup', payload }));
   channel = subscribeTable(channel, tablePricelistsName,
     payload => queueRealtimeEvent({ kind: 'priceList', payload }));
   channel = subscribeTable(channel, tablePriceListItemsName,

@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260915-debt-date-order-v2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260915-debt-date-order-v2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260915-payroll-product-group-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260915-payroll-product-group-v1';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260915-debt-date-order-v2';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260915-debt-date-order-v2';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260915-debt-date-order-v2';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260915-payroll-product-group-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260915-payroll-product-group-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260915-payroll-product-group-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -75,6 +75,7 @@ export function clearSupabaseAuthStorage() {
 
 // Tên các bảng trên cơ sở dữ liệu (tự động điều chỉnh dựa trên sự tồn tại của tiền tố wl_)
 export let tableProductsName = 'products';
+export let tablePayrollProductGroupsName = 'payroll_product_groups';
 export let tableOrdersName = 'orders';
 export let tableDraftOrdersName = 'draft_orders';
 export let tableCustomersName = 'customers';
@@ -1175,6 +1176,7 @@ const optionalProductSchemaColumns = new Set([
   'barcode',
   'purchase_price',
   'product_group',
+  'payroll_product_group_id',
   'is_legacy'
 ]);
 const unavailableProductSchemaColumns = new Set();
@@ -1223,6 +1225,7 @@ function normalizeProductRow(row, localProducts = []) {
     brand: row.brand || (local ? local.brand : 'Nano10*'),
     brandId: row.brand_id || (local ? local.brandId : null),
     group: row.product_group || row.group || (local ? local.group : ''),
+    payrollProductGroupId: row.payroll_product_group_id || (local ? local.payrollProductGroupId : null) || null,
     packageType: row.package_type || row.packageType || '',
     packagingName: row.packaging_name || row.package_type || row.packageType || '',
     packageWeight: row.package_weight || row.packageWeight || '',
@@ -1240,6 +1243,34 @@ function normalizeProductRow(row, localProducts = []) {
     createdAt: row.created_at || '',
     updatedAt: row.updated_at || ''
   };
+}
+
+function normalizePayrollProductGroupRow(row = {}) {
+  return {
+    id: row.id || '',
+    code: row.code || '',
+    name: row.name || '',
+    description: row.description || '',
+    isActive: row.is_active !== false,
+    createdBy: row.created_by || '',
+    createdAt: row.created_at || '',
+    updatedBy: row.updated_by || '',
+    updatedAt: row.updated_at || ''
+  };
+}
+
+export function applyPayrollProductGroupRealtimePayload(payload = {}) {
+  const row = payload.new || payload.old || {};
+  const id = String(row.id || '');
+  if (!id) return false;
+  const remaining = (state.payrollProductGroups || []).filter(group => String(group.id) !== id);
+  if (payload.eventType !== 'DELETE' && payload.new) {
+    remaining.push(normalizePayrollProductGroupRow(payload.new));
+    remaining.sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
+  }
+  state.payrollProductGroups = remaining;
+  localStorage.setItem('billing_system_payroll_product_groups', JSON.stringify(remaining));
+  return true;
 }
 
 export function applyProductRealtimePayload(payload = {}) {
@@ -1315,6 +1346,23 @@ export async function fetchCloudData(options = {}) {
       } catch (prodErr) {
         console.warn("Could not load products from Supabase, fallback to local:", prodErr.message);
         state.products = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
+      }
+    };
+
+    const fetchPayrollProductGroups = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from(tablePayrollProductGroupsName)
+          .select('*')
+          .order('code', { ascending: true });
+        if (error) throw error;
+        state.payrollProductGroups = (data || []).map(normalizePayrollProductGroupRow);
+        localStorage.setItem('billing_system_payroll_product_groups', JSON.stringify(state.payrollProductGroups));
+      } catch (error) {
+        const missing = isMissingSchemaCacheRelationError(error, `public.${tablePayrollProductGroupsName}`) ||
+          isMissingSchemaCacheRelationError(error, tablePayrollProductGroupsName);
+        if (!missing) console.warn('Could not load payroll product groups from Supabase:', error.message);
+        state.payrollProductGroups = JSON.parse(localStorage.getItem('billing_system_payroll_product_groups') || '[]');
       }
     };
 
@@ -1914,6 +1962,7 @@ export async function fetchCloudData(options = {}) {
     if (onlyDomains) {
       const loaders = {
         products: fetchProducts,
+        payrollProductGroups: fetchPayrollProductGroups,
         orders: fetchOrders,
         customers: fetchCustomers,
         pricelists: fetchPricelists,
@@ -1937,6 +1986,7 @@ export async function fetchCloudData(options = {}) {
     // loading in the background and are rendered again when complete.
     const coreLoad = Promise.all([
       fetchProducts(),
+      fetchPayrollProductGroups(),
       fetchCustomers(),
       fetchPricelists({ includeItems: !leanBootstrap }),
       fetchUsers(),
@@ -2060,6 +2110,7 @@ async function legacyLocalUploadDisabled() {
             package_weight_unit: p.packageWeightUnit || 'kg',
             display_specification: p.displaySpecification || '',
             product_group: p.group || null,
+            payroll_product_group_id: p.payrollProductGroupId || null,
             is_active: p.isActive !== false,
             is_legacy: p.isLegacy === true,
             updated_at: new Date().toISOString()
@@ -2340,6 +2391,7 @@ export async function dbSaveProduct(product) {
         barcode: product.barcode || null,
         purchase_price: Number(product.purchasePrice || 0),
         product_group: product.group || null,
+        payroll_product_group_id: product.payrollProductGroupId || null,
         is_active: product.isActive !== false,
         is_legacy: product.isLegacy === true,
         updated_at: new Date().toISOString()
@@ -2440,6 +2492,7 @@ export async function dbSaveProductsBulk(products) {
         barcode: product.barcode || null,
         purchase_price: Number(product.purchasePrice || 0),
         product_group: product.group || null,
+        payroll_product_group_id: product.payrollProductGroupId || null,
         is_active: product.isActive !== false,
         is_legacy: product.isLegacy === true,
         updated_at: new Date().toISOString()
@@ -2494,6 +2547,60 @@ export async function dbSaveProductsBulk(products) {
   } catch (err) {
     console.error(err);
     showToast('Không thể nhập danh sách sản phẩm lên đám mây: ' + err.message, 'danger');
+    return false;
+  }
+}
+
+export async function dbSavePayrollProductGroup(group) {
+  if (!group?.id || !group?.code || !group?.name) return false;
+  if (!isCloudActive || !supabaseClient) return true;
+  if (!['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase())) {
+    showToast('Chỉ Admin hoặc Kế toán được quản lý nhóm sản phẩm tính lương.', 'danger');
+    return false;
+  }
+
+  try {
+    const row = {
+      id: group.id,
+      code: String(group.code).trim().toUpperCase(),
+      name: String(group.name).trim(),
+      description: String(group.description || '').trim() || null,
+      is_active: group.isActive !== false,
+      created_by: group.createdBy || state.currentUser?.username || state.currentUser?.id || null,
+      updated_by: state.currentUser?.username || state.currentUser?.id || null,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await supabaseClient
+      .from(tablePayrollProductGroupsName)
+      .upsert(row, { onConflict: 'id' });
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error(error);
+    showToast('Không thể lưu nhóm sản phẩm tính lương: ' + error.message, 'danger');
+    return false;
+  }
+}
+
+export async function dbSetPayrollProductGroupActive(groupId, isActive) {
+  if (!groupId) return false;
+  if (!isCloudActive || !supabaseClient) return true;
+  if (!['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase())) return false;
+
+  try {
+    const { error } = await supabaseClient
+      .from(tablePayrollProductGroupsName)
+      .update({
+        is_active: isActive === true,
+        updated_by: state.currentUser?.username || state.currentUser?.id || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', groupId);
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error(error);
+    showToast('Không thể đổi trạng thái nhóm sản phẩm: ' + error.message, 'danger');
     return false;
   }
 }

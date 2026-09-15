@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260915-debt-date-order-v2';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260915-debt-date-order-v2';
-import { renderAll, switchTab } from '../main.js?v=20260915-debt-date-order-v2';
-import { populateManagedByDropdown } from './customers.js?v=20260915-debt-date-order-v2';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260915-payroll-product-group-v1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260915-payroll-product-group-v1';
+import { renderAll, switchTab } from '../main.js?v=20260915-payroll-product-group-v1';
+import { populateManagedByDropdown } from './customers.js?v=20260915-payroll-product-group-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260915-debt-date-order-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20260915-payroll-product-group-v1';
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -740,7 +740,7 @@ export function applyUserPermissions(user) {
       #btn-print-type-processing, #btn-print-type-warehouse { display: none !important; }
       .delete-cust-btn, .pay-debt-btn { display: none !important; }
       .edit-cust-btn { display: inline-flex !important; }
-      #btn-open-add-product-modal, #btn-open-excel-modal, #btn-download-excel-template, .edit-product-btn, .delete-prod-btn { display: none !important; }
+      #btn-open-add-product-modal, #btn-open-excel-modal, #btn-download-excel-template, #btn-manage-payroll-product-groups, .edit-product-btn, .edit-prod-btn, .delete-prod-btn, .archive-prod-btn { display: none !important; }
       #products-panel th:last-child, #products-panel td:last-child { display: none !important; }
       .col-delete-prod { display: none !important; }
       .delete-order-btn { display: none !important; }
@@ -755,7 +755,7 @@ export function applyUserPermissions(user) {
       .delete-cust-btn { display: inline-flex !important; }
       .edit-cust-btn { display: inline-flex !important; }
       .pay-debt-btn { display: inline-flex !important; }
-      #btn-open-add-product-modal, .edit-product-btn, .delete-product-btn { display: none !important; }
+      #btn-open-add-product-modal, .edit-product-btn, .edit-prod-btn, .delete-product-btn, .archive-prod-btn { display: none !important; }
       .delete-order-btn { display: none !important; }
     `;
   } else {

@@ -613,6 +613,9 @@
               <button class="btn btn-secondary btn-sm" id="btn-export-products-excel">
                 <i data-lucide="file-down"></i> Xuất Excel
               </button>
+              <button class="btn btn-secondary btn-sm" id="btn-manage-payroll-product-groups">
+                <i data-lucide="tags"></i> Nhóm tính lương
+              </button>
               <button class="btn btn-indigo btn-sm" id="btn-open-excel-modal">
                 <i data-lucide="file-up"></i> Nhập Excel
               </button>
@@ -637,6 +640,11 @@
                 <option value="">Tất cả loại bao bì</option>
               </select>
             </div>
+            <div class="filter-wrapper" style="width: 190px;">
+              <select class="form-control" id="product-payroll-group-filter">
+                <option value="">Tất cả nhóm tính lương</option>
+              </select>
+            </div>
             <div class="filter-wrapper" style="width: 170px;">
               <select class="form-control" id="product-status-filter">
                 <option value="">Tất cả trạng thái</option>
@@ -647,11 +655,12 @@
           </div>
 
           <div class="table-responsive">
-            <table class="table" style="table-layout: fixed; min-width: 1180px;">
+            <table class="table" style="table-layout: fixed; min-width: 1340px;">
               <colgroup>
                 <col style="width: 50px;">
                 <col style="width: 150px;">
                 <col style="width: 260px;">
+                <col style="width: 210px;">
                 <col style="width: 150px;">
                 <col style="width: 110px;">
                 <col style="width: 120px;">
@@ -664,6 +673,7 @@
                   <th style="text-align: center;">STT</th>
                   <th>Mã gốc</th>
                   <th>Tên sản phẩm</th>
+                  <th>Nhóm tính lương</th>
                   <th>Hãng sơn</th>
                   <th>Đóng gói</th>
                   <th>Khối lượng</th>
@@ -2410,8 +2420,11 @@
                 <select class="form-control" id="prod-brand"></select>
               </div>
               <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label" for="prod-product-group">Nhóm sản phẩm</label>
-                <input type="text" class="form-control" id="prod-product-group" placeholder="Ví dụ: Sơn nội thất">
+                <label class="form-label" for="prod-product-group">Nhóm sản phẩm (tính lương)</label>
+                <select class="form-control" id="prod-product-group">
+                  <option value="">Chưa phân nhóm</option>
+                </select>
+                <small style="color: var(--text-muted);">Chỉ chọn từ nhóm do Kế toán/Admin tạo.</small>
               </div>
             </div>
           <div class="form-group" id="prod-brand-custom-group" style="margin-bottom: 0; display: none;">
@@ -2456,6 +2469,53 @@
           <button type="submit" class="btn btn-primary" id="btn-save-product-submit">Lưu sản phẩm</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Accounting-owned product groups used by payroll Excel exports -->
+  <div class="modal-overlay" id="payroll-product-groups-modal">
+    <div class="modal-content" style="max-width: 820px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i data-lucide="tags"></i> Nhóm sản phẩm tính lương</h3>
+        <button type="button" class="modal-close" id="btn-close-payroll-product-groups-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+        <p style="margin: 0; color: var(--text-secondary);">
+          Kế toán tạo nhóm thủ công tại đây. Hệ thống không tự sinh nhóm từ tên sản phẩm hoặc file Excel.
+        </p>
+        <form id="payroll-product-group-form" class="product-editor-section">
+          <input type="hidden" id="payroll-product-group-id" value="">
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="payroll-product-group-code">Mã nhóm *</label>
+              <input class="form-control" id="payroll-product-group-code" required placeholder="Ví dụ: NHOM-1">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="payroll-product-group-name">Tên nhóm *</label>
+              <input class="form-control" id="payroll-product-group-name" required placeholder="Ví dụ: Sản phẩm kinh tế">
+            </div>
+          </div>
+          <div class="form-group" style="margin: 0.75rem 0;">
+            <label class="form-label" for="payroll-product-group-description">Ghi chú</label>
+            <input class="form-control" id="payroll-product-group-description" placeholder="Mô tả để kế toán dễ nhận biết">
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-reset-payroll-product-group-form">Nhập mới</button>
+            <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="save"></i> Lưu nhóm</button>
+          </div>
+        </form>
+        <div class="table-responsive" style="max-height: 360px;">
+          <table class="table">
+            <thead><tr><th>Mã nhóm</th><th>Tên nhóm</th><th>Ghi chú</th><th>Trạng thái</th><th style="text-align:center;">Hành động</th></tr></thead>
+            <tbody id="payroll-product-groups-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="btn-done-payroll-product-groups">Đóng</button>
+      </div>
     </div>
   </div>
 
@@ -4471,6 +4531,6 @@
 
   <!-- App logic -->
   <script type="module" src="js/customer-care-landing.js?v=20260829-sheet-workspace-v4"></script>
-  <script type="module" src="js/main.js?v=20260915-debt-date-order-v2"></script>
+  <script type="module" src="js/main.js?v=20260915-payroll-product-group-v1"></script>
 </body>
 </html>

@@ -7,6 +7,7 @@ export const DEFAULT_COMPANIES = [
 // Đối tượng trạng thái toàn cục của ứng dụng (State)
 export const state = {
   products: [],
+  payrollProductGroups: [],
   brands: [],
   companies: [...DEFAULT_COMPANIES],
   invoiceItems: [], // [{ product, brand, package, colorCode, colorPercent, quantity, discountPercent, price }]

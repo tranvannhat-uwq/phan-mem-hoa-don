@@ -1,7 +1,12 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
-import { dbSaveProductsBulk, dbDeleteProduct } from '../services/supabase.js?v=20260915-debt-date-order-v2';
-import { renderAll } from '../main.js?v=20260915-debt-date-order-v2';
+import {
+  dbDeleteProduct,
+  dbSavePayrollProductGroup,
+  dbSaveProductsBulk,
+  dbSetPayrollProductGroupActive
+} from '../services/supabase.js?v=20260915-payroll-product-group-v1';
+import { renderAll } from '../main.js?v=20260915-payroll-product-group-v1';
 import {
   buildProductFamilies,
   getProductBaseCode,
@@ -13,6 +18,33 @@ import {
 let excelImportData = [];
 let isSelectingFile = false;
 let editingProductFamilyKey = '';
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[char]);
+
+function canManagePayrollProductGroups() {
+  return ['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase());
+}
+
+function getPayrollProductGroup(groupId) {
+  return (state.payrollProductGroups || []).find(group => String(group.id) === String(groupId || '')) || null;
+}
+
+function findPayrollProductGroup(value) {
+  const normalized = normalizeCatalogText(value);
+  if (!normalized) return null;
+  return (state.payrollProductGroups || []).find(group =>
+    normalizeCatalogText(group.code) === normalized || normalizeCatalogText(group.name) === normalized
+  ) || null;
+}
+
+function createPayrollProductGroupId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+    return `paygrp-${globalThis.crypto.randomUUID()}`;
+  }
+  return `paygrp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 function isSku(product) {
   return Boolean(product && product.id && product.packageType && !product.isLegacy);
@@ -39,6 +71,7 @@ function getFilteredSkuProducts() {
   const search = (document.getElementById('product-search-input')?.value || '').trim().toLowerCase();
   const brandFilter = document.getElementById('product-brand-filter')?.value || '';
   const packageFilter = document.getElementById('product-package-filter')?.value || '';
+  const payrollGroupFilter = document.getElementById('product-payroll-group-filter')?.value || '';
   const statusFilter = document.getElementById('product-status-filter')?.value || '';
 
   return (state.products || [])
@@ -49,6 +82,7 @@ function getFilteredSkuProducts() {
       if (search && !haystack.includes(search)) return false;
       if (brandFilter && brand !== brandFilter) return false;
       if (packageFilter && product.packageType !== packageFilter) return false;
+      if (payrollGroupFilter && String(product.payrollProductGroupId || '') !== payrollGroupFilter) return false;
       if (statusFilter === 'active' && product.isActive === false) return false;
       if (statusFilter === 'inactive' && product.isActive !== false) return false;
       return true;
@@ -60,6 +94,7 @@ function getFilteredProductFamilies() {
   const search = (document.getElementById('product-search-input')?.value || '').trim();
   const brandFilter = document.getElementById('product-brand-filter')?.value || '';
   const packageFilter = document.getElementById('product-package-filter')?.value || '';
+  const payrollGroupFilter = document.getElementById('product-payroll-group-filter')?.value || '';
   const statusFilter = document.getElementById('product-status-filter')?.value || '';
   let families = buildProductFamilies(state.products, { includeInactive: true });
 
@@ -67,6 +102,7 @@ function getFilteredProductFamilies() {
   return families.filter(family => {
     if (brandFilter && family.brand !== brandFilter) return false;
     if (packageFilter && !family.variants.some(variant => variant.packageType === packageFilter)) return false;
+    if (payrollGroupFilter && String(family.payrollProductGroupId || '') !== payrollGroupFilter) return false;
     if (statusFilter === 'active' && !family.variants.some(variant => variant.isActive !== false)) return false;
     if (statusFilter === 'inactive' && !family.variants.every(variant => variant.isActive === false)) return false;
     return true;
@@ -94,10 +130,41 @@ function populateBrandOptions() {
   }
 }
 
+function payrollGroupOptions(selectedId = '', { includeInactiveSelection = true } = {}) {
+  const selected = getPayrollProductGroup(selectedId);
+  const groups = (state.payrollProductGroups || [])
+    .filter(group => group.isActive !== false || (includeInactiveSelection && String(group.id) === String(selectedId)))
+    .sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
+  return groups.map(group => {
+    const inactive = group.isActive === false ? ' (ngừng dùng)' : '';
+    return `<option value="${escapeHtml(group.id)}" ${String(group.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(group.code)} - ${escapeHtml(group.name)}${inactive}</option>`;
+  }).join('') || (selected ? `<option value="${escapeHtml(selected.id)}" selected>${escapeHtml(selected.name)}</option>` : '');
+}
+
+function populatePayrollProductGroupOptions() {
+  const filter = document.getElementById('product-payroll-group-filter');
+  if (filter) {
+    const current = filter.value;
+    filter.innerHTML = '<option value="">Tất cả nhóm tính lương</option>' +
+      (state.payrollProductGroups || [])
+        .map(group => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.code)} - ${escapeHtml(group.name)}${group.isActive === false ? ' (ngừng dùng)' : ''}</option>`)
+        .join('');
+    filter.value = [...filter.options].some(option => option.value === current) ? current : '';
+  }
+
+  const modalSelect = document.getElementById('prod-product-group');
+  if (modalSelect) {
+    const current = modalSelect.value;
+    modalSelect.innerHTML = '<option value="">Chưa phân nhóm</option>' + payrollGroupOptions(current);
+    modalSelect.value = [...modalSelect.options].some(option => option.value === current) ? current : '';
+  }
+}
+
 export function renderProductsTable() {
   const tableBody = document.getElementById('products-table-body');
   if (!tableBody) return;
   populateBrandOptions();
+  populatePayrollProductGroupOptions();
 
   const packageSelect = document.getElementById('product-package-filter');
   if (packageSelect) {
@@ -124,11 +191,23 @@ export function renderProductsTable() {
         const unit = variant.unitName || variant.packageWeightUnit || '';
         return `${String(value).replace('.', ',')} ${unit}`.trim();
       }).join(', ');
+      const payrollGroup = getPayrollProductGroup(family.payrollProductGroupId);
+      const groupLabel = family.payrollProductGroupId
+        ? (payrollGroup?.name || family.group || 'Nhóm không còn trong danh mục')
+        : 'Chưa phân nhóm';
       return `
       <tr>
         <td class="text-center">${start + index + 1}</td>
         <td class="sku-code">${family.baseCode}</td>
         <td title="${family.name}">${family.name}</td>
+        <td>
+          ${canManagePayrollProductGroups() ? `
+            <select class="form-control product-payroll-group-assignment" data-family-key="${escapeHtml(family.key)}" title="Chọn nhóm dùng để lọc khi tính lương">
+              <option value="">Chưa phân nhóm</option>
+              ${payrollGroupOptions(family.payrollProductGroupId)}
+            </select>
+          ` : escapeHtml(groupLabel)}
+        </td>
         <td>${family.brand}</td>
         <td>${packageNames || '-'}</td>
         <td title="${weights}">${weights || '-'}</td>
@@ -147,7 +226,7 @@ export function renderProductsTable() {
       </tr>
     `;
     }).join('')
-    : `<tr><td colspan="9" class="empty-table-cell">Không tìm thấy sản phẩm phù hợp.</td></tr>`;
+    : `<tr><td colspan="10" class="empty-table-cell">Không tìm thấy sản phẩm phù hợp.</td></tr>`;
 
   const pagination = document.getElementById('products-pagination');
   if (pagination) {
@@ -180,6 +259,9 @@ export function renderProductsTable() {
   });
   document.querySelectorAll('.archive-prod-btn').forEach(button => {
     button.addEventListener('click', () => archiveProductFamily(button.dataset.familyKey));
+  });
+  document.querySelectorAll('.product-payroll-group-assignment').forEach(select => {
+    select.addEventListener('change', () => assignPayrollGroupToFamily(select.dataset.familyKey, select.value));
   });
   safeCreateIcons();
 }
@@ -239,7 +321,9 @@ export function openProductModal(index = -1) {
   document.getElementById('prod-id').value = family?.id || '';
   document.getElementById('prod-code').value = family?.baseCode || '';
   document.getElementById('prod-name').value = family?.name || '';
-  document.getElementById('prod-product-group').value = family?.group || '';
+  const payrollGroupSelect = document.getElementById('prod-product-group');
+  payrollGroupSelect.innerHTML = '<option value="">Chưa phân nhóm</option>' + payrollGroupOptions(family?.payrollProductGroupId || '');
+  payrollGroupSelect.value = family?.payrollProductGroupId || '';
   document.getElementById('prod-description').value = family?.description || '';
   const brandSelect = document.getElementById('prod-brand');
   const customBrandGroup = document.getElementById('prod-brand-custom-group');
@@ -278,6 +362,12 @@ export async function saveProduct() {
   }
 
   const matchedBrand = (state.brands || []).find(item => item.name.toLowerCase() === brand.toLowerCase());
+  const payrollGroupId = document.getElementById('prod-product-group').value || null;
+  const payrollGroup = payrollGroupId ? getPayrollProductGroup(payrollGroupId) : null;
+  if (payrollGroupId && !payrollGroup) {
+    showToast('Nhóm sản phẩm tính lương không tồn tại. Vui lòng chọn lại.', 'warning');
+    return;
+  }
   const groupId = document.getElementById('prod-id').value || createProductGroupId(baseCode, name, brand);
   const existingFamily = editingProductFamilyKey
     ? buildProductFamilies(state.products, { includeInactive: true }).find(item => item.key === editingProductFamilyKey)
@@ -309,7 +399,8 @@ export async function saveProduct() {
       displaySpecification: `${packageType} ${String(weight ?? '').replace('.', ',')} ${unit}`.trim(),
       purchasePrice: Number(row.querySelector('.variant-purchase-price-input').value.replace(/\D/g, '') || 0),
       conversionQuantity: Number(existing?.conversionQuantity || 1),
-      group: document.getElementById('prod-product-group').value.trim(),
+      payrollProductGroupId: payrollGroup?.id || null,
+      group: payrollGroup?.name || '',
       description: document.getElementById('prod-description').value.trim(),
       isActive: row.querySelector('.variant-active-input').checked,
       isLegacy: false
@@ -348,6 +439,41 @@ export async function saveProduct() {
   showToast(`Đã lưu sản phẩm và ${variants.length} quy cách.`);
 }
 
+async function assignPayrollGroupToFamily(familyKey, payrollProductGroupId) {
+  if (!canManagePayrollProductGroups()) {
+    showToast('Chỉ Admin hoặc Kế toán được phân nhóm sản phẩm.', 'danger');
+    renderProductsTable();
+    return;
+  }
+  const family = buildProductFamilies(state.products, { includeInactive: true }).find(item => item.key === familyKey);
+  if (!family) return;
+  const selectedGroup = payrollProductGroupId ? getPayrollProductGroup(payrollProductGroupId) : null;
+  if (payrollProductGroupId && (!selectedGroup || selectedGroup.isActive === false)) {
+    showToast('Nhóm đã ngừng dùng hoặc không tồn tại.', 'warning');
+    renderProductsTable();
+    return;
+  }
+
+  const variants = family.variants.map(variant => ({
+    ...variant,
+    payrollProductGroupId: selectedGroup?.id || null,
+    group: selectedGroup?.name || ''
+  }));
+  if (!await dbSaveProductsBulk(variants)) {
+    renderProductsTable();
+    return;
+  }
+  variants.forEach(variant => {
+    const index = state.products.findIndex(product => product.id === variant.id);
+    if (index >= 0) state.products[index] = variant;
+  });
+  localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+  renderProductsTable();
+  showToast(selectedGroup
+    ? `Đã xếp “${family.name}” vào nhóm “${selectedGroup.name}”.`
+    : `Đã bỏ nhóm tính lương của “${family.name}”.`);
+}
+
 async function archiveProductFamily(familyKey) {
   const family = buildProductFamilies(state.products, { includeInactive: true }).find(item => item.key === familyKey);
   if (!family || !confirm(`Ngừng áp dụng toàn bộ ${family.variants.length} quy cách của "${family.name}"?`)) return;
@@ -381,7 +507,18 @@ export function downloadExcelTemplate() {
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet(rows);
   sheet['!cols'] = [{ wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 14 }];
+  sheet['!autofilter'] = { ref: 'A1:K2' };
+  sheet['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
   XLSX.utils.book_append_sheet(workbook, sheet, 'Danh Sach SKU');
+  const groupRows = (state.payrollProductGroups || []).map(group => ({
+    'Mã nhóm': group.code,
+    'Tên nhóm': group.name,
+    'Trạng thái': group.isActive === false ? 'Ngừng dùng' : 'Đang dùng'
+  }));
+  const groupSheet = XLSX.utils.json_to_sheet(groupRows, { header: ['Mã nhóm', 'Tên nhóm', 'Trạng thái'] });
+  groupSheet['!cols'] = [{ wch: 18 }, { wch: 35 }, { wch: 16 }];
+  groupSheet['!autofilter'] = { ref: `A1:C${Math.max(1, groupRows.length + 1)}` };
+  XLSX.utils.book_append_sheet(workbook, groupSheet, 'Nhom Tinh Luong');
   XLSX.writeFile(workbook, 'Mau_Danh_Sach_SKU.xlsx');
 }
 
@@ -397,7 +534,9 @@ export function exportProductsExcel() {
       'Khối lượng *': Number(product.packageWeight),
       'Đơn vị *': product.packageWeightUnit || 'kg',
       'Quy cách hiển thị': specificationOf(product),
-      'Nhóm sản phẩm': product.group || '',
+      'Nhóm sản phẩm': product.payrollProductGroupId
+        ? (getPayrollProductGroup(product.payrollProductGroupId)?.name || product.group || '')
+        : '',
       'Giá nhập': Number(product.purchasePrice || 0),
       'Đang áp dụng': product.isActive !== false
     };
@@ -408,6 +547,7 @@ export function exportProductsExcel() {
   });
   sheet['!cols'] = [{ wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 20 }, { wch: 16 }, { wch: 13 }, { wch: 11 }, { wch: 24 }, { wch: 20 }, { wch: 14 }, { wch: 15 }];
   sheet['!autofilter'] = { ref: `A1:K${Math.max(1, products.length + 1)}` };
+  sheet['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
   XLSX.utils.book_append_sheet(workbook, sheet, 'Danh Sach SKU');
   XLSX.writeFile(workbook, `Danh_Sach_SKU_${new Date().toISOString().slice(0, 10)}.xlsx`);
   showToast(`Đã xuất ${products.length} SKU theo bộ lọc hiện tại.`);
@@ -421,6 +561,7 @@ function handleExcelFileSelect(file) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
       const hasPurchasePriceColumn = normalizeCatalogText(rows[0]?.[9]).includes('gia nhap');
       const importedGroupIds = new Map();
+      const unknownPayrollGroups = new Set();
       excelImportData = rows.slice(1).filter(row => row[0]).map(row => {
         const brand = String(row[2] || '').trim();
         const name = String(row[1] || '').trim();
@@ -435,6 +576,11 @@ function handleExcelFileSelect(file) {
         const packageType = String(row[4] || '').trim();
         const weight = Number(String(row[5] ?? '').replace(',', '.'));
         const unit = String(row[6] || 'kg').trim();
+        const payrollGroupValue = String(row[8] || '').trim();
+        const payrollGroup = findPayrollProductGroup(payrollGroupValue);
+        if (payrollGroupValue && (!payrollGroup || payrollGroup.isActive === false)) {
+          unknownPayrollGroups.add(payrollGroupValue);
+        }
         return {
           id: createProductId(),
           code: String(row[0]).trim().toUpperCase(),
@@ -451,13 +597,19 @@ function handleExcelFileSelect(file) {
           packageWeightUnit: unit,
           unitName: unit,
           displaySpecification: String(row[7] || '').trim(),
-          group: String(row[8] || '').trim(),
+          payrollProductGroupId: payrollGroup?.id || null,
+          group: payrollGroup?.name || '',
+          payrollGroupProvided: Boolean(payrollGroupValue),
           purchasePrice: Number(hasPurchasePriceColumn ? row[9] || 0 : 0),
           isActive: (hasPurchasePriceColumn ? row[10] : row[9]) !== false &&
             String(hasPurchasePriceColumn ? row[10] : row[9]).toLowerCase() !== 'false',
           isLegacy: false
         };
       }).filter(product => product.code && product.name && product.brand && product.packageType && Number.isFinite(product.packageWeight));
+
+      if (unknownPayrollGroups.size > 0) {
+        throw new Error(`Nhóm chưa được Kế toán tạo hoặc đã ngừng dùng: ${[...unknownPayrollGroups].join(', ')}`);
+      }
 
       document.getElementById('excel-preview-table-body').innerHTML = excelImportData.slice(0, 5).map((product, index) => `
         <tr><td>${index + 1}</td><td>${product.code}</td><td>${product.name}</td><td>${product.brand}</td><td>${specificationOf(product)}</td><td>Quản lý tại màn hình Bảng giá</td></tr>
@@ -481,7 +633,15 @@ async function processExcelImport() {
       String(product.code).toUpperCase() === imported.code &&
       getBrandName(product.brandId || product.brand, product.brand || '').toLowerCase() === imported.brand.toLowerCase()
     );
-    return existing ? { ...existing, ...imported, id: existing.id } : { ...imported };
+    const { payrollGroupProvided, ...importedProduct } = imported;
+    if (!existing) return importedProduct;
+    return {
+      ...existing,
+      ...importedProduct,
+      id: existing.id,
+      payrollProductGroupId: payrollGroupProvided ? importedProduct.payrollProductGroupId : existing.payrollProductGroupId,
+      group: payrollGroupProvided ? importedProduct.group : existing.group
+    };
   });
 
   if (!await dbSaveProductsBulk(productsToSave)) return;
@@ -500,6 +660,131 @@ async function processExcelImport() {
   localStorage.setItem('billing_system_products', JSON.stringify(state.products));
   renderAll();
   showToast(`Đã nhập/cập nhật ${successCount} SKU.`);
+}
+
+function resetPayrollProductGroupForm() {
+  const form = document.getElementById('payroll-product-group-form');
+  form?.reset();
+  const idInput = document.getElementById('payroll-product-group-id');
+  if (idInput) idInput.value = '';
+}
+
+function renderPayrollProductGroupsTable() {
+  const body = document.getElementById('payroll-product-groups-table-body');
+  if (!body) return;
+  const groups = [...(state.payrollProductGroups || [])]
+    .sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
+  body.innerHTML = groups.length ? groups.map(group => `
+    <tr>
+      <td><strong>${escapeHtml(group.code)}</strong></td>
+      <td>${escapeHtml(group.name)}</td>
+      <td>${escapeHtml(group.description || '')}</td>
+      <td><span class="status-badge ${group.isActive === false ? 'inactive' : 'active'}">${group.isActive === false ? 'Ngừng dùng' : 'Đang dùng'}</span></td>
+      <td class="text-center">
+        <div class="actions-cell">
+          <button type="button" class="btn btn-secondary btn-sm btn-circle edit-payroll-product-group" data-id="${escapeHtml(group.id)}" title="Sửa nhóm"><i data-lucide="edit-2"></i></button>
+          <button type="button" class="btn ${group.isActive === false ? 'btn-primary' : 'btn-danger'} btn-sm toggle-payroll-product-group" data-id="${escapeHtml(group.id)}">
+            ${group.isActive === false ? 'Dùng lại' : 'Ngừng dùng'}
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="5" class="empty-table-cell">Chưa có nhóm nào. Kế toán tạo nhóm đầu tiên ở biểu mẫu phía trên.</td></tr>';
+
+  body.querySelectorAll('.edit-payroll-product-group').forEach(button => {
+    button.addEventListener('click', () => {
+      const group = getPayrollProductGroup(button.dataset.id);
+      if (!group) return;
+      document.getElementById('payroll-product-group-id').value = group.id;
+      document.getElementById('payroll-product-group-code').value = group.code;
+      document.getElementById('payroll-product-group-name').value = group.name;
+      document.getElementById('payroll-product-group-description').value = group.description || '';
+      document.getElementById('payroll-product-group-code').focus();
+    });
+  });
+  body.querySelectorAll('.toggle-payroll-product-group').forEach(button => {
+    button.addEventListener('click', async () => {
+      const group = getPayrollProductGroup(button.dataset.id);
+      if (!group) return;
+      const nextActive = group.isActive === false;
+      const assignedCount = (state.products || []).filter(product => product.payrollProductGroupId === group.id).length;
+      if (!nextActive && !confirm(`Ngừng dùng nhóm “${group.name}”? ${assignedCount} SKU đang gán nhóm này vẫn được giữ nguyên.`)) return;
+      if (!await dbSetPayrollProductGroupActive(group.id, nextActive)) return;
+      group.isActive = nextActive;
+      group.updatedAt = new Date().toISOString();
+      localStorage.setItem('billing_system_payroll_product_groups', JSON.stringify(state.payrollProductGroups));
+      renderPayrollProductGroupsTable();
+      renderProductsTable();
+      showToast(nextActive ? 'Đã cho phép dùng lại nhóm sản phẩm.' : 'Đã ngừng dùng nhóm; các gán cũ vẫn được giữ.');
+    });
+  });
+  safeCreateIcons();
+}
+
+function openPayrollProductGroupsModal() {
+  if (!canManagePayrollProductGroups()) {
+    showToast('Chỉ Admin hoặc Kế toán được quản lý nhóm sản phẩm tính lương.', 'danger');
+    return;
+  }
+  resetPayrollProductGroupForm();
+  renderPayrollProductGroupsTable();
+  document.getElementById('payroll-product-groups-modal')?.classList.add('active');
+}
+
+function closePayrollProductGroupsModal() {
+  document.getElementById('payroll-product-groups-modal')?.classList.remove('active');
+}
+
+async function savePayrollProductGroup() {
+  if (!canManagePayrollProductGroups()) return;
+  const idInput = document.getElementById('payroll-product-group-id');
+  const id = idInput.value || createPayrollProductGroupId();
+  const code = document.getElementById('payroll-product-group-code').value.trim().toUpperCase();
+  const name = document.getElementById('payroll-product-group-name').value.trim();
+  const description = document.getElementById('payroll-product-group-description').value.trim();
+  if (!code || !name) {
+    showToast('Vui lòng nhập mã nhóm và tên nhóm.', 'warning');
+    return;
+  }
+  const duplicate = (state.payrollProductGroups || []).find(group =>
+    group.id !== id && (
+      normalizeCatalogText(group.code) === normalizeCatalogText(code) ||
+      normalizeCatalogText(group.name) === normalizeCatalogText(name)
+    )
+  );
+  if (duplicate) {
+    showToast('Mã nhóm hoặc tên nhóm đã tồn tại.', 'danger');
+    return;
+  }
+
+  const existing = getPayrollProductGroup(id);
+  const group = {
+    ...(existing || {}),
+    id,
+    code,
+    name,
+    description,
+    isActive: existing?.isActive !== false,
+    createdBy: existing?.createdBy || state.currentUser?.username || state.currentUser?.id || '',
+    updatedBy: state.currentUser?.username || state.currentUser?.id || '',
+    updatedAt: new Date().toISOString()
+  };
+  if (!await dbSavePayrollProductGroup(group)) return;
+
+  const index = (state.payrollProductGroups || []).findIndex(item => item.id === id);
+  if (index >= 0) state.payrollProductGroups[index] = group;
+  else state.payrollProductGroups.push(group);
+  if (existing && existing.name !== name) {
+    (state.products || []).forEach(product => {
+      if (product.payrollProductGroupId === id) product.group = name;
+    });
+    localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+  }
+  localStorage.setItem('billing_system_payroll_product_groups', JSON.stringify(state.payrollProductGroups));
+  resetPayrollProductGroupForm();
+  renderPayrollProductGroupsTable();
+  renderProductsTable();
+  showToast(existing ? 'Đã cập nhật nhóm sản phẩm.' : 'Đã tạo nhóm sản phẩm thủ công.');
 }
 
 export function setupExcelImportAndTemplate() {
@@ -543,11 +828,19 @@ export function setupProductManagement() {
     state.productsPage = 1;
     renderProductsTable();
   };
-  ['product-search-input', 'product-brand-filter', 'product-package-filter', 'product-status-filter'].forEach(id => {
+  ['product-search-input', 'product-brand-filter', 'product-package-filter', 'product-payroll-group-filter', 'product-status-filter'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', refresh);
     document.getElementById(id)?.addEventListener('change', refresh);
   });
   document.getElementById('btn-open-add-product-modal')?.addEventListener('click', () => openProductModal(-1));
+  document.getElementById('btn-manage-payroll-product-groups')?.addEventListener('click', openPayrollProductGroupsModal);
+  document.getElementById('btn-close-payroll-product-groups-modal')?.addEventListener('click', closePayrollProductGroupsModal);
+  document.getElementById('btn-done-payroll-product-groups')?.addEventListener('click', closePayrollProductGroupsModal);
+  document.getElementById('btn-reset-payroll-product-group-form')?.addEventListener('click', resetPayrollProductGroupForm);
+  document.getElementById('payroll-product-group-form')?.addEventListener('submit', event => {
+    event.preventDefault();
+    savePayrollProductGroup();
+  });
   document.getElementById('btn-close-product-modal')?.addEventListener('click', closeProductModal);
   document.getElementById('btn-cancel-product')?.addEventListener('click', closeProductModal);
   document.getElementById('product-form')?.addEventListener('submit', event => {

@@ -74,6 +74,11 @@ Run these files in order on a staging clone first:
 66. `0066_attribute_employee_report_to_customer_manager.sql`
 67. `0067_employee_business_report_egress_optimization.sql`
 68. `0068_preserve_customer_receipt_transaction_time.sql`
+69. `0069_authoritative_invoice_debt_snapshots.sql`
+70. `0070_sales_return_order_unit_price.sql`
+71. `0071_guard_customer_debt_chain_before_order.sql`
+72. `0072_defer_customer_debt_chain_guard.sql`
+73. `0073_manual_payroll_product_groups.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -399,3 +404,9 @@ New-order confirmation and in-place amendment write the customer aggregate and
 ledger in opposite orders, so the invariant is checked only after both atomic
 writes are complete. Genuine final-state mismatches and malformed ledger rows
 still abort and roll back the transaction.
+
+Migration `0073` adds an accounting-owned product-group catalog for payroll
+classification. Products may only reference a manually created catalog row;
+the migration deliberately does not convert or auto-create groups from legacy
+free text. Renaming a group refreshes its compatibility display name, while
+archiving it preserves existing assignments and historical product references.

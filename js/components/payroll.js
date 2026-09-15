@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, showToast } from '../utils.js';
-import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20260915-debt-date-order-v2';
+import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20260915-payroll-product-group-v1';
 
 let currentPayroll = null;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);

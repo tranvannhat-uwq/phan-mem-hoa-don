@@ -46,7 +46,7 @@ test('history Excel export matches the supplied one-sheet detailed invoice layou
   assert.match(customers, /Đã xuất \$\{historyDetailRowCount\} dòng hàng hóa theo đúng mẫu chi tiết hóa đơn/);
 });
 
-test('detailed invoice export keeps the required 62-column order with managed salesperson', () => {
+test('detailed invoice export keeps the required 63-column order with managed salesperson and product group', () => {
   const customers = read('js/components/customers.js');
   const columnsStart = customers.indexOf('const HISTORY_DETAIL_EXPORT_COLUMNS');
   const columnsEnd = customers.indexOf('const HISTORY_DETAIL_EXPORT_DATE_COLUMNS', columnsStart);
@@ -70,12 +70,12 @@ test('detailed invoice export keeps the required 62-column order with managed sa
     'Tổng tiền hàng', 'Giảm giá hóa đơn', 'Thu khác', 'Khách cần trả',
     'Khách đã trả', 'Tiền mặt', 'Thẻ', 'Ví', 'Chuyển khoản',
     'Còn cần thu (COD)', 'Thời gian giao hàng', 'Trạng thái',
-    'Trạng thái giao hàng', 'Mã hàng', 'Tên hàng', 'Thương hiệu', 'ĐVT',
+    'Trạng thái giao hàng', 'Mã hàng', 'Tên hàng', 'Nhóm sản phẩm', 'Thương hiệu', 'ĐVT',
     'Ghi chú hàng hóa', 'Số lượng', 'Đơn giá', 'Giảm giá %', 'Giảm giá',
     'Giá bán', 'Thành tiền'
   ];
   assert.deepEqual(Array.from(sandbox.columns), expectedColumns);
-  assert.equal(sandbox.columns.length, 62);
+  assert.equal(sandbox.columns.length, 63);
   assert.match(customers, /'Mã hàng': row\['Mã hàng'\]/);
   assert.match(customers, /'Tên hàng': row\['Tên hàng'\]/);
   assert.match(customers, /'Số lượng': row\['Số lượng'\]/);
