@@ -83,6 +83,17 @@ export function parseOrderBusinessDateTimeInput(value, now = new Date()) {
   return { ok: true, value: timestamp, dateKey };
 }
 
+export function resolveOrderBusinessDateTimeForSave(value, options = {}) {
+  const now = options.now instanceof Date ? options.now : new Date();
+  const inputValue = options.useCurrentTime
+    ? currentBusinessDateTimeInputValue(now)
+    : String(value || '').trim();
+  return {
+    ...parseOrderBusinessDateTimeInput(inputValue, now),
+    inputValue
+  };
+}
+
 export function parseOrderBusinessDateInput(value, now = new Date()) {
   const input = String(value || '').trim();
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);

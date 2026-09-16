@@ -7,7 +7,8 @@ import {
   canAdjustOrderBusinessDate,
   currentBusinessDateTimeInputValue,
   orderDateToDateTimeInputValue,
-  parseOrderBusinessDateTimeInput
+  parseOrderBusinessDateTimeInput,
+  resolveOrderBusinessDateTimeForSave
 } from '../js/domain/order-business-date.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -53,19 +54,43 @@ test('parseOrderBusinessDateTimeInput parses and validates order datetime inputs
   assert.equal(parseOrderBusinessDateTimeInput('2026-08-15T16:00', now).ok, false);
 });
 
+test('untouched new-order time refreshes at save while manually selected time is preserved', () => {
+  const openedAt = '2026-09-16T10:29';
+  const finalizedAt = new Date('2026-09-16T13:47:20+07:00');
+
+  const automatic = resolveOrderBusinessDateTimeForSave(openedAt, {
+    useCurrentTime: true,
+    now: finalizedAt
+  });
+  assert.equal(automatic.ok, true);
+  assert.equal(automatic.inputValue, '2026-09-16T13:47');
+  assert.equal(automatic.value, '2026-09-16T13:47:00+07:00');
+
+  const manual = resolveOrderBusinessDateTimeForSave(openedAt, {
+    useCurrentTime: false,
+    now: finalizedAt
+  });
+  assert.equal(manual.ok, true);
+  assert.equal(manual.inputValue, openedAt);
+  assert.equal(manual.value, '2026-09-16T10:29:00+07:00');
+});
+
 test('invoice UI syncs datetime-local input correctly without invalid date values', () => {
   // Must use datetime-local formatted value in reset and setup
   assert.doesNotMatch(invoiceSource, /syncInvoiceBusinessDateControl\(currentBusinessDateInputValue\(\)/);
-  assert.match(invoiceSource, /syncInvoiceBusinessDateControl\(currentBusinessDateTimeInputValue\(\),\s*false\)/);
+  assert.match(invoiceSource, /syncInvoiceBusinessDateControl\(currentBusinessDateTimeInputValue\(\),\s*false,\s*true\)/);
 
   // syncInvoiceBusinessDateControl must handle value > currentMax
   assert.match(invoiceSource, /input\.max\s*=\s*value\s*&&\s*value\s*>\s*currentMax\s*\?\s*value\s*:\s*currentMax/);
+  assert.match(invoiceSource, /businessDateInput\?\.dataset\.autoRefreshOnSave\s*===\s*'true'/);
+  assert.match(invoiceSource, /&&\s*!editOrderId\s*&&\s*!originalOrderDate/);
+  assert.match(invoiceSource, /businessDateInput\.dataset\.autoRefreshOnSave\s*=\s*'false'/);
 });
 
 test('history loads order date into datetime-local control on edit', () => {
   assert.match(
     historySource,
-    /syncInvoiceBusinessDateControl\(\s*isCopy\s*\?\s*currentBusinessDateTimeInputValue\(\)\s*:\s*orderDateToDateTimeInputValue\(order\.date\),\s*isReadOnly\s*\)/
+    /syncInvoiceBusinessDateControl\(\s*isCopy\s*\?\s*currentBusinessDateTimeInputValue\(\)\s*:\s*orderDateToDateTimeInputValue\(order\.date\),\s*isReadOnly,\s*isCopy\s*\)/
   );
 });
 

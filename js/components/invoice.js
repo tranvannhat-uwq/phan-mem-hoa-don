@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260916-product-import-count-v2';
-import { renderAll, switchTab } from '../main.js?v=20260916-product-import-count-v2';
-import { populatePricelistsDropdowns } from './pricelists.js?v=20260916-product-import-count-v2';
-import { generateUniqueCustomerCode } from './customers.js?v=20260916-product-import-count-v2';
-import { addCashbookTransaction } from './so_quy.js?v=20260916-product-import-count-v2';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260916-product-import-count-v2';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20260916-order-time-v1';
+import { renderAll, switchTab } from '../main.js?v=20260916-order-time-v1';
+import { populatePricelistsDropdowns } from './pricelists.js?v=20260916-order-time-v1';
+import { generateUniqueCustomerCode } from './customers.js?v=20260916-order-time-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20260916-order-time-v1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20260916-order-time-v1';
 import { normalizeCustomerPhone } from '../domain/customer-query.js';
-import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260916-product-import-count-v2';
+import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20260916-order-time-v1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
-import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260916-product-import-count-v2';
+import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20260916-order-time-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
-import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, parseOrderBusinessDateTimeInput } from '../domain/order-business-date.js';
+import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, resolveOrderBusinessDateTimeForSave } from '../domain/order-business-date.js?v=20260916-order-time-v1';
 import { reorderOrderItems } from '../domain/order-edit.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260916-product-import-count-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20260916-order-time-v1';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;
@@ -38,7 +38,7 @@ function formatSalesManagerPrintLabel(managerId) {
   return `${abbreviateSalesPosition(manager?.position)}: ${managerName}`;
 }
 
-export function syncInvoiceBusinessDateControl(value = null, isReadOnly = false) {
+export function syncInvoiceBusinessDateControl(value = null, isReadOnly = false, autoRefreshOnSave = false) {
   const group = document.getElementById('invoice-business-date-group');
   const input = document.getElementById('invoice-business-date');
   if (!group || !input) return;
@@ -48,6 +48,7 @@ export function syncInvoiceBusinessDateControl(value = null, isReadOnly = false)
   const currentMax = currentBusinessDateTimeInputValue();
   input.max = value && value > currentMax ? value : currentMax;
   input.value = value || input.value || currentMax;
+  input.dataset.autoRefreshOnSave = String(Boolean(autoRefreshOnSave && !isReadOnly));
 }
 
 function createClientUuid() {
@@ -1017,10 +1018,23 @@ export function compileActiveOrder(customerOverride = null) {
       && !canAdjustOrderBusinessDate(state.currentUser)) {
     orderDate = originalOrderDate;
   } else if (canAdjustOrderBusinessDate(state.currentUser)) {
-    const parsedOrderDate = parseOrderBusinessDateTimeInput(document.getElementById('invoice-business-date')?.value);
+    const businessDateInput = document.getElementById('invoice-business-date');
+    // A new invoice may stay open for hours. Refresh only its untouched default;
+    // edits, drafts and finalized-order amendments must keep their chosen time.
+    const useCurrentTime = businessDateInput?.dataset.autoRefreshOnSave === 'true'
+      && !editOrderId
+      && !originalOrderDate;
+    const parsedOrderDate = resolveOrderBusinessDateTimeForSave(
+      businessDateInput?.value,
+      { useCurrentTime }
+    );
     if (!parsedOrderDate.ok) {
       showToast(parsedOrderDate.message, 'danger');
       return null;
+    }
+    if (useCurrentTime && businessDateInput) {
+      businessDateInput.value = parsedOrderDate.inputValue;
+      businessDateInput.max = parsedOrderDate.inputValue;
     }
     orderDate = parsedOrderDate.value;
   }
@@ -1473,7 +1487,7 @@ export function resetInvoiceBuilder() {
     productSearch.removeAttribute('data-matched-variant-id');
   }
   selectedProductFamilyKey = '';
-  syncInvoiceBusinessDateControl(currentBusinessDateTimeInputValue(), false);
+  syncInvoiceBusinessDateControl(currentBusinessDateTimeInputValue(), false, true);
   closeVariantPicker();
   
   // Khôi phục nút và tiêu đề panel về trạng thái Tạo hóa đơn mới
@@ -2367,7 +2381,12 @@ export function setupPrintTypeModal() {
 
 export function setupInvoiceCreator() {
   populateQuickCustomerManagerDropdown();
-  syncInvoiceBusinessDateControl(currentBusinessDateTimeInputValue(), false);
+  syncInvoiceBusinessDateControl(currentBusinessDateTimeInputValue(), false, true);
+
+  const businessDateInput = document.getElementById('invoice-business-date');
+  businessDateInput?.addEventListener('input', () => {
+    businessDateInput.dataset.autoRefreshOnSave = 'false';
+  });
 
   const quickProvinceSelect = document.getElementById('quick-cust-province');
   if (quickProvinceSelect) {
