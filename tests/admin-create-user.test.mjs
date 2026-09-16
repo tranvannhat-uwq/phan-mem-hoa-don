@@ -79,7 +79,7 @@ test('password-reset code uses a fresh browser module version', () => {
   const users = read('js/components/users.js');
   const realtime = read('js/services/realtime.js');
   const moduleGraph = readSourceTree('js');
-  const version = '20260915-payroll-product-group-v1';
+  const version = '20260916-product-import-count-v2';
 
   assert.match(html, new RegExp(`main\\.js\\?v=${version}`));
   assert.match(main, new RegExp(`services/supabase\\.js\\?v=${version}`));

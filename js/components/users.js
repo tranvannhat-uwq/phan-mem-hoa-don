@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260915-payroll-product-group-v1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260915-payroll-product-group-v1';
-import { renderAll, switchTab } from '../main.js?v=20260915-payroll-product-group-v1';
-import { populateManagedByDropdown } from './customers.js?v=20260915-payroll-product-group-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260916-product-import-count-v2';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260916-product-import-count-v2';
+import { renderAll, switchTab } from '../main.js?v=20260916-product-import-count-v2';
+import { populateManagedByDropdown } from './customers.js?v=20260916-product-import-count-v2';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260915-payroll-product-group-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20260916-product-import-count-v2';
 
 function normalizeUserSearch(value) {
   return String(value || '')

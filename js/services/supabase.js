@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260915-payroll-product-group-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260915-payroll-product-group-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260916-product-import-count-v2';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260916-product-import-count-v2';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260915-payroll-product-group-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260915-payroll-product-group-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260915-payroll-product-group-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260916-product-import-count-v2';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260916-product-import-count-v2';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260916-product-import-count-v2';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -1333,12 +1333,11 @@ export async function fetchCloudData(options = {}) {
     // Luồng tải dữ liệu lõi (nếu lỗi sẽ dừng và báo lỗi toàn cục)
     const fetchProducts = async () => {
       try {
-        const { data: prodData, error: prodErr } = await supabaseClient
+        const prodData = await collectAllPages((offset, end) => supabaseClient
           .from(tableProductsName)
-          .select('*')
-          .order('code', { ascending: true });
-          
-        if (prodErr) throw prodErr;
+          .select('*', { count: 'exact' })
+          .order('code', { ascending: true })
+          .range(offset, end));
         
         const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
         state.products = (prodData || []).map(row => normalizeProductRow(row, localProducts));
@@ -1351,11 +1350,11 @@ export async function fetchCloudData(options = {}) {
 
     const fetchPayrollProductGroups = async () => {
       try {
-        const { data, error } = await supabaseClient
+        const data = await collectAllPages((offset, end) => supabaseClient
           .from(tablePayrollProductGroupsName)
-          .select('*')
-          .order('code', { ascending: true });
-        if (error) throw error;
+          .select('*', { count: 'exact' })
+          .order('code', { ascending: true })
+          .range(offset, end));
         state.payrollProductGroups = (data || []).map(normalizePayrollProductGroupRow);
         localStorage.setItem('billing_system_payroll_product_groups', JSON.stringify(state.payrollProductGroups));
       } catch (error) {
@@ -2452,10 +2451,11 @@ export async function dbSaveProductsBulk(products) {
   if (!isCloudActive || !supabaseClient) return true;
 
   try {
-    const { data: existingProducts, error: fetchError } = await supabaseClient
+    const existingProducts = await collectAllPages((offset, end) => supabaseClient
       .from(tableProductsName)
-      .select('id,code,brand');
-    if (fetchError) throw fetchError;
+      .select('id,code,brand', { count: 'exact' })
+      .order('id', { ascending: true })
+      .range(offset, end));
 
     const productKey = product => `${String(product.code || '').trim().toUpperCase()}\u0000${String(product.brand || '').trim().toLowerCase()}`;
     const existingById = new Map((existingProducts || []).map(product => [product.id, product]));

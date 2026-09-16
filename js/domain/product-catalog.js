@@ -128,7 +128,28 @@ export function buildProductFamilies(products, { includeInactive = false } = {})
   });
 
   return [...families.values()]
-    .map(family => ({ ...family, variants: [...family.variants].sort(compareVariants) }))
+    .map(family => {
+      const variants = [...family.variants].sort(compareVariants);
+      const assignedGroupIds = [...new Set(variants
+        .map(variant => String(variant.payrollProductGroupId || '').trim())
+        .filter(Boolean))];
+      const hasUnassignedVariant = variants.some(variant => !String(variant.payrollProductGroupId || '').trim());
+      const hasMixedPayrollProductGroups = assignedGroupIds.length > 1 ||
+        (assignedGroupIds.length === 1 && hasUnassignedVariant);
+      const resolvedGroupId = assignedGroupIds.length === 1 ? assignedGroupIds[0] : null;
+      const groupedVariant = resolvedGroupId
+        ? variants.find(variant => String(variant.payrollProductGroupId || '') === resolvedGroupId)
+        : null;
+
+      return {
+        ...family,
+        variants,
+        payrollProductGroupId: resolvedGroupId,
+        group: groupedVariant?.group || family.group || '',
+        payrollProductGroupIds: assignedGroupIds,
+        hasMixedPayrollProductGroups
+      };
+    })
     .sort((a, b) => {
       const brandDiff = a.brand.localeCompare(b.brand, 'vi');
       if (brandDiff !== 0) return brandDiff;

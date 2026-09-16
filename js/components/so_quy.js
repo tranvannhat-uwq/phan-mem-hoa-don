@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20260915-payroll-product-group-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260915-payroll-product-group-v1';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260915-payroll-product-group-v1';
+import { renderAll } from '../main.js?v=20260916-product-import-count-v2';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20260916-product-import-count-v2';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260916-product-import-count-v2';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];

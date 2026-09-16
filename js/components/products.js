@@ -5,8 +5,8 @@ import {
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20260915-payroll-product-group-v1';
-import { renderAll } from '../main.js?v=20260915-payroll-product-group-v1';
+} from '../services/supabase.js?v=20260916-product-import-count-v2';
+import { renderAll } from '../main.js?v=20260916-product-import-count-v2';
 import {
   buildProductFamilies,
   getProductBaseCode,
@@ -102,7 +102,9 @@ function getFilteredProductFamilies() {
   return families.filter(family => {
     if (brandFilter && family.brand !== brandFilter) return false;
     if (packageFilter && !family.variants.some(variant => variant.packageType === packageFilter)) return false;
-    if (payrollGroupFilter && String(family.payrollProductGroupId || '') !== payrollGroupFilter) return false;
+    if (payrollGroupFilter && !family.variants.some(variant =>
+      String(variant.payrollProductGroupId || '') === payrollGroupFilter
+    )) return false;
     if (statusFilter === 'active' && !family.variants.some(variant => variant.isActive !== false)) return false;
     if (statusFilter === 'inactive' && !family.variants.every(variant => variant.isActive === false)) return false;
     return true;
@@ -192,7 +194,9 @@ export function renderProductsTable() {
         return `${String(value).replace('.', ',')} ${unit}`.trim();
       }).join(', ');
       const payrollGroup = getPayrollProductGroup(family.payrollProductGroupId);
-      const groupLabel = family.payrollProductGroupId
+      const groupLabel = family.hasMixedPayrollProductGroups
+        ? 'Nhiều nhóm / chưa đồng nhất'
+        : family.payrollProductGroupId
         ? (payrollGroup?.name || family.group || 'Nhóm không còn trong danh mục')
         : 'Chưa phân nhóm';
       return `
@@ -203,7 +207,7 @@ export function renderProductsTable() {
         <td>
           ${canManagePayrollProductGroups() ? `
             <select class="form-control product-payroll-group-assignment" data-family-key="${escapeHtml(family.key)}" title="Chọn nhóm dùng để lọc khi tính lương">
-              <option value="">Chưa phân nhóm</option>
+              <option value="">${family.hasMixedPayrollProductGroups ? 'Nhiều nhóm / chưa đồng nhất' : 'Chưa phân nhóm'}</option>
               ${payrollGroupOptions(family.payrollProductGroupId)}
             </select>
           ` : escapeHtml(groupLabel)}
@@ -230,10 +234,11 @@ export function renderProductsTable() {
 
   const pagination = document.getElementById('products-pagination');
   if (pagination) {
+    const filteredSkuCount = filtered.reduce((count, family) => count + family.variants.length, 0);
     pagination.innerHTML = `
       <div class="pagination-controls">
         <button class="btn btn-secondary btn-sm" id="products-prev-page" ${state.productsPage === 1 ? 'disabled' : ''}><i data-lucide="chevron-left"></i> Trước</button>
-        <span>Trang <strong>${state.productsPage}</strong> / ${totalPages} (${filtered.length} sản phẩm)</span>
+        <span>Trang <strong>${state.productsPage}</strong> / ${totalPages} (${filtered.length} sản phẩm gốc, ${filteredSkuCount} SKU)</span>
         <button class="btn btn-secondary btn-sm" id="products-next-page" ${state.productsPage === totalPages ? 'disabled' : ''}>Sau <i data-lucide="chevron-right"></i></button>
       </div>
     `;

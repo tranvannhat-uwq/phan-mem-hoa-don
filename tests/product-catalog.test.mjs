@@ -108,4 +108,13 @@ assert.equal(searchProductFamilies(families, 'Lon 6,3')[0].matchedVariantId, 'ct
 assert.equal(shouldAutoSelectVariant(ctFamily), false);
 assert.equal(shouldAutoSelectVariant(families.find(family => family.baseCode === 'BA-46')), true);
 
+const groupedFamilies = buildProductFamilies([
+  { ...products[0], payrollProductGroupId: null, group: '' },
+  { ...products[1], payrollProductGroupId: 'group-premium', group: 'Cao cấp' }
+]);
+assert.equal(groupedFamilies[0].payrollProductGroupId, 'group-premium');
+assert.deepEqual(groupedFamilies[0].payrollProductGroupIds, ['group-premium']);
+assert.equal(groupedFamilies[0].hasMixedPayrollProductGroups, true);
+assert.equal(groupedFamilies[0].group, 'Cao cấp');
+
 console.log('product-catalog.test.mjs: all assertions passed');
