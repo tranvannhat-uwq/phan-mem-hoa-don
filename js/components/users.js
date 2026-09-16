@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260916-order-time-v1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260916-order-time-v1';
-import { renderAll, switchTab } from '../main.js?v=20260916-order-time-v1';
-import { populateManagedByDropdown } from './customers.js?v=20260916-order-time-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20260916-accounting-product-actions-v1';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20260916-accounting-product-actions-v1';
+import { renderAll, switchTab } from '../main.js?v=20260916-accounting-product-actions-v1';
+import { populateManagedByDropdown } from './customers.js?v=20260916-accounting-product-actions-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260916-order-time-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20260916-accounting-product-actions-v1';
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -755,7 +755,6 @@ export function applyUserPermissions(user) {
       .delete-cust-btn { display: inline-flex !important; }
       .edit-cust-btn { display: inline-flex !important; }
       .pay-debt-btn { display: inline-flex !important; }
-      #btn-open-add-product-modal, .edit-product-btn, .edit-prod-btn, .delete-product-btn, .archive-prod-btn { display: none !important; }
       .delete-order-btn { display: none !important; }
     `;
   } else {

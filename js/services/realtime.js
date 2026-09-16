@@ -29,7 +29,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260916-order-time-v1';
+} from './supabase.js?v=20260916-accounting-product-actions-v1';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;
