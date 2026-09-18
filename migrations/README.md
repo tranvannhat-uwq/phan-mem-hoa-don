@@ -79,6 +79,7 @@ Run these files in order on a staging clone first:
 71. `0071_guard_customer_debt_chain_before_order.sql`
 72. `0072_defer_customer_debt_chain_guard.sql`
 73. `0073_manual_payroll_product_groups.sql`
+74. `0074_customer_debt_full_invariant_and_reconciliation.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -410,3 +411,11 @@ classification. Products may only reference a manually created catalog row;
 the migration deliberately does not convert or auto-create groups from legacy
 free text. Renaming a group refreshes its compatibility display name, while
 archiving it preserves existing assignments and historical product references.
+
+Migration `0074` extends the deferred debt invariant from orders to every
+customer-debt write and to changes of the cached customer balance. It provides
+an audited Accounting/Admin reconciliation RPC that restores only the cached
+aggregate from immutable ledger arithmetic, repairs the reviewed Thuy VP
+incident when all four exact source documents match, and corrects only those
+two invoice print snapshots. No ledger, order, receipt or return row is deleted
+or rewritten.

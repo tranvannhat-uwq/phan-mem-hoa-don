@@ -308,6 +308,42 @@ export function buildCustomerDebtDisplayHistory(history = [], currentDebt = 0) {
     }
   });
 
+  const roundedCurrentDebt = toDebtAmount(currentDebt);
+  const snapshotsFormContinuousChain = chronological.length > 0
+    && chronological.every((entry, index) => {
+      if (!entry.__hasDebtSnapshot) return false;
+      if (entry.debtAfter !== entry.debtBefore + entry.debtChange) return false;
+      if (index > 0 && entry.debtBefore !== chronological[index - 1].debtAfter) return false;
+      return true;
+    })
+    && chronological[chronological.length - 1].debtAfter === roundedCurrentDebt;
+
+  if (!snapshotsFormContinuousChain) {
+    // A customer statement must always reconcile to the authoritative current
+    // balance. Legacy rows can contain stale before/after snapshots after old
+    // imports, amendments or interrupted writes. Keep those immutable rows in
+    // the database for audit, but do not repeat their broken arithmetic in the
+    // user-facing running balance. Invoice printing uses its own persisted
+    // order snapshot and is intentionally unaffected by this projection.
+    let balanceAfter = roundedCurrentDebt;
+    for (let index = chronological.length - 1; index >= 0; index -= 1) {
+      const entry = chronological[index];
+      if (entry.__hasDebtSnapshot) {
+        entry.sourceDebtBefore = entry.debtBefore;
+        entry.sourceDebtAfter = entry.debtAfter;
+      }
+      entry.debtAfter = balanceAfter;
+      entry.debtBefore = balanceAfter - entry.debtChange;
+      balanceAfter = entry.debtBefore;
+    }
+
+    chronological.forEach(entry => {
+      delete entry.__hasDebtSnapshot;
+      delete entry.__displayOrder;
+    });
+    return chronological;
+  }
+
   const firstSnapshotIndex = chronological.findIndex(entry => entry.__hasDebtSnapshot);
   if (firstSnapshotIndex === -1) {
     // Old browser/local rows may have no immutable snapshots at all.

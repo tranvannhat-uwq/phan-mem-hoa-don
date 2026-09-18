@@ -5,8 +5,8 @@ import {
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20260916-accounting-product-actions-v1';
-import { renderAll } from '../main.js?v=20260916-accounting-product-actions-v1';
+} from '../services/supabase.js?v=20260918-customer-debt-invariant-v2';
+import { renderAll } from '../main.js?v=20260918-customer-debt-invariant-v2';
 import {
   buildProductFamilies,
   getProductBaseCode,

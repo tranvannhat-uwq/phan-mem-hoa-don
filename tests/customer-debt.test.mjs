@@ -57,10 +57,33 @@ const importedOpeningBalance = buildCustomerDebtDisplayHistory([
 assert.deepEqual(
   importedOpeningBalance.map(entry => ({ id: entry.id, debtBefore: entry.debtBefore, debtAfter: entry.debtAfter })),
   [
-    { id: 'opening', debtBefore: 2609785, debtAfter: 20491651 },
-    { id: 'sep-10-payment', debtBefore: 35443843, debtAfter: 27443843 }
+    { id: 'opening', debtBefore: 26336451, debtAfter: 44218317 },
+    { id: 'sep-10-payment', debtBefore: 44218317, debtAfter: 36218317 }
   ],
-  'A later current balance must not shift immutable historical snapshots'
+  'A customer statement reconstructs stale snapshots into one continuous chain ending at current debt'
+);
+assert.deepEqual(
+  importedOpeningBalance.map(entry => [entry.sourceDebtBefore, entry.sourceDebtAfter]),
+  [[2609785, 20491651], [35443843, 27443843]],
+  'Stale source snapshots remain available for diagnostics without being displayed as running balances'
+);
+
+const thuyVpIncident = buildCustomerDebtDisplayHistory([
+  { id: 'opening', type: 'adjust', transactionType: 'adjust', debtChange: 8947896, debtBefore: 0, debtAfter: 8947896, postedAt: '2026-09-15T09:00:00+07:00' },
+  { id: 'receipt-900k', type: 'payment', transactionType: 'payment', debtChange: -900000, debtBefore: 8947896, debtAfter: 8047896, postedAt: '2026-09-15T09:07:00+07:00' },
+  { id: 'receipt-8m', type: 'payment', transactionType: 'payment', debtChange: -8000000, debtBefore: 8047896, debtAfter: 47896, postedAt: '2026-09-15T09:27:00+07:00' },
+  { id: 'order-1682', type: 'charge', transactionType: 'order', debtChange: 10660388, debtBefore: 47896, debtAfter: 10708284, postedAt: '2026-09-18T07:14:00+07:00' },
+  { id: 'order-1684', type: 'charge', transactionType: 'order', debtChange: 650000, debtBefore: 10735884, debtAfter: 11385884, postedAt: '2026-09-18T07:28:00+07:00' },
+  { id: 'receipt-10m', type: 'payment', transactionType: 'payment', debtChange: -10000000, debtBefore: 10708284, debtAfter: 708284, postedAt: '2026-09-18T09:38:00+07:00' }
+], 1358284);
+assert.deepEqual(
+  thuyVpIncident.slice(-3).map(entry => [entry.id, entry.debtBefore, entry.debtAfter]),
+  [
+    ['order-1682', 47896, 10708284],
+    ['order-1684', 10708284, 11358284],
+    ['receipt-10m', 11358284, 1358284]
+  ],
+  'The reported Thuy VP ledger renders the two invoices and receipt as one exact chain'
 );
 
 const amendedDisplay = buildCustomerDebtDisplayHistory([
