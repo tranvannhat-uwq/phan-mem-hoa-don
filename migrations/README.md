@@ -419,3 +419,8 @@ aggregate from immutable ledger arithmetic, repairs the reviewed Thuy VP
 incident when all four exact source documents match, and corrects only those
 two invoice print snapshots. No ledger, order, receipt or return row is deleted
 or rewritten.
+
+Migration `0075` keeps dashboard KPI cards, charts, rankings, and recent orders
+inside one resolved company/brand/customer/salesperson scope. It also accepts
+legacy brand names while the UI migrates to canonical brand IDs and preserves
+the FESTIVAL allocation toggle for snapshot-based items.

@@ -84,6 +84,8 @@ test('rollback guidance preserves financial history', () => {
 test('database integration covers commission, scoped dashboard, payroll and anon denial', () => {
   assert.match(integration, /order_creates_rule_snapshot_commission/);
   assert.match(integration, /sale_dashboard_is_server_scoped/);
+  assert.match(integration, /dashboard_brand_company_scope_keeps_item_widgets/);
+  assert.match(integration, /dashboard_legacy_brand_name_resolves/);
   assert.match(integration, /payroll_lock_snapshots_server_calculation/);
   assert.match(integration, /non_admin_cannot_unlock/);
   assert.match(integration, /anon_cannot_call_phase5_rpc/);

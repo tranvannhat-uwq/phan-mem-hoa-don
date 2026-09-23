@@ -26,9 +26,12 @@ WHERE public.profiles.auth_user_id = fixture.auth_user_id;
 
 INSERT INTO public.product_groups(id, base_code, product_name, brand_name)
 VALUES ('p5-group', 'P5-SP', 'P5 Product', 'P5 Brand') ON CONFLICT DO NOTHING;
-INSERT INTO public.products(id, code, name, brand, product_group_id, base_code, variant_code, packaging_name, unit_name, is_active)
-VALUES ('p5-sku', 'P5-SKU', 'P5 Product - SKU', 'P5 Brand', 'p5-group', 'P5-SP', 'P5-SKU', 'Thùng', 'thùng', true)
-ON CONFLICT (id) DO UPDATE SET is_active = true;
+INSERT INTO public.brands(id, name, company_id, company_name)
+VALUES ('p5-brand-id', 'P5 Brand', 'ABS_NORTH', 'P5 Company')
+ON CONFLICT (name) DO UPDATE SET id = EXCLUDED.id, company_id = EXCLUDED.company_id, company_name = EXCLUDED.company_name;
+INSERT INTO public.products(id, code, name, brand, brand_id, product_group_id, base_code, variant_code, packaging_name, unit_name, is_active)
+VALUES ('p5-sku', 'P5-SKU', 'P5 Product - SKU', 'P5 Brand', 'p5-brand-id', 'p5-group', 'P5-SP', 'P5-SKU', 'Thùng', 'thùng', true)
+ON CONFLICT (id) DO UPDATE SET brand_id = EXCLUDED.brand_id, is_active = true;
 INSERT INTO public.customers(id, code, name, managed_by, debt, status, deleted_at)
 VALUES ('p5-customer', 'P5-CUST', 'P5 Customer', 'p5-sale', 0, 'active', NULL)
 ON CONFLICT (id) DO UPDATE SET managed_by = 'p5-sale', debt = 0, status = 'active', deleted_at = NULL;
@@ -66,6 +69,34 @@ CREATE TEMP TABLE p5_sale_dashboard AS SELECT public.rpc_get_phase5_dashboard(js
 INSERT INTO phase5_test_results
 SELECT 'sale_dashboard_is_server_scoped', (result->'summary'->>'gross_sales')::numeric = 100000
   AND (result->'summary'->>'order_count')::integer = 1, result::text FROM p5_sale_dashboard;
+
+CREATE TEMP TABLE p5_filtered_dashboard AS
+SELECT public.rpc_get_phase5_dashboard(jsonb_build_object(
+  'start', now() - interval '1 day', 'end', now() + interval '1 day',
+  'company_id', 'ABS_NORTH', 'brand_id', 'p5-brand-id',
+  'sales_mode', 'net', 'include_festival_allocation', true)) result;
+INSERT INTO phase5_test_results
+SELECT 'dashboard_brand_company_scope_keeps_item_widgets',
+  (result->'summary'->>'net_sales')::numeric = 100000
+  AND (result->'summary'->>'order_count')::integer = 1
+  AND jsonb_array_length(result->'by_company') > 0
+  AND jsonb_array_length(result->'by_brand') > 0
+  AND jsonb_array_length(result->'by_salesperson') > 0
+  AND jsonb_array_length(result->'by_customer') > 0
+  AND jsonb_array_length(result->'series') > 0
+  AND jsonb_array_length(result->'top_skus') > 0,
+  result::text FROM p5_filtered_dashboard;
+
+CREATE TEMP TABLE p5_filtered_dashboard_legacy_brand AS
+SELECT public.rpc_get_phase5_dashboard(jsonb_build_object(
+  'start', now() - interval '1 day', 'end', now() + interval '1 day',
+  'company_id', 'ABS_NORTH', 'brand_id', 'P5 Brand', 'sales_mode', 'net')) result;
+INSERT INTO phase5_test_results
+SELECT 'dashboard_legacy_brand_name_resolves',
+  (result->'summary'->>'net_sales')::numeric = 100000
+  AND (result->'summary'->>'order_count')::integer = 1
+  AND jsonb_array_length(result->'top_skus') > 0,
+  result::text FROM p5_filtered_dashboard_legacy_brand;
 
 RESET ROLE;
 SET LOCAL ROLE authenticated;

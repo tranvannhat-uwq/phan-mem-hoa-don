@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
+import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
 import { switchTab } from '../main.js?v=20260918-customer-debt-invariant-v2';
 import { openProductModal } from './products.js';
 import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260918-customer-debt-invariant-v2';
@@ -336,53 +336,56 @@ export function populateDashboardFilters() {
   }
 
   // 2. Nhãn sản phẩm (Lọc theo công ty được chọn: hiển thị nhãn do công ty đó quản lý + nhãn dùng chung)
+  // The RPC receives the canonical brand id. Legacy browser state and products
+  // may still contain a brand name, so resolve both forms before rendering.
   const selectedCompId = state.dashboardFilter.companyId || 'all';
 
-  const allBrandsSet = new Set();
-  (state.brands || []).forEach(b => {
-    if (!b.name) return;
-    if (selectedCompId === 'all') {
-      allBrandsSet.add(b.name);
-    } else {
-      const bCompId = b.companyId || '';
-      const isShared = !bCompId || bCompId === 'shared' || isFestivalBrand(b.name) || b.companyName === 'Dùng chung';
-      if (bCompId === selectedCompId || isShared) {
-        allBrandsSet.add(b.name);
-      }
-    }
+  const allBrands = new Map();
+  const addBrand = (rawBrand, fallbackCompanyId = '') => {
+    const raw = rawBrand && typeof rawBrand === 'object'
+      ? rawBrand
+      : { id: rawBrand, name: rawBrand };
+    const candidate = raw.id || raw.name || raw.brand;
+    if (!candidate && !raw.name) return;
+    const linked = getBrandById(candidate || raw.name, state.brands) || getBrandById(raw.name, state.brands);
+    const name = String(linked?.name || raw.name || raw.brand || candidate || '').trim();
+    if (!name) return;
+    const id = String(linked?.id || raw.id || name).trim();
+    if (!id) return;
+    const companyId = String(linked?.companyId || linked?.company_id || raw.companyId || raw.company_id || fallbackCompanyId || '').trim();
+    const isShared = !companyId || companyId === 'shared' || isFestivalBrand(name) || linked?.companyName === 'Dùng chung' || linked?.company_name === 'Dùng chung';
+    if (selectedCompId !== 'all' && companyId !== selectedCompId && !isShared && linked) return;
+    if (!allBrands.has(id)) allBrands.set(id, { id, name, companyId });
+  };
+
+  (state.brands || []).forEach(brand => addBrand(brand));
+  (state.products || []).forEach(product => addBrand({
+    id: product.brandId || product.brand_id || '',
+    name: product.brand || product.brandName || '',
+    companyId: product.companyId || product.company_id || ''
+  }));
+
+  const brandEntries = Array.from(allBrands.values());
+  const hasFestivaNano = brandEntries.some(entry => {
+    const normalized = entry.name.trim().toLowerCase();
+    return normalized === 'festiva nano' || normalized === 'festivanano';
+  });
+  const cleanBrands = brandEntries.filter(entry => {
+    const normalized = entry.name.trim().toLowerCase();
+    return !(hasFestivaNano && (normalized === 'festival' || normalized === 'festiva'));
   });
 
-  (state.products || []).forEach(p => {
-    if (!p.brand) return;
-    if (selectedCompId === 'all') {
-      allBrandsSet.add(p.brand);
-    } else {
-      const foundBrand = (state.brands || []).find(b => b.name && b.name.toLowerCase() === p.brand.toLowerCase());
-      const bCompId = foundBrand ? (foundBrand.companyId || '') : '';
-      const isShared = !bCompId || bCompId === 'shared' || isFestivalBrand(p.brand) || (foundBrand && foundBrand.companyName === 'Dùng chung');
-      if (!foundBrand || bCompId === selectedCompId || isShared) {
-        allBrandsSet.add(p.brand);
-      }
-    }
-  });
-
-  const rawList = Array.from(allBrandsSet);
-  const hasFestivaNano = rawList.some(b => b.trim().toLowerCase() === 'festiva nano' || b.trim().toLowerCase() === 'festivanano');
-
-  const cleanBrands = rawList.filter(b => {
-    const bLower = b.trim().toLowerCase();
-    if (hasFestivaNano && (bLower === 'festival' || bLower === 'festiva')) {
-      return false;
-    }
-    return true;
-  });
-
-  const brandOptions = cleanBrands.map(b => `<option value="${b}">${b}</option>`).join('');
+  const brandOptions = cleanBrands.map(entry => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`).join('');
 
   if (brandSelect) {
     brandSelect.innerHTML = `<option value="all">-- Tất cả nhãn --</option>${brandOptions}`;
-    if (cleanBrands.includes(state.dashboardFilter.brand)) {
-      brandSelect.value = state.dashboardFilter.brand;
+    const storedBrand = String(state.dashboardFilter.brand || 'all');
+    const selectedBrand = cleanBrands.find(entry => entry.id === storedBrand
+      || entry.name.toLowerCase() === storedBrand.toLowerCase()
+      || String(getBrandById(storedBrand, state.brands)?.id || '') === entry.id);
+    if (selectedBrand) {
+      state.dashboardFilter.brand = selectedBrand.id;
+      brandSelect.value = selectedBrand.id;
     } else {
       state.dashboardFilter.brand = 'all';
       brandSelect.value = 'all';
@@ -734,7 +737,8 @@ function dashboardRequestFiltersForRange(timeRange) {
     brand_id: state.dashboardFilter.brand || 'all',
     salesperson_id: state.dashboardFilter.saleUser || 'all',
     customer_id: state.dashboardFilter.customerId || 'all',
-    sales_mode: state.dashboardSalesMode || 'net'
+    sales_mode: state.dashboardSalesMode || 'net',
+    include_festival_allocation: state.dashboardFilter.includeFestivalAllocation !== false
   };
 }
 
