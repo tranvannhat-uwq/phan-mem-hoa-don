@@ -1029,6 +1029,33 @@ export function setupDashboardFilters() {
   const modeFilter = document.getElementById('dashboard-sales-mode-filter');
   const resetBtn = document.getElementById('btn-reset-dashboard-filters');
   const refreshBtn = document.getElementById('btn-refresh-dashboard-data');
+  const filterToolbar = document.querySelector('.dashboard-toolbar');
+  const filterToggle = document.getElementById('btn-toggle-dashboard-filters');
+  const filterContent = document.getElementById('dashboard-filter-content');
+  const closeFilterBtn = document.getElementById('btn-close-dashboard-filters');
+
+  const isMobileFilterLayout = () => window.matchMedia?.('(max-width: 768px)').matches === true;
+  const setFilterPopupOpen = (open) => {
+    if (!filterToolbar || !filterToggle || !filterContent) return;
+    const nextOpen = isMobileFilterLayout() ? open : false;
+    filterToolbar.classList.toggle('is-filter-open', nextOpen);
+    filterToggle.setAttribute('aria-expanded', String(nextOpen));
+    filterContent.setAttribute('aria-hidden', String(isMobileFilterLayout() && !nextOpen));
+  };
+
+  filterToggle?.addEventListener('click', () => {
+    const isOpen = filterToolbar?.classList.contains('is-filter-open') === true;
+    setFilterPopupOpen(!isOpen);
+  });
+  closeFilterBtn?.addEventListener('click', () => setFilterPopupOpen(false));
+  document.addEventListener('click', (event) => {
+    if (!isMobileFilterLayout() || !filterToolbar?.classList.contains('is-filter-open')) return;
+    if (!filterToolbar.contains(event.target)) setFilterPopupOpen(false);
+  });
+  window.addEventListener('resize', () => {
+    if (!isMobileFilterLayout()) setFilterPopupOpen(false);
+  });
+  setFilterPopupOpen(false);
 
   if (timeSelect) {
     timeSelect.addEventListener('change', () => {

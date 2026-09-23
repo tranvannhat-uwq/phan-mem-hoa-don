@@ -293,6 +293,7 @@ function setupNavigation() {
   // Tự động xóa trạng thái thu nhỏ cũ để tránh ẩn thanh điều hướng trên máy khách
   localStorage.removeItem('sidebar_collapsed');
 
+  const mobileNavToggle = document.getElementById('btn-mobile-nav-toggle');
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
@@ -306,6 +307,12 @@ function setupNavigation() {
 
   const sidebarOverlay = document.getElementById('sidebar-overlay');
 
+  mobileNavToggle?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleMobileSidebar();
+  });
+
   if (sidebarOverlay) {
     sidebarOverlay.addEventListener('click', () => {
       closeMobileSidebar();
@@ -316,6 +323,10 @@ function setupNavigation() {
     if (window.innerWidth > 768) {
       closeMobileSidebar();
     }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeMobileSidebar();
   });
 
   const staffMenuTrigger = document.querySelector('.staff-menu-trigger');
@@ -389,6 +400,7 @@ function setupNavigation() {
 function toggleMobileSidebar() {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.getElementById('sidebar-overlay');
+  const toggle = document.getElementById('btn-mobile-nav-toggle');
   if (sidebar && overlay) {
     const isOpen = sidebar.classList.contains('open');
     if (isOpen) {
@@ -396,6 +408,9 @@ function toggleMobileSidebar() {
     } else {
       sidebar.classList.add('open');
       overlay.classList.add('active');
+      document.body.classList.add('mobile-nav-open');
+      toggle?.setAttribute('aria-expanded', 'true');
+      toggle?.setAttribute('aria-label', 'Đóng menu điều hướng');
     }
   }
 }
@@ -403,8 +418,12 @@ function toggleMobileSidebar() {
 function closeMobileSidebar() {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.getElementById('sidebar-overlay');
+  const toggle = document.getElementById('btn-mobile-nav-toggle');
   if (sidebar) sidebar.classList.remove('open');
   if (overlay) overlay.classList.remove('active');
+  document.body.classList.remove('mobile-nav-open');
+  toggle?.setAttribute('aria-expanded', 'false');
+  toggle?.setAttribute('aria-label', 'Mở menu điều hướng');
 }
 
 // Quản lý tab Cấu hình đám mây

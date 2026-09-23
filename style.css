@@ -11191,3 +11191,703 @@ body.quick-customer-modal-open {
     display: none;
   }
 }
+
+/* ================================================================
+   UNIVERSAL RESPONSIVE LAYOUT
+   Keep the authenticated workspace usable from 320px phones through
+   wide desktop screens. This section intentionally comes last so it
+   can normalize legacy module rules without changing their bindings.
+   ================================================================ */
+
+html {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+body,
+.app-container,
+.main-content,
+.panel,
+.panel.active {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+img,
+svg,
+canvas,
+video,
+iframe {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+.sidebar,
+.brand,
+.nav-menu,
+.sidebar-actions,
+.top-header,
+.top-header > div,
+.dashboard-toolbar,
+.dashboard-toolbar-head,
+.dashboard-toolbar-title,
+.dashboard-toolbar-title > span:last-child,
+.dashboard-filter-grid,
+.dashboard-filter-field,
+.dashboard-people-filters,
+.dashboard-insight-card,
+.dashboard-insight-header,
+.dashboard-insight-header > div,
+.widgets-grid > *,
+.dashboard-charts-row > *,
+.dashboard-grid > * {
+  min-width: 0;
+}
+
+.nav-menu,
+.dashboard-toolbar,
+.dashboard-charts-row,
+.dashboard-insights-grid,
+.dashboard-grid,
+.widgets-grid,
+.table-responsive {
+  max-width: 100%;
+}
+
+.nav-link,
+.purchase-menu-trigger,
+.staff-menu-trigger {
+  max-width: 100%;
+}
+
+.nav-link > svg,
+.purchase-menu-trigger > svg,
+.staff-menu-trigger > svg {
+  flex: 0 0 auto;
+}
+
+.top-header > div > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0.25rem;
+  min-width: 0;
+}
+
+.top-header p,
+.top-header .db-status-badge {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Keep the horizontal desktop navigation from pushing the actions off-screen
+   on laptops while retaining every destination for keyboard and touch users. */
+@media (min-width: 769px) and (max-width: 1240px) {
+  .sidebar {
+    gap: 0.5rem !important;
+    padding-inline: 0.75rem !important;
+  }
+
+  .brand-project-logo {
+    width: clamp(112px, 14vw, 138px) !important;
+    height: 48px !important;
+  }
+
+  .nav-menu {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    scrollbar-width: none;
+  }
+
+  .nav-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-link {
+    flex: 0 0 auto;
+    padding-inline: clamp(0.38rem, 0.7vw, 0.6rem) !important;
+    font-size: clamp(0.72rem, 0.82vw, 0.825rem) !important;
+  }
+}
+
+/* The dashboard filter is a single-column flow on phones. Its controls never
+   rely on a fixed minimum width, so long company/brand names remain usable. */
+.dashboard-toolbar-actions {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.dashboard-toolbar-actions .btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.dashboard-filter-grid {
+  width: 100%;
+}
+
+.dashboard-toolbar .dashboard-filter-field .form-control,
+.dashboard-autocomplete-wrap,
+.dashboard-autocomplete-wrap .form-control,
+.dashboard-festival-toggle {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.dashboard-toolbar .dashboard-filter-field .form-control {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-festival-toggle-copy {
+  overflow: hidden;
+}
+
+.dashboard-festival-toggle-copy strong,
+.dashboard-festival-toggle-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-insight-header {
+  flex-wrap: wrap;
+}
+
+.dashboard-insight-header > div {
+  flex: 1 1 180px;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100% !important;
+    height: calc(96px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(96px + env(safe-area-inset-top, 0px)) !important;
+    grid-template-rows: 44px 36px !important;
+    row-gap: 0.15rem !important;
+    padding-inline: max(0.65rem, env(safe-area-inset-left)) !important;
+    padding-right: max(0.65rem, env(safe-area-inset-right)) !important;
+  }
+
+  .brand-project-logo {
+    width: min(138px, 38vw) !important;
+    height: 46px !important;
+  }
+
+  .brand {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .sidebar-actions {
+    gap: 0.35rem !important;
+    max-width: 46vw;
+  }
+
+  .sidebar-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .nav-menu {
+    min-width: 0 !important;
+    margin-inline: 0 !important;
+    padding-inline: 0.05rem !important;
+    scroll-snap-type: x proximity;
+  }
+
+  .nav-item {
+    scroll-snap-align: start;
+  }
+
+  .nav-link {
+    min-height: 36px;
+    max-width: none;
+    padding: 0.4rem 0.58rem !important;
+    font-size: clamp(0.74rem, 3.2vw, 0.8rem) !important;
+  }
+
+  .main-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: calc(96px + env(safe-area-inset-top, 0px)) !important;
+    padding: clamp(0.65rem, 2.8vw, 0.9rem) !important;
+    gap: 0.75rem !important;
+  }
+
+  .top-header {
+    width: 100%;
+    align-items: flex-start !important;
+    gap: 0.35rem;
+    padding-bottom: 0.7rem !important;
+  }
+
+  .page-title {
+    max-width: 100%;
+    font-size: clamp(1.05rem, 5vw, 1.3rem) !important;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-toolbar.glass-panel {
+    width: 100%;
+    border-radius: 14px;
+  }
+
+  .dashboard-toolbar-head {
+    padding: 0.8rem !important;
+  }
+
+  .dashboard-toolbar-title {
+    width: 100%;
+  }
+
+  .dashboard-toolbar-title strong {
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .dashboard-toolbar-actions .btn {
+    width: 100%;
+    justify-content: center;
+    padding-inline: 0.45rem;
+  }
+
+  .dashboard-filter-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 0.7rem;
+    padding: 0.75rem !important;
+  }
+
+  .dashboard-people-filters,
+  .dashboard-date-range {
+    grid-column: 1 !important;
+    width: 100%;
+  }
+
+  .dashboard-people-filters {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 0.7rem;
+  }
+
+  .dashboard-toolbar .dashboard-filter-field .form-control {
+    min-height: 45px;
+    height: 45px;
+  }
+
+  .dashboard-date-range {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dashboard-date-range label,
+  .dashboard-date-range .form-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-date-separator {
+    display: none;
+  }
+
+  .widgets-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem;
+  }
+
+  .widget-card {
+    min-width: 0;
+    min-height: 88px;
+    padding: 0.8rem !important;
+  }
+
+  .widget-info {
+    min-width: 0;
+  }
+
+  .widget-label {
+    display: block;
+    font-size: clamp(0.66rem, 2.4vw, 0.78rem);
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+
+  .widget-value {
+    font-size: clamp(0.9rem, 4vw, 1.15rem) !important;
+    overflow-wrap: anywhere;
+  }
+
+  .widget-icon-wrapper {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+  }
+
+  .dashboard-charts-row,
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 0.75rem;
+  }
+
+  .chart-panel,
+  .top-products-panel {
+    padding: 0.8rem !important;
+  }
+
+  .chart-panel .panel-header,
+  .top-products-panel .panel-header {
+    width: 100%;
+    gap: 0.6rem;
+  }
+
+  .chart-controls {
+    width: 100% !important;
+    justify-content: stretch;
+  }
+
+  .chart-controls .chart-view-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .chart-wrapper {
+    height: clamp(220px, 62vw, 280px);
+  }
+
+  .dashboard-breakdown-chart,
+  .dashboard-breakdown-chart-tall,
+  .dashboard-breakdown-chart-donut,
+  .dashboard-breakdown-chart-columns,
+  .dashboard-breakdown-chart-trend,
+  .dashboard-breakdown-chart-ranking {
+    height: clamp(220px, 70vw, 285px);
+    min-height: 220px;
+  }
+
+  .dashboard-insight-header {
+    gap: 0.55rem;
+  }
+
+  .dashboard-insight-header .panel-title {
+    font-size: 0.9rem;
+  }
+
+  .dashboard-insight-badge,
+  .dashboard-festival-total {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dashboard-festival-table .table {
+    min-width: 340px;
+  }
+
+  .modal-content,
+  .global-settings-menu,
+  .purchase-menu,
+  .staff-menu {
+    max-width: calc(100vw - 1rem);
+  }
+
+  /* Dropdowns must escape the horizontally scrolling nav strip on touch
+     devices; otherwise the menu is clipped by the nav overflow container. */
+  .purchase-nav-item .purchase-menu,
+  .staff-nav-item .staff-menu {
+    position: fixed;
+    top: calc(96px + env(safe-area-inset-top, 0px) + 0.4rem);
+    right: 0.5rem;
+    left: 0.5rem;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .purchase-nav-item .purchase-menu {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .purchase-nav-item .purchase-menu-section + .purchase-menu-section {
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border-color);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    padding-top: max(0.45rem, env(safe-area-inset-top)) !important;
+  }
+
+  .dashboard-toolbar-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-toolbar-actions .btn {
+    min-height: 40px;
+  }
+
+  .dashboard-toolbar-title small {
+    display: none;
+  }
+
+  .dashboard-festival-toggle {
+    min-height: 58px;
+    padding-inline: 0.65rem;
+  }
+
+  .panel-title {
+    line-height: 1.25;
+  }
+}
+
+@media (max-width: 350px) {
+  .widgets-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .brand-project-logo {
+    width: 116px !important;
+  }
+
+  .nav-link {
+    padding-inline: 0.5rem !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .dashboard-toolbar-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Compact mobile navigation: the full destination list lives behind one
+   accessible menu button instead of competing with the logo and actions. */
+.mobile-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #c8d8ee;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.mobile-nav-toggle:hover,
+.mobile-nav-toggle:focus-visible {
+  border-color: var(--color-primary);
+  background: #ffffff;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.mobile-nav-toggle svg {
+  width: 19px;
+  height: 19px;
+  stroke: currentColor;
+}
+
+body.mobile-nav-open {
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  /* The overlay dims the page below the menu; it must never cover or blur the
+     fixed header that contains the hamburger and the open navigation panel. */
+  .sidebar {
+    z-index: 1001 !important;
+  }
+
+  .mobile-nav-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar-overlay {
+    z-index: 1000;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .sidebar:not(.open) .nav-menu {
+    display: none !important;
+  }
+
+  .sidebar.open .nav-menu {
+    position: fixed;
+    top: calc(96px + env(safe-area-inset-top, 0px));
+    right: 0.65rem;
+    left: 0.65rem;
+    z-index: 1001;
+    display: flex !important;
+    width: auto !important;
+    max-height: calc(100dvh - 96px - env(safe-area-inset-top, 0px) - 1rem);
+    flex-direction: column !important;
+    align-items: stretch;
+    gap: 0.35rem;
+    padding: 0.65rem;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    border: 1px solid #c8d8ee;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 18px 45px rgba(15, 42, 82, 0.2);
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar.open .nav-menu > .nav-item {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .sidebar.open .nav-menu > .nav-item > .nav-link {
+    width: 100%;
+    min-height: 44px;
+    justify-content: flex-start;
+    padding: 0.65rem 0.75rem !important;
+    border-radius: 10px;
+    color: var(--nav-foreground-color) !important;
+    background: transparent !important;
+    font-size: 0.9rem !important;
+  }
+
+  .sidebar.open .nav-menu > .nav-item > .nav-link:hover,
+  .sidebar.open .nav-menu > .nav-item > .nav-link:focus-visible {
+    color: var(--color-primary) !important;
+    background: var(--nav-active-background) !important;
+    outline: none;
+  }
+
+  .sidebar.open .nav-menu > .nav-item > .nav-link.active {
+    color: #ffffff !important;
+    background: linear-gradient(135deg, #3677ee 0%, #2459d6 100%) !important;
+    box-shadow: 0 5px 14px rgba(37, 99, 235, 0.2);
+  }
+
+  .sidebar.open .purchase-menu-trigger,
+  .sidebar.open .staff-menu-trigger {
+    justify-content: flex-start;
+  }
+
+  .sidebar.open .purchase-menu-trigger .purchase-menu-chevron,
+  .sidebar.open .staff-menu-trigger .staff-menu-chevron {
+    margin-left: auto;
+  }
+
+  .sidebar.open .purchase-menu-link,
+  .sidebar.open .staff-menu .staff-menu-link {
+    min-height: 40px;
+    padding: 0.55rem 0.7rem !important;
+    color: var(--text-primary) !important;
+    background: transparent !important;
+  }
+
+  .sidebar.open .purchase-menu-link:hover,
+  .sidebar.open .purchase-menu-link:focus-visible,
+  .sidebar.open .staff-menu .staff-menu-link:hover,
+  .sidebar.open .staff-menu .staff-menu-link:focus-visible {
+    color: var(--color-primary) !important;
+    background: var(--bg-surface-hover) !important;
+    outline: none;
+  }
+}
+
+/* Mobile dashboard filters are a floating, scrollable popover. The compact
+   toolbar remains in the document flow while the controls overlay the cards
+   below it, so opening filters never causes the dashboard to jump. */
+.dashboard-filter-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-filter-toggle:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+.dashboard-toolbar.is-filter-open {
+  z-index: 1200;
+}
+
+.dashboard-toolbar.is-filter-open .dashboard-toolbar-icon {
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.34);
+}
+
+.dashboard-filter-popover-footer {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .dashboard-toolbar:not(.is-filter-open) .dashboard-filter-grid {
+    display: none !important;
+  }
+
+  .dashboard-toolbar.is-filter-open .dashboard-filter-grid {
+    position: absolute;
+    top: calc(100% + 0.55rem);
+    right: 0;
+    left: 0;
+    z-index: 1201;
+    display: grid !important;
+    width: 100%;
+    max-height: calc(100dvh - 7rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid #c6d8ec;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #ffffff 0%, #f7faff 100%);
+    box-shadow: 0 20px 46px rgba(19, 52, 94, 0.24);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dashboard-filter-popover-footer {
+    display: flex;
+    grid-column: 1;
+    justify-content: flex-end;
+    padding-top: 0.15rem;
+    border-top: 1px solid #dce7f3;
+  }
+
+  .dashboard-filter-popover-footer .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 350px) {
+  .dashboard-toolbar.is-filter-open .dashboard-filter-grid {
+    max-height: calc(100dvh - 5.5rem);
+  }
+}
