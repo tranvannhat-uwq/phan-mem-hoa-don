@@ -3551,7 +3551,11 @@ select option {
 .activity-detail-meta > div { padding: .75rem; border: 1px solid var(--border-color); border-radius: 10px; display: flex; flex-direction: column; gap: .25rem; }
 .activity-detail-meta span,.activity-diff-values span { color: var(--text-muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
 .activity-diff-list { display: grid; gap: .75rem; }
-.activity-diff { border: 1px solid var(--border-color); border-radius: 12px; padding: .85rem; }
+.activity-diff { border: 1px solid var(--border-color); border-radius: 9px; padding: .55rem .7rem; }
+.activity-field-diff { display: grid; grid-template-columns: minmax(110px, .3fr) 1fr; align-items: baseline; gap: .65rem; }
+.activity-field-diff > strong { font-size: .84rem; }
+.activity-field-diff > span { display: inline-flex; align-items: baseline; gap: .4rem; min-width: 0; color: var(--text-secondary); font-size: .84rem; overflow-wrap: anywhere; }
+.activity-field-diff svg { flex: 0 0 auto; width: 14px; height: 14px; color: var(--color-primary); }
 .activity-diff-values { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .7rem; margin-top: .6rem; }
 .activity-diff-values pre { margin: .25rem 0 0; padding: .65rem; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; background: #f8fafc; font: inherit; font-size: .82rem; }
 .activity-diff-values > div:first-child pre { background: #fff1f2; color: #be123c; }
@@ -3569,7 +3573,7 @@ select option {
 .activity-timeline-item:hover { background: rgba(16,185,129,.06); }
 .activity-timeline-item time { color: var(--text-muted); font-size: .78rem; }
 @media (max-width: 1100px) { .activity-filters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (max-width: 640px) { .activity-filters,.activity-detail-meta { grid-template-columns: 1fr; } .activity-diff-values { grid-template-columns: 1fr; } .activity-diff-values svg { transform: rotate(90deg); } .activity-timeline-item { grid-template-columns: 1fr; gap: .15rem; } .modal-content.activity-detail-modal { width: 100%; max-height: 100vh; height: 100vh; border-radius: 0; } }
+@media (max-width: 640px) { .activity-filters,.activity-detail-meta,.activity-field-diff { grid-template-columns: 1fr; } .activity-diff-values { grid-template-columns: 1fr; } .activity-diff-values svg { transform: rotate(90deg); } .activity-timeline-item { grid-template-columns: 1fr; gap: .15rem; } .modal-content.activity-detail-modal { width: 100%; max-height: 100vh; height: 100vh; border-radius: 0; } }
 
 /* ========================================
    RESPONSIVE: LARGE TABLETS (≤ 1200px)

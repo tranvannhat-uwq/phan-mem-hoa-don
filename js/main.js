@@ -16,7 +16,7 @@ import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260
 import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20260918-customer-debt-invariant-v2';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
 import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260918-customer-debt-invariant-v2';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260918-customer-debt-invariant-v2';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260924-activity-log-v3';
 
 const SALES_WORKSPACE_HASH = '#/ban-hang';
 

@@ -80,6 +80,9 @@ Run these files in order on a staging clone first:
 72. `0072_defer_customer_debt_chain_guard.sql`
 73. `0073_manual_payroll_product_groups.sql`
 74. `0074_customer_debt_full_invariant_and_reconciliation.sql`
+75. `0075_dashboard_filter_scope_consistency.sql`
+76. `0076_admin_only_activity_log.sql`
+77. `0077_activity_log_15_day_retention.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -424,3 +427,11 @@ Migration `0075` keeps dashboard KPI cards, charts, rankings, and recent orders
 inside one resolved company/brand/customer/salesperson scope. It also accepts
 legacy brand names while the UI migrates to canonical brand IDs and preserves
 the FESTIVAL allocation toggle for snapshot-based items.
+
+Migration `0076` restricts global and per-order Activity Log reads to Admin.
+The application hides the corresponding controls from Accounting and Sale,
+and the database rejects their direct RPC requests as well.
+
+Migration `0077` retains audit and Activity Log rows for fifteen days and lets
+the Admin readers query that same window. The activity page loads only the
+currently requested server-side page of twenty rows after the page is opened.

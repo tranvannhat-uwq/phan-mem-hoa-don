@@ -631,7 +631,7 @@ export function applyUserPermissions(user) {
   if (!user) return;
   const role = user.role;
   const activityButton = document.getElementById('btn-activity-log');
-  if (activityButton) activityButton.closest('.activity-header-wrap').style.display = ['admin', 'accounting'].includes(role) ? 'block' : 'none';
+  if (activityButton) activityButton.closest('.activity-header-wrap').style.display = role === 'admin' ? 'block' : 'none';
 
   const invoiceDateGroup = document.getElementById('invoice-business-date-group');
   const invoiceDateInput = document.getElementById('invoice-business-date');

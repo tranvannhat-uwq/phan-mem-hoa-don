@@ -1142,9 +1142,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                     <button class="history-detail-action history-action-print history-print-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                       <i data-lucide="printer"></i> In
                     </button>
-                    <button class="history-detail-action history-action-view history-activity-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
-                      <i data-lucide="history"></i> Lịch sử hoạt động
-                    </button>
+                    ${state.currentUser?.role === 'admin' ? `
+                      <button class="history-detail-action history-action-view history-activity-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
+                        <i data-lucide="history"></i> Lịch sử hoạt động
+                      </button>
+                    ` : ''}
                     ${showReturnBtn ? `
                       <button class="history-detail-action history-action-return history-return-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                         <i data-lucide="rotate-ccw"></i> Trả hàng
@@ -1306,9 +1308,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-copy-btn" data-id="${order.id}" title="Sao chép thành đơn mới">
                 <i data-lucide="copy" style="width: 13px; height: 13px;"></i> Sao chép
               </button>
-              <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-activity-btn" data-id="${order.id}" title="Xem lịch sử hoạt động của đơn">
-                <i data-lucide="history" style="width: 13px; height: 13px;"></i> Hoạt động
-              </button>
+              ${state.currentUser?.role === 'admin' ? `
+                <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-activity-btn" data-id="${order.id}" title="Xem lịch sử hoạt động của đơn">
+                  <i data-lucide="history" style="width: 13px; height: 13px;"></i> Hoạt động
+                </button>
+              ` : ''}
               ${['admin', 'accounting'].includes(state.currentUser?.role) ? `
                 <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-notes-btn" data-id="${order.id}" title="Sửa riêng ghi chú, không thay đổi đơn hoặc công nợ">
                   <i data-lucide="notebook-pen" style="width: 13px; height: 13px;"></i> Ghi chú

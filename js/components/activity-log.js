@@ -7,6 +7,7 @@ import { safeCreateIcons, showToast, makeSelectSearchable } from '../utils.js';
 const PAGE_SIZE = 20;
 let activityPage = 1;
 let latestRows = [];
+let activityRequestId = 0;
 
 const ACTION_LABELS = {
   create_order: 'Đã tạo đơn hàng', update_order: 'Đã chỉnh sửa đơn hàng', change_order_status: 'Đã thay đổi trạng thái đơn hàng',
@@ -35,7 +36,7 @@ const HIDDEN_ACTIVITY_FIELDS = new Set([
 ]);
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-const canViewAll = () => ['admin', 'accounting'].includes(String(state.currentUser?.role || '').toLowerCase());
+const canViewAll = () => String(state.currentUser?.role || '').toLowerCase() === 'admin';
 const formatTime = value => new Date(value).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
 const formatMoney = value => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const EMPTY_VALUE = 'Không có';
@@ -105,7 +106,7 @@ function renderItemsDiff(change) {
 
 function renderFieldDiff(field, change) {
   if (field === 'items') return renderItemsDiff(change);
-  return `<article class="activity-diff"><strong>${escapeHtml(FIELD_LABELS[field] || field)}</strong><div class="activity-diff-values"><div><span>Trước</span><pre>${escapeHtml(displayValue(change?.old))}</pre></div><i data-lucide="arrow-right"></i><div><span>Sau</span><pre>${escapeHtml(displayValue(change?.new))}</pre></div></div></article>`;
+  return `<article class="activity-diff activity-field-diff"><strong>${escapeHtml(FIELD_LABELS[field] || field)}</strong><span>${escapeHtml(displayValue(change?.old))} <i data-lucide="arrow-right"></i> ${escapeHtml(displayValue(change?.new))}</span></article>`;
 }
 const actionLabel = action => ACTION_LABELS[action] || 'Đã thực hiện thay đổi';
 
@@ -171,11 +172,13 @@ function currentFilters(limit = PAGE_SIZE, offset = (activityPage - 1) * PAGE_SI
 
 export async function renderActivityLog() {
   const body = document.getElementById('activity-log-body');
-  if (!body) return;
+  if (!body || state.currentTab !== 'activity-log-panel') return;
   if (!canViewAll()) {
     body.innerHTML = '<tr><td colspan="5" class="activity-empty">Tài khoản này không có quyền xem toàn bộ lịch sử hoạt động.</td></tr>';
     return;
   }
+  const requestId = ++activityRequestId;
+  const requestedPage = activityPage;
   const actorFilter = document.getElementById('activity-actor-filter');
   if (actorFilter && actorFilter.options.length <= 1) {
     actorFilter.innerHTML = '<option value="all">Tất cả nhân viên</option>' + (state.users || []).map(user => `<option value="${escapeHtml(user.authUserId || user.id)}">${escapeHtml(user.displayName || user.username)}</option>`).join('');
@@ -183,18 +186,20 @@ export async function renderActivityLog() {
   }
   body.innerHTML = '<tr><td colspan="5" class="activity-empty">Đang tải lịch sử hoạt động...</td></tr>';
   try {
-    const rawResult = await dbFetchActivityLogs(currentFilters());
+    const rawResult = await dbFetchActivityLogs(currentFilters(PAGE_SIZE, (requestedPage - 1) * PAGE_SIZE));
+    if (requestId !== activityRequestId || state.currentTab !== 'activity-log-panel') return;
     const result = typeof rawResult === 'string' ? JSON.parse(rawResult) : rawResult;
     latestRows = result.rows || [];
     body.innerHTML = latestRows.length ? latestRows.map(rowHtml).join('') : '<tr><td colspan="5" class="activity-empty">Không có hoạt động phù hợp.</td></tr>';
     const pages = Math.max(1, Math.ceil(Number(result.total || 0) / PAGE_SIZE));
-    document.getElementById('activity-page-info').textContent = `Trang ${activityPage}/${pages} · ${Number(result.total || 0)} hoạt động`;
-    document.getElementById('activity-prev').disabled = activityPage <= 1;
-    document.getElementById('activity-next').disabled = activityPage >= pages;
+    document.getElementById('activity-page-info').textContent = `Trang ${requestedPage}/${pages} · ${Number(result.total || 0)} hoạt động`;
+    document.getElementById('activity-prev').disabled = requestedPage <= 1;
+    document.getElementById('activity-next').disabled = requestedPage >= pages;
     bindTargetLinks(body);
     body.querySelectorAll('.activity-detail-btn').forEach(button => button.onclick = () => openActivityDetail(button.dataset.id));
     safeCreateIcons();
   } catch (error) {
+    if (requestId !== activityRequestId || state.currentTab !== 'activity-log-panel') return;
     body.innerHTML = `<tr><td colspan="5" class="activity-empty">${escapeHtml(error.message || 'Không tải được lịch sử hoạt động.')}</td></tr>`;
   }
 }
@@ -223,6 +228,7 @@ async function renderActivityDropdown() {
 }
 
 export async function openOrderActivityModal(orderId) {
+  if (!canViewAll()) return;
   const modal = document.getElementById('order-activity-modal');
   const body = document.getElementById('order-activity-body');
   if (!modal || !body) return;
