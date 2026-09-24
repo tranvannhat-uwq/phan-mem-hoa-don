@@ -27,13 +27,36 @@ const ACTION_LABELS = {
   create_price: 'Đã thêm giá sản phẩm', update_price: 'Đã sửa giá sản phẩm', delete_price: 'Đã xóa giá sản phẩm'
 };
 const MODULE_LABELS = { orders: 'Đơn hàng', customers: 'Khách hàng', employees: 'Nhân viên', payments: 'Thanh toán', returns: 'Trả hàng', cashbook: 'Sổ quỹ', suppliers: 'Nhà cung cấp', purchases: 'Mua hàng', products: 'Sản phẩm', brands: 'Hãng sơn', pricelists: 'Bảng giá' };
-const FIELD_LABELS = { status: 'Trạng thái', notes: 'Ghi chú', reason: 'Lý do chỉnh sửa', phone: 'Số điện thoại', phone2: 'Số điện thoại 2', address: 'Địa chỉ', customer_name: 'Tên khách hàng', customer_phone: 'Số điện thoại khách hàng', customer_address: 'Địa chỉ khách hàng', recipient_name: 'Người nhận', recipient_phone: 'Số điện thoại người nhận', shipping_address: 'Địa chỉ giao hàng', shipping_unit: 'Đơn vị vận chuyển', shipping_code: 'Mã vận đơn', name: 'Tên', quantity: 'Số lượng', items: 'Sản phẩm', subtotal: 'Tiền hàng', total_market: 'Tổng tiền hàng', total_payable: 'Tổng thanh toán', total_amount: 'Tổng tiền', paid_amount: 'Đã thanh toán', debt: 'Công nợ', debt_amount: 'Công nợ', net_revenue: 'Doanh thu thuần', last_order_at: 'Thời gian đơn hàng gần nhất', total_transaction: 'Tổng giao dịch', discount_value: 'Mức giảm giá', discount_amount: 'Giảm giá', discount_percent: 'Phần trăm giảm giá', discount_type: 'Hình thức giảm giá', shipping_support: 'Hỗ trợ vận chuyển', shipping_discount: 'Giảm phí vận chuyển', shipping_fee: 'Phí vận chuyển', shipping_fee_value: 'Mức phí vận chuyển', shipping_fee_amount: 'Phí vận chuyển', extra_fee: 'Thu khác', other_fee: 'Thu khác', other_fee_value: 'Mức thu khác', other_fee_amount: 'Số tiền thu khác', other_fee_type: 'Hình thức thu khác', payment_method: 'Phương thức thanh toán', payment_status: 'Trạng thái thanh toán', role: 'Vai trò', is_active: 'Trạng thái tài khoản', managed_by: 'Nhân viên phụ trách', pricelist_name: 'Bảng giá', price_list_name: 'Bảng giá', date: 'Ngày đơn hàng', order_date: 'Ngày đơn hàng' };
+const FIELD_LABELS = {
+  status: 'Trạng thái', notes: 'Ghi chú', reason: 'Lý do chỉnh sửa', code: 'Mã khách hàng',
+  phone: 'Số điện thoại', phone2: 'Số điện thoại 2', email: 'Email', facebook: 'Facebook',
+  birthday: 'Ngày sinh', gender: 'Giới tính', avatar_url: 'Ảnh đại diện', address: 'Địa chỉ',
+  invoice_address: 'Địa chỉ xuất hóa đơn', province: 'Tỉnh/Thành phố', ward: 'Phường/Xã',
+  company_name: 'Tên công ty', tax_code: 'Mã số thuế', customer_group_id: 'Nhóm khách hàng',
+  debtDays: 'Số ngày công nợ',
+  assigned_brand: 'Nhãn đại lý', brand_discounts: 'Chiết khấu theo hãng',
+  customer_name: 'Tên khách hàng', customer_phone: 'Số điện thoại khách hàng', customer_address: 'Địa chỉ khách hàng',
+  recipient_name: 'Người nhận', recipient_phone: 'Số điện thoại người nhận', shipping_address: 'Địa chỉ giao hàng',
+  shipping_unit: 'Đơn vị vận chuyển', shipping_code: 'Mã vận đơn', name: 'Tên', quantity: 'Số lượng', items: 'Sản phẩm',
+  subtotal: 'Tiền hàng', total_market: 'Tổng tiền hàng', total_payable: 'Tổng thanh toán', total_amount: 'Tổng tiền',
+  paid_amount: 'Đã thanh toán', debt: 'Công nợ', debt_amount: 'Công nợ', net_revenue: 'Doanh thu thuần',
+  last_order_at: 'Thời gian đơn hàng gần nhất', total_transaction: 'Tổng giao dịch', discount_value: 'Mức giảm giá',
+  discount_amount: 'Giảm giá', discount_percent: 'Phần trăm giảm giá', discount_type: 'Hình thức giảm giá',
+  shipping_support: 'Hỗ trợ vận chuyển', shipping_discount: 'Giảm phí vận chuyển', shipping_fee: 'Phí vận chuyển',
+  shipping_fee_value: 'Mức phí vận chuyển', shipping_fee_amount: 'Phí vận chuyển', extra_fee: 'Thu khác',
+  other_fee: 'Thu khác', other_fee_value: 'Mức thu khác', other_fee_amount: 'Số tiền thu khác',
+  other_fee_type: 'Hình thức thu khác', payment_method: 'Phương thức thanh toán', payment_status: 'Trạng thái thanh toán',
+  role: 'Vai trò', is_active: 'Trạng thái tài khoản', managed_by: 'Nhân viên phụ trách',
+  pricelist_id: 'Bảng giá áp dụng', default_price_list_id: 'Bảng giá mặc định',
+  pricelist_name: 'Bảng giá', price_list_name: 'Bảng giá', date: 'Ngày đơn hàng', order_date: 'Ngày đơn hàng'
+};
 const HIDDEN_ACTIVITY_FIELDS = new Set([
   'id', 'company_id', 'customer_id', 'product_id', 'variant_id', 'pricelist_id', 'price_list_id',
   'created_by', 'updated_by', 'deleted_by', 'cancelled_by', 'canceled_by', 'salesperson_id',
   'auth_user_id', 'idempotency_key', 'request_fingerprint', 'operation_key', 'saved_at',
   'created_at', 'updated_at', 'deleted_at', 'cancelled_at', 'canceled_at', 'confirmed_at'
 ]);
+const CUSTOMER_VISIBLE_ID_FIELDS = new Set(['customer_group_id', 'pricelist_id', 'default_price_list_id']);
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const canViewAll = () => String(state.currentUser?.role || '').toLowerCase() === 'admin';
@@ -104,14 +127,53 @@ function renderItemsDiff(change) {
   return `<article class="activity-diff activity-items-diff"><strong>Sản phẩm</strong><div class="activity-items-summary"><span>${before.size} sản phẩm trước</span><i data-lucide="arrow-right"></i><span>${after.size} sản phẩm sau</span></div>${rows.length ? `<ul>${rows.join('')}</ul>` : '<p>Danh sách sản phẩm không có thay đổi đáng kể.</p>'}</article>`;
 }
 
-function renderFieldDiff(field, change) {
+function customerPriceListName(id) {
+  if (!id) return EMPTY_VALUE;
+  if (id === 'custom') return 'Chiết khấu riêng';
+  if (id === 'retail') return 'Khách lẻ';
+  return [...(state.allPricelists || []), ...(state.pricelists || [])]
+    .find(item => String(item.id) === String(id))?.name || String(id);
+}
+
+function customerFieldLabel(field) {
+  return field === 'name' ? 'Tên khách hàng' : (FIELD_LABELS[field] || field);
+}
+
+function displayFieldValue(field, value, row) {
+  if (row?.module !== 'customers') return displayValue(value);
+  if (field === 'pricelist_id' || field === 'default_price_list_id') return customerPriceListName(value);
+  if (field === 'avatar_url') return value ? 'Đã thiết lập ảnh' : EMPTY_VALUE;
+  if (field === 'brand_discounts') {
+    const discounts = parseStructuredValue(value);
+    if (!discounts || typeof discounts !== 'object' || Array.isArray(discounts)) return displayValue(value);
+    const entries = Object.entries(discounts).filter(([key, item]) => key !== 'salesBaselineImportedAt' && item !== null && item !== '');
+    return entries.length
+      ? entries.map(([key, item]) => `${FIELD_LABELS[key] || key}: ${typeof item === 'object' ? JSON.stringify(item) : item}`).join(' · ')
+      : EMPTY_VALUE;
+  }
+  if (field === 'status') {
+    const status = String(value ?? '').toLowerCase();
+    if (['active', 'enabled'].includes(status)) return 'Đang hoạt động';
+    if (['inactive', 'disabled'].includes(status)) return 'Ngừng hoạt động';
+  }
+  if (field === 'gender') {
+    const gender = String(value ?? '').toLowerCase();
+    if (['male', 'nam'].includes(gender)) return 'Nam';
+    if (['female', 'nữ', 'nu'].includes(gender)) return 'Nữ';
+  }
+  return displayValue(value);
+}
+
+function renderFieldDiff(field, change, row) {
   if (field === 'items') return renderItemsDiff(change);
-  return `<article class="activity-diff activity-field-diff"><strong>${escapeHtml(FIELD_LABELS[field] || field)}</strong><span>${escapeHtml(displayValue(change?.old))} <i data-lucide="arrow-right"></i> ${escapeHtml(displayValue(change?.new))}</span></article>`;
+  return `<article class="activity-diff activity-field-diff"><strong>${escapeHtml(customerFieldLabel(field))}</strong><span>${escapeHtml(displayFieldValue(field, change?.old, row))} <i data-lucide="arrow-right"></i> ${escapeHtml(displayFieldValue(field, change?.new, row))}</span></article>`;
 }
 const actionLabel = action => ACTION_LABELS[action] || 'Đã thực hiện thay đổi';
 
-function isVisibleActivityField(field) {
-  if (!field || HIDDEN_ACTIVITY_FIELDS.has(field)) return false;
+function isVisibleActivityField(field, row) {
+  if (!field) return false;
+  if (row?.module === 'customers' && CUSTOMER_VISIBLE_ID_FIELDS.has(field)) return true;
+  if (HIDDEN_ACTIVITY_FIELDS.has(field)) return false;
   if (field === 'managed_by') return true;
   if (/(?:_id|Id)$/.test(field)) return false;
   if (/(?:_by|By)$/.test(field)) return false;
@@ -119,7 +181,7 @@ function isVisibleActivityField(field) {
 }
 
 function visibleChanges(row) {
-  return Object.entries(row?.changes || {}).filter(([field]) => isVisibleActivityField(field));
+  return Object.entries(row?.changes || {}).filter(([field]) => isVisibleActivityField(field, row));
 }
 
 function activityTargetHtml(row) {
@@ -156,7 +218,7 @@ export function openActivityDetail(rowOrId) {
   document.getElementById('activity-detail-body').innerHTML = `
     <div class="activity-detail-meta"><div><span>Người thực hiện</span><strong>${escapeHtml(row.actor_name)}</strong></div><div><span>Thời gian</span><strong>${formatTime(row.created_at)}</strong></div><div><span>Hoạt động</span><strong>${actionLabel(row.action)}</strong></div><div><span>Đối tượng</span>${activityTargetHtml(row)}</div></div>
     <h4>Những thay đổi (${changes.length})</h4>
-    <div class="activity-diff-list">${changes.length ? changes.map(([field, change]) => renderFieldDiff(field, change)).join('') : '<p class="activity-empty">Không có thay đổi nghiệp vụ cần hiển thị.</p>'}</div>`;
+    <div class="activity-diff-list">${changes.length ? changes.map(([field, change]) => renderFieldDiff(field, change, row)).join('') : '<p class="activity-empty">Không có thay đổi nghiệp vụ cần hiển thị.</p>'}</div>`;
   document.getElementById('activity-detail-modal').classList.add('active');
   bindTargetLinks(document.getElementById('activity-detail-body'));
   safeCreateIcons();

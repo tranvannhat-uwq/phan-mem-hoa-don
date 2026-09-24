@@ -84,6 +84,7 @@ Run these files in order on a staging clone first:
 76. `0076_admin_only_activity_log.sql`
 77. `0077_activity_log_15_day_retention.sql`
 78. `0078_track_customer_manager_changes.sql`
+79. `0079_detailed_customer_activity_changes.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -439,3 +440,6 @@ currently requested server-side page of twenty rows after the page is opened.
 
 Migration `0078` keeps `managed_by` changes when compacting audit and activity
 rows so future customer-manager reassignments retain their before/after values.
+
+Migration `0079` preserves changes to customer profile details such as contact,
+address, company, assigned brand, discounts, shipping support, and price lists.
