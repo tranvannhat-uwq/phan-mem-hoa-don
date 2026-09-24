@@ -83,6 +83,7 @@ Run these files in order on a staging clone first:
 75. `0075_dashboard_filter_scope_consistency.sql`
 76. `0076_admin_only_activity_log.sql`
 77. `0077_activity_log_15_day_retention.sql`
+78. `0078_track_customer_manager_changes.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -435,3 +436,6 @@ and the database rejects their direct RPC requests as well.
 Migration `0077` retains audit and Activity Log rows for fifteen days and lets
 the Admin readers query that same window. The activity page loads only the
 currently requested server-side page of twenty rows after the page is opened.
+
+Migration `0078` keeps `managed_by` changes when compacting audit and activity
+rows so future customer-manager reassignments retain their before/after values.
