@@ -85,6 +85,7 @@ Run these files in order on a staging clone first:
 77. `0077_activity_log_15_day_retention.sql`
 78. `0078_track_customer_manager_changes.sql`
 79. `0079_detailed_customer_activity_changes.sql`
+80. `0080_sale_managed_customer_order_history_pricing_independence.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -443,3 +444,8 @@ rows so future customer-manager reassignments retain their before/after values.
 
 Migration `0079` preserves changes to customer profile details such as contact,
 address, company, assigned brand, discounts, shipping support, and price lists.
+
+Migration `0080` lets Sale read finalized orders for customers in their current
+managed scope even after the order's historical price list is disabled or the
+customer's assigned list changes. Draft and order mutation price-list checks
+remain in force.

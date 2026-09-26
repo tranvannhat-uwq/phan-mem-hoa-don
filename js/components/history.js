@@ -392,6 +392,23 @@ function getHistoryManagerName(order, customer) {
   return managerValue ? getManagerDisplayName(managerValue, state.users) : 'Chưa phân công';
 }
 
+function getHistoryOrderPriceListName(order, lookups) {
+  const orderPriceListId = String(order?.pricelistId || order?.pricelist_id || 'retail');
+  const itemSnapshot = (Array.isArray(order?.items) ? order.items : []).find(item =>
+    String(item.priceListId || item.price_list_id || '') === orderPriceListId
+    && (item.priceListNameSnapshot || item.price_list_name_snapshot || item.priceListName)
+  );
+  const snapshotName = order?.priceListNameSnapshot || order?.price_list_name_snapshot
+    || itemSnapshot?.priceListNameSnapshot || itemSnapshot?.price_list_name_snapshot
+    || itemSnapshot?.priceListName;
+  if (snapshotName) return snapshotName;
+  const priceList = lookups.pricelistById.get(orderPriceListId);
+  if (priceList?.name) return priceList.name;
+  if (orderPriceListId === 'retail') return 'Nhập tay';
+  if (orderPriceListId === 'custom') return 'Chiết khấu riêng';
+  return orderPriceListId;
+}
+
 function getHistoryOrderActionContext(order, lookups) {
   const financeRole = ['admin', 'accounting'].includes(state.currentUser?.role);
   const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
@@ -1054,18 +1071,12 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       } = getHistoryOrderActionContext(order, lookups);
 
       const cust = getHistoryCustomer(order, lookups);
-      let plName = 'Nhập tay';
+      const plName = getHistoryOrderPriceListName(order, lookups);
       let debtText = '0 ₫';
       const managerName = getHistoryManagerName(order, cust);
       
       if (cust) {
-        const pl = lookups.pricelistById.get(String(cust.pricelistId));
-        plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
         debtText = formatCurrency(cust.debt || 0);
-      } else {
-        const orderPlId = order.pricelistId || 'retail';
-        const pl = lookups.pricelistById.get(String(orderPlId));
-        plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
       }
 
       return `
@@ -1238,18 +1249,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       const cust = getHistoryCustomer(order, lookups);
       
       const managerName = getHistoryManagerName(order, cust);
-      let plName = 'Nhập tay';
+      const plName = getHistoryOrderPriceListName(order, lookups);
       let debtText = '0 ₫';
       
       if (cust) {
-        const pl = lookups.pricelistById.get(String(cust.pricelistId));
-        plName = pl ? pl.name : (cust.pricelistId === 'custom' ? 'Chiết khấu riêng' : (cust.pricelistId === 'retail' ? 'Nhập tay' : 'Chưa xác định'));
-        
         debtText = formatCurrency(cust.debt || 0);
-      } else {
-        const orderPlId = order.pricelistId || 'retail';
-        const pl = lookups.pricelistById.get(String(orderPlId));
-        plName = pl ? pl.name : (orderPlId === 'custom' ? 'Chiết khấu riêng' : (orderPlId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
       }
 
       return `
@@ -1275,7 +1279,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
               <div class="flex items-center gap-1"><i data-lucide="calendar" style="width:13px;height:13px;"></i> <span>Ngày lập: ${formatDateTime(order.date)}</span></div>
               <div class="flex items-center gap-1"><i data-lucide="user-check" style="width:13px;height:13px;"></i> <span>Người tạo: ${creatorName}</span></div>
               <div class="flex items-center gap-1"><i data-lucide="users" style="width:13px;height:13px;"></i> <span>Kinh doanh quản lý: ${managerName}</span></div>
-              <div class="flex items-center gap-1"><i data-lucide="tags" style="width:13px;height:13px;"></i> <span>Bảng giá: <strong style="color: var(--color-warning);">${plName}</strong></span></div>
+              <div class="flex items-center gap-1"><i data-lucide="tags" style="width:13px;height:13px;"></i> <span>Bảng giá: <strong style="color: var(--color-warning);">${escapeHistoryHtml(plName)}</strong></span></div>
               <div class="flex items-center gap-1"><i data-lucide="credit-card" style="width:13px;height:13px;"></i> <span>Công nợ hiện tại: <strong style="color: var(--color-danger);">${debtText}</strong></span></div>
               <div class="flex items-start gap-1"><i data-lucide="notebook-pen" style="width:13px;height:13px;margin-top:2px;"></i> <span>Ghi chú đơn: <strong>${escapeHistoryHtml(order.notes || 'Không có')}</strong></span></div>
             </div>

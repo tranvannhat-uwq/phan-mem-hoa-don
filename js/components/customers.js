@@ -3477,7 +3477,10 @@ async function openCustomerDebtSourceDetail(source, historyEntry, customer) {
     if (source.kind === 'order') {
       let order = (state.savedOrders || []).find(item => String(item.id) === source.id);
       if (!order) {
-        await dbRefreshOrderById(source.id);
+        const refreshedOrder = await dbRefreshOrderById(source.id);
+        if (refreshedOrder === false) {
+          throw new Error(`Không tải được đơn hàng ${source.id} từ máy chủ. Vui lòng thử lại.`);
+        }
         order = (state.savedOrders || []).find(item => String(item.id) === source.id);
       }
       if (!order) throw new Error(`Không tìm thấy đơn hàng ${source.id} trong phạm vi được xem.`);
