@@ -86,6 +86,7 @@ Run these files in order on a staging clone first:
 78. `0078_track_customer_manager_changes.sql`
 79. `0079_detailed_customer_activity_changes.sql`
 80. `0080_sale_managed_customer_order_history_pricing_independence.sql`
+81. `0081_sale_managed_customer_draft_order_history.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the
@@ -449,3 +450,7 @@ Migration `0080` lets Sale read finalized orders for customers in their current
 managed scope even after the order's historical price list is disabled or the
 customer's assigned list changes. Draft and order mutation price-list checks
 remain in force.
+
+Migration `0081` applies the same customer-manager read scope to draft orders,
+including drafts created by another employee. Draft creation, editing and
+deletion restrictions are unchanged.

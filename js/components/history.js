@@ -338,6 +338,12 @@ function orderIsVisibleToSale(order, user, lookups) {
   return lookups.customerById.has(String(order.customerId));
 }
 
+function canManageHistoryDraft(order) {
+  return order?.status === 'draft'
+    && (['admin', 'accounting'].includes(state.currentUser?.role)
+      || orderWasCreatedByUser(order, state.currentUser));
+}
+
 function updateHistorySummary(orders, lookups) {
   const beforeDiscountEl = document.getElementById('history-total-before-discount');
   const discountEl = document.getElementById('history-total-discount');
@@ -412,11 +418,13 @@ function getHistoryOrderPriceListName(order, lookups) {
 function getHistoryOrderActionContext(order, lookups) {
   const financeRole = ['admin', 'accounting'].includes(state.currentUser?.role);
   const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
+  const canEditDraft = canManageHistoryDraft(order);
   return {
     financeRole,
     activeOrderReturns,
     canEditNotes: financeRole,
-    showDeleteBtn: order.status === 'draft',
+    canEditDraft,
+    showDeleteBtn: canEditDraft,
     showCancelBtn: order.status === 'settled' && financeRole,
     showReturnBtn: ['settled', 'partially_returned'].includes(order.status) && financeRole,
     showAmendBtn: order.status === 'settled' && financeRole && activeOrderReturns.length === 0
@@ -1066,7 +1074,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       }
 
       const {
-        financeRole, activeOrderReturns, canEditNotes, showDeleteBtn,
+        financeRole, activeOrderReturns, canEditNotes, canEditDraft, showDeleteBtn,
         showCancelBtn, showReturnBtn, showAmendBtn
       } = getHistoryOrderActionContext(order, lookups);
 
@@ -1142,7 +1150,7 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                         <i data-lucide="save"></i> Lưu ghi chú
                       </button>
                     ` : ''}
-                    ${(order.status === 'draft' || showAmendBtn) ? `
+                    ${(canEditDraft || showAmendBtn) ? `
                       <button class="history-detail-action history-action-edit history-edit-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                         <i data-lucide="edit"></i> Chỉnh sửa
                       </button>
@@ -1237,7 +1245,8 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
         
       const creatorName = getUserDisplayName(order.createdBy, 'Không xác định', state.users);
 
-      const showDeleteBtn = order.status === 'draft';
+      const canEditDraft = canManageHistoryDraft(order);
+      const showDeleteBtn = canEditDraft;
       const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
       const showReturnBtn = ['settled', 'partially_returned'].includes(order.status)
         && ['admin', 'accounting'].includes(state.currentUser?.role);
@@ -1323,11 +1332,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                 </button>
               ` : ''}
               
-              ${order.status === 'draft' ? `
+              ${canEditDraft ? `
                 <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}">
                   <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
                 </button>
-              ` : `
+              ` : order.status === 'draft' ? '' : `
                 ${showAmendBtn ? `
                   <button class="btn btn-primary btn-sm flex items-center justify-center gap-1 history-edit-btn" data-id="${order.id}" title="Sửa đơn đã chốt">
                     <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
