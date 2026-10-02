@@ -1,22 +1,22 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20260918-customer-debt-invariant-v2';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20260918-customer-debt-invariant-v2';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20260918-customer-debt-invariant-v2';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20260918-customer-debt-invariant-v2';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20260918-customer-debt-invariant-v2';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20260918-customer-debt-invariant-v2';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20260918-customer-debt-invariant-v2';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20260918-customer-debt-invariant-v2';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20260918-customer-debt-invariant-v2';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20260918-customer-debt-invariant-v2';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20260918-customer-debt-invariant-v2';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20260918-customer-debt-invariant-v2';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20260918-customer-debt-invariant-v2';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20260918-customer-debt-invariant-v2';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20261002-mobile-data-recovery-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261002-mobile-data-recovery-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261002-mobile-data-recovery-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261002-mobile-data-recovery-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261002-mobile-data-recovery-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261002-mobile-data-recovery-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261002-mobile-data-recovery-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20261002-mobile-data-recovery-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261002-mobile-data-recovery-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261002-mobile-data-recovery-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261002-mobile-data-recovery-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261002-mobile-data-recovery-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261002-mobile-data-recovery-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261002-mobile-data-recovery-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20260918-customer-debt-invariant-v2';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20260924-activity-log-v3';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20261002-mobile-data-recovery-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261002-mobile-data-recovery-v1';
 
 const SALES_WORKSPACE_HASH = '#/ban-hang';
 
@@ -25,12 +25,22 @@ function isSalesWorkspaceRoute() {
 }
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
+  'dashboard-panel': ['orders', 'customers', 'salesReturns'],
+  'customers-panel': ['customers'],
   'invoice-panel': ['pricelists'],
   'pricelists-panel': ['pricelists'],
   'history-panel': ['orders', 'salesReturns'],
   'so-quy-panel': ['cashbook', 'startingBalances'],
   'suppliers-panel': ['suppliers'],
   'goods-panel': ['suppliers', 'purchases']
+});
+const CLOUD_DOMAIN_LABELS = Object.freeze({
+  products: 'sản phẩm', payrollProductGroups: 'nhóm sản phẩm', orders: 'đơn hàng',
+  customers: 'khách hàng', pricelists: 'bảng giá', users: 'nhân viên', brands: 'nhãn hàng',
+  cashbook: 'sổ quỹ', startingBalances: 'số dư đầu kỳ', suppliers: 'nhà cung cấp',
+  purchases: 'phiếu mua hàng', rawMaterials: 'nguyên liệu', semiFinished: 'bán thành phẩm',
+  recipes: 'công thức', productionLogs: 'lịch sử sản xuất', finishedGoodsStock: 'tồn kho thành phẩm',
+  salesReturns: 'phiếu trả hàng'
 });
 let panelCloudSessionId = '';
 const loadedPanelDomains = new Set();
@@ -48,7 +58,11 @@ function syncPanelCloudSession() {
 function panelNeedsCloudData(panelId) {
   if (!state.currentUser || !isCloudActive) return false;
   syncPanelCloudSession();
-  return (PANEL_CLOUD_DOMAINS[panelId] || []).some(domain => !loadedPanelDomains.has(domain));
+  return (PANEL_CLOUD_DOMAINS[panelId] || []).some(domain => {
+    const status = state.cloudLoadStatus?.[domain]?.status;
+    if (status === 'error') return true;
+    return status !== 'ready' && status !== 'loading' && !loadedPanelDomains.has(domain);
+  });
 }
 
 function panelHasPricingSnapshot(panelId) {
@@ -65,6 +79,7 @@ function panelHasPricingSnapshot(panelId) {
 function renderPanelCloudLoading(panelId) {
   const targets = {
     'invoice-panel': ['invoice-items-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải dữ liệu bảng giá…</td></tr>'],
+    'customers-panel': ['customers-table-body', '<tr><td colspan="18" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải danh sách khách hàng…</td></tr>'],
     'pricelists-panel': ['pricelists-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải chi tiết bảng giá…</td></tr>'],
     'history-panel': ['history-orders-container', '<div class="empty-state"><div class="empty-state-title">Đang tải lịch sử giao dịch…</div></div>'],
     'so-quy-panel': ['so-quy-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải dữ liệu Sổ quỹ…</td></tr>'],
@@ -86,7 +101,11 @@ export async function ensurePanelCloudData(panelId, { force = false, domains: do
     : panelDomains;
   const domains = force
     ? requestedDomains
-    : requestedDomains.filter(domain => !loadedPanelDomains.has(domain));
+    : requestedDomains.filter(domain => {
+      const status = state.cloudLoadStatus?.[domain]?.status;
+      if (status === 'error') return true;
+      return status !== 'ready' && status !== 'loading' && !loadedPanelDomains.has(domain);
+    });
   if (domains.length === 0) return false;
 
   const loadKey = [...domains].sort().join('|');
@@ -96,12 +115,67 @@ export async function ensurePanelCloudData(panelId, { force = false, domains: do
     onlyDomains: domains,
     hydrateCustomerHistory: false
   }).then(result => {
-    domains.forEach(domain => loadedPanelDomains.add(domain));
+    const failedDomains = new Set(result?.failedDomains || []);
+    domains.forEach(domain => {
+      if (failedDomains.has(domain)) loadedPanelDomains.delete(domain);
+      else loadedPanelDomains.add(domain);
+    });
     if (state.currentTab === panelId) renderAll();
     return result;
   }).finally(() => pendingPanelDomainLoads.delete(loadKey));
   pendingPanelDomainLoads.set(loadKey, load);
+  if (state.currentTab === panelId) renderAll();
   return load;
+}
+
+function renderCloudLoadWarning() {
+  const warning = document.getElementById('cloud-load-warning');
+  const message = document.getElementById('cloud-load-warning-text');
+  const retryButton = document.getElementById('btn-retry-cloud-load');
+  if (!warning || !message) return;
+
+  const statuses = state.cloudLoadStatus || {};
+  const failed = Object.keys(statuses).filter(domain => statuses[domain]?.status === 'error');
+  const loading = Object.keys(statuses).filter(domain => statuses[domain]?.status === 'loading');
+  if (failed.length > 0) {
+    const labels = failed.map(domain => CLOUD_DOMAIN_LABELS[domain] || domain);
+    message.textContent = `Chưa tải được ${labels.join(', ')}. Dữ liệu đang có vẫn được giữ lại.`;
+    warning.hidden = false;
+  } else if (loading.length > 0) {
+    message.textContent = 'Đang tải dữ liệu mới nhất…';
+    warning.hidden = false;
+  } else {
+    warning.hidden = true;
+    message.textContent = '';
+  }
+  if (retryButton) {
+    retryButton.disabled = loading.length > 0;
+    retryButton.textContent = loading.length > 0 ? 'Đang tải…' : 'Thử tải lại';
+  }
+}
+
+function setupCloudLoadRetry() {
+  const retryButton = document.getElementById('btn-retry-cloud-load');
+  if (!retryButton || retryButton.dataset.bound === 'true') return;
+  retryButton.dataset.bound = 'true';
+  retryButton.addEventListener('click', async () => {
+    if (!state.currentUser || !isCloudActive || retryButton.disabled) return;
+    const failed = Object.entries(state.cloudLoadStatus || {})
+      .filter(([, status]) => status?.status === 'error')
+      .map(([domain]) => domain);
+    const domains = failed.length ? failed : (PANEL_CLOUD_DOMAINS[state.currentTab] || []);
+    if (domains.length === 0) return;
+    retryButton.disabled = true;
+    const retryLoad = fetchCloudData({ onlyDomains: domains, hydrateCustomerHistory: false });
+    renderAll();
+    const result = await retryLoad;
+    const failedAfterRetry = new Set(result?.failedDomains || []);
+    domains.forEach(domain => {
+      if (failedAfterRetry.has(domain)) loadedPanelDomains.delete(domain);
+      else loadedPanelDomains.add(domain);
+    });
+    renderAll();
+  });
 }
 
 // Chỉ render panel đang nhìn thấy. Các panel khác sẽ render khi người dùng
@@ -111,9 +185,13 @@ export function renderAll() {
   // profile has been established. This also prevents dashboard RPC noise on
   // the login screen and avoids leaking stale cached business data.
   if (!state.currentUser) {
+    const warning = document.getElementById('cloud-load-warning');
+    if (warning) warning.hidden = true;
     safeCreateIcons();
     return;
   }
+
+  renderCloudLoadWarning();
 
   backfillMultiCompanyAndRevenueData();
 
@@ -490,6 +568,7 @@ async function initApp() {
   if (dateLbl) dateLbl.innerText = today.toLocaleDateString('vi-VN');
 
   setupNavigation();
+  setupCloudLoadRetry();
   setupProductManagement();
   setupCustomerManagement();
   setupSupplierManagement();

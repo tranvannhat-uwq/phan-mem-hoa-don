@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20260918-customer-debt-invariant-v2';
+import { switchTab } from '../main.js?v=20261002-mobile-data-recovery-v1';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20260918-customer-debt-invariant-v2';
+import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20261002-mobile-data-recovery-v1';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260918-customer-debt-invariant-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20261002-mobile-data-recovery-v1';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;

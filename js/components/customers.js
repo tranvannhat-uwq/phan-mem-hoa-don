@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20260918-customer-debt-invariant-v2';
-import { renderAll } from '../main.js?v=20260918-customer-debt-invariant-v2';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20260918-customer-debt-invariant-v2';
-import { addCashbookTransaction } from './so_quy.js?v=20260918-customer-debt-invariant-v2';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20261002-mobile-data-recovery-v1';
+import { renderAll } from '../main.js?v=20261002-mobile-data-recovery-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261002-mobile-data-recovery-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261002-mobile-data-recovery-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20260918-customer-debt-invariant-v2';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20260918-customer-debt-invariant-v2';
+} from '../domain/order-financials.js?v=20261002-mobile-data-recovery-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261002-mobile-data-recovery-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20260918-customer-debt-invariant-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20261002-mobile-data-recovery-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -943,10 +943,16 @@ export function renderCustomersTable() {
 
   if (filtered.length === 0) {
     const extraColumnCount = state.currentUser?.role === 'sale' ? 1 : 2;
+    const loadStatus = state.cloudLoadStatus?.customers?.status;
+    const rowMessage = !state.customers?.length && loadStatus === 'loading'
+      ? 'Đang tải danh sách khách hàng…'
+      : !state.customers?.length && loadStatus === 'error'
+        ? 'Không tải được danh sách khách hàng. Hãy dùng nút “Thử tải lại” ở đầu trang.'
+        : 'Không tìm thấy khách hàng nào.';
     tableBody.innerHTML = `
       <tr>
         <td colspan="${getVisibleCustomerColumns().size + extraColumnCount}" style="text-align: center; color: var(--text-muted); padding: 3rem;">
-          Không tìm thấy khách hàng nào.
+          ${rowMessage}
         </td>
       </tr>
     `;

@@ -12,11 +12,11 @@ test('a successful empty customer response clears browser state and cache', () =
   const end = service.indexOf('const fetchPricelists = async () =>', start);
   const fetchCustomers = service.slice(start, end);
 
-  assert.match(fetchCustomers, /state\.customers = \(customerData \|\| \[\]\)\.map/);
-  assert.match(fetchCustomers, /localStorage\.setItem\('billing_system_customers', JSON\.stringify\(state\.customers\)\)/);
+  assert.match(fetchCustomers, /const loadedCustomers = \(customerData \|\| \[\]\)\.map/);
+  assert.match(fetchCustomers, /writeCustomerCache\(state\.customers\)/);
   assert.doesNotMatch(fetchCustomers, /customerData\.length > 0/);
   assert.doesNotMatch(fetchCustomers, /else if \(localCust\.length > 0\)/);
-  assert.match(fetchCustomers, /catch \(custErr\)[\s\S]*billing_system_customers/);
+  assert.match(fetchCustomers, /catch \(custErr\)[\s\S]*state\.customerSnapshotScope !== cacheScope/);
 });
 
 test('successful empty order and cashbook windows clear only their loaded ranges', () => {

@@ -29,7 +29,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20260918-customer-debt-invariant-v2';
+} from './supabase.js?v=20261002-mobile-data-recovery-v1';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;
@@ -41,6 +41,9 @@ let realtimeStatus = 'CLOSED';
 let pendingEvents = [];
 let flushInProgress = false;
 let onlineHandler = null;
+let visibilityHandler = null;
+let pageShowHandler = null;
+let catchupTimer = null;
 
 function eventRecordId(payload) {
   return payload?.new?.id || payload?.old?.id || '';
@@ -140,6 +143,15 @@ async function flushRealtimeEvents() {
 
 function queueVisiblePanelCatchup() {
   if (!state.currentUser || document.visibilityState === 'hidden') return;
+  if (catchupTimer) clearTimeout(catchupTimer);
+  catchupTimer = setTimeout(() => {
+    catchupTimer = null;
+    refreshVisiblePanelFromCloud();
+  }, 350);
+}
+
+function refreshVisiblePanelFromCloud() {
+  if (!state.currentUser || document.visibilityState === 'hidden') return;
   const domainsByPanel = {
     'products-panel': ['products', 'payrollProductGroups'],
     'pricelists-panel': ['pricelists'],
@@ -153,9 +165,13 @@ function queueVisiblePanelCatchup() {
   const domains = domainsByPanel[state.currentTab] || [];
   if (domains.length === 0) return;
   void fetchCloudData({ onlyDomains: domains, hydrateCustomerHistory: false })
-    .then(() => {
+    .then(result => {
+      if (result?.failedDomains?.length) {
+        console.warn('Mobile/background catch-up could not load:', result.failedDomains.join(', '));
+      }
       if (typeof realtimeRender === 'function' && state.currentUser) realtimeRender();
-    });
+    })
+    .catch(error => console.warn('Visible-panel cloud catch-up failed:', error));
 }
 
 function subscribeTable(channel, table, handler) {
@@ -166,9 +182,15 @@ export async function stopRealtimeSync() {
   realtimeGeneration += 1;
   if (realtimeTimer) clearTimeout(realtimeTimer);
   realtimeTimer = null;
+  if (catchupTimer) clearTimeout(catchupTimer);
+  catchupTimer = null;
   pendingEvents = [];
   if (onlineHandler) window.removeEventListener('online', onlineHandler);
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+  if (pageShowHandler) window.removeEventListener('pageshow', pageShowHandler);
   onlineHandler = null;
+  visibilityHandler = null;
+  pageShowHandler = null;
 
   const channel = realtimeChannel;
   const client = realtimeClient;
@@ -241,6 +263,12 @@ export async function startRealtimeSync(renderCallback) {
 
   onlineHandler = queueVisiblePanelCatchup;
   window.addEventListener('online', onlineHandler);
+  visibilityHandler = () => {
+    if (document.visibilityState === 'visible') queueVisiblePanelCatchup();
+  };
+  pageShowHandler = () => queueVisiblePanelCatchup();
+  document.addEventListener('visibilitychange', visibilityHandler);
+  window.addEventListener('pageshow', pageShowHandler);
   return true;
 }
 

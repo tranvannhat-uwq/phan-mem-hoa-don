@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20260918-customer-debt-invariant-v2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20260918-customer-debt-invariant-v2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261002-mobile-data-recovery-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261002-mobile-data-recovery-v1';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20260918-customer-debt-invariant-v2';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20260918-customer-debt-invariant-v2';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20260918-customer-debt-invariant-v2';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261002-mobile-data-recovery-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261002-mobile-data-recovery-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261002-mobile-data-recovery-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -15,6 +15,62 @@ export let isCloudActive = false;
 const ORDER_CACHE_KEY = 'billing_system_orders';
 const ORDER_CACHE_MAX_ITEMS = 120;
 const ORDER_CACHE_MAX_JSON_CHARS = 750000;
+
+function readLocalJsonCache(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch (error) {
+    console.warn(`Could not read the ${key} browser cache:`, error?.message || error);
+    return fallback;
+  }
+}
+
+function writeLocalJsonCache(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    // Browser storage is an optional offline cache. A quota or privacy-mode
+    // error must never turn a successful Cloud read into a failed data load.
+    console.warn(`Could not update the ${key} browser cache:`, error?.message || error);
+    return false;
+  }
+}
+
+function parseJsonValue(value, fallback) {
+  if (typeof value !== 'string') return value ?? fallback;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function getCustomerCacheScope() {
+  const user = state.currentUser;
+  if (!user) return '';
+  return [user.authUserId || user.id || '', user.role || '', user.companyId || ''].join('|');
+}
+
+function getScopedCustomerCacheKey(scope = getCustomerCacheScope()) {
+  return scope ? `billing_system_customers__${encodeURIComponent(scope)}` : '';
+}
+
+function readScopedCustomerCache(scope = getCustomerCacheScope()) {
+  const key = getScopedCustomerCacheKey(scope);
+  if (!key) return [];
+  const cached = readLocalJsonCache(key, []);
+  return Array.isArray(cached) ? cached : [];
+}
+
+function writeCustomerCache(customers) {
+  const key = getScopedCustomerCacheKey();
+  if (key) writeLocalJsonCache(key, customers);
+  // Keep the existing cache key for older app versions, but never use it as
+  // an authenticated fallback because it is shared by every account.
+  writeLocalJsonCache('billing_system_customers', customers);
+}
 
 // Cloud is authoritative. This browser copy is only a bounded fallback cache and
 // must never make a successful Cloud write look like a failed business action.
@@ -745,7 +801,7 @@ export function applyCustomerDebtRealtimePayload(payload = {}) {
   }
   customer.debtHistory = history.sort((a, b) =>
     new Date(getCustomerDebtPostingDate(a) || 0) - new Date(getCustomerDebtPostingDate(b) || 0));
-  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  writeCustomerCache(state.customers);
   return true;
 }
 
@@ -920,7 +976,7 @@ function getCurrentLocalWeekRange() {
 function replaceLoadedCashbookWindow(rawTransactions, startIso, endExclusiveIso) {
   const startTime = new Date(startIso).getTime();
   const endTime = new Date(endExclusiveIso).getTime();
-  const cached = JSON.parse(localStorage.getItem('billing_system_cashbook_transactions') || '[]');
+  const cached = readLocalJsonCache('billing_system_cashbook_transactions', []);
   const retained = cached.filter(transaction => {
     const transactionTime = new Date(transaction.date || transaction.transaction_date || 0).getTime();
     return !Number.isFinite(transactionTime)
@@ -932,7 +988,7 @@ function replaceLoadedCashbookWindow(rawTransactions, startIso, endExclusiveIso)
     .filter((transaction, index, rows) => rows.findIndex(item => String(item.id) === String(transaction.id)) === index)
     .sort((left, right) => new Date(right.date || 0) - new Date(left.date || 0));
   const deduped = purgeGhostCustomerReceipts(merged);
-  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(deduped));
+  writeLocalJsonCache('billing_system_cashbook_transactions', deduped);
   return mapped;
 }
 
@@ -960,7 +1016,7 @@ async function loadFullCashbookFallback() {
     .order('date', { ascending: false });
   if (error) throw error;
   const transactions = purgeGhostCustomerReceipts((data || []).map(mapCashbookTransaction));
-  localStorage.setItem('billing_system_cashbook_transactions', JSON.stringify(transactions));
+  writeLocalJsonCache('billing_system_cashbook_transactions', transactions);
   state.cashbookOpeningNetByMethod = null;
   state.cashbookOpeningStartIso = '';
   return transactions;
@@ -1329,6 +1385,28 @@ export async function fetchCloudData(options = {}) {
   const onlyDomains = Array.isArray(options.onlyDomains)
     ? new Set(options.onlyDomains.filter(Boolean))
     : null;
+  const failedDomains = new Set();
+  const markDomainFailed = (domain, error) => {
+    failedDomains.add(domain);
+    state.cloudLoadStatus[domain] = {
+      status: 'error',
+      message: String(error?.message || error || 'Không thể tải dữ liệu.'),
+      updatedAt: new Date().toISOString()
+    };
+  };
+  const loadDomain = async (domain, loader) => {
+    state.cloudLoadStatus[domain] = { status: 'loading', updatedAt: new Date().toISOString() };
+    failedDomains.delete(domain);
+    try {
+      await loader();
+    } catch (error) {
+      markDomainFailed(domain, error);
+    }
+    if (!failedDomains.has(domain)) {
+      state.cloudLoadStatus[domain] = { status: 'ready', updatedAt: new Date().toISOString() };
+    }
+    return !failedDomains.has(domain);
+  };
   try {
     // Luồng tải dữ liệu lõi (nếu lỗi sẽ dừng và báo lỗi toàn cục)
     const fetchProducts = async () => {
@@ -1339,12 +1417,13 @@ export async function fetchCloudData(options = {}) {
           .order('code', { ascending: true })
           .range(offset, end));
         
-        const localProducts = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
+        const localProducts = readLocalJsonCache('billing_system_products', []);
         state.products = (prodData || []).map(row => normalizeProductRow(row, localProducts));
-        localStorage.setItem('billing_system_products', JSON.stringify(state.products));
+        writeLocalJsonCache('billing_system_products', state.products);
       } catch (prodErr) {
         console.warn("Could not load products from Supabase, fallback to local:", prodErr.message);
-        state.products = JSON.parse(localStorage.getItem('billing_system_products') || '[]');
+        markDomainFailed('products', prodErr);
+        if (!state.products?.length) state.products = readLocalJsonCache('billing_system_products', []);
       }
     };
 
@@ -1356,12 +1435,15 @@ export async function fetchCloudData(options = {}) {
           .order('code', { ascending: true })
           .range(offset, end));
         state.payrollProductGroups = (data || []).map(normalizePayrollProductGroupRow);
-        localStorage.setItem('billing_system_payroll_product_groups', JSON.stringify(state.payrollProductGroups));
+        writeLocalJsonCache('billing_system_payroll_product_groups', state.payrollProductGroups);
       } catch (error) {
         const missing = isMissingSchemaCacheRelationError(error, `public.${tablePayrollProductGroupsName}`) ||
           isMissingSchemaCacheRelationError(error, tablePayrollProductGroupsName);
         if (!missing) console.warn('Could not load payroll product groups from Supabase:', error.message);
-        state.payrollProductGroups = JSON.parse(localStorage.getItem('billing_system_payroll_product_groups') || '[]');
+        if (!missing) markDomainFailed('payrollProductGroups', error);
+        if (!state.payrollProductGroups?.length) {
+          state.payrollProductGroups = readLocalJsonCache('billing_system_payroll_product_groups', []);
+        }
       }
     };
 
@@ -1395,7 +1477,8 @@ export async function fetchCloudData(options = {}) {
         cacheOrdersLocally(state.savedOrders);
       } catch (ordErr) {
         console.warn("Could not load orders from Supabase, fallback to local:", ordErr.message);
-        state.savedOrders = JSON.parse(localStorage.getItem('billing_system_orders') || '[]');
+        markDomainFailed('orders', ordErr);
+        if (!state.savedOrders?.length) state.savedOrders = readLocalJsonCache('billing_system_orders', []);
       }
     };
 
@@ -1405,17 +1488,21 @@ export async function fetchCloudData(options = {}) {
         // The paginated RPC intentionally caps one call at 500 rows. The
         // customer screen filters client-side, so load every RLS-visible page.
         const customerData = await fetchFullTableData(tableCustomersName, CUSTOMER_LIST_COLUMNS);
+        const cacheScope = getCustomerCacheScope();
+        const previousCustomers = state.customerSnapshotScope === cacheScope && Array.isArray(state.customers)
+          ? state.customers
+          : readScopedCustomerCache(cacheScope);
         // A successful empty Cloud response is authoritative (for example
         // after the guarded business-data reset). Local data is used only in
         // the catch branch when the Cloud request actually fails.
-        state.customers = (customerData || []).map(cust => ({
+        const loadedCustomers = (customerData || []).map(cust => ({
             id: cust.id,
             code: cust.code,
             name: cust.name,
             phone: cust.phone,
             address: cust.address,
             assignedBrand: cust.assigned_brand || 'Tất cả',
-            brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
+            brandDiscounts: parseJsonValue(cust.brand_discounts, {}),
             shippingSupport: cust.shipping_support || false,
             debt: parseFloat(cust.debt || 0),
             totalTransaction: parseFloat(cust.total_transaction || 0),
@@ -1437,18 +1524,25 @@ export async function fetchCloudData(options = {}) {
             defaultPriceListId: cust.default_price_list_id || cust.pricelist_id || '',
             customerGroupId: cust.customer_group_id || '',
             managedBy: cust.managed_by || '',
-            debtHistory: (state.customers || []).find(item => String(item.id) === String(cust.id))?.debtHistory || []
+            debtHistory: previousCustomers.find(item => String(item.id) === String(cust.id))?.debtHistory || []
           }));
-        if (hydrateCustomerHistory && state.customers.length > 0) {
-          await hydrateCustomerDebtHistory(state.customers);
+        if (hydrateCustomerHistory && loadedCustomers.length > 0) {
+          await hydrateCustomerDebtHistory(loadedCustomers);
         }
-        if (state.activeCustomerId && !state.customers.some(customer => customer.id === state.activeCustomerId)) {
+        state.customers = loadedCustomers;
+        state.customerSnapshotScope = cacheScope;
+        if (state.activeCustomerId && !state.customers.some(customer => String(customer.id) === String(state.activeCustomerId))) {
           state.activeCustomerId = null;
         }
-        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+        writeCustomerCache(state.customers);
       } catch (custErr) {
-        console.warn("Could not load customers from Supabase, using local fallback:", custErr.message);
-        state.customers = JSON.parse(localStorage.getItem('billing_system_customers') || '[]');
+        console.warn("Could not load customers from Supabase; keeping the last available data:", custErr.message);
+        markDomainFailed('customers', custErr);
+        const cacheScope = getCustomerCacheScope();
+        if (state.customerSnapshotScope !== cacheScope) {
+          state.customers = readScopedCustomerCache(cacheScope);
+          state.customerSnapshotScope = cacheScope;
+        }
       }
     };
 
@@ -1516,6 +1610,7 @@ export async function fetchCloudData(options = {}) {
         if (includeItems) state.pricingSnapshotCachedAt = new Date().toISOString();
         scheduleAuthorizedPricingCachePersist();
       } catch (plErr) {
+        markDomainFailed('pricelists', plErr);
         // Keep the last in-memory snapshot for this authenticated session on
         // transient refresh failures. Bootstrap data or a snapshot belonging
         // to another account must still fail closed.
@@ -1586,7 +1681,7 @@ export async function fetchCloudData(options = {}) {
         state.users = uniqueUsers;
       } catch (uErr) {
         console.warn("Could not load authenticated profiles from Supabase:", uErr.message);
-        state.users = [];
+        markDomainFailed('users', uErr);
       }
     };
 
@@ -1599,7 +1694,7 @@ export async function fetchCloudData(options = {}) {
 
         if (brandErr) throw brandErr;
 
-        const localBrands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
+        const localBrands = readLocalJsonCache('billing_system_brands', []);
         let sourceData = (brandData && brandData.length > 0) ? brandData : localBrands;
 
         const uniqueBrands = [];
@@ -1630,10 +1725,11 @@ export async function fetchCloudData(options = {}) {
         });
 
         state.brands = uniqueBrands;
-        localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
+        writeLocalJsonCache('billing_system_brands', state.brands);
       } catch (brandErr) {
         console.warn("Could not load brands from Supabase:", brandErr.message);
-        state.brands = JSON.parse(localStorage.getItem('billing_system_brands') || '[]');
+        markDomainFailed('brands', brandErr);
+        if (!state.brands?.length) state.brands = readLocalJsonCache('billing_system_brands', []);
       }
     };
 
@@ -1644,6 +1740,7 @@ export async function fetchCloudData(options = {}) {
         if (!loaded) throw new Error('Cashbook window could not be loaded');
       } catch (txErr) {
         console.warn("Could not load cashbook transactions from Supabase:", txErr.message);
+        markDomainFailed('cashbook', txErr);
       }
     };
 
@@ -1662,9 +1759,10 @@ export async function fetchCloudData(options = {}) {
           bank: parseFloat(balData?.bank || 0),
           wallet: parseFloat(balData?.wallet || 0)
         };
-        localStorage.setItem('billing_system_cashbook_start_balances', JSON.stringify(cloudBal));
+        writeLocalJsonCache('billing_system_cashbook_start_balances', cloudBal);
       } catch (balErr) {
         console.warn("Could not load starting balances from Supabase:", balErr.message);
+        markDomainFailed('startingBalances', balErr);
       }
     };
     const fetchSuppliers = async () => {
@@ -1694,7 +1792,7 @@ export async function fetchCloudData(options = {}) {
         console.log("[SUPPLIERS] STATE:", state.suppliers?.length || 0);
       } catch (err) {
         console.warn("Could not load suppliers from Supabase:", err.message);
-        state.suppliers = [];
+        markDomainFailed('suppliers', err);
       }
     };
     const fetchPurchases = async () => {
@@ -1768,7 +1866,7 @@ export async function fetchCloudData(options = {}) {
         });
       } catch (err) {
         console.warn('Could not load authoritative purchases from Supabase:', err.message || err);
-        state.purchases = [];
+        markDomainFailed('purchases', err);
       }
     };
     const fetchRawMaterials = async () => {
@@ -1784,14 +1882,15 @@ export async function fetchCloudData(options = {}) {
             quantity: parseFloat(r.quantity || 0),
             notes: r.notes || ''
           }));
-          localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
+          writeLocalJsonCache('billing_system_raw_materials', state.rawMaterials);
         } else {
           state.rawMaterials = [...rawMaterialsSeed];
-          localStorage.setItem('billing_system_raw_materials', JSON.stringify(state.rawMaterials));
+          writeLocalJsonCache('billing_system_raw_materials', state.rawMaterials);
         }
       } catch (err) {
         console.warn("Could not load raw materials from Supabase, using local:", err.message);
-        state.rawMaterials = JSON.parse(localStorage.getItem('billing_system_raw_materials') || '[]');
+        markDomainFailed('rawMaterials', err);
+        if (!state.rawMaterials?.length) state.rawMaterials = readLocalJsonCache('billing_system_raw_materials', []);
       }
     };
     const fetchSemiFinished = async () => {
@@ -1806,11 +1905,12 @@ export async function fetchCloudData(options = {}) {
             quantity: parseFloat(s.quantity || 0),
             notes: s.notes || ''
           }));
-          localStorage.setItem('billing_system_semi_finished', JSON.stringify(state.semiFinished));
+          writeLocalJsonCache('billing_system_semi_finished', state.semiFinished);
         }
       } catch (err) {
         console.warn("Could not load semi finished from Supabase, using local:", err.message);
-        state.semiFinished = JSON.parse(localStorage.getItem('billing_system_semi_finished') || '[]');
+        markDomainFailed('semiFinished', err);
+        if (!state.semiFinished?.length) state.semiFinished = readLocalJsonCache('billing_system_semi_finished', []);
       }
     };
     const fetchRecipes = async () => {
@@ -1825,11 +1925,12 @@ export async function fetchCloudData(options = {}) {
             ingredients: typeof r.ingredients === 'string' ? JSON.parse(r.ingredients) : (r.ingredients || []),
             notes: r.notes || ''
           }));
-          localStorage.setItem('billing_system_recipes', JSON.stringify(state.recipes));
+          writeLocalJsonCache('billing_system_recipes', state.recipes);
         }
       } catch (err) {
         console.warn("Could not load recipes from Supabase, using local:", err.message);
-        state.recipes = JSON.parse(localStorage.getItem('billing_system_recipes') || '[]');
+        markDomainFailed('recipes', err);
+        if (!state.recipes?.length) state.recipes = readLocalJsonCache('billing_system_recipes', []);
       }
     };
     const fetchProductionLogs = async () => {
@@ -1846,11 +1947,12 @@ export async function fetchCloudData(options = {}) {
             createdBy: l.created_by || 'admin',
             date: l.created_at
           }));
-          localStorage.setItem('billing_system_production_logs', JSON.stringify(state.productionLogs));
+          writeLocalJsonCache('billing_system_production_logs', state.productionLogs);
         }
       } catch (err) {
         console.warn("Could not load production logs from Supabase, using local:", err.message);
-        state.productionLogs = JSON.parse(localStorage.getItem('billing_system_production_logs') || '[]');
+        markDomainFailed('productionLogs', err);
+        if (!state.productionLogs?.length) state.productionLogs = readLocalJsonCache('billing_system_production_logs', []);
       }
     };
     const fetchFinishedGoodsStock = async () => {
@@ -1863,11 +1965,14 @@ export async function fetchCloudData(options = {}) {
             packageType: s.package_type,
             quantity: parseFloat(s.quantity || 0)
           }));
-          localStorage.setItem('billing_system_finished_goods_stock', JSON.stringify(state.finishedGoodsStock));
+          writeLocalJsonCache('billing_system_finished_goods_stock', state.finishedGoodsStock);
         }
       } catch (err) {
         console.warn("Could not load finished goods stock from Supabase, using local:", err.message);
-        state.finishedGoodsStock = JSON.parse(localStorage.getItem('billing_system_finished_goods_stock') || '[]');
+        markDomainFailed('finishedGoodsStock', err);
+        if (!state.finishedGoodsStock?.length) {
+          state.finishedGoodsStock = readLocalJsonCache('billing_system_finished_goods_stock', []);
+        }
       }
     };
 
@@ -1926,7 +2031,8 @@ export async function fetchCloudData(options = {}) {
         }
       } catch (err) {
         console.warn("Could not load sales returns from Supabase, using local:", err.message);
-        state.salesReturns = getSalesReturns();
+        markDomainFailed('salesReturns', err);
+        if (!state.salesReturns?.length) state.salesReturns = getSalesReturns();
       }
     };
 
@@ -1958,46 +2064,58 @@ export async function fetchCloudData(options = {}) {
 
     // Realtime catch-up refreshes only the affected domain. This path remains
     // read-only and avoids downloading unrelated business tables.
+    const loaders = {
+      products: fetchProducts,
+      payrollProductGroups: fetchPayrollProductGroups,
+      orders: fetchOrders,
+      customers: fetchCustomers,
+      pricelists: fetchPricelists,
+      users: fetchUsers,
+      brands: fetchBrands,
+      cashbook: fetchCashbook,
+      startingBalances: fetchStartingBalances,
+      suppliers: fetchSuppliers,
+      purchases: fetchPurchases,
+      rawMaterials: fetchRawMaterials,
+      semiFinished: fetchSemiFinished,
+      recipes: fetchRecipes,
+      productionLogs: fetchProductionLogs,
+      finishedGoodsStock: fetchFinishedGoodsStock,
+      salesReturns: fetchSalesReturns
+    };
+    const runDomain = (domain, loader = loaders[domain]) =>
+      loader ? loadDomain(domain, loader) : Promise.resolve(false);
+
     if (onlyDomains) {
-      const loaders = {
-        products: fetchProducts,
-        payrollProductGroups: fetchPayrollProductGroups,
-        orders: fetchOrders,
-        customers: fetchCustomers,
-        pricelists: fetchPricelists,
-        brands: fetchBrands,
-        cashbook: fetchCashbook,
-        startingBalances: fetchStartingBalances,
-        suppliers: fetchSuppliers,
-        purchases: fetchPurchases,
-        salesReturns: fetchSalesReturns
-      };
       await Promise.all([...onlyDomains]
-        .map(domain => loaders[domain])
-        .filter(Boolean)
-        .map(loader => loader()));
+        .map(domain => runDomain(domain)));
       if (onlyDomains.has('purchases') || onlyDomains.has('salesReturns')) enrichSecondaryState();
-      return { background: null, domains: [...onlyDomains] };
+      return { background: null, domains: [...onlyDomains], failedDomains: [...failedDomains] };
     }
 
     // Start every request together, but login may stop waiting once the data
     // needed for the first useful screen is ready. Secondary panels continue
     // loading in the background and are rendered again when complete.
     const coreLoad = Promise.all([
-      fetchProducts(),
-      fetchPayrollProductGroups(),
-      fetchCustomers(),
-      fetchPricelists({ includeItems: !leanBootstrap }),
-      fetchUsers(),
-      fetchBrands(),
-      ...(leanBootstrap ? [] : [fetchOrders()])
+      runDomain('products'),
+      runDomain('payrollProductGroups'),
+      runDomain('customers'),
+      runDomain('pricelists', () => fetchPricelists({ includeItems: !leanBootstrap })),
+      runDomain('users'),
+      runDomain('brands'),
+      ...(leanBootstrap ? [] : [runDomain('orders')])
     ]);
     const secondaryLoad = Promise.all(leanBootstrap ? [] : [
-      fetchCashbook(),
-      fetchStartingBalances(),
-      fetchSuppliers(),
-      fetchPurchases(),
-      fetchSalesReturns()
+      runDomain('cashbook'),
+      runDomain('startingBalances'),
+      runDomain('suppliers'),
+      runDomain('purchases', fetchPurchases),
+      runDomain('rawMaterials'),
+      runDomain('semiFinished'),
+      runDomain('recipes'),
+      runDomain('productionLogs'),
+      runDomain('finishedGoodsStock'),
+      runDomain('salesReturns')
     ]);
 
     await coreLoad;
@@ -2007,7 +2125,7 @@ export async function fetchCloudData(options = {}) {
       // Returns load in parallel with customers/orders; enrich display-only names
       // after every authoritative collection has completed.
       enrichSecondaryState();
-      return true;
+      return { failedDomains: [...failedDomains] };
     };
 
     if (deferSecondary) {
@@ -2018,12 +2136,13 @@ export async function fetchCloudData(options = {}) {
       return { background };
     }
 
-    await finishSecondaryLoad();
-    return { background: null };
+    const secondaryResult = await finishSecondaryLoad();
+    return { background: null, failedDomains: secondaryResult.failedDomains };
 
   } catch(err) {
     console.error('Error fetching cloud data:', err);
     showToast('Lỗi đồng bộ dữ liệu đám mây!', 'danger');
+    return { failedDomains: [...failedDomains], error: err };
   }
 }
 
@@ -2036,7 +2155,12 @@ export async function syncLocalToCloud() {
   }
   try {
     updateDbStatusUI('connecting', 'Đang tải dữ liệu mới nhất từ Cloud...');
-    await fetchCloudData({ leanBootstrap: true, hydrateCustomerHistory: false });
+    const result = await fetchCloudData({ leanBootstrap: true, hydrateCustomerHistory: false });
+    if (result?.failedDomains?.length) {
+      updateDbStatusUI('cloud');
+      showToast(`Chưa tải được: ${result.failedDomains.join(', ')}. Hãy thử tải lại các mục đang báo lỗi.`, 'warning');
+      return false;
+    }
     updateDbStatusUI('cloud');
     showToast('Đã tải lại dữ liệu mới nhất từ Cloud. Cache trình duyệt không được ghi ngược lên database.', 'success');
     return true;
@@ -2892,7 +3016,7 @@ export async function dbFetchCustomers({ includeHistory = false } = {}) {
         status: cust.status || 'active',
         createdBy: cust.created_by || '',
         assignedBrand: cust.assigned_brand || 'Tất cả',
-        brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
+        brandDiscounts: parseJsonValue(cust.brand_discounts, {}),
         shippingSupport: cust.shipping_support || false,
         debt: parseFloat(cust.debt || 0),
         totalTransaction: parseFloat(cust.total_transaction || 0),
@@ -2917,7 +3041,8 @@ export async function dbFetchCustomers({ includeHistory = false } = {}) {
         deletedAt: cust.deleted_at || null
       }));
       if (includeHistory) await hydrateCustomerDebtHistory(state.customers);
-      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      state.customerSnapshotScope = getCustomerCacheScope();
+      writeCustomerCache(state.customers);
       return true;
     } catch (err) {
       console.error("Error fetching customers:", err);
@@ -2963,7 +3088,7 @@ export async function dbFetchCustomerById(customerId) {
       status: cust.status || 'active',
       createdBy: cust.created_by || '',
       assignedBrand: cust.assigned_brand || 'Tất cả',
-      brandDiscounts: typeof cust.brand_discounts === 'string' ? JSON.parse(cust.brand_discounts) : (cust.brand_discounts || {}),
+      brandDiscounts: parseJsonValue(cust.brand_discounts, {}),
       shippingSupport: cust.shipping_support || false,
       debt: Number(cust.debt || 0),
       totalTransaction: Number(cust.total_transaction || 0),
@@ -2990,7 +3115,7 @@ export async function dbFetchCustomerById(customerId) {
 
     if (existingIndex >= 0) state.customers[existingIndex] = customer;
     else state.customers.push(customer);
-    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    writeCustomerCache(state.customers);
     return customer;
   } catch (error) {
     console.error('Error refreshing customer profile:', error);
@@ -3011,7 +3136,7 @@ export function applyCustomerRealtimePayload(payload = {}) {
   if (payload.eventType === 'DELETE') {
     state.customers = (state.customers || [])
       .filter(customer => String(customer.id) !== customerId);
-    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    writeCustomerCache(state.customers);
     return true;
   }
   if (!payload.new) return false;
@@ -3057,7 +3182,7 @@ export function applyCustomerRealtimePayload(payload = {}) {
 
   if (existingIndex >= 0) state.customers[existingIndex] = customer;
   else state.customers.push(customer);
-  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  writeCustomerCache(state.customers);
   return customer;
 }
 
@@ -3244,7 +3369,7 @@ export async function dbRefreshCustomerFinancialState(customerId, { includeHisto
         ledgerRows.map(mapCustomerDebtTransaction)
       );
     }
-    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+    writeCustomerCache(state.customers);
     return customer;
   } catch (error) {
     console.error('Error refreshing customer financial state:', error);
@@ -4325,15 +4450,12 @@ export async function dbDeleteAllSemiFinished() {
 }
 
 export function getSalesReturns() {
-  const stored = localStorage.getItem('billing_system_sales_returns');
-  if (stored) {
-    try { return JSON.parse(stored); } catch(e) { return []; }
-  }
-  return [];
+  const stored = readLocalJsonCache('billing_system_sales_returns', []);
+  return Array.isArray(stored) ? stored : [];
 }
 
 export function saveSalesReturns(returns) {
-  localStorage.setItem('billing_system_sales_returns', JSON.stringify(returns));
+  writeLocalJsonCache('billing_system_sales_returns', returns);
 }
 
 export async function dbSaveSalesReturn(ret) {
@@ -4413,7 +4535,7 @@ export function backfillMultiCompanyAndRevenueData() {
       }
     });
     if (custChanged) {
-      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      writeCustomerCache(state.customers);
     }
   }
 

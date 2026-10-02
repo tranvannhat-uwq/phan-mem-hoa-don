@@ -18,7 +18,7 @@ const html = read('index.html');
 test('login uses a lean bootstrap and defers historical domains until their panels open', () => {
   assert.match(users, /leanBootstrap:\s*true/);
   assert.match(main, /leanBootstrap:\s*true/);
-  assert.match(service, /\.\.\.\(leanBootstrap \? \[\] : \[fetchOrders\(\)\]\)/);
+  assert.match(service, /\.\.\.\(leanBootstrap \? \[\] : \[runDomain\('orders'\)\]\)/);
   assert.match(service, /Promise\.all\(leanBootstrap \? \[\] : \[/);
   assert.match(service, /fetchPricelists\(\{ includeItems: !leanBootstrap \}\)/);
   assert.match(service, /if \(!includeItems\) \{\s*itemData = \[\]/);
@@ -91,7 +91,7 @@ test('range refresh preserves unrelated cached orders and refreshes returns sepa
   assert.match(main, /domainOverride\.filter\(domain => panelDomains\.includes\(domain\)\)/);
 });
 
-test('realtime applies row deltas and tab visibility does not trigger refetching', () => {
+test('realtime applies row deltas and refreshes the active panel after returning to the app', () => {
   for (const updater of [
     'applyCashbookRealtimePayload', 'applyCustomerDebtRealtimePayload', 'applyStartingBalanceRealtimePayload',
     'applyProductRealtimePayload', 'applyPricingRealtimePayload', 'applyBrandRealtimePayload',
@@ -104,6 +104,8 @@ test('realtime applies row deltas and tab visibility does not trigger refetching
   assert.match(service, /export function applyOrderRealtimePayload/);
   assert.match(service, /export function applyCustomerRealtimePayload/);
   assert.doesNotMatch(realtime, /refreshDomains\.add/);
-  assert.doesNotMatch(realtime, /addEventListener\('visibilitychange'/);
+  assert.match(realtime, /document\.addEventListener\('visibilitychange'/);
+  assert.match(realtime, /pageShowHandler = \(\) => queueVisiblePanelCatchup\(\)/);
+  assert.match(realtime, /function refreshVisiblePanelFromCloud\(\)/);
   assert.match(realtime, /window\.addEventListener\('online'/);
 });

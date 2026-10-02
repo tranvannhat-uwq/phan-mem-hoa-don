@@ -12,9 +12,11 @@ export const state = {
   companies: [...DEFAULT_COMPANIES],
   invoiceItems: [], // [{ product, brand, package, colorCode, colorPercent, quantity, discountPercent, price }]
   savedOrders: [],
+  cloudLoadStatus: {},
   cashbookOpeningNetByMethod: null,
   cashbookOpeningStartIso: '',
   customers: [],
+  customerSnapshotScope: '',
   pricelists: [],
   // Bản đầy đủ dùng để áp dụng bảng giá đã gán cho khách; pricelists vẫn là
   // danh sách đã lọc để hiển thị theo quyền người dùng.

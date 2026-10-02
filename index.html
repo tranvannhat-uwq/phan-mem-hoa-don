@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20260924-activity-log-v1">
+  <link rel="stylesheet" href="style.css?v=20261002-mobile-data-recovery-v1">
 </head>
 <body>
 
@@ -308,6 +308,10 @@
           <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
             <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Hôm nay: <span id="current-date-lbl">23/06/2026</span></p>
             <span class="db-status-badge status-local" id="db-status-badge">Cục bộ (LocalStorage)</span>
+          </div>
+          <div class="cloud-load-warning" id="cloud-load-warning" role="status" aria-live="polite" hidden>
+            <span id="cloud-load-warning-text"></span>
+            <button class="btn btn-secondary btn-sm" id="btn-retry-cloud-load" type="button">Thử tải lại</button>
           </div>
         </div>
       </header>
@@ -1659,6 +1663,8 @@
               </select>
             </label>
           </div>
+
+          <p class="mobile-table-scroll-hint" aria-hidden="true">Vuốt ngang bảng để xem các cột còn lại →</p>
 
           <div class="customer-filter-drawer-backdrop" id="customer-filter-drawer-backdrop" aria-hidden="true"></div>
           <aside class="customer-advanced-filter-panel" id="customer-advanced-filter-panel" aria-hidden="true" aria-label="Bộ lọc khách hàng">
@@ -4540,6 +4546,6 @@
 
   <!-- App logic -->
   <script type="module" src="js/customer-care-landing.js?v=20260829-sheet-workspace-v4"></script>
-  <script type="module" src="js/main.js?v=20260924-activity-log-v1"></script>
+  <script type="module" src="js/main.js?v=20261002-mobile-data-recovery-v1"></script>
 </body>
 </html>
