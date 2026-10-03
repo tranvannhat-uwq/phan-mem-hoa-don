@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261002-mobile-data-recovery-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261002-mobile-data-recovery-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261003-pricing-cold-start-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261003-pricing-cold-start-v1';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261002-mobile-data-recovery-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261002-mobile-data-recovery-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261002-mobile-data-recovery-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261003-pricing-cold-start-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261003-pricing-cold-start-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261003-pricing-cold-start-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -613,13 +613,15 @@ async function hydrateAuthorizedPricingCache(pricingActorId) {
   state.pricingSnapshotActorId = pricingActorId;
   state.pricingSnapshotRole = pricingRole;
   state.pricingSnapshotSource = 'browser';
+  state.pricingSnapshotComplete = true;
   state.pricingSnapshotCachedAt = snapshot.cachedAt;
   return true;
 }
 
 export async function persistAuthorizedPricingCache() {
   const pricingActorId = currentPricingActorId();
-  if (!pricingActorId || state.pricingSnapshotActorId !== pricingActorId ||
+  if (!pricingActorId || !state.pricingSnapshotComplete ||
+      state.pricingSnapshotActorId !== pricingActorId ||
       state.pricingSnapshotRole !== String(state.currentUser?.role || '')) return false;
   return saveAuthorizedPricingCache(
     state.currentUser,
@@ -1403,7 +1405,10 @@ export async function fetchCloudData(options = {}) {
       markDomainFailed(domain, error);
     }
     if (!failedDomains.has(domain)) {
-      state.cloudLoadStatus[domain] = { status: 'ready', updatedAt: new Date().toISOString() };
+      state.cloudLoadStatus[domain] = {
+        status: domain === 'pricelists' && leanBootstrap ? 'partial' : 'ready',
+        updatedAt: new Date().toISOString()
+      };
     }
     return !failedDomains.has(domain);
   };
@@ -1607,6 +1612,7 @@ export async function fetchCloudData(options = {}) {
         state.pricingSnapshotActorId = pricingActorId;
         state.pricingSnapshotRole = String(state.currentUser?.role || '');
         state.pricingSnapshotSource = includeItems ? 'cloud' : (state.pricingSnapshotSource || 'cloud-metadata');
+        if (includeItems) state.pricingSnapshotComplete = true;
         if (includeItems) state.pricingSnapshotCachedAt = new Date().toISOString();
         scheduleAuthorizedPricingCachePersist();
       } catch (plErr) {
@@ -1626,6 +1632,7 @@ export async function fetchCloudData(options = {}) {
           state.pricingSnapshotActorId = '';
           state.pricingSnapshotRole = '';
           state.pricingSnapshotSource = '';
+          state.pricingSnapshotComplete = false;
           state.pricingSnapshotCachedAt = '';
         }
         console.warn(

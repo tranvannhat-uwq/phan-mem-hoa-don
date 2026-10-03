@@ -5,8 +5,8 @@ import {
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20261002-mobile-data-recovery-v1';
-import { renderAll } from '../main.js?v=20261002-mobile-data-recovery-v1';
+} from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
+import { renderAll } from '../main.js?v=20261003-pricing-cold-start-v1';
 import {
   buildProductFamilies,
   getProductBaseCode,

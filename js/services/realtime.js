@@ -29,7 +29,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20261002-mobile-data-recovery-v1';
+} from './supabase.js?v=20261003-pricing-cold-start-v1';
 
 const REALTIME_DEBOUNCE_MS = 250;
 let realtimeChannel = null;

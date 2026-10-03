@@ -1,22 +1,22 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20261002-mobile-data-recovery-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261002-mobile-data-recovery-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261002-mobile-data-recovery-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261002-mobile-data-recovery-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261002-mobile-data-recovery-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261002-mobile-data-recovery-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261002-mobile-data-recovery-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20261002-mobile-data-recovery-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261002-mobile-data-recovery-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261002-mobile-data-recovery-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261002-mobile-data-recovery-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261002-mobile-data-recovery-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261002-mobile-data-recovery-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261002-mobile-data-recovery-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20261003-pricing-cold-start-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261003-pricing-cold-start-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261003-pricing-cold-start-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261003-pricing-cold-start-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261003-pricing-cold-start-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261003-pricing-cold-start-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261003-pricing-cold-start-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20261003-pricing-cold-start-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261003-pricing-cold-start-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261003-pricing-cold-start-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261003-pricing-cold-start-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261003-pricing-cold-start-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261003-pricing-cold-start-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261003-pricing-cold-start-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20261002-mobile-data-recovery-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261002-mobile-data-recovery-v1';
+import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20261003-pricing-cold-start-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261003-pricing-cold-start-v1';
 
 const SALES_WORKSPACE_HASH = '#/ban-hang';
 
@@ -72,6 +72,7 @@ function panelHasPricingSnapshot(panelId) {
     actorId &&
     state.pricingSnapshotActorId === actorId &&
     state.pricingSnapshotRole === String(state.currentUser?.role || '') &&
+    state.pricingSnapshotComplete &&
     state.pricingSnapshotSource
   );
 }
@@ -124,7 +125,12 @@ export async function ensurePanelCloudData(panelId, { force = false, domains: do
     return result;
   }).finally(() => pendingPanelDomainLoads.delete(loadKey));
   pendingPanelDomainLoads.set(loadKey, load);
-  if (state.currentTab === panelId) renderAll();
+  if (state.currentTab === panelId) {
+    renderAll();
+    if (domains.includes('pricelists') && !panelHasPricingSnapshot(panelId)) {
+      renderPanelCloudLoading(panelId);
+    }
+  }
   return load;
 }
 

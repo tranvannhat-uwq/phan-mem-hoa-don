@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20261002-mobile-data-recovery-v1';
-import { renderAll, switchTab } from '../main.js?v=20261002-mobile-data-recovery-v1';
-import { populatePricelistsDropdowns } from './pricelists.js?v=20261002-mobile-data-recovery-v1';
-import { generateUniqueCustomerCode } from './customers.js?v=20261002-mobile-data-recovery-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261002-mobile-data-recovery-v1';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20261002-mobile-data-recovery-v1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
+import { renderAll, switchTab } from '../main.js?v=20261003-pricing-cold-start-v1';
+import { populatePricelistsDropdowns } from './pricelists.js?v=20261003-pricing-cold-start-v1';
+import { generateUniqueCustomerCode } from './customers.js?v=20261003-pricing-cold-start-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261003-pricing-cold-start-v1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20261003-pricing-cold-start-v1';
 import { normalizeCustomerPhone } from '../domain/customer-query.js';
-import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20261002-mobile-data-recovery-v1';
+import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20261003-pricing-cold-start-v1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
-import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20261002-mobile-data-recovery-v1';
+import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20261003-pricing-cold-start-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
-import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, resolveOrderBusinessDateTimeForSave } from '../domain/order-business-date.js?v=20261002-mobile-data-recovery-v1';
+import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, resolveOrderBusinessDateTimeForSave } from '../domain/order-business-date.js?v=20261003-pricing-cold-start-v1';
 import { reorderOrderItems } from '../domain/order-edit.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261002-mobile-data-recovery-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261003-pricing-cold-start-v1';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;
@@ -171,6 +171,23 @@ function resolveProductPrice(product) {
   });
 }
 
+function invoicePricingIsUnavailable() {
+  if (!isCloudActive) return false;
+  const actorId = String(state.currentUser?.authUserId || state.currentUser?.id || '');
+  return !actorId || state.pricingSnapshotActorId !== actorId
+    || state.pricingSnapshotRole !== String(state.currentUser?.role || '')
+    || !state.pricingSnapshotComplete;
+}
+
+function warnIfInvoicePricingUnavailable() {
+  if (!invoicePricingIsUnavailable()) return false;
+  const failed = state.cloudLoadStatus?.pricelists?.status === 'error';
+  showToast(failed
+    ? 'Không tải được bảng giá. Hãy bấm “Thử tải lại” rồi chọn sản phẩm.'
+    : 'Đang tải bảng giá. Vui lòng chờ rồi chọn sản phẩm.', failed ? 'danger' : 'warning');
+  return true;
+}
+
 function isExplicitInvoicePriceListOverride() {
   const select = document.getElementById('invoice-pricelist-select');
   return Boolean(
@@ -299,6 +316,7 @@ function closeVariantPicker() {
 }
 
 function addVariantToInvoice(variant) {
+  if (warnIfInvoicePricingUnavailable()) return false;
   if (!variant?.id || !variant.packageType || variant.isLegacy || variant.isActive === false) {
     showToast('Quy cách này đã ngừng áp dụng hoặc không hợp lệ.', 'warning');
     return false;
@@ -347,6 +365,7 @@ function addVariantToInvoice(variant) {
 
 function openVariantPicker(family, preferredVariantId = '') {
   if (!family) return;
+  if (warnIfInvoicePricingUnavailable()) return;
   if (shouldAutoSelectVariant(family)) {
     addVariantToInvoice(family.variants.find(variant => variant.isActive !== false));
     return;

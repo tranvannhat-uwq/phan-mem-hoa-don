@@ -1,7 +1,8 @@
 const DATABASE_NAME = 'weblendon_authorized_pricing_cache';
 const DATABASE_VERSION = 1;
 const SNAPSHOT_STORE = 'snapshots';
-const SNAPSHOT_VERSION = 1;
+// Version 1 could contain a metadata-only bootstrap with no price rows.
+const SNAPSHOT_VERSION = 2;
 
 function normalizeActor(user) {
   const actorId = String(user?.authUserId || user?.auth_user_id || user?.id || '').trim();

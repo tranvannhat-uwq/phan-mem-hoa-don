@@ -26,6 +26,7 @@ export const state = {
   pricingSnapshotActorId: '',
   pricingSnapshotRole: '',
   pricingSnapshotSource: '',
+  pricingSnapshotComplete: false,
   pricingSnapshotCachedAt: '',
   selectedPriceListIds: [],
   users: [],
