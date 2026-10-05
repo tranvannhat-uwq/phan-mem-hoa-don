@@ -35,9 +35,10 @@ test('unused manager and province cards are removed and revenue insights use cha
   assert.match(css, /\.dashboard-insights-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(12/);
 });
 
-test('salesperson and customer rankings stay compact and preserve the FESTIVAL detail table', () => {
+test('salesperson and customer rankings stay compact without the FESTIVAL detail card', () => {
   assert.match(html, /dashboard-insight-salesperson[\s\S]*?salesperson-revenue-chart/);
   assert.match(html, /dashboard-insight-customer[\s\S]*?customer-revenue-chart/);
   assert.match(css, /\.dashboard-breakdown-chart-tall\s*\{\s*height:\s*310px/);
-  assert.match(html, /festival-allocation-breakdown-body/);
+  assert.doesNotMatch(html, /festival-allocation-breakdown-body|dashboard-insight-festival/);
+  assert.match(html, /id="dashboard-include-festival-allocation"/);
 });

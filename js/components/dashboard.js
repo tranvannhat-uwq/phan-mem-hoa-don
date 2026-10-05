@@ -207,8 +207,7 @@ function getOrderRevenueRows(order, sign = 1) {
       rCompany,
       spKey,
       custKey,
-      customerName,
-      isFestival: isFestivalBrand(pBrand)
+      customerName
     };
   }).filter(row => row.amount || row.quantity);
 }
@@ -775,7 +774,7 @@ function renderServerDashboard(payload) {
   setText('stat-total-sold-products', summary.sold_quantity || 0);
   renderDashboardBreakdownChart({ key: 'company', canvasId: 'company-revenue-chart', emptyId: 'company-revenue-chart-empty', metaId: 'company-revenue-chart-meta', rows: payload.by_company, labelResolver: companyId => getCompanyNameById(companyId, state.companies), type: 'doughnut', limit: 6, metaLabel: 'công ty' });
   renderDashboardBreakdownChart({ key: 'brand', canvasId: 'brand-revenue-chart', emptyId: 'brand-revenue-chart-empty', metaId: 'brand-revenue-chart-meta', rows: payload.by_brand, labelResolver: brandId => (state.brands || []).find(brand => String(brand.id) === String(brandId))?.name || brandId, type: 'bar', orientation: 'vertical', limit: 8, metaLabel: 'nhãn sơn' });
-  renderDashboardBreakdownChart({ key: 'salesperson', canvasId: 'salesperson-revenue-chart', emptyId: 'salesperson-revenue-chart-empty', metaId: 'salesperson-revenue-chart-meta', rows: filterLoginEmployeeRevenueRows(payload.by_salesperson, state.users), labelResolver: userId => getUserDisplayName(userId, 'Chưa phân công', state.users), type: 'line', limit: 8, metaLabel: 'nhân viên' });
+  renderDashboardBreakdownChart({ key: 'salesperson', canvasId: 'salesperson-revenue-chart', emptyId: 'salesperson-revenue-chart-empty', metaId: 'salesperson-revenue-chart-meta', rows: filterLoginEmployeeRevenueRows(payload.by_salesperson, state.users), labelResolver: userId => getUserDisplayName(userId, 'Chưa phân công', state.users), type: 'bar', orientation: 'vertical', limit: 8, metaLabel: 'nhân viên' });
   renderDashboardBreakdownChart({ key: 'customer', canvasId: 'customer-revenue-chart', emptyId: 'customer-revenue-chart-empty', metaId: 'customer-revenue-chart-meta', rows: payload.by_customer, labelResolver: (_customerId, row) => row.name || row.key, type: 'bar', orientation: 'horizontal', limit: 8, metaLabel: 'khách hàng' });
 
   const topProducts = document.getElementById('top-products-list');
@@ -880,8 +879,6 @@ function updateDashboardStatsLegacy() {
   const salespersonRevenueMap = {};
   const customerRevenueMap = {};
   const customerNameMap = {};
-  const festivalAllocationMap = {};
-  let totalFestivalRevenue = 0;
 
   const revenueRows = buildDashboardRevenueRows(filteredOrders);
   let actualRevenue = 0;
@@ -893,10 +890,6 @@ function updateDashboardStatsLegacy() {
     salespersonRevenueMap[row.spKey] = (salespersonRevenueMap[row.spKey] || 0) + row.amount;
     customerRevenueMap[row.custKey] = (customerRevenueMap[row.custKey] || 0) + row.amount;
     customerNameMap[row.custKey] = row.customerName;
-    if (row.isFestival) {
-      totalFestivalRevenue += row.amount;
-      festivalAllocationMap[row.rBrand] = (festivalAllocationMap[row.rBrand] || 0) + row.amount;
-    }
   });
   const totalOrdersCount = filteredOrders.length;
   const totalDebt = userCustomers.reduce((sum, c) => sum + (c.debt || 0), 0);
@@ -925,29 +918,10 @@ function updateDashboardStatsLegacy() {
     type: 'bar', orientation: 'vertical', limit: 8, metaLabel: 'nhãn sơn'
   });
 
-  // Render bảng Phân bổ hàng FESTIVAL
-  const festivalBody = document.getElementById('festival-allocation-breakdown-body');
-  const festivalBadge = document.getElementById('festival-total-revenue-badge');
-  if (festivalBadge) festivalBadge.innerText = formatCurrency(totalFestivalRevenue);
-
-  if (festivalBody) {
-    const festEntries = Object.entries(festivalAllocationMap).sort((a, b) => b[1] - a[1]);
-    if (festEntries.length === 0) {
-      festivalBody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu FESTIVAL xuất bán</td></tr>`;
-    } else {
-      festivalBody.innerHTML = festEntries.map(([agencyB, amount]) => `
-        <tr>
-          <td style="font-weight: 500; color: #f59e0b;">Đại lý ${agencyB}</td>
-          <td style="text-align: right; font-weight: 600; color: #f59e0b;">${formatCurrency(amount)}</td>
-        </tr>
-      `).join('');
-    }
-  }
-
   renderDashboardBreakdownChart({
     key: 'salesperson', canvasId: 'salesperson-revenue-chart', emptyId: 'salesperson-revenue-chart-empty', metaId: 'salesperson-revenue-chart-meta',
     rows: filterLoginEmployeeRevenueRows(Object.entries(salespersonRevenueMap).map(([key, amount]) => ({ key, amount })), state.users),
-    labelResolver: userId => getUserDisplayName(userId, 'Chưa phân công', state.users), type: 'line', limit: 8, metaLabel: 'nhân viên'
+    labelResolver: userId => getUserDisplayName(userId, 'Chưa phân công', state.users), type: 'bar', orientation: 'vertical', limit: 8, metaLabel: 'nhân viên'
   });
   renderDashboardBreakdownChart({
     key: 'customer', canvasId: 'customer-revenue-chart', emptyId: 'customer-revenue-chart-empty', metaId: 'customer-revenue-chart-meta',

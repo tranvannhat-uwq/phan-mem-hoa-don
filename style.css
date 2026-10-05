@@ -3382,7 +3382,7 @@ select option {
   margin-top: 0.5rem;
 }
 
-/* Dashboard insight cards: ưu tiên trực quan, chỉ giữ bảng cho dữ liệu chi tiết. */
+/* Dashboard insight cards */
 .dashboard-insights-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -3405,14 +3405,6 @@ select option {
 .dashboard-insight-brand { grid-column: span 8; }
 .dashboard-insight-salesperson,
 .dashboard-insight-customer { grid-column: span 6; }
-.dashboard-insight-festival {
-  grid-column: 1 / -1;
-  order: 3;
-  border-color: rgba(245, 158, 11, 0.28);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), rgba(255, 255, 255, 0.96));
-}
-.dashboard-insight-salesperson,
-.dashboard-insight-customer { order: 2; }
 
 .dashboard-insight-header {
   display: flex;
@@ -3431,8 +3423,7 @@ select option {
   line-height: 1.4;
 }
 
-.dashboard-insight-badge,
-.dashboard-festival-total {
+.dashboard-insight-badge {
   flex: 0 0 auto;
   padding: 0.35rem 0.6rem;
   border: 1px solid rgba(16, 185, 129, 0.16);
@@ -3442,13 +3433,6 @@ select option {
   font-size: 0.72rem;
   font-weight: 700;
   white-space: nowrap;
-}
-
-.dashboard-festival-title { color: #d97706; }
-.dashboard-festival-total {
-  border-color: rgba(245, 158, 11, 0.22);
-  background: rgba(245, 158, 11, 0.1);
-  color: #b45309;
 }
 
 .dashboard-breakdown-chart {
@@ -3476,14 +3460,6 @@ select option {
   text-align: center;
 }
 
-.dashboard-festival-table {
-  max-height: 210px;
-  overflow: auto;
-}
-
-.dashboard-festival-table .table th,
-.dashboard-festival-table .table td { padding: 0.7rem 0.85rem; }
-
 @media (max-width: 1100px) {
   .dashboard-insight-company,
   .dashboard-insight-brand,
@@ -3496,8 +3472,7 @@ select option {
   .dashboard-insight-company,
   .dashboard-insight-brand,
   .dashboard-insight-salesperson,
-  .dashboard-insight-customer,
-  .dashboard-insight-festival { grid-column: 1; }
+  .dashboard-insight-customer { grid-column: 1; }
   .dashboard-insight-header { align-items: center; }
   .dashboard-insight-header p { display: none; }
   .dashboard-breakdown-chart,
@@ -10230,7 +10205,6 @@ body.quick-customer-modal-open {
 .dashboard-festival-toggle:focus-within { outline: 3px solid rgba(37, 99, 235, 0.15); outline-offset: 2px; }
 
 .dashboard-breakdown-chart-columns { height: 315px; }
-.dashboard-breakdown-chart-trend { height: 320px; }
 .dashboard-breakdown-chart-ranking { height: 310px; }
 
 @media (max-width: 1180px) {
@@ -10252,7 +10226,6 @@ body.quick-customer-modal-open {
   .dashboard-date-separator { display: none; }
   .dashboard-festival-toggle { min-height: 62px; }
   .dashboard-breakdown-chart-columns,
-  .dashboard-breakdown-chart-trend,
   .dashboard-breakdown-chart-ranking { height: 285px; }
 }
 
@@ -11589,7 +11562,6 @@ textarea {
   .dashboard-breakdown-chart-tall,
   .dashboard-breakdown-chart-donut,
   .dashboard-breakdown-chart-columns,
-  .dashboard-breakdown-chart-trend,
   .dashboard-breakdown-chart-ranking {
     height: clamp(220px, 70vw, 285px);
     min-height: 220px;
@@ -11603,15 +11575,10 @@ textarea {
     font-size: 0.9rem;
   }
 
-  .dashboard-insight-badge,
-  .dashboard-festival-total {
+  .dashboard-insight-badge {
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .dashboard-festival-table .table {
-    min-width: 340px;
   }
 
   .modal-content,

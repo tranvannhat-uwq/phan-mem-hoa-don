@@ -514,34 +514,16 @@
             </div>
           </article>
 
-          <article class="glass-panel dashboard-insight-card dashboard-insight-festival">
-            <div class="dashboard-insight-header">
-              <div>
-                <h3 class="panel-title dashboard-festival-title"><i data-lucide="sparkles"></i> Phân bổ FESTIVAL</h3>
-                <p>Chi tiết nhãn đại lý nhận doanh thu</p>
-              </div>
-              <span class="dashboard-festival-total" id="festival-total-revenue-badge">0 ₫</span>
-            </div>
-            <div class="table-responsive dashboard-festival-table">
-              <table class="table">
-                <thead><tr><th>Nhãn đại lý</th><th style="text-align: right;">Doanh thu</th></tr></thead>
-                <tbody id="festival-allocation-breakdown-body">
-                  <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Không có dữ liệu FESTIVAL</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
-
           <article class="glass-panel dashboard-insight-card dashboard-insight-salesperson">
             <div class="dashboard-insight-header">
               <div>
                 <h3 class="panel-title"><i data-lucide="user-check"></i> Doanh số theo Nhân viên</h3>
-                <p>Đường xu hướng theo thứ hạng doanh số nhân viên</p>
+                <p>So sánh doanh số theo thứ hạng nhân viên</p>
               </div>
               <span class="dashboard-insight-badge" id="salesperson-revenue-chart-meta">Top nhân viên</span>
             </div>
-            <div class="dashboard-breakdown-chart dashboard-breakdown-chart-trend">
-              <canvas id="salesperson-revenue-chart" role="img" aria-label="Biểu đồ đường xu hướng doanh số theo nhân viên kinh doanh"></canvas>
+            <div class="dashboard-breakdown-chart dashboard-breakdown-chart-columns">
+              <canvas id="salesperson-revenue-chart" role="img" aria-label="Biểu đồ cột doanh số theo nhân viên kinh doanh"></canvas>
               <div class="dashboard-chart-empty" id="salesperson-revenue-chart-empty">Chưa có dữ liệu nhân viên</div>
             </div>
           </article>
@@ -3917,6 +3899,7 @@
                   <option value="Thu tiền hàng trừ vào lương">Thu tiền hàng trừ vào lương</option>
                   <option value="Thu tiền khách hàng / Trả trước">Thu tiền khách hàng / Trả trước</option>
                   <option value="Thu Hộ trợ vận chuyển cho khách">Thu Hộ trợ vận chuyển cho khách</option>
+                  <option value="Thu hỗ trợ biển bảng đại lý">Thu hỗ trợ biển bảng đại lý</option>
                   <option value="Thu Thư lương thị trường">Thu Thư lương thị trường</option>
                   <option value="Thu tiền thưởng tháng">Thu tiền thưởng tháng</option>
                   <option value="Thu tiền thưởng Quý">Thu tiền thưởng Quý</option>

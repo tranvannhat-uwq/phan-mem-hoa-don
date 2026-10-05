@@ -24,7 +24,6 @@
       const parsed = new DOMParser().parseFromString(source, 'text/html');
       const toolbar = parsed.querySelector('.dashboard-toolbar');
       const insights = parsed.querySelector('.dashboard-insights-grid');
-      insights.querySelector('.dashboard-insight-festival')?.remove();
       document.getElementById('dashboard-harness').append(toolbar, insights);
       insights.querySelectorAll('.dashboard-chart-empty').forEach(element => { element.style.display = 'none'; });
       insights.querySelectorAll('canvas').forEach(element => { element.style.display = 'block'; });
@@ -39,7 +38,7 @@
       });
       draw('company-revenue-chart', 'doughnut', labels.company);
       draw('brand-revenue-chart', 'bar', labels.brand, { indexAxis: 'x' });
-      draw('salesperson-revenue-chart', 'line', labels.salesperson);
+      draw('salesperson-revenue-chart', 'bar', labels.salesperson, { indexAxis: 'x' });
       draw('customer-revenue-chart', 'bar', labels.customer, { indexAxis: 'y' });
     });
   </script>
