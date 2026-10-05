@@ -32,6 +32,7 @@ import {
 } from './supabase.js?v=20261003-pricing-cold-start-v1';
 
 const REALTIME_DEBOUNCE_MS = 250;
+const VISIBLE_PANEL_CATCHUP_COOLDOWN_MS = 60_000;
 let realtimeChannel = null;
 let realtimeClient = null;
 let realtimeRender = null;
@@ -44,6 +45,9 @@ let onlineHandler = null;
 let visibilityHandler = null;
 let pageShowHandler = null;
 let catchupTimer = null;
+let catchupForceRequested = false;
+const lastVisiblePanelCatchups = new Map();
+const visiblePanelCatchupsInFlight = new Map();
 
 function eventRecordId(payload) {
   return payload?.new?.id || payload?.old?.id || '';
@@ -141,17 +145,23 @@ async function flushRealtimeEvents() {
   }
 }
 
-function queueVisiblePanelCatchup() {
-  if (!state.currentUser || document.visibilityState === 'hidden') return;
+function queueVisiblePanelCatchup({ force = false } = {}) {
+  if (!state.currentUser) return;
+  catchupForceRequested = catchupForceRequested || force;
+  if (document.visibilityState === 'hidden') return;
+  if (!catchupForceRequested && realtimeStatus === 'SUBSCRIBED') return;
   if (catchupTimer) clearTimeout(catchupTimer);
   catchupTimer = setTimeout(() => {
     catchupTimer = null;
-    refreshVisiblePanelFromCloud();
+    const forceCatchup = catchupForceRequested;
+    catchupForceRequested = false;
+    void refreshVisiblePanelFromCloud({ force: forceCatchup });
   }, 350);
 }
 
-function refreshVisiblePanelFromCloud() {
+function refreshVisiblePanelFromCloud({ force = false } = {}) {
   if (!state.currentUser || document.visibilityState === 'hidden') return;
+  if (!force && realtimeStatus === 'SUBSCRIBED') return;
   const domainsByPanel = {
     'products-panel': ['products', 'payrollProductGroups'],
     'pricelists-panel': ['pricelists'],
@@ -162,16 +172,36 @@ function refreshVisiblePanelFromCloud() {
     'reports-panel': ['orders', 'customers', 'salesReturns'],
     'dashboard-panel': ['orders', 'customers', 'salesReturns']
   };
-  const domains = domainsByPanel[state.currentTab] || [];
+  const panel = state.currentTab;
+  const domains = domainsByPanel[panel] || [];
   if (domains.length === 0) return;
-  void fetchCloudData({ onlyDomains: domains, hydrateCustomerHistory: false })
+  const userId = String(state.currentUser.authUserId || state.currentUser.id || '');
+  const catchupKey = JSON.stringify([userId, panel]);
+  const inFlight = visiblePanelCatchupsInFlight.get(catchupKey);
+  if (inFlight) return inFlight;
+
+  const lastCatchupAt = lastVisiblePanelCatchups.get(catchupKey) || 0;
+  if (!force && Date.now() - lastCatchupAt < VISIBLE_PANEL_CATCHUP_COOLDOWN_MS) return;
+
+  let request;
+  request = fetchCloudData({ onlyDomains: domains, hydrateCustomerHistory: false })
     .then(result => {
       if (result?.failedDomains?.length) {
         console.warn('Mobile/background catch-up could not load:', result.failedDomains.join(', '));
+      } else {
+        lastVisiblePanelCatchups.set(catchupKey, Date.now());
       }
       if (typeof realtimeRender === 'function' && state.currentUser) realtimeRender();
+      return result;
     })
-    .catch(error => console.warn('Visible-panel cloud catch-up failed:', error));
+    .catch(error => console.warn('Visible-panel cloud catch-up failed:', error))
+    .finally(() => {
+      if (visiblePanelCatchupsInFlight.get(catchupKey) === request) {
+        visiblePanelCatchupsInFlight.delete(catchupKey);
+      }
+    });
+  visiblePanelCatchupsInFlight.set(catchupKey, request);
+  return request;
 }
 
 function subscribeTable(channel, table, handler) {
@@ -184,6 +214,7 @@ export async function stopRealtimeSync() {
   realtimeTimer = null;
   if (catchupTimer) clearTimeout(catchupTimer);
   catchupTimer = null;
+  catchupForceRequested = false;
   pendingEvents = [];
   if (onlineHandler) window.removeEventListener('online', onlineHandler);
   if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
@@ -254,6 +285,7 @@ export async function startRealtimeSync(renderCallback) {
       // without replaying rows changed while this client was away. The initial
       // page load is already authoritative; only a later subscription needs a
       // narrow, read-only catch-up for the panel currently on screen.
+      catchupForceRequested = catchupForceRequested || hasEstablishedRealtimeSubscription;
       if (hasEstablishedRealtimeSubscription) queueVisiblePanelCatchup();
       hasEstablishedRealtimeSubscription = true;
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -261,7 +293,7 @@ export async function startRealtimeSync(renderCallback) {
     }
   });
 
-  onlineHandler = queueVisiblePanelCatchup;
+  onlineHandler = () => queueVisiblePanelCatchup({ force: true });
   window.addEventListener('online', onlineHandler);
   visibilityHandler = () => {
     if (document.visibilityState === 'visible') queueVisiblePanelCatchup();
