@@ -2,12 +2,12 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261003-pricing-cold-start-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261003-pricing-cold-start-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261005-egress-v2';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261005-egress-v2';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261003-pricing-cold-start-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261003-pricing-cold-start-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261003-pricing-cold-start-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261005-egress-v2';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261005-egress-v2';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261005-egress-v2';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -510,12 +510,15 @@ export async function retrySupabaseConnection() {
 }
 
 // Hàm phụ trợ tải toàn bộ dữ liệu (bỏ giới hạn mặc định 1000 dòng của PostgREST)
-async function fetchFullTableData(tableName, columns = '*') {
+async function fetchFullTableData(tableName, columns = '*', client = supabaseClient, isRequestCurrent = null) {
   const pageSize = 1000;
-  return collectAllPages((offset, end) => supabaseClient
+  return collectAllPages((offset, end) => {
+    if (isRequestCurrent && !isRequestCurrent()) throw new Error('session_changed');
+    return client
       .from(tableName)
       .select(columns, { count: 'exact' })
-      .range(offset, end), pageSize);
+      .range(offset, end);
+  }, pageSize);
 }
 
 const CUSTOMER_LIST_COLUMNS = [
@@ -529,7 +532,7 @@ const CUSTOMER_LIST_COLUMNS = [
   'default_price_list_id', 'managed_by', 'created_at', 'updated_at', 'deleted_at'
 ].join(',');
 
-async function fetchPriceListItemsForIds(priceListIds) {
+async function fetchPriceListItemsForIds(priceListIds, client = supabaseClient, isRequestCurrent = null) {
   const uniqueIds = [...new Set((priceListIds || []).map(String).filter(Boolean))];
   if (uniqueIds.length === 0) return [];
 
@@ -537,11 +540,14 @@ async function fetchPriceListItemsForIds(priceListIds) {
   const chunkSize = 100;
   for (let start = 0; start < uniqueIds.length; start += chunkSize) {
     const chunk = uniqueIds.slice(start, start + chunkSize);
-    const chunkRows = await collectAllPages((offset, end) => supabaseClient
+    const chunkRows = await collectAllPages((offset, end) => {
+      if (isRequestCurrent && !isRequestCurrent()) throw new Error('session_changed');
+      return client
       .from(tablePriceListItemsName)
       .select('*', { count: 'exact' })
       .in('price_list_id', chunk)
-      .range(offset, end), 1000);
+      .range(offset, end);
+    }, 1000);
     rows.push(...chunkRows);
   }
   return rows;
@@ -596,14 +602,50 @@ function currentPricingActorId() {
   );
 }
 
+const pricingLoadsByClient = new WeakMap();
+const pricingSnapshotRpcUnavailable = new WeakSet();
+let pricingMutationGeneration = 0;
+
+export function invalidateAuthorizedPricingRevision() {
+  pricingMutationGeneration += 1;
+  state.pricingSnapshotRevision = '';
+}
+
+function currentPricingScope() {
+  return JSON.stringify([currentPricingActorId(), state.currentUser?.role || '', state.currentUser?.companyId || '']);
+}
+
+async function loadPricingSnapshotFromCloud(client, cachedRevision = '') {
+  if (pricingSnapshotRpcUnavailable.has(client)) return null;
+  const { data, error } = await client.rpc('rpc_get_pricing_snapshot', {
+    p_cached_revision: cachedRevision || null
+  });
+  if (error) {
+    if (['42883', 'PGRST202'].includes(error.code)) {
+      pricingSnapshotRpcUnavailable.add(client);
+      return null;
+    }
+    throw error;
+  }
+  if (!data || typeof data.revision !== 'string' || !data.revision ||
+      (data.not_modified !== true && (!Array.isArray(data.price_lists) || !Array.isArray(data.items)))) {
+    throw new Error('Cloud returned an incomplete pricing snapshot.');
+  }
+  return data;
+}
+
 async function hydrateAuthorizedPricingCache(pricingActorId) {
   const pricingRole = String(state.currentUser?.role || '');
   if (!pricingActorId || (
     state.pricingSnapshotActorId === pricingActorId && state.pricingSnapshotRole === pricingRole
   )) return false;
   const userAtRequest = state.currentUser;
+  const clientAtRequest = supabaseClient;
+  const scopeAtRequest = currentPricingScope();
   const snapshot = await loadAuthorizedPricingCache(userAtRequest);
-  if (!snapshot || currentPricingActorId() !== pricingActorId || state.currentUser?.role !== userAtRequest?.role) {
+  if (!snapshot || state.currentUser !== userAtRequest || supabaseClient !== clientAtRequest ||
+      currentPricingScope() !== scopeAtRequest || currentPricingActorId() !== pricingActorId ||
+      state.currentUser?.role !== userAtRequest?.role) {
     return false;
   }
 
@@ -615,6 +657,7 @@ async function hydrateAuthorizedPricingCache(pricingActorId) {
   state.pricingSnapshotSource = 'browser';
   state.pricingSnapshotComplete = true;
   state.pricingSnapshotCachedAt = snapshot.cachedAt;
+  state.pricingSnapshotRevision = snapshot.revision || '';
   return true;
 }
 
@@ -626,7 +669,8 @@ export async function persistAuthorizedPricingCache() {
   return saveAuthorizedPricingCache(
     state.currentUser,
     state.allPricelists || [],
-    state.allPriceListItems || []
+    state.allPriceListItems || [],
+    state.pricingSnapshotRevision || ''
   );
 }
 
@@ -662,6 +706,7 @@ export function applyPricingRealtimePayload(kind, payload = {}) {
     return false;
   }
 
+  invalidateAuthorizedPricingRevision();
   publishAuthorizedPricingState();
   scheduleAuthorizedPricingCachePersist();
   return true;
@@ -671,6 +716,11 @@ export function applyPricingRealtimePayload(kind, payload = {}) {
 // authoritative permission and still hides it from unrelated customers.
 export async function dbLoadCustomerAssignedPricing(customer) {
   if (!isCloudActive || !supabaseClient || !customer) return { loaded: false, reason: 'offline' };
+  const client = supabaseClient;
+  const userAtRequest = state.currentUser;
+  const scopeAtRequest = currentPricingScope();
+  const isCurrentRequest = () => isCloudActive && supabaseClient === client &&
+    state.currentUser === userAtRequest && currentPricingScope() === scopeAtRequest;
   const references = [...new Set([customer.pricelistId, customer.defaultPriceListId]
     .map(value => String(value || '').trim())
     .filter(value => value && !['custom', 'retail'].includes(value)))];
@@ -679,9 +729,10 @@ export async function dbLoadCustomerAssignedPricing(customer) {
   try {
     let row = null;
     let itemRows = null;
-    const rpcResult = await supabaseClient.rpc('rpc_get_customer_assigned_pricing', {
+    const rpcResult = await client.rpc('rpc_get_customer_assigned_pricing', {
       p_customer_id: customer.id
     });
+    if (!isCurrentRequest()) return { loaded: false, reason: 'session_changed' };
 
     if (!rpcResult.error && rpcResult.data?.price_list) {
       row = rpcResult.data.price_list;
@@ -694,7 +745,7 @@ export async function dbLoadCustomerAssignedPricing(customer) {
       // by the existing customer-aware RLS policies from migration 0040.
       for (const reference of references) {
         for (const column of ['id', 'code', 'name']) {
-          const { data, error } = await supabaseClient
+          const { data, error } = await client
             .from(tablePricelistsName)
             .select('*')
             .eq(column, reference)
@@ -708,6 +759,7 @@ export async function dbLoadCustomerAssignedPricing(customer) {
         if (row) break;
       }
     }
+    if (!isCurrentRequest()) return { loaded: false, reason: 'session_changed' };
     if (!row) return { loaded: false, reason: 'not_authorized' };
 
     const priceList = mapAuthorizedPriceList(row);
@@ -716,12 +768,13 @@ export async function dbLoadCustomerAssignedPricing(customer) {
     }
 
     if (itemRows === null) {
-      itemRows = await collectAllPages((offset, end) => supabaseClient
+      itemRows = await collectAllPages((offset, end) => client
         .from(tablePriceListItemsName)
         .select('*', { count: 'exact' })
         .eq('price_list_id', priceList.id)
         .range(offset, end), 1000);
     }
+    if (!isCurrentRequest()) return { loaded: false, reason: 'session_changed' };
     const items = (itemRows || []).map(mapAuthorizedPriceListItem);
 
     state.allPricelists = [
@@ -738,6 +791,7 @@ export async function dbLoadCustomerAssignedPricing(customer) {
     state.pricingSnapshotActorId = currentPricingActorId();
     state.pricingSnapshotRole = String(state.currentUser?.role || '');
     state.pricingSnapshotSource = 'cloud';
+    invalidateAuthorizedPricingRevision();
     scheduleAuthorizedPricingCachePersist();
     return { loaded: true, priceList };
   } catch (error) {
@@ -1381,6 +1435,10 @@ export function applyBrandRealtimePayload(payload = {}) {
 // Tải toàn bộ dữ liệu từ Supabase về State
 export async function fetchCloudData(options = {}) {
   if (!supabaseClient) return;
+  const cloudClientAtRequest = supabaseClient;
+  const cloudUserAtRequest = state.currentUser;
+  const cloudScopeAtRequest = currentPricingScope();
+  const isCurrentCloudRequest = () => supabaseClient === cloudClientAtRequest && state.currentUser === cloudUserAtRequest && currentPricingScope() === cloudScopeAtRequest;
   const deferSecondary = options.deferSecondary === true;
   const leanBootstrap = options.leanBootstrap === true;
   const hydrateCustomerHistory = options.hydrateCustomerHistory === true;
@@ -1389,6 +1447,7 @@ export async function fetchCloudData(options = {}) {
     : null;
   const failedDomains = new Set();
   const markDomainFailed = (domain, error) => {
+    if (!isCurrentCloudRequest()) return;
     failedDomains.add(domain);
     state.cloudLoadStatus[domain] = {
       status: 'error',
@@ -1397,6 +1456,7 @@ export async function fetchCloudData(options = {}) {
     };
   };
   const loadDomain = async (domain, loader) => {
+    if (!isCurrentCloudRequest()) return false;
     state.cloudLoadStatus[domain] = { status: 'loading', updatedAt: new Date().toISOString() };
     failedDomains.delete(domain);
     try {
@@ -1404,6 +1464,7 @@ export async function fetchCloudData(options = {}) {
     } catch (error) {
       markDomainFailed(domain, error);
     }
+    if (!isCurrentCloudRequest()) return false;
     if (!failedDomains.has(domain)) {
       state.cloudLoadStatus[domain] = {
         status: domain === 'pricelists' && leanBootstrap ? 'partial' : 'ready',
@@ -1493,6 +1554,7 @@ export async function fetchCloudData(options = {}) {
         // The paginated RPC intentionally caps one call at 500 rows. The
         // customer screen filters client-side, so load every RLS-visible page.
         const customerData = await fetchFullTableData(tableCustomersName, CUSTOMER_LIST_COLUMNS);
+        if (!isCurrentCloudRequest()) return;
         const cacheScope = getCustomerCacheScope();
         const previousCustomers = state.customerSnapshotScope === cacheScope && Array.isArray(state.customers)
           ? state.customers
@@ -1534,6 +1596,7 @@ export async function fetchCloudData(options = {}) {
         if (hydrateCustomerHistory && loadedCustomers.length > 0) {
           await hydrateCustomerDebtHistory(loadedCustomers);
         }
+        if (!isCurrentCloudRequest()) return;
         state.customers = loadedCustomers;
         state.customerSnapshotScope = cacheScope;
         if (state.activeCustomerId && !state.customers.some(customer => String(customer.id) === String(state.activeCustomerId))) {
@@ -1541,6 +1604,7 @@ export async function fetchCloudData(options = {}) {
         }
         writeCustomerCache(state.customers);
       } catch (custErr) {
+        if (!isCurrentCloudRequest()) return;
         console.warn("Could not load customers from Supabase; keeping the last available data:", custErr.message);
         markDomainFailed('customers', custErr);
         const cacheScope = getCustomerCacheScope();
@@ -1553,94 +1617,164 @@ export async function fetchCloudData(options = {}) {
 
     const fetchPricelists = async ({ includeItems = true } = {}) => {
       const pricingActorId = currentPricingActorId();
-      await hydrateAuthorizedPricingCache(pricingActorId);
-      try {
-        let plData = null;
-        let itemData = null;
-        if (includeItems && state.currentUser?.role === 'sale') {
-          const { data: snapshot, error: snapshotError } = await supabaseClient
-            .rpc('rpc_get_sale_pricing_snapshot');
-          if (!snapshotError) {
-            plData = Array.isArray(snapshot?.price_lists) ? snapshot.price_lists : [];
-            itemData = Array.isArray(snapshot?.items) ? snapshot.items : [];
-          } else if (!['42883', 'PGRST202'].includes(snapshotError.code)) {
-            throw snapshotError;
+      const pricingRole = String(state.currentUser?.role || '');
+      const client = cloudClientAtRequest;
+      let pricingLoads = pricingLoadsByClient.get(client);
+      if (!pricingLoads) {
+        pricingLoads = new Map();
+        pricingLoadsByClient.set(client, pricingLoads);
+      }
+      const loadKey = JSON.stringify([cloudScopeAtRequest, includeItems]);
+      const pendingLoad = pricingLoads.get(loadKey);
+      if (pendingLoad?.user === cloudUserAtRequest) return pendingLoad.promise;
+      const request = (async () => {
+        await hydrateAuthorizedPricingCache(pricingActorId);
+        if (!isCurrentCloudRequest()) return;
+        // Keep a complete cached snapshot atomic until the full loader can
+        // validate it. A metadata page must not prune rows from that snapshot.
+        if (!includeItems && state.pricingSnapshotComplete &&
+            state.pricingSnapshotActorId === pricingActorId && state.pricingSnapshotRole === pricingRole) {
+          publishAuthorizedPricingState();
+          return;
+        }
+        try {
+          let plData = null;
+          let itemData = null;
+          let revision = '';
+          if (includeItems && !tablePriceListItemsName.startsWith('wl_')) {
+            const cachedRevision = state.pricingSnapshotComplete &&
+              state.pricingSnapshotActorId === pricingActorId && state.pricingSnapshotRole === pricingRole
+              ? state.pricingSnapshotRevision || '' : '';
+            let snapshot;
+            let mutationAtRead;
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+              mutationAtRead = pricingMutationGeneration;
+              snapshot = await loadPricingSnapshotFromCloud(client, attempt === 0 ? cachedRevision : '');
+              if (!isCurrentCloudRequest()) return;
+              if (!snapshot || mutationAtRead === pricingMutationGeneration) break;
+            }
+            if (snapshot && mutationAtRead !== pricingMutationGeneration) {
+              throw new Error('Bảng giá đang thay đổi. Vui lòng thử tải lại sau khi cập nhật hoàn tất.');
+            }
+            // A Realtime update can invalidate the cache while validation is in
+            // flight. Fetch current rows rather than trusting the earlier cache.
+            if (snapshot?.not_modified && (!cachedRevision ||
+                snapshot.revision !== cachedRevision ||
+                state.pricingSnapshotRevision !== cachedRevision || !state.pricingSnapshotComplete)) {
+              snapshot = await loadPricingSnapshotFromCloud(client);
+              if (!isCurrentCloudRequest()) return;
+              if (snapshot?.not_modified) throw new Error('Cloud did not return the required pricing rows.');
+            }
+            if (snapshot) {
+              if (snapshot.actor_id !== pricingActorId || snapshot.role !== pricingRole) {
+                throw new Error('Cloud pricing snapshot does not match the authenticated profile.');
+              }
+              if (snapshot.not_modified) {
+                publishAuthorizedPricingState();
+                state.pricingSnapshotSource = 'cloud';
+                state.pricingSnapshotCachedAt = new Date().toISOString();
+                scheduleAuthorizedPricingCachePersist();
+                return;
+              }
+              plData = snapshot.price_lists;
+              itemData = snapshot.items;
+              revision = snapshot.revision;
+            }
           }
-        }
+          if (includeItems && plData === null && state.currentUser?.role === 'sale') {
+            const { data: snapshot, error: snapshotError } = await client
+              .rpc('rpc_get_sale_pricing_snapshot');
+            if (!snapshotError) {
+              plData = Array.isArray(snapshot?.price_lists) ? snapshot.price_lists : [];
+              itemData = Array.isArray(snapshot?.items) ? snapshot.items : [];
+            } else if (!['42883', 'PGRST202'].includes(snapshotError.code)) {
+              throw snapshotError;
+            }
+          }
 
-        // Compatibility path while migration 0043 is being deployed, and the
-        // unchanged direct-table path for Admin/Accounting price management.
-        if (plData === null) {
-          const { data, error } = await supabaseClient
-            .from(tablePricelistsName)
-            .select('*');
-          if (error) throw error;
-          plData = data || [];
-        }
+          // Compatibility path while migration 0043 is being deployed, and the
+          // unchanged direct-table path for Admin/Accounting price management.
+          if (plData === null) {
+            plData = await fetchFullTableData(tablePricelistsName, '*', client, isCurrentCloudRequest);
+          }
+          if (!isCurrentCloudRequest()) return;
+          const mappedPricelists = (plData || []).map(mapAuthorizedPriceList);
+          const visiblePricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
+          const visiblePriceListIds = new Set(visiblePricelists.map(priceList => priceList.id));
+          // Build one complete authorized snapshot before touching shared state.
+          // A price-list refresh is used by login and Realtime; publishing the
+          // list before its item rows arrive makes prices briefly disappear.
+          // Sale loads only the global lists explicitly enabled by Accounting.
+          // Customer-assigned exceptions are loaded on demand by
+          // dbLoadCustomerAssignedPricing after the exact dealer is selected.
+          // This avoids evaluating the customer-assignment RLS branch for every
+          // unrelated price row and prevents one slow item request from erasing
+          // the otherwise valid visible price-list snapshot.
+          if (!includeItems) {
+            itemData = [];
+          } else if (itemData === null) {
+            itemData = state.currentUser?.role === 'sale'
+              ? await fetchPriceListItemsForIds([...visiblePriceListIds], client, isCurrentCloudRequest)
+              : await fetchFullTableData(tablePriceListItemsName, '*', client, isCurrentCloudRequest);
+          }
+          const mappedPriceListItems = (itemData || []).map(mapAuthorizedPriceListItem);
+          if (!includeItems) {
+            const authorizedIds = new Set(mappedPricelists.map(priceList => String(priceList.id)));
+            mappedPriceListItems.push(...(state.allPriceListItems || []).filter(item =>
+              authorizedIds.has(String(item.priceListId))
+            ));
+          }
 
-        const mappedPricelists = (plData || []).map(mapAuthorizedPriceList);
-        const visiblePricelists = filterPriceListsForUser(mappedPricelists, state.currentUser);
-        const visiblePriceListIds = new Set(visiblePricelists.map(priceList => priceList.id));
-        // Build one complete authorized snapshot before touching shared state.
-        // A price-list refresh is used by login and Realtime; publishing the
-        // list before its item rows arrive makes prices briefly disappear.
-        // Sale loads only the global lists explicitly enabled by Accounting.
-        // Customer-assigned exceptions are loaded on demand by
-        // dbLoadCustomerAssignedPricing after the exact dealer is selected.
-        // This avoids evaluating the customer-assignment RLS branch for every
-        // unrelated price row and prevents one slow item request from erasing
-        // the otherwise valid visible price-list snapshot.
-        if (!includeItems) {
-          itemData = [];
-        } else if (itemData === null) {
-          itemData = state.currentUser?.role === 'sale'
-            ? await fetchPriceListItemsForIds([...visiblePriceListIds])
-            : await fetchFullTableData(tablePriceListItemsName);
+          if (!isCurrentCloudRequest()) return;
+          state.allPricelists = mappedPricelists;
+          state.pricelists = visiblePricelists;
+          state.allPriceListItems = mappedPriceListItems;
+          state.priceListItems = mappedPriceListItems
+            .filter(item => visiblePriceListIds.has(String(item.priceListId)));
+          state.pricingSnapshotActorId = pricingActorId;
+          state.pricingSnapshotRole = String(state.currentUser?.role || '');
+          state.pricingSnapshotSource = includeItems ? 'cloud' : (state.pricingSnapshotSource || 'cloud-metadata');
+          if (includeItems) state.pricingSnapshotComplete = true;
+          if (includeItems) state.pricingSnapshotCachedAt = new Date().toISOString();
+          if (includeItems) state.pricingSnapshotRevision = revision;
+          scheduleAuthorizedPricingCachePersist();
+        } catch (plErr) {
+          if (!isCurrentCloudRequest()) return;
+          markDomainFailed('pricelists', plErr);
+          // Keep the last in-memory snapshot for this authenticated session on
+          // transient refresh failures. Bootstrap data or a snapshot belonging
+          // to another account must still fail closed.
+          const canKeepCurrentSnapshot = Boolean(
+            pricingActorId && state.pricingSnapshotActorId === pricingActorId &&
+            state.pricingSnapshotRole === String(state.currentUser?.role || '')
+          );
+          if (!canKeepCurrentSnapshot) {
+            state.pricelists = [];
+            state.allPricelists = [];
+            state.priceListItems = [];
+            state.allPriceListItems = [];
+            state.pricingSnapshotActorId = '';
+            state.pricingSnapshotRole = '';
+            state.pricingSnapshotSource = '';
+            state.pricingSnapshotComplete = false;
+            state.pricingSnapshotCachedAt = '';
+            state.pricingSnapshotRevision = '';
+          }
+          console.warn(
+            canKeepCurrentSnapshot
+              ? "Could not refresh authorized pricelists from Supabase; keeping the last snapshot:"
+              : "Could not load an authorized pricing snapshot from Supabase:",
+            plErr.message
+          );
+          throw plErr;
         }
-        const mappedPriceListItems = (itemData || []).map(mapAuthorizedPriceListItem);
-        if (!includeItems) {
-          mappedPriceListItems.push(...(state.allPriceListItems || []).filter(item =>
-            visiblePriceListIds.has(String(item.priceListId))
-          ));
-        }
-
-        state.allPricelists = mappedPricelists;
-        state.pricelists = visiblePricelists;
-        state.allPriceListItems = mappedPriceListItems;
-        state.priceListItems = mappedPriceListItems
-          .filter(item => visiblePriceListIds.has(String(item.priceListId)));
-        state.pricingSnapshotActorId = pricingActorId;
-        state.pricingSnapshotRole = String(state.currentUser?.role || '');
-        state.pricingSnapshotSource = includeItems ? 'cloud' : (state.pricingSnapshotSource || 'cloud-metadata');
-        if (includeItems) state.pricingSnapshotComplete = true;
-        if (includeItems) state.pricingSnapshotCachedAt = new Date().toISOString();
-        scheduleAuthorizedPricingCachePersist();
-      } catch (plErr) {
-        markDomainFailed('pricelists', plErr);
-        // Keep the last in-memory snapshot for this authenticated session on
-        // transient refresh failures. Bootstrap data or a snapshot belonging
-        // to another account must still fail closed.
-        const canKeepCurrentSnapshot = Boolean(
-          pricingActorId && state.pricingSnapshotActorId === pricingActorId &&
-          state.pricingSnapshotRole === String(state.currentUser?.role || '')
-        );
-        if (!canKeepCurrentSnapshot) {
-          state.pricelists = [];
-          state.allPricelists = [];
-          state.priceListItems = [];
-          state.allPriceListItems = [];
-          state.pricingSnapshotActorId = '';
-          state.pricingSnapshotRole = '';
-          state.pricingSnapshotSource = '';
-          state.pricingSnapshotComplete = false;
-          state.pricingSnapshotCachedAt = '';
-        }
-        console.warn(
-          canKeepCurrentSnapshot
-            ? "Could not refresh authorized pricelists from Supabase; keeping the last snapshot:"
-            : "Could not load an authorized pricing snapshot from Supabase:",
-          plErr.message
-        );
+      })();
+      const loadEntry = { user: cloudUserAtRequest, promise: request };
+      pricingLoads.set(loadKey, loadEntry);
+      try {
+        return await request;
+      } finally {
+        if (pricingLoads.get(loadKey) === loadEntry) pricingLoads.delete(loadKey);
       }
     };
 

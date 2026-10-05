@@ -1,13 +1,19 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
-import { switchTab } from '../main.js?v=20261003-pricing-cold-start-v1';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20261003-pricing-cold-start-v1';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20261005-egress-v2';
+import { switchTab } from '../main.js?v=20261005-egress-v2';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20261005-egress-v2';
 import { safeCreateIcons, showToast, makeSelectSearchable } from '../utils.js';
 
 const PAGE_SIZE = 20;
 let activityPage = 1;
 let latestRows = [];
 let activityRequestId = 0;
+let activitySearchTimer = null;
+
+function cancelActivitySearch() {
+  if (activitySearchTimer !== null) clearTimeout(activitySearchTimer);
+  activitySearchTimer = null;
+}
 
 const ACTION_LABELS = {
   create_order: 'Đã tạo đơn hàng', update_order: 'Đã chỉnh sửa đơn hàng', change_order_status: 'Đã thay đổi trạng thái đơn hàng',
@@ -233,6 +239,7 @@ function currentFilters(limit = PAGE_SIZE, offset = (activityPage - 1) * PAGE_SI
 }
 
 export async function renderActivityLog() {
+  cancelActivitySearch();
   const body = document.getElementById('activity-log-body');
   if (!body || state.currentTab !== 'activity-log-panel') return;
   if (!canViewAll()) {
@@ -318,7 +325,16 @@ export function setupActivityLog() {
     dropdown.classList.remove('active');
     switchTab('activity-log-panel');
   });
-  ['activity-search','activity-actor-filter','activity-module-filter','activity-action-filter','activity-start-filter','activity-end-filter'].forEach(id => document.getElementById(id)?.addEventListener(id === 'activity-search' ? 'input' : 'change', () => { activityPage = 1; renderActivityLog(); }));
+  document.getElementById('activity-search')?.addEventListener('input', () => {
+    activityPage = 1;
+    cancelActivitySearch();
+    activityRequestId++;
+    activitySearchTimer = setTimeout(() => {
+      activitySearchTimer = null;
+      void renderActivityLog();
+    }, 300);
+  });
+  ['activity-actor-filter','activity-module-filter','activity-action-filter','activity-start-filter','activity-end-filter'].forEach(id => document.getElementById(id)?.addEventListener('change', () => { activityPage = 1; renderActivityLog(); }));
   document.getElementById('activity-prev')?.addEventListener('click', () => { if (activityPage > 1) { activityPage--; renderActivityLog(); } });
   document.getElementById('activity-next')?.addEventListener('click', () => { activityPage++; renderActivityLog(); });
   document.getElementById('activity-detail-close')?.addEventListener('click', () => document.getElementById('activity-detail-modal').classList.remove('active'));

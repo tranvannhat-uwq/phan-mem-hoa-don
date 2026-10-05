@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode, showToast } from '../utils.js';
-import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
-import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20261003-pricing-cold-start-v1';
+import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261005-egress-v2';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20261005-egress-v2';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 let employeeBusinessChart = null;

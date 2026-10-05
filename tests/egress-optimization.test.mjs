@@ -26,6 +26,7 @@ test('login uses a lean bootstrap and defers historical domains until their pane
   assert.match(main, /'pricelists-panel': \['pricelists'\]/);
   assert.match(main, /'history-panel': \['orders', 'salesReturns'\]/);
   assert.match(main, /'so-quy-panel': \['cashbook', 'startingBalances'\]/);
+  assert.match(main, /'dashboard-panel': \['customers'\]/);
   assert.match(main, /loadedPanelDomains\.has\(domain\)/);
   assert.match(main, /pendingPanelDomainLoads\.has\(loadKey\)/);
 });
@@ -55,9 +56,12 @@ test('routine refresh actions do not download every business table', () => {
 test('invoice history defaults to the current week and filters orders at Supabase', () => {
   assert.match(html, /<option value="week" selected>Tuần này<\/option>/);
   assert.match(service, /fetchOrderRowsForHistoryWindow\(currentWeek\.startIso, currentWeek\.endExclusiveIso\)/);
-  assert.match(service, /\.gte\('order_date', startIso\)/);
-  assert.match(service, /\.lt\('order_date', endExclusiveIso\)/);
-  assert.match(service, /\.limit\(500\)/);
+  assert.match(service, /order_date\.gte\.\$\{startIso\}/);
+  assert.match(service, /order_date\.lt\.\$\{endExclusiveIso\}/);
+  assert.match(service, /return filter \? query\.or\(filter\) : query/);
+  const historyLoader = service.slice(service.indexOf('async function fetchOrderRowsForHistoryWindow'), service.indexOf('function replaceLoadedOrderWindow'));
+  assert.match(historyLoader, /\.range\(offset, end\)/);
+  assert.match(historyLoader, /\}, 500\)/);
   assert.doesNotMatch(service, /p_limit:\s*10000/);
   assert.match(history, /const onDateFilterChange = \(\) => \{[\s\S]*reloadHistoryDateWindow\(\)/);
   assert.match(history, /if \(dateMode !== 'all'\)[\s\S]*oDate >= endExclusiveDate/);
@@ -105,7 +109,7 @@ test('realtime applies row deltas and refreshes the active panel after returning
   assert.match(service, /export function applyCustomerRealtimePayload/);
   assert.doesNotMatch(realtime, /refreshDomains\.add/);
   assert.match(realtime, /document\.addEventListener\('visibilitychange'/);
-  assert.match(realtime, /pageShowHandler = \(\) => queueVisiblePanelCatchup\(\)/);
-  assert.match(realtime, /function refreshVisiblePanelFromCloud\(\)/);
+  assert.match(realtime, /pageShowHandler = \(\) => \{\s*if \(isRealtimeSessionCurrent\(generation, userId\)\) queueVisiblePanelCatchup\(\)/);
+  assert.match(realtime, /function refreshVisiblePanelFromCloud\(\{ connectionGap = null \} = \{\}\)/);
   assert.match(realtime, /window\.addEventListener\('online'/);
 });

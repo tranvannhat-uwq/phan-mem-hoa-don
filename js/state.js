@@ -28,6 +28,7 @@ export const state = {
   pricingSnapshotSource: '',
   pricingSnapshotComplete: false,
   pricingSnapshotCachedAt: '',
+  pricingSnapshotRevision: '',
   selectedPriceListIds: [],
   users: [],
   currentUser: null,

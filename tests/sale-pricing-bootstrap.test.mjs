@@ -17,7 +17,7 @@ test('sale pricing bootstrap requests only lists explicitly visible to sale', ()
   assert.match(fetchFlow, /snapshot\?\.items/);
   const visibleLists = fetchFlow.indexOf('const visiblePricelists = filterPriceListsForUser');
   const visibleIds = fetchFlow.indexOf('const visiblePriceListIds = new Set');
-  const scopedItems = fetchFlow.indexOf('await fetchPriceListItemsForIds([...visiblePriceListIds])');
+  const scopedItems = fetchFlow.indexOf('await fetchPriceListItemsForIds([...visiblePriceListIds], client, isCurrentCloudRequest)');
   assert.ok(visibleLists >= 0 && visibleIds > visibleLists && scopedItems > visibleIds);
   assert.match(fetchFlow, /state\.currentUser\?\.role === 'sale'/);
 });

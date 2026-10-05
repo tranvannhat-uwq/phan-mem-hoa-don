@@ -69,8 +69,11 @@ test('RLS-scoped customer state is paged beyond the Supabase 1000-row default', 
   assert.match(service, /\.select\(columns, \{ count: 'exact' \}\)/);
   assert.match(service, /fetchFullTableData\(tableCustomersName, CUSTOMER_LIST_COLUMNS\)/);
   assert.doesNotMatch(service, /CUSTOMER_LIST_COLUMNS[\s\S]{0,1000}'debt_history'/);
-  assert.match(service, /collectAllPages\(\(offset, end\) => supabaseClient/);
-  assert.match(service, /\.range\(offset, end\), pageSize\)/);
+  const loader = service.slice(service.indexOf('async function fetchFullTableData'), service.indexOf('const CUSTOMER_LIST_COLUMNS'));
+  assert.match(loader, /client = supabaseClient/);
+  assert.match(loader, /collectAllPages\(\(offset, end\) => \{/);
+  assert.match(loader, /return client\s*\.from\(tableName\)/);
+  assert.match(loader, /\.range\(offset, end\);\s*\}, pageSize\)/);
   assert.match(service, /const customerData = await fetchFullTableData\(tableCustomersName, CUSTOMER_LIST_COLUMNS\)/);
   assert.doesNotMatch(service, /p_search: '', p_managed_by: null, p_limit: 10000, p_offset: 0/);
   assert.match(rls, /CREATE POLICY customers_select ON public\.customers FOR SELECT TO authenticated/);

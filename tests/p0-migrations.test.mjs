@@ -81,7 +81,14 @@ const migrationNames = [
   '0072_defer_customer_debt_chain_guard.sql',
   '0073_manual_payroll_product_groups.sql',
   '0074_customer_debt_full_invariant_and_reconciliation.sql',
-  '0075_dashboard_filter_scope_consistency.sql'
+  '0075_dashboard_filter_scope_consistency.sql',
+  '0076_admin_only_activity_log.sql',
+  '0077_activity_log_15_day_retention.sql',
+  '0078_track_customer_manager_changes.sql',
+  '0079_detailed_customer_activity_changes.sql',
+  '0080_sale_managed_customer_order_history_pricing_independence.sql',
+  '0081_sale_managed_customer_draft_order_history.sql',
+  '0082_conditional_pricing_snapshot.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 

@@ -61,6 +61,7 @@ export async function loadAuthorizedPricingCache(user) {
       actorId: snapshot.actorId,
       role: snapshot.role,
       cachedAt: snapshot.cachedAt || '',
+      revision: typeof snapshot.revision === 'string' ? snapshot.revision : '',
       priceLists: snapshot.priceLists,
       priceListItems: snapshot.priceListItems
     };
@@ -72,7 +73,7 @@ export async function loadAuthorizedPricingCache(user) {
   }
 }
 
-export async function saveAuthorizedPricingCache(user, priceLists, priceListItems) {
+export async function saveAuthorizedPricingCache(user, priceLists, priceListItems, revision = '') {
   const actor = normalizeActor(user);
   if (!actor || !Array.isArray(priceLists) || !Array.isArray(priceListItems)) return false;
   let database = null;
@@ -85,6 +86,7 @@ export async function saveAuthorizedPricingCache(user, priceLists, priceListItem
       actorId: actor.actorId,
       role: actor.role,
       cachedAt: new Date().toISOString(),
+      revision: typeof revision === 'string' ? revision : '',
       priceLists,
       priceListItems
     }));

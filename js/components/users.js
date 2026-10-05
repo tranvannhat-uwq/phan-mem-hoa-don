@@ -1,16 +1,16 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20261003-pricing-cold-start-v1';
-import { renderAll, switchTab } from '../main.js?v=20261003-pricing-cold-start-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261003-pricing-cold-start-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20261005-egress-v2';
+import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20261005-egress-v2';
+import { renderAll, switchTab } from '../main.js?v=20261005-egress-v2';
+import { populateManagedByDropdown } from './customers.js?v=20261005-egress-v2';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261003-pricing-cold-start-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261005-egress-v2';
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -370,6 +370,20 @@ export function populateCustomerEmployeeFilter() {
 
 let isLoggingIn = false;
 let maintenanceMonitor = null;
+let maintenanceVisibilityHandler = null;
+let maintenanceMonitorGeneration = 0;
+let maintenanceStatusRequest = null;
+
+function currentMaintenanceUserId() {
+  return String(state.currentUser?.authUserId || state.currentUser?.id || state.currentUser?.username || '');
+}
+
+function isCurrentMaintenanceSession(userId, generation) {
+  return generation === maintenanceMonitorGeneration
+    && !!state.currentUser
+    && state.currentUser.role !== 'admin'
+    && currentMaintenanceUserId() === userId;
+}
 
 function setMaintenanceNotice(message = '', visible = false) {
   const notice = document.getElementById('login-maintenance-notice');
@@ -380,18 +394,28 @@ function setMaintenanceNotice(message = '', visible = false) {
 }
 
 export function stopMaintenanceMonitor() {
-  if (maintenanceMonitor) clearInterval(maintenanceMonitor);
+  maintenanceMonitorGeneration++;
+  if (maintenanceMonitor !== null) clearInterval(maintenanceMonitor);
   maintenanceMonitor = null;
+  if (maintenanceVisibilityHandler) document.removeEventListener('visibilitychange', maintenanceVisibilityHandler);
+  maintenanceVisibilityHandler = null;
 }
 
 async function enforceMaintenanceForActiveEmployee() {
-  if (!state.currentUser || state.currentUser.role === 'admin') return;
+  if (document.hidden || !state.currentUser || state.currentUser.role === 'admin' || maintenanceStatusRequest) return;
+  const userId = currentMaintenanceUserId();
+  const generation = maintenanceMonitorGeneration;
+  const request = { userId, generation };
+  maintenanceStatusRequest = request;
   try {
     const status = await getMaintenanceStatus();
-    if (!status.enabled) return;
+    if (!isCurrentMaintenanceSession(userId, generation) || !status.enabled) return;
     stopMaintenanceMonitor();
+    const logoutGeneration = maintenanceMonitorGeneration;
     await stopRealtimeSync();
+    if (!isCurrentMaintenanceSession(userId, logoutGeneration)) return;
     try { await supabaseClient?.auth.signOut(); } catch (_) { /* clear local session below */ }
+    if (!isCurrentMaintenanceSession(userId, logoutGeneration)) return;
     clearAuthenticatedSessionState();
     clearSupabaseAuthStorage();
     showLoginGate();
@@ -399,12 +423,22 @@ async function enforceMaintenanceForActiveEmployee() {
     showToast(status.message, 'warning');
   } catch (error) {
     console.warn('Maintenance status check failed; keeping the current session until the next check.', error);
+  } finally {
+    if (maintenanceStatusRequest === request) maintenanceStatusRequest = null;
+    // A restarted monitor must check its own session after an older request finishes.
+    if (generation !== maintenanceMonitorGeneration && maintenanceMonitor !== null && !document.hidden) {
+      void enforceMaintenanceForActiveEmployee();
+    }
   }
 }
 
 export function startMaintenanceMonitor() {
   stopMaintenanceMonitor();
   if (!state.currentUser || state.currentUser.role === 'admin') return;
+  maintenanceVisibilityHandler = () => {
+    if (!document.hidden) void enforceMaintenanceForActiveEmployee();
+  };
+  document.addEventListener('visibilitychange', maintenanceVisibilityHandler);
   maintenanceMonitor = setInterval(() => void enforceMaintenanceForActiveEmployee(), 15000);
 }
 
@@ -428,6 +462,7 @@ export function clearAuthenticatedSessionState() {
   state.pricingSnapshotSource = '';
   state.pricingSnapshotComplete = false;
   state.pricingSnapshotCachedAt = '';
+  state.pricingSnapshotRevision = '';
   state.selectedPriceListIds = [];
 }
 

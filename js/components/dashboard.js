@@ -1,18 +1,21 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20261003-pricing-cold-start-v1';
+import { switchTab } from '../main.js?v=20261005-egress-v2';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
+import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20261005-egress-v2';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261003-pricing-cold-start-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261005-egress-v2';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
-let dashboardStatsInFlight = null;
-let dashboardStatsInFlightKey = '';
-let dashboardStatsCache = { key: '', payload: null, cachedAt: 0 };
+let dashboardStatsRequestId = 0;
+let dashboardPayloadGeneration = 0;
+const dashboardStatsInFlight = new Map();
+const dashboardStatsCache = new Map();
+let dashboardRequestScope = { key: '', user: null };
 const DASHBOARD_STATS_CACHE_MS = 10_000;
+const DASHBOARD_STATS_CACHE_MAX_ENTRIES = 8;
 const DASHBOARD_COMPANY_SCOPE_VERSION = 'finance-all-companies-v1';
 const dashboardBreakdownCharts = new Map();
 const DASHBOARD_CHART_COLORS = ['#10b981', '#6366f1', '#0ea5e9', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316'];
@@ -741,15 +744,94 @@ function dashboardRequestFiltersForRange(timeRange) {
   };
 }
 
-async function updateRevenueChartForView(view, prefetchedPayload = null) {
+export function invalidateDashboardPayloadCache() {
+  dashboardPayloadGeneration += 1;
+  dashboardStatsCache.clear();
+  dashboardStatsInFlight.clear();
+  dashboardStatsRequestId += 1;
+  dashboardChartRequestId += 1;
+}
+
+function synchronizeDashboardRequestScope() {
+  const user = state.currentUser;
+  const key = user ? JSON.stringify({
+    actor: dashboardCompanyScopeActor(user),
+    username: String(user.username || ''),
+    role: String(user.role || '').toLowerCase(),
+    company: getUserCompanyId(user),
+    allCompanies: canViewAllDashboardCompanies(user),
+    external: user.isExternal === true || user.is_external === true,
+    active: user.isActive !== false && user.is_active !== false
+  }) : '';
+  if (key !== dashboardRequestScope.key || user !== dashboardRequestScope.user) {
+    dashboardRequestScope = { key, user };
+    invalidateDashboardPayloadCache();
+  }
+  return dashboardRequestScope;
+}
+
+function isCurrentDashboardScope(scope) {
+  return Boolean(scope.key) && synchronizeDashboardRequestScope() === scope;
+}
+
+function dashboardPayloadKey(filters, scope) {
+  return JSON.stringify([scope.key, filters]);
+}
+
+function isCurrentDashboardPayloadKey(key, scope, timeRange) {
+  return isCurrentDashboardScope(scope)
+    && key === dashboardPayloadKey(dashboardRequestFiltersForRange(timeRange), scope);
+}
+
+function fetchDashboardPayload(filters, { force = false, scope } = {}) {
+  const key = dashboardPayloadKey(filters, scope);
+  const generation = dashboardPayloadGeneration;
+  // A refresh can share a pending request, including one started by the other view.
+  if (dashboardStatsInFlight.has(key)) return dashboardStatsInFlight.get(key);
+  const cached = dashboardStatsCache.get(key);
+  if (!force && cached && Date.now() - cached.cachedAt < DASHBOARD_STATS_CACHE_MS) {
+    dashboardStatsCache.delete(key);
+    dashboardStatsCache.set(key, cached);
+    return Promise.resolve(cached.payload);
+  }
+  dashboardStatsCache.delete(key);
+  const request = (async () => {
+    const payload = await dbFetchPhase5Dashboard(filters);
+    const currentSummaryRange = state.dashboardFilter.timeRange || 'month';
+    if (generation === dashboardPayloadGeneration
+        && (isCurrentDashboardPayloadKey(key, scope, currentSummaryRange)
+          || isCurrentDashboardPayloadKey(key, scope, state.dashboardChartView))) {
+      dashboardStatsCache.delete(key);
+      dashboardStatsCache.set(key, { payload, cachedAt: Date.now() });
+      while (dashboardStatsCache.size > DASHBOARD_STATS_CACHE_MAX_ENTRIES) {
+        dashboardStatsCache.delete(dashboardStatsCache.keys().next().value);
+      }
+    }
+    return payload;
+  })().finally(() => {
+    if (dashboardStatsInFlight.get(key) === request) dashboardStatsInFlight.delete(key);
+  });
+  dashboardStatsInFlight.set(key, request);
+  return request;
+}
+
+async function updateRevenueChartForView(view, prefetchedPayload = null, { force = false, scope = synchronizeDashboardRequestScope() } = {}) {
   const requestId = ++dashboardChartRequestId;
+  if (!scope.key) return null;
+  const filters = dashboardRequestFiltersForRange(view);
+  const key = dashboardPayloadKey(filters, scope);
+  const isCurrentRequest = () => requestId === dashboardChartRequestId
+    && view === state.dashboardChartView && isCurrentDashboardPayloadKey(key, scope, view);
   try {
-    const payload = prefetchedPayload || await dbFetchPhase5Dashboard(dashboardRequestFiltersForRange(view));
-    if (requestId !== dashboardChartRequestId || view !== state.dashboardChartView) return;
+    const payload = prefetchedPayload || await fetchDashboardPayload(filters, { force, scope });
+    if (!isCurrentRequest()) return null;
     renderServerRevenueChart(payload);
+    return payload;
   } catch (error) {
+    if (!isCurrentRequest()) return null;
     console.error('Revenue chart RPC error:', error);
     showToast('Không tải được dữ liệu biểu đồ doanh thu.', 'danger');
+    return null;
   }
 }
 
@@ -797,52 +879,33 @@ function renderServerDashboard(payload) {
 
 export async function updateDashboardStats({ force = false } = {}) {
   populateDashboardFilters();
+  const scope = synchronizeDashboardRequestScope();
+  const requestId = ++dashboardStatsRequestId;
+  if (!scope.key) return null;
   const filters = dashboardRequestFiltersForRange(state.dashboardFilter.timeRange || 'month');
-  const requestKey = JSON.stringify(filters);
-  const renderPayload = async payload => {
-    renderServerDashboard(payload);
-    const canReusePayload = state.dashboardFilter.timeRange !== 'custom'
-      && state.dashboardChartView === state.dashboardFilter.timeRange;
-    await updateRevenueChartForView(state.dashboardChartView, canReusePayload ? payload : null);
-    return payload;
-  };
-
-  if (!force
-      && dashboardStatsCache.key === requestKey
-      && dashboardStatsCache.payload
-      && Date.now() - dashboardStatsCache.cachedAt < DASHBOARD_STATS_CACHE_MS) {
-    return renderPayload(dashboardStatsCache.payload);
-  }
-  if (!force && dashboardStatsInFlight && dashboardStatsInFlightKey === requestKey) {
-    return dashboardStatsInFlight;
-  }
-
-  const request = (async () => {
-    try {
-      const payload = await dbFetchPhase5Dashboard(filters);
-      dashboardStatsCache = { key: requestKey, payload, cachedAt: Date.now() };
-      return await renderPayload(payload);
-    } catch (error) {
-      console.error('Phase 5 dashboard RPC error:', error);
-      ['stat-total-revenue', 'stat-total-orders', 'stat-total-debt', 'stat-total-sold-products'].forEach(id => {
-        const element = document.getElementById(id); if (element) element.innerText = '—';
-      });
-      const reason = String(error?.message || '').trim();
-      showToast(reason
-        ? `Không tải được dashboard từ Cloud: ${reason}`
-        : 'Không tải được dashboard từ Cloud. Vui lòng thử tải lại trang.', 'danger');
-      return null;
-    }
-  })();
-  dashboardStatsInFlight = request;
-  dashboardStatsInFlightKey = requestKey;
+  const key = dashboardPayloadKey(filters, scope);
+  const isCurrentRequest = () => requestId === dashboardStatsRequestId
+    && isCurrentDashboardPayloadKey(key, scope, state.dashboardFilter.timeRange || 'month');
+  // The summary and chart can cover different periods; refresh both together.
+  if (force) dashboardStatsCache.clear();
   try {
-    return await request;
-  } finally {
-    if (dashboardStatsInFlight === request) {
-      dashboardStatsInFlight = null;
-      dashboardStatsInFlightKey = '';
-    }
+    const payload = await fetchDashboardPayload(filters, { force, scope });
+    if (!isCurrentRequest()) return null;
+    renderServerDashboard(payload);
+    const chartKey = dashboardPayloadKey(dashboardRequestFiltersForRange(state.dashboardChartView), scope);
+    const chartPayload = await updateRevenueChartForView(state.dashboardChartView, chartKey === key ? payload : null, { force, scope });
+    return chartPayload && isCurrentRequest() ? payload : null;
+  } catch (error) {
+    if (!isCurrentRequest()) return null;
+    console.error('Phase 5 dashboard RPC error:', error);
+    ['stat-total-revenue', 'stat-total-orders', 'stat-total-debt', 'stat-total-sold-products'].forEach(id => {
+      const element = document.getElementById(id); if (element) element.innerText = '—';
+    });
+    const reason = String(error?.message || '').trim();
+    showToast(reason
+      ? `Không tải được dashboard từ Cloud: ${reason}`
+      : 'Không tải được dashboard từ Cloud. Vui lòng thử tải lại trang.', 'danger');
+    return null;
   }
 }
 
@@ -1119,8 +1182,8 @@ export function setupDashboardFilters() {
   if (refreshBtn) {
     refreshBtn.onclick = async () => {
       showToast('Đang làm mới dữ liệu...', 'info');
-      await updateDashboardStats({ force: true });
-      showToast('Đã làm mới dữ liệu mới nhất!');
+      const payload = await updateDashboardStats({ force: true });
+      if (payload) showToast('Đã làm mới dữ liệu mới nhất!');
     };
   }
 

@@ -5,10 +5,11 @@ import {
   dbDeletePricelist,
   dbSavePriceListItems,
   dbDeletePriceListItem,
+  invalidateAuthorizedPricingRevision,
   persistAuthorizedPricingCache
-} from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
-import { renderAll } from '../main.js?v=20261003-pricing-cold-start-v1';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20261003-pricing-cold-start-v1';
+} from '../services/supabase.js?v=20261005-egress-v2';
+import { renderAll } from '../main.js?v=20261005-egress-v2';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20261005-egress-v2';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -19,8 +20,8 @@ import {
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
-} from '../domain/pricing.js?v=20261003-pricing-cold-start-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261003-pricing-cold-start-v1';
+} from '../domain/pricing.js?v=20261005-egress-v2';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261005-egress-v2';
 
 const pendingChanges = new Map();
 const pendingDeletes = new Set();
@@ -53,6 +54,7 @@ function upsertPriceListSnapshot(priceList) {
   else allLists.push(priceList);
   state.allPricelists = allLists;
   state.pricelists = filterPriceListsForUser(allLists, state.currentUser);
+  invalidateAuthorizedPricingRevision();
   void persistAuthorizedPricingCache();
 }
 
@@ -74,6 +76,7 @@ function commitPriceListItemSnapshot(changes, deletedKeys = new Set()) {
   const visibleIds = new Set((state.pricelists || []).map(priceList => priceList.id));
   state.allPriceListItems = allItems;
   state.priceListItems = allItems.filter(item => visibleIds.has(item.priceListId));
+  invalidateAuthorizedPricingRevision();
   void persistAuthorizedPricingCache();
 }
 

@@ -1,20 +1,20 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261003-pricing-cold-start-v1';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20261003-pricing-cold-start-v1';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261003-pricing-cold-start-v1';
-import { openHistoryOrderExportModal } from './customers.js?v=20261003-pricing-cold-start-v1';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261005-egress-v2';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20261005-egress-v2';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261005-egress-v2';
+import { openHistoryOrderExportModal } from './customers.js?v=20261005-egress-v2';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary,
   calculateHistoryFinancialSummary,
   isSalesReturnActive
-} from '../domain/order-financials.js?v=20261003-pricing-cold-start-v1';
+} from '../domain/order-financials.js?v=20261005-egress-v2';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
-import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261003-pricing-cold-start-v1';
+import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261005-egress-v2';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261003-pricing-cold-start-v1';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261005-egress-v2';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
