@@ -87,6 +87,8 @@ Run these files in order on a staging clone first:
 79. `0079_detailed_customer_activity_changes.sql`
 80. `0080_sale_managed_customer_order_history_pricing_independence.sql`
 81. `0081_sale_managed_customer_draft_order_history.sql`
+82. `0082_conditional_pricing_snapshot.sql`
+83. `0083_cancel_amended_order_full_debt.sql`
 
 Every file is additive and records its version in `public.schema_migrations`.
 Apply each version once; the migration table is the source of truth for the

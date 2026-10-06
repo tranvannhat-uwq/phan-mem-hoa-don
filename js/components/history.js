@@ -797,7 +797,7 @@ export async function cancelOrderById(id) {
   // Reload the authoritative customer balance and debt ledger. The cancellation
   // RPC appends an order_cancel row; patching only customer.debt would hide it.
   const customersRefreshed = order.customerId
-    ? await dbRefreshCustomerFinancialState(order.customerId, { includeHistory: false })
+    ? await dbRefreshCustomerFinancialState(order.customerId, { includeHistory: true })
     : true;
   cacheOrdersLocally(state.savedOrders);
   renderAll();
