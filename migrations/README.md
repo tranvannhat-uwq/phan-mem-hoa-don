@@ -456,3 +456,12 @@ remain in force.
 Migration `0081` applies the same customer-manager read scope to draft orders,
 including drafts created by another employee. Draft creation, editing and
 deletion restrictions are unchanged.
+
+Migration `0083` reverses the original order charge and all in-place amendment
+deltas when cancelling an order. It appends a guarded correction for the reviewed
+invoice HD-20261005-00002274 without rewriting prior financial records.
+
+Migration `0084` checks every ledger-backed customer's order-owned debt when an
+order becomes cancelled. An incomplete reversal aborts the cancellation, while
+independent receipts and legacy orders without an order ledger keep their
+existing behavior.
