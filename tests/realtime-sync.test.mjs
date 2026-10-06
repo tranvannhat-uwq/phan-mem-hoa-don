@@ -33,7 +33,8 @@ test('realtime client batches events and applies changed records without full-ta
   assert.match(service, /if \(!onlyDomains\)[\s\S]{0,300}\.delete\(\)/);
   assert.match(realtime, /document\.addEventListener\('visibilitychange'/);
   assert.match(realtime, /let hasEstablishedRealtimeSubscription = false/);
-  assert.match(realtime, /if \(hasEstablishedRealtimeSubscription\) queueVisiblePanelCatchup\(\)/);
+  assert.match(realtime, /const isRecovery = hasEstablishedRealtimeSubscription/);
+  assert.match(realtime, /if \(isRecovery\) queueVisiblePanelCatchup\(\)/);
   assert.match(realtime, /hasEstablishedRealtimeSubscription = true/);
 });
 

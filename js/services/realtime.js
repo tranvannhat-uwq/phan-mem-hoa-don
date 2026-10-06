@@ -362,6 +362,7 @@ export async function startRealtimeSync(renderCallback) {
   realtimeChannel = channel;
   channel.subscribe(status => {
     if (channel !== realtimeChannel || !isRealtimeSessionCurrent(generation, userId)) return;
+    const wasSubscribed = realtimeStatus === 'SUBSCRIBED';
     realtimeStatus = status;
     if (status === 'SUBSCRIBED') {
       updateDbStatusUI('cloud', 'Đám mây • Trực tiếp');
@@ -369,7 +370,11 @@ export async function startRealtimeSync(renderCallback) {
       // without replaying rows changed while this client was away. The initial
       // page load is already authoritative; only a later subscription needs a
       // narrow, read-only catch-up for the panel currently on screen.
-      if (hasEstablishedRealtimeSubscription) {
+      // Repeated SUBSCRIBED callbacks without a connection gap are not a
+      // recovery and must not trigger another full panel download.
+      const isRecovery = hasEstablishedRealtimeSubscription &&
+        (!wasSubscribed || (activeConnectionGap && !activeConnectionGap.recovered));
+      if (isRecovery) {
         if (!activeConnectionGap || activeConnectionGap.recovered) createConnectionGap();
         activeConnectionGap.recovered = true;
         activeConnectionGap.recoveryStarted = true;
@@ -377,7 +382,7 @@ export async function startRealtimeSync(renderCallback) {
       } else if (activeConnectionGap) {
         activeConnectionGap.recovered = true;
       }
-      if (hasEstablishedRealtimeSubscription) queueVisiblePanelCatchup();
+      if (isRecovery) queueVisiblePanelCatchup();
       hasEstablishedRealtimeSubscription = true;
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
       if (hasEstablishedRealtimeSubscription && (!activeConnectionGap || activeConnectionGap.recovered)) {

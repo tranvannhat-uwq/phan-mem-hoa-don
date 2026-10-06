@@ -127,6 +127,29 @@ test('returning to a healthy subscribed tab does not read cloud tables', async (
   assert.equal(harness.requests.length, 0);
 });
 
+test('repeated SUBSCRIBED status without a connection gap does not reload panel data', async () => {
+  const { harness, channel } = await startSubscribed();
+  channel.status('SUBSCRIBED');
+  channel.status('SUBSCRIBED');
+  await harness.advance();
+  assert.equal(harness.requests.length, 0);
+  channel.status('CHANNEL_ERROR');
+  channel.status('SUBSCRIBED');
+  await harness.advance();
+  assert.equal(harness.requests.length, 1);
+  channel.status('SUBSCRIBED');
+  await harness.advance();
+  assert.equal(harness.requests.length, 1);
+});
+
+test('an offline signal followed by SUBSCRIBED still reloads the visible panel', async () => {
+  const { harness, channel } = await startSubscribed();
+  harness.event('offline');
+  channel.status('SUBSCRIBED');
+  await harness.advance();
+  assert.equal(harness.requests.length, 1);
+});
+
 test('online catch-up and later SUBSCRIBED for the same outage read only once', async () => {
   const { harness, channel } = await startSubscribed();
   channel.status('CHANNEL_ERROR');
