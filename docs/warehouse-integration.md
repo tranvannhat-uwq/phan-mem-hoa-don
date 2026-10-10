@@ -4,10 +4,12 @@ Migration `migrations/0085_warehouse_inventory_outbox.sql` xếp hàng các đơ
 
 Migration `migrations/0086_inventory_sync_fail_open_pause.sql` thêm trạng thái tạm dừng (`enabled = false`) và bảo đảm lỗi của hàng đợi không làm thất bại thao tác chốt/sửa/hoàn đơn. Trong lúc tạm dừng, đơn mới vẫn được ghi vào hàng đợi nhưng không gửi sang kho. Nếu bản thân hàng đợi lỗi, đơn vẫn được lưu; cần kiểm tra cảnh báo của PostgreSQL và đối chiếu lại đơn sau khi sửa lỗi.
 
+Migration `migrations/0087_inventory_sync_control.sql` cho phép máy chủ kho đọc trạng thái và tạm dừng qua hai RPC chỉ cấp cho `service_role`. Quản trị viên kho dùng nút **Tạm dừng đồng bộ kho** ở mục **Đồng bộ đơn**. Endpoint kho cũng kiểm tra trạng thái trước khi xử lý hàng đợi, kể cả khi đã có yêu cầu HTTP đang chờ. Nút bật lại chưa mở cho đến khi đối chiếu tồn đầu kỳ và đơn cũ.
+
 ## Bật kết nối
 
 1. Triển khai ứng dụng Quản Lý Kho cùng migration và biến môi trường theo README của kho.
-2. Chạy lần lượt migration `0085_warehouse_inventory_outbox.sql` và `0086_inventory_sync_fail_open_pause.sql` trên Supabase của trang bán hàng, trước ở staging. Kiểm tra extension `pg_net` đã bật. Migration tạo hàng đợi với RLS; chỉ service role đọc được.
+2. Chạy lần lượt migration `0085_warehouse_inventory_outbox.sql`, `0086_inventory_sync_fail_open_pause.sql` và `0087_inventory_sync_control.sql` trên Supabase của trang bán hàng, trước ở staging. Kiểm tra extension `pg_net` đã bật. Migration tạo hàng đợi với RLS; chỉ service role đọc được.
 3. Tạo một chuỗi ngẫu nhiên dài ít nhất 32 ký tự. Đặt chuỗi đó trong biến `INVENTORY_SYNC_SIGNING_SECRET` của ứng dụng kho và trong SQL dưới đây. URL phải là URL HTTPS công khai của kho:
 
    ```sql
