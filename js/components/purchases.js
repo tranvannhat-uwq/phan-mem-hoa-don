@@ -5,7 +5,7 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261005-egress-v2';
+} from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
 
 let pendingPurchaseKey = '';
 const pendingSupplierPaymentKeys = new Map();

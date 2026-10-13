@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode, showToast } from '../utils.js';
-import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261005-egress-v2';
-import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate } from '../domain/customer-debt.js?v=20261005-egress-v2';
+import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261013-order-amend-ledger-v1';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 let employeeBusinessChart = null;
@@ -223,14 +223,31 @@ window.viewCustomerDebtHistory = function(customerId) {
           ${history.map(item => {
             const isCharge = item.type === 'charge' || item.type === 'order';
             const isPay = item.type === 'payment';
-            const typeLabel = isCharge ? 'Phát sinh đơn hàng' : isPay ? 'Thu tiền nợ' : item.type === 'return' ? 'Khấu trừ trả hàng' : 'Điều chỉnh thủ công';
+            const isOrderAmendment = item.transactionType === 'order_amend';
+            const typeLabel = isOrderAmendment ? 'Điều chỉnh đơn' : isCharge ? 'Phát sinh đơn hàng' : isPay ? 'Thu tiền nợ' : item.type === 'return' ? 'Khấu trừ trả hàng' : 'Điều chỉnh thủ công';
             const colorClass = isCharge ? 'var(--color-danger)' : isPay ? 'var(--color-success)' : 'var(--color-primary)';
+            const businessDate = getCustomerDebtBusinessDate(item);
+            const postingDate = getCustomerDebtPostingDate(item);
+            const postingDateDifference = Math.abs(new Date(postingDate).getTime() - new Date(businessDate).getTime());
+            const postingDateDiffers = Number.isFinite(new Date(postingDate).getTime())
+              && (isOrderAmendment ? postingDateDifference > 0 : postingDateDifference >= 60000);
+            const postingDateLabel = postingDateDiffers && isOrderAmendment
+              ? new Intl.DateTimeFormat('vi-VN', {
+                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+              }).format(new Date(postingDate))
+              : postingDateDiffers ? formatDateTime(postingDate) : '';
+            const postingHint = postingDateDiffers
+              ? `<small style="display:block;color:var(--text-muted);font-size:0.7rem;">Ghi sổ ${postingDateLabel}</small>`
+              : '';
+            const transactionAmount = isOrderAmendment
+              ? `${Number(item.debtChange) >= 0 ? '+' : ''}${formatCurrency(item.debtChange)}`
+              : `${isPay || item.type === 'return' ? '-' : '+'}${formatCurrency(item.amount)}`;
 
             return `
               <tr>
-                <td>${formatDateTime(getCustomerDebtBusinessDate(item))}</td>
+                <td>${formatDateTime(businessDate)}${postingHint}</td>
                 <td><span style="font-weight: 600; color: ${colorClass};">${typeLabel}</span></td>
-                <td style="text-align: right; font-weight: 600; color: ${colorClass};">${isPay || item.type === 'return' ? '-' : '+'}${formatCurrency(item.amount)}</td>
+                <td style="text-align: right; font-weight: 600; color: ${colorClass};">${transactionAmount}</td>
                 <td style="text-align: right; font-weight: 700;">${formatCurrency(item.debtAfter)}</td>
                 <td style="font-size: 0.85rem; color: var(--text-secondary);">${item.notes || item.note || item.id || ''}</td>
               </tr>

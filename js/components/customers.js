@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20261005-egress-v2';
-import { renderAll } from '../main.js?v=20261005-egress-v2';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261005-egress-v2';
-import { addCashbookTransaction } from './so_quy.js?v=20261005-egress-v2';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
+import { renderAll } from '../main.js?v=20261013-order-amend-ledger-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261013-order-amend-ledger-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261013-order-amend-ledger-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261005-egress-v2';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261005-egress-v2';
+} from '../domain/order-financials.js?v=20261013-order-amend-ledger-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261013-order-amend-ledger-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261005-egress-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20261013-order-amend-ledger-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -3669,6 +3669,7 @@ export async function openCustomerDetailModal(index) {
         let amountText = '';
         let debtBefore = 0;
         const noteText = h.note || h.notes || '-';
+        const isOrderAmendment = h.transactionType === 'order_amend';
         const source = getCustomerDebtSource(h);
         const sourceIcon = source?.kind === 'cashbook' ? 'receipt-text' : source?.kind === 'return' ? 'rotate-ccw' : 'file-text';
         const sourceCell = source
@@ -3689,6 +3690,12 @@ export async function openCustomerDetailModal(index) {
           const returnChange = debtChange ?? -Math.abs(Number(h.amount || 0));
           amountText = `<span style="color: #0284c7; font-weight: 600;">-${formatCurrency(Math.abs(returnChange))}</span>`;
           debtBefore = h.debtBefore ?? (h.debtAfter - returnChange);
+        } else if (isOrderAmendment) {
+          typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: 600; white-space: nowrap;">Điều chỉnh đơn</span>`;
+          const amendmentChange = debtChange ?? Number(h.amount || 0);
+          const sign = amendmentChange >= 0 ? '+' : '';
+          amountText = `<span style="color: #818cf8; font-weight: 600;">${sign}${formatCurrency(amendmentChange)}</span>`;
+          debtBefore = h.debtBefore ?? (h.debtAfter - amendmentChange);
         } else {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: 600; white-space: nowrap;">Điều chỉnh</span>`;
           const effectiveChange = debtChange ?? Number(h.amount || 0);
@@ -3707,11 +3714,16 @@ export async function openCustomerDetailModal(index) {
           hour: '2-digit', minute: '2-digit'
         }).format(transactionDate);
         const postingDate = new Date(getCustomerDebtPostingDate(h));
+        const postingDateDifference = Math.abs(postingDate.getTime() - transactionDate.getTime());
         const postingDateDiffers = Number.isFinite(postingDate.getTime())
-          && Math.abs(postingDate.getTime() - transactionDate.getTime()) >= 60000;
+          && (isOrderAmendment ? postingDateDifference > 0 : postingDateDifference >= 60000);
+        const postingDateFormatOptions = {
+          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+        };
+        if (isOrderAmendment) postingDateFormatOptions.second = '2-digit';
         const postingHint = postingDateDiffers
           ? `<small style="display:block;color:var(--text-muted);font-size:0.65rem;white-space:nowrap;" title="Thứ tự số dư được tính theo thời điểm ghi sổ">Ghi sổ ${new Intl.DateTimeFormat('vi-VN', {
-            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+            ...postingDateFormatOptions
           }).format(postingDate)}</small>`
           : '';
         

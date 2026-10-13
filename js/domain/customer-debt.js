@@ -157,8 +157,9 @@ function debtRelationValue(entry = {}, camelKey, snakeKey) {
  * Build the effective business history shown to users.
  *
  * The database ledger remains append-only for audit. Cancellation rows remove
- * their whole source document from this projection, while amendment rows are
- * folded into the original transaction so the UI shows one current voucher.
+ * their whole source document from this projection. Non-order amendment rows
+ * are folded into their source transaction; order amendments stay separate so
+ * later invoices retain their real posting-time balance in the history view.
  */
 export function projectEffectiveCustomerDebtHistory(history = []) {
   const entries = (Array.isArray(history) ? history : []).filter(Boolean);
@@ -217,22 +218,40 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
       && !(type === 'order_amend' && projected.has(targetId))) continue;
     const target = targetId ? projected.get(targetId) : null;
     const amendmentChange = toDebtAmount(amendment.debtChange ?? amendment.debt_change);
+
+    if (type === 'order_amend') {
+      // Keep invoice edits at their actual posting time. Folding this delta
+      // into the original order made later invoices appear to have been issued
+      // against a balance that did not exist yet, while their saved snapshots
+      // correctly preserved the balance at issuance.
+      if (amendmentChange !== 0 && amendmentId) {
+        projected.set(amendmentId, {
+          ...amendment,
+          type: 'order_amend',
+          transactionType: 'order_amend',
+          amount: Math.abs(amendmentChange),
+          debtChange: amendmentChange,
+          postedAt: amendment.postedAt || amendment.posted_at
+            || amendment.createdAt || amendment.created_at
+            || getCustomerDebtPostingDate(amendment)
+        });
+        hiddenIds.delete(amendmentId);
+      }
+      continue;
+    }
+
     if (target) {
       const effectiveChange = toDebtAmount(target.debtChange ?? target.debt_change) + amendmentChange;
       target.debtChange = effectiveChange;
       target.amount = Math.abs(effectiveChange);
       target.debtAfter = toDebtAmount(amendment.debtAfter ?? amendment.balance_after);
-      // An order amendment changes the original invoice, so it remains on the
-      // invoice business timestamp instead of appearing as today's new sale.
-      if (type !== 'order_amend') {
-        target.date = amendment.date || target.date;
-        // A date-only amendment is metadata, not a new financial event. Keep
-        // the original posting position so changing the voucher date cannot
-        // move an old payment above newer transactions and break the visible
-        // running-balance sequence.
-        if (amendmentChange !== 0) {
-          target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
-        }
+      target.date = amendment.date || target.date;
+      // A date-only amendment is metadata, not a new financial event. Keep
+      // the original posting position so changing the voucher date cannot
+      // move an old payment above newer transactions and break the visible
+      // running-balance sequence.
+      if (amendmentChange !== 0) {
+        target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
       }
       // Alias the hidden delta to its visible target so a later amendment can
       // safely reference the immediately preceding amendment row.
@@ -251,11 +270,7 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
         type: effectiveType,
         transactionType: effectiveType === 'charge' ? 'order' : effectiveType,
         amount: Math.abs(amendmentChange),
-        debtChange: amendmentChange,
-        ...(type === 'order_amend' ? {
-          postedAt: amendment.date || amendment.transactionDate || amendment.transaction_date
-            || getCustomerDebtPostingDate(amendment)
-        } : {})
+        debtChange: amendmentChange
       });
       hiddenIds.delete(amendmentId);
     }
@@ -281,11 +296,11 @@ function getCustomerDebtEntryChange(entry = {}) {
 
 /**
  * Create the effective user-facing ledger. Technical cancellations are
- * removed and amendments are folded, so their stored snapshots cannot always
- * be displayed verbatim. Preserve immutable before/after snapshots whenever
- * they exist; only legacy rows without snapshots are reconstructed. The
- * business timestamp remains display metadata and must never rewrite an issued
- * invoice's historical balance.
+ * removed and non-order amendments are folded. Order amendments remain
+ * separate posting events so later invoice snapshots line up with the balance
+ * shown at issue time. Preserve stored before/after snapshots whenever they
+ * form a continuous ledger; only legacy rows without a valid chain are
+ * reconstructed.
  */
 export function buildCustomerDebtDisplayHistory(history = [], currentDebt = 0) {
   const chronological = projectEffectiveCustomerDebtHistory(history)
