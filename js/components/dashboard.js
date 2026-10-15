@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20261013-order-amend-ledger-v1';
+import { switchTab } from '../main.js?v=20261015-stock-sync-v1';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard } from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
+import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261015-stock-sync-v1';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261013-order-amend-ledger-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261015-stock-sync-v1';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
@@ -1202,6 +1202,8 @@ export function setupDashboardFilters() {
 
 let saleDebounceTimer = null;
 let customerDebounceTimer = null;
+let dashboardCustomerSearchSequence = 0;
+let selectedDashboardCustomer = null;
 
 function setupSaleAutocomplete() {
   const input = document.getElementById('dashboard-sale-search-input');
@@ -1304,7 +1306,8 @@ function setupCustomerAutocomplete() {
 
   const updateInputDisplay = () => {
     if (state.dashboardFilter.customerId && state.dashboardFilter.customerId !== 'all') {
-      const found = (state.customers || []).find(c => String(c.id) === String(state.dashboardFilter.customerId));
+      const found = (state.customers || []).find(c => String(c.id) === String(state.dashboardFilter.customerId))
+        || (String(selectedDashboardCustomer?.id) === String(state.dashboardFilter.customerId) ? selectedDashboardCustomer : null);
       input.value = found ? `${found.name} (${found.code})` : state.dashboardFilter.customerId;
       if (clearBtn) clearBtn.style.display = 'block';
     } else {
@@ -1316,22 +1319,49 @@ function setupCustomerAutocomplete() {
 
   updateInputDisplay();
 
-  const renderSuggestions = (query = '') => {
+  // A saved filter can refer to a customer outside the small in-memory list.
+  // Resolve only that one visible row, and ignore a response from an old user.
+  if (isCloudActive && state.dashboardFilter.customerId !== 'all'
+      && !(state.customers || []).some(c => String(c.id) === String(state.dashboardFilter.customerId))) {
+    const selectedId = String(state.dashboardFilter.customerId);
+    const actor = dashboardCompanyScopeActor();
+    void dbFetchInvoiceCustomerDetail(selectedId).then(customer => {
+      if (!customer || actor !== dashboardCompanyScopeActor()
+          || selectedId !== String(state.dashboardFilter.customerId)) return;
+      selectedDashboardCustomer = customer;
+      updateInputDisplay();
+    }).catch(error => console.warn('Could not resolve dashboard customer filter:', error));
+  }
+
+  const renderSuggestions = async (query = '') => {
+    const sequence = ++dashboardCustomerSearchSequence;
+    const actor = dashboardCompanyScopeActor();
     const cleanQuery = removeVietnameseTones(query.trim().toLowerCase());
     const phoneQuery = query.replace(/\D/g, '');
-    const custs = state.customers || [];
-    
-    let filtered = custs;
-    if (cleanQuery) {
-      filtered = custs.filter(c => {
-        const name = removeVietnameseTones((c.name || '').toLowerCase());
-        const code = removeVietnameseTones((c.code || '').toLowerCase());
-        const phone = (c.phone || '').replace(/\D/g, '');
-        return name.includes(cleanQuery) || code.includes(cleanQuery) || (phoneQuery && phone.includes(phoneQuery));
-      });
+    if (!cleanQuery) {
+      list.innerHTML = '<li style="padding:8px 12px;color:var(--text-muted);">Nhập tên, mã hoặc số điện thoại để tìm khách hàng</li>';
+      list.style.display = 'block';
+      return;
     }
-
-    filtered = filtered.slice(0, 20);
+    let filtered;
+    try {
+      filtered = isCloudActive
+        ? await dbSearchInvoiceCustomers(query, { limit: 20 })
+        : (state.customers || []).filter(c => {
+          const name = removeVietnameseTones((c.name || '').toLowerCase());
+          const code = removeVietnameseTones((c.code || '').toLowerCase());
+          const phone = (c.phone || '').replace(/\D/g, '');
+          return name.includes(cleanQuery) || code.includes(cleanQuery) || (phoneQuery && phone.includes(phoneQuery));
+        }).slice(0, 20);
+    } catch (error) {
+      if (sequence !== dashboardCustomerSearchSequence || actor !== dashboardCompanyScopeActor()) return;
+      list.innerHTML = '<li style="padding:8px 12px;color:var(--text-muted);">Không tải được khách hàng. Hãy thử lại.</li>';
+      list.style.display = 'block';
+      console.warn('Dashboard customer search failed:', error);
+      return;
+    }
+    if (sequence !== dashboardCustomerSearchSequence || actor !== dashboardCompanyScopeActor()
+        || query !== input.value) return;
 
     let html = `<li class="suggestion-item select-cust-opt" data-id="all" style="padding: 8px 12px; cursor: pointer; color: var(--color-primary); font-weight: 600;">-- Tất cả khách hàng --</li>`;
     if (filtered.length > 0) {
@@ -1343,6 +1373,9 @@ function setupCustomerAutocomplete() {
           </div>
         </li>
       `).join('');
+      if (filtered.hasMore === true) {
+        html += '<li style="padding:8px 12px;color:var(--text-muted);">Còn khách hàng khác. Nhập thêm tên, mã hoặc số điện thoại để thu hẹp.</li>';
+      }
     } else {
       html += `<li style="padding: 8px 12px; color: var(--text-muted); font-size: 0.85rem;">Không tìm thấy khách hàng</li>`;
     }
@@ -1352,7 +1385,9 @@ function setupCustomerAutocomplete() {
 
     list.querySelectorAll('.select-cust-opt').forEach(li => {
       li.onclick = () => {
+        dashboardCustomerSearchSequence += 1;
         const custId = li.getAttribute('data-id');
+        selectedDashboardCustomer = filtered.find(customer => String(customer.id) === custId) || null;
         state.dashboardFilter.customerId = custId;
         updateInputDisplay();
         list.style.display = 'none';
@@ -1363,19 +1398,22 @@ function setupCustomerAutocomplete() {
   };
 
   input.onfocus = () => {
-    renderSuggestions(input.value);
+    void renderSuggestions(state.dashboardFilter.customerId !== 'all' ? '' : input.value);
   };
 
   input.oninput = () => {
+    dashboardCustomerSearchSequence += 1;
     if (clearBtn) clearBtn.style.display = input.value ? 'block' : 'none';
     if (customerDebounceTimer) clearTimeout(customerDebounceTimer);
     customerDebounceTimer = setTimeout(() => {
-      renderSuggestions(input.value);
+      void renderSuggestions(input.value);
     }, 300);
   };
 
   if (clearBtn) {
     clearBtn.onclick = () => {
+      dashboardCustomerSearchSequence += 1;
+      selectedDashboardCustomer = null;
       state.dashboardFilter.customerId = 'all';
       updateInputDisplay();
       list.style.display = 'none';
@@ -1386,6 +1424,7 @@ function setupCustomerAutocomplete() {
 
   document.addEventListener('click', (e) => {
     if (!input.contains(e.target) && !list.contains(e.target) && (!clearBtn || !clearBtn.contains(e.target))) {
+      dashboardCustomerSearchSequence += 1;
       list.style.display = 'none';
       updateInputDisplay();
     }

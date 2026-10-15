@@ -1,5 +1,10 @@
 # PROMPT TỔNG CUỐI CÙNG – HỆ THỐNG LÊN ĐƠN VÀ TÀI CHÍNH
 
+> Cập nhật yêu cầu 14/10/2026: người dùng đã yêu cầu thêm kho tích hợp trong
+> ứng dụng bán hàng, với ngân sách dự kiến trong Supabase Free. Phần mở rộng
+> này được mô tả tại [INVENTORY_FREE_DEPLOYMENT.md](INVENTORY_FREE_DEPLOYMENT.md)
+> và thay thế giới hạn kho ngoài phạm vi trong tài liệu lịch sử bên dưới.
+
 Bạn là Senior Full-stack Engineer, Software Architect, Database Engineer, QA và Security Reviewer.
 
 Hãy chuẩn hóa dự án website lên đơn theo tài liệu này. Đây là nguồn yêu cầu chính. Không tự thay đổi nghiệp vụ, không tự thêm chức năng ngoài phạm vi và không đoán khi dữ liệu chưa đủ rõ.

@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261013-order-amend-ledger-v1">
+  <link rel="stylesheet" href="style.css?v=20261015-stock-sync-v1">
 </head>
 <body>
 
@@ -187,6 +187,12 @@
           <a class="nav-link" data-target="customers-panel">
             <i data-lucide="users"></i>
             Khách hàng
+          </a>
+        </li>
+        <li class="nav-item inventory-nav-item">
+          <a class="nav-link" data-target="inventory-panel">
+            <i data-lucide="warehouse"></i>
+            Quản lý kho
           </a>
         </li>
         <li class="nav-item purchase-nav-item">
@@ -687,6 +693,7 @@
       </section>
 
       <!-- Goods / Inventory & Production Panel -->
+      <section id="inventory-panel" class="panel" aria-label="Quản lý kho"></section>
       <section id="goods-panel" class="panel">
         <!-- Sub-navigation tabs for Goods module -->
         <div class="goods-sub-tabs-container glass-panel" style="margin-bottom: 1.5rem; display: flex; gap: 0.5rem; padding: 0.75rem;">
@@ -4529,6 +4536,6 @@
 
   <!-- App logic -->
   <script type="module" src="js/customer-care-landing.js?v=20260829-sheet-workspace-v4"></script>
-  <script type="module" src="js/main.js?v=20261013-order-amend-ledger-v1"></script>
+  <script type="module" src="js/main.js?v=20261015-stock-sync-v1"></script>
 </body>
 </html>

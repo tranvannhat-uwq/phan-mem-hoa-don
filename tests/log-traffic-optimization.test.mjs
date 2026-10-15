@@ -14,7 +14,7 @@ const deferred = () => {
 
 function createTimers() {
   const jobs = new Map();
-  let now = 0;
+  let now = Date.now();
   let nextId = 1;
   const schedule = (fn, delay, repeat) => {
     const id = nextId++;
@@ -27,6 +27,7 @@ function createTimers() {
     clearTimeout: id => jobs.delete(id),
     setInterval: (fn, delay) => schedule(fn, delay, true),
     clearInterval: id => jobs.delete(id),
+    now: () => now,
     async advance(duration) {
       const until = now + duration;
       for (;;) {
@@ -88,16 +89,24 @@ function loadComponent(path, context, expose) {
 function maintenanceHarness() {
   const timers = createTimers();
   const document = createDocument();
+  const window = createEventTarget();
+  const ClockDate = class extends Date { static now() { return timers.now(); } };
   const state = { currentUser: { id: 'staff-1', authUserId: 'auth-1', role: 'sale' }, users: [] };
-  const calls = { status: 0, realtimeStop: 0, signOut: 0, clearAuth: 0, warnings: [], toasts: [] };
+  const calls = { status: 0, realtimeStop: 0, signOut: 0, clearAuth: 0, inventoryReset: 0, warnings: [], toasts: [] };
   const results = [];
   let stopResult = null;
   const api = loadComponent('js/components/users.js', {
-    state, document, ...timers,
+    state, document, window, Date: ClockDate, ...timers,
+    resetSupabaseEgressMetrics() {},
     getMaintenanceStatus: () => { calls.status++; return results.shift() || Promise.resolve({ enabled: false }); },
     stopRealtimeSync: () => { calls.realtimeStop++; return stopResult || Promise.resolve(); },
     supabaseClient: { auth: { signOut: async () => { calls.signOut++; } } },
     clearSupabaseAuthStorage: () => { calls.clearAuth++; },
+    resetAuthenticatedBusinessState() {},
+    resetRealtimeEventMetrics() {},
+    resetInventoryPanel: () => { calls.inventoryReset++; },
+    resetInvoiceLookupSession() {},
+    resetInvoiceBuilder() {},
     showToast: (...args) => calls.toasts.push(args),
     LOGIN_ERROR: { MAINTENANCE: 'maintenance' }, loginErrorMessage: () => 'maintenance',
     console: { warn: (...args) => calls.warnings.push(args) }
@@ -115,7 +124,7 @@ test('maintenance skips hidden polling, checks when visible and cleans listeners
   h.document.emit('visibilitychange');
   await flush();
   assert.equal(h.calls.status, 1);
-  await h.timers.advance(15_000);
+  await h.timers.advance(60_000);
   assert.equal(h.calls.status, 2);
   h.api.stopMaintenanceMonitor();
   assert.equal(h.document.listeners.get('visibilitychange').size, 0);
@@ -136,7 +145,7 @@ test('maintenance requests stay single-flight through interval and visibility ev
   assert.equal(h.calls.status, 1);
   pending.reject(new Error('offline'));
   await flush();
-  await h.timers.advance(15_000);
+  await h.timers.advance(60_000);
   assert.equal(h.calls.status, 2);
   assert.equal(h.calls.warnings.length, 1);
 });
@@ -188,6 +197,7 @@ test('maintenance still signs employees out when enabled and does not poll admin
   assert.equal(h.calls.signOut, 1);
   assert.equal(h.calls.clearAuth, 1);
   assert.equal(h.state.currentUser, null);
+  assert.equal(h.calls.inventoryReset, 1);
   assert.equal(h.state.pricingSnapshotRevision, '');
   assert.equal(h.document.getElementById('login-maintenance-notice').textContent, 'Đang bảo trì');
   assert.equal(h.document.listeners.get('visibilitychange').size, 0);

@@ -15,18 +15,24 @@ const history = read('js/components/history.js');
 const cashbook = read('js/components/so_quy.js');
 const html = read('index.html');
 
-test('login uses a lean bootstrap and defers historical domains until their panels open', () => {
+test('login skips full customer and product collections until a dependent panel opens', () => {
   assert.match(users, /leanBootstrap:\s*true/);
   assert.match(main, /leanBootstrap:\s*true/);
   assert.match(service, /\.\.\.\(leanBootstrap \? \[\] : \[runDomain\('orders'\)\]\)/);
   assert.match(service, /Promise\.all\(leanBootstrap \? \[\] : \[/);
   assert.match(service, /fetchPricelists\(\{ includeItems: !leanBootstrap \}\)/);
   assert.match(service, /if \(!includeItems\) \{\s*itemData = \[\]/);
+  assert.match(service, /\(leanBootstrap \? \[\] : \[runDomain\('products'\)\]\)/);
+  assert.match(service, /\(leanBootstrap \? \[\] : \[runDomain\('customers'\)\]\)/);
   assert.match(main, /'invoice-panel': \['pricelists'\]/);
-  assert.match(main, /'pricelists-panel': \['pricelists'\]/);
-  assert.match(main, /'history-panel': \['orders', 'salesReturns'\]/);
-  assert.match(main, /'so-quy-panel': \['cashbook', 'startingBalances'\]/);
-  assert.match(main, /'dashboard-panel': \['customers'\]/);
+  assert.match(main, /'pricelists-panel': \['pricelists', 'products', 'customers'\]/);
+  assert.match(main, /'history-panel': \['orders', 'salesReturns', 'products', 'customers'\]/);
+  assert.match(main, /'so-quy-panel': \['cashbook', 'startingBalances', 'customers'\]/);
+  assert.match(main, /'dashboard-panel': \[\]/);
+  assert.match(main, /'products-panel': \['products',\s*'payrollProductGroups'\]/);
+  assert.match(main, /'customers-panel': \['customers'\]/);
+  assert.match(main, /'inventory-panel': \['products'\]/);
+  assert.match(dashboard, /dbSearchInvoiceCustomers\(query, \{ limit: 20 \}\)/);
   assert.match(main, /loadedPanelDomains\.has\(domain\)/);
   assert.match(main, /pendingPanelDomainLoads\.has\(loadKey\)/);
 });

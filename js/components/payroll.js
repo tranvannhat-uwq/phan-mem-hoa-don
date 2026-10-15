@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, showToast } from '../utils.js';
-import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
+import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20261015-stock-sync-v1';
 
 let currentPayroll = null;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);

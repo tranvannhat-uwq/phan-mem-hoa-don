@@ -15,8 +15,11 @@ test('customer search loads matching orders from the selected date window', () =
   assert.match(service, /export async function dbSearchOrdersForHistory/);
   assert.match(service, /createSearchQuery\('customer_name'\)/);
   assert.match(service, /\.in\('customer_id', matchingCustomerIds\)/);
-  assert.match(service, /if \(startIso\) scopedRequest = scopedRequest\.gte\('order_date', startIso\)/);
-  assert.match(service, /if \(endExclusiveIso\) scopedRequest = scopedRequest\.lt\('order_date', endExclusiveIso\)/);
+  assert.match(service, /const applyDateWindow = request => applyHistoryOrderWindow\(request, startIso, endExclusiveIso\)/);
+  assert.match(service, /function applyHistoryOrderWindow\(query, startIso = null, endExclusiveIso = null\)/);
+  assert.match(service, /order_date\.gte\.\$\{startIso\}/);
+  assert.match(service, /order_date\.lt\.\$\{endExclusiveIso\}/);
+  assert.match(service, /return filter \? query\.or\(filter\) : query/);
   assert.match(service, /state\.savedOrders = \[\s*\.\.\.mapped,/);
 });
 

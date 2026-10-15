@@ -1,22 +1,38 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode } from './services/supabase.js?v=20261013-order-amend-ledger-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261013-order-amend-ledger-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261013-order-amend-ledger-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261013-order-amend-ledger-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261013-order-amend-ledger-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261013-order-amend-ledger-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261013-order-amend-ledger-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor } from './components/users.js?v=20261013-order-amend-ledger-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261013-order-amend-ledger-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261013-order-amend-ledger-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261013-order-amend-ledger-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261013-order-amend-ledger-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261013-order-amend-ledger-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261013-order-amend-ledger-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261015-stock-sync-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261015-stock-sync-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261015-stock-sync-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261015-stock-sync-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261015-stock-sync-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261015-stock-sync-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261015-stock-sync-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261015-stock-sync-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261015-stock-sync-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261015-stock-sync-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261015-stock-sync-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261015-stock-sync-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261015-stock-sync-v1';
+import { renderInventoryPanel } from './components/inventory.js?v=20261015-stock-sync-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261015-stock-sync-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync } from './services/realtime.js?v=20261013-order-amend-ledger-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261013-order-amend-ledger-v1';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261015-stock-sync-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261015-stock-sync-v1';
+
+if (typeof window !== 'undefined') {
+  window.billingEgressMetrics = Object.freeze({
+    async snapshot() {
+      return {
+        http: await getSupabaseEgressSnapshot(),
+        realtime: getRealtimeEventMetricsSnapshot()
+      };
+    },
+    reset() {
+      resetSupabaseEgressMetrics();
+      resetRealtimeEventMetrics();
+    }
+  });
+}
 
 const SALES_WORKSPACE_HASH = '#/ban-hang';
 
@@ -25,14 +41,18 @@ function isSalesWorkspaceRoute() {
 }
 
 const PANEL_CLOUD_DOMAINS = Object.freeze({
-  'dashboard-panel': ['customers'],
+  'dashboard-panel': [],
+  'products-panel': ['products', 'payrollProductGroups'],
   'customers-panel': ['customers'],
   'invoice-panel': ['pricelists'],
-  'pricelists-panel': ['pricelists'],
-  'history-panel': ['orders', 'salesReturns'],
-  'so-quy-panel': ['cashbook', 'startingBalances'],
+  'pricelists-panel': ['pricelists', 'products', 'customers'],
+  'history-panel': ['orders', 'salesReturns', 'products', 'customers'],
+  'so-quy-panel': ['cashbook', 'startingBalances', 'customers'],
   'suppliers-panel': ['suppliers'],
-  'goods-panel': ['suppliers', 'purchases']
+  'goods-panel': ['suppliers', 'purchases', 'products'],
+  'inventory-panel': ['products'],
+  'reports-panel': ['customers'],
+  'brands-panel': ['products', 'customers']
 });
 const CLOUD_DOMAIN_LABELS = Object.freeze({
   products: 'sản phẩm', payrollProductGroups: 'nhóm sản phẩm', orders: 'đơn hàng',
@@ -43,13 +63,20 @@ const CLOUD_DOMAIN_LABELS = Object.freeze({
   salesReturns: 'phiếu trả hàng'
 });
 let panelCloudSessionId = '';
+let panelCloudClient = null;
 const loadedPanelDomains = new Set();
 const pendingPanelDomainLoads = new Map();
 
+function currentPanelCloudSessionId() {
+  const user = state.currentUser;
+  return user ? [user.authUserId || user.id || '', user.role || '', user.companyId || ''].join('|') : '';
+}
+
 function syncPanelCloudSession() {
-  const sessionId = String(state.currentUser?.authUserId || state.currentUser?.id || '');
-  if (panelCloudSessionId !== sessionId) {
+  const sessionId = currentPanelCloudSessionId();
+  if (panelCloudSessionId !== sessionId || panelCloudClient !== supabaseClient) {
     panelCloudSessionId = sessionId;
+    panelCloudClient = supabaseClient;
     loadedPanelDomains.clear();
     pendingPanelDomainLoads.clear();
   }
@@ -79,6 +106,7 @@ function panelHasPricingSnapshot(panelId) {
 
 function renderPanelCloudLoading(panelId) {
   const targets = {
+    'products-panel': ['products-table-body', '<tr><td colspan="16" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải sản phẩm…</td></tr>'],
     'invoice-panel': ['invoice-items-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải dữ liệu bảng giá…</td></tr>'],
     'customers-panel': ['customers-table-body', '<tr><td colspan="18" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải danh sách khách hàng…</td></tr>'],
     'pricelists-panel': ['pricelists-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải chi tiết bảng giá…</td></tr>'],
@@ -112,10 +140,13 @@ export async function ensurePanelCloudData(panelId, { force = false, domains: do
   const loadKey = [...domains].sort().join('|');
   if (!force && pendingPanelDomainLoads.has(loadKey)) return pendingPanelDomainLoads.get(loadKey);
 
+  const sessionId = panelCloudSessionId;
+  const client = supabaseClient;
   const load = fetchCloudData({
     onlyDomains: domains,
     hydrateCustomerHistory: false
   }).then(result => {
+    if (sessionId !== currentPanelCloudSessionId() || client !== supabaseClient) return result;
     const failedDomains = new Set(result?.failedDomains || []);
     domains.forEach(domain => {
       if (failedDomains.has(domain)) loadedPanelDomains.delete(domain);
@@ -123,13 +154,13 @@ export async function ensurePanelCloudData(panelId, { force = false, domains: do
     });
     if (state.currentTab === panelId) renderAll();
     return result;
-  }).finally(() => pendingPanelDomainLoads.delete(loadKey));
+  }).finally(() => {
+    if (pendingPanelDomainLoads.get(loadKey) === load) pendingPanelDomainLoads.delete(loadKey);
+  });
   pendingPanelDomainLoads.set(loadKey, load);
   if (state.currentTab === panelId) {
     renderAll();
-    if (domains.includes('pricelists') && !panelHasPricingSnapshot(panelId)) {
-      renderPanelCloudLoading(panelId);
-    }
+    if (!panelHasPricingSnapshot(panelId)) renderPanelCloudLoading(panelId);
   }
   return load;
 }
@@ -171,10 +202,14 @@ function setupCloudLoadRetry() {
       .map(([domain]) => domain);
     const domains = failed.length ? failed : (PANEL_CLOUD_DOMAINS[state.currentTab] || []);
     if (domains.length === 0) return;
+    syncPanelCloudSession();
+    const sessionId = panelCloudSessionId;
+    const client = supabaseClient;
     retryButton.disabled = true;
     const retryLoad = fetchCloudData({ onlyDomains: domains, hydrateCustomerHistory: false });
     renderAll();
     const result = await retryLoad;
+    if (sessionId !== currentPanelCloudSessionId() || client !== supabaseClient) return;
     const failedAfterRetry = new Set(result?.failedDomains || []);
     domains.forEach(domain => {
       if (failedAfterRetry.has(domain)) loadedPanelDomains.delete(domain);
@@ -235,6 +270,9 @@ export function renderAll() {
     case 'goods-panel':
       renderGoodsPanel();
       break;
+    case 'inventory-panel':
+      renderInventoryPanel();
+      break;
     case 'reports-panel': {
       populateCustomerEmployeeFilter();
       const activeReport = document.querySelector('.report-subtab-btn.active')?.getAttribute('data-subtab') || 'debt';
@@ -259,6 +297,9 @@ export function renderAll() {
 export function switchTab(panelId) {
   if (panelId === 'payroll-panel') panelId = 'dashboard-panel';
   if (state.currentUser?.role === 'sale' && ['products-panel', 'pricelists-panel'].includes(panelId)) {
+    panelId = 'invoice-panel';
+  }
+  if (panelId === 'inventory-panel' && !['admin', 'accounting'].includes(state.currentUser?.role)) {
     panelId = 'invoice-panel';
   }
   if (state.currentUser?.role === 'sale' && panelId === 'dashboard-panel') {
@@ -303,6 +344,7 @@ export function switchTab(panelId) {
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
   else if (panelId === 'goods-panel') heading.innerText = 'Phiếu mua hàng';
+  else if (panelId === 'inventory-panel') heading.innerText = 'Quản lý kho';
   else if (panelId === 'reports-panel') heading.innerText = 'Báo cáo nghiệp vụ';
   else if (panelId === 'activity-log-panel') heading.innerText = 'Lịch sử hoạt động';
   
@@ -552,7 +594,9 @@ function setupSupabaseSettings() {
     await stopRealtimeSync();
     disconnectSupabase();
   });
-  syncBtn.addEventListener('click', syncLocalToCloud);
+  syncBtn.addEventListener('click', () => syncLocalToCloud({
+    domains: PANEL_CLOUD_DOMAINS[state.currentTab] || []
+  }).then(() => renderAll()));
 }
 
 // loadLocalStorageBackup đã được chuyển sang services/supabase.js để tối ưu hóa
@@ -665,6 +709,7 @@ async function initApp() {
           isActive: profile.is_active === true
         };
         const maintenance = await getMaintenanceStatus();
+        noteMaintenanceStatusCheck(activeUser.authUserId || activeUser.id);
         if (maintenance.enabled && activeUser.role !== 'admin') {
           throw new Error(maintenance.message || 'Hệ thống đang bảo trì. Chỉ admin có thể truy cập.');
         }
@@ -704,6 +749,7 @@ async function initApp() {
   
   let recoveredCloudLoad = null;
   if (activeUser) {
+    resetAuthenticatedBusinessState();
     state.currentUser = activeUser;
     recoveredCloudLoad = await fetchCloudData({
       deferSecondary: true,

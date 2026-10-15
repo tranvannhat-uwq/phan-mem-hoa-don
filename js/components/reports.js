@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode, showToast } from '../utils.js';
-import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
-import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261013-order-amend-ledger-v1';
+import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261015-stock-sync-v1';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261015-stock-sync-v1';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 let employeeBusinessChart = null;
@@ -87,6 +87,7 @@ export function setupReportsPanel() {
 }
 
 export function switchReportSubtab(subtab) {
+  if (subtab === 'kpi') subtab = 'debt';
   document.querySelectorAll('.report-subtab-btn').forEach(btn => {
     if (btn.getAttribute('data-subtab') === subtab) btn.classList.add('active');
     else btn.classList.remove('active');

@@ -1,5 +1,8 @@
-BEGIN;
+DO $migration$
+BEGIN
 
+-- Keep the reconciliation in one server-side statement so the temp table
+-- survives statement-level autocommit in SQL editors.
 -- Reconcile standalone customer receipts created after the earlier backfill,
 -- including non-sales categories such as shipping support or penalties. Only a
 -- voucher whose partner text uniquely and exactly identifies one active customer
@@ -89,18 +92,14 @@ SELECT
   )::text) AS request_hash
 FROM sequenced;
 
-DO $validation$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM p46_cashbook_reconciliation repair
-    JOIN public.payments payment
-      ON payment.cashbook_transaction_id = repair.cashbook_id
-  ) THEN
-    RAISE EXCEPTION 'Migration 0046 stopped: a candidate voucher already has a payment row';
-  END IF;
-END
-$validation$;
+IF EXISTS (
+  SELECT 1
+  FROM p46_cashbook_reconciliation repair
+  JOIN public.payments payment
+    ON payment.cashbook_transaction_id = repair.cashbook_id
+) THEN
+  RAISE EXCEPTION 'Migration 0046 stopped: a candidate voucher already has a payment row';
+END IF;
 
 UPDATE public.cashbook_transactions cashbook
 SET transaction_type = 'customer_payment',
@@ -202,6 +201,7 @@ INSERT INTO public.schema_migrations(version, description)
 VALUES ('0046', 'Reconcile later non-sales customer receipts into debt history')
 ON CONFLICT (version) DO NOTHING;
 
-COMMIT;
+END
+$migration$;
 
 

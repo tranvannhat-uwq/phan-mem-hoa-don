@@ -8,7 +8,8 @@ test('workspace declares a mobile viewport and versioned responsive stylesheet',
   const html = read('index.html');
 
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, viewport-fit=cover"/);
-  assert.match(html, /style\.css\?v=20261005-egress-v2/);
+  const version = html.match(/src="js\/main\.js\?v=([^"]+)"/)[1];
+  assert.ok(html.includes(`style.css?v=${version}`));
   assert.match(html, /id="btn-mobile-nav-toggle"[\s\S]*aria-controls="primary-navigation"/);
   assert.match(html, /id="btn-toggle-dashboard-filters"[\s\S]*aria-controls="dashboard-filter-content"/);
 });

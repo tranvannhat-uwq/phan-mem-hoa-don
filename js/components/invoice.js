@@ -1,26 +1,91 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
-import { renderAll, switchTab } from '../main.js?v=20261013-order-amend-ledger-v1';
-import { populatePricelistsDropdowns } from './pricelists.js?v=20261013-order-amend-ledger-v1';
-import { generateUniqueCustomerCode } from './customers.js?v=20261013-order-amend-ledger-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261013-order-amend-ledger-v1';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20261013-order-amend-ledger-v1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, dbSearchInvoiceProducts, dbFetchInvoiceProductFamily, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20261015-stock-sync-v1';
+import { renderAll, switchTab } from '../main.js?v=20261015-stock-sync-v1';
+import { populatePricelistsDropdowns } from './pricelists.js?v=20261015-stock-sync-v1';
+import { generateUniqueCustomerCode } from './customers.js?v=20261015-stock-sync-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261015-stock-sync-v1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20261015-stock-sync-v1';
 import { normalizeCustomerPhone } from '../domain/customer-query.js';
-import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20261013-order-amend-ledger-v1';
+import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20261015-stock-sync-v1';
 import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js';
-import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20261013-order-amend-ledger-v1';
+import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20261015-stock-sync-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
-import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, resolveOrderBusinessDateTimeForSave } from '../domain/order-business-date.js?v=20261013-order-amend-ledger-v1';
+import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, resolveOrderBusinessDateTimeForSave } from '../domain/order-business-date.js?v=20261015-stock-sync-v1';
 import { reorderOrderItems } from '../domain/order-edit.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261013-order-amend-ledger-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261015-stock-sync-v1';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;
 let isSavingOrder = false;
 let selectedProductFamilyKey = '';
+let selectedProductFamilyScope = '';
+let invoiceProductSearchSequence = 0;
+let invoiceProductSearchTimer = null;
+let invoiceProductSearchPromise = null;
+let invoiceProductSearchPromiseKey = '';
+let invoiceProductSearchResolvedQuery = '';
+let invoiceProductSearchScope = '';
+let invoiceSearchProducts = [];
+let invoiceProductSearchHasMore = false;
+let invoiceCustomerSearchSequence = 0;
+let invoiceCustomerSearchTimer = null;
 const ORDER_IDEMPOTENCY_STORAGE_KEY = 'billing_pending_order_idempotency_key';
 const ORDER_PENDING_ID_STORAGE_KEY = 'billing_pending_order_id';
+const INVOICE_SEARCH_DELAY_MS = 250;
+
+function invoiceSearchScope() {
+  const actor = state.currentUser || {};
+  return [actor.authUserId || actor.id || '', actor.role || '', actor.username || ''].join(':');
+}
+
+function escapeInvoiceHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+}
+
+function resetInvoiceProductSearch() {
+  invoiceProductSearchSequence += 1;
+  clearTimeout(invoiceProductSearchTimer);
+  invoiceProductSearchTimer = null;
+  invoiceProductSearchResolvedQuery = '';
+  invoiceProductSearchScope = '';
+  invoiceSearchProducts = [];
+  invoiceProductSearchHasMore = false;
+  selectedProductFamilyKey = '';
+  selectedProductFamilyScope = '';
+  const input = document.getElementById('invoice-product-search');
+  input?.removeAttribute('data-selected-family-key');
+  input?.removeAttribute('data-matched-variant-id');
+  input?.removeAttribute('data-exact-variant-id');
+  const suggestions = document.getElementById('invoice-product-suggestions');
+  if (suggestions) suggestions.style.display = 'none';
+}
+
+function resetInvoiceCustomerSearch() {
+  invoiceCustomerSearchSequence += 1;
+  clearTimeout(invoiceCustomerSearchTimer);
+  invoiceCustomerSearchTimer = null;
+}
+
+export function resetInvoiceLookupSession() {
+  resetInvoiceProductSearch();
+  resetInvoiceCustomerSearch();
+  invoiceProductSearchPromise = null;
+  invoiceProductSearchPromiseKey = '';
+  currentOrderToPrint = null;
+  lastFinalizedOrder = null;
+  const customerInput = document.getElementById('invoice-customer-search');
+  if (customerInput) {
+    customerInput.value = '';
+    delete customerInput.dataset.selectedCustomerName;
+  }
+  const customerId = document.getElementById('invoice-customer-id');
+  if (customerId) customerId.value = '';
+  const suggestions = document.getElementById('invoice-customer-suggestions');
+  if (suggestions) suggestions.style.display = 'none';
+}
 
 function abbreviateSalesPosition(position = '') {
   const raw = String(position || '').trim();
@@ -293,8 +358,13 @@ function shouldRequestAuthoritativePriceListOverride() {
   });
 }
 
-function getInvoiceProductFamilies() {
-  let variants = (state.products || []).filter(product =>
+function getInvoiceProductFamilies(productsOverride = null) {
+  const products = productsOverride || (isCloudActive
+    && invoiceProductSearchResolvedQuery
+    && invoiceProductSearchScope === invoiceSearchScope()
+    ? invoiceSearchProducts
+    : state.products || []);
+  let variants = products.filter(product =>
     product?.id &&
     product.packageType &&
     !product.isLegacy &&
@@ -308,6 +378,140 @@ function getInvoiceProductFamilies() {
     });
   }
   return buildProductFamilies(variants);
+}
+
+function getLocalInvoiceProductMatches(query) {
+  return searchProductFamilies(getInvoiceProductFamilies(state.products || []), query).slice(0, 30);
+}
+
+function renderInvoiceProductSuggestions(list, input, matches, message = '', hasMore = false) {
+  if (!list || !input) return;
+  if (!input.value.trim()) {
+    list.style.display = 'none';
+    return;
+  }
+  if (!matches.length) {
+    list.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">${escapeInvoiceHtml(message || 'Không tìm thấy sản phẩm')}</li>`;
+  } else {
+    list.innerHTML = matches.map((family, index) => {
+      const matchedVariant = family.variants.find(variant => variant.id === family.matchedVariantId);
+      return `
+        <li class="suggestion-item" data-family-index="${index}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div class="suggestion-info" style="text-align: left; align-items: flex-start; display: flex; flex-direction: column;">
+            <span class="suggestion-code" style="font-weight: 700; color: var(--text-primary); font-size: 0.8rem;">${escapeInvoiceHtml(family.baseCode)}</span>
+            <span class="suggestion-name" style="color: var(--text-secondary); font-size: 0.85rem;">${escapeInvoiceHtml(family.name)}</span>
+            <span style="color: var(--text-muted); font-size: 0.75rem;">
+              ${matchedVariant
+                ? `Khớp ${escapeInvoiceHtml(matchedVariant.code)} • ${escapeInvoiceHtml(variantSpecification(matchedVariant))}`
+                : `Có ${family.variants.length} quy cách`}
+            </span>
+          </div>
+          <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #047857; border: 1px solid rgba(34, 197, 94, 0.3);">${escapeInvoiceHtml(family.brand)}</span>
+        </li>`;
+    }).join('');
+    if (hasMore) {
+      list.insertAdjacentHTML('beforeend', '<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Còn kết quả khác. Nhập thêm mã hoặc tên để thu hẹp.</li>');
+    }
+  }
+  list.style.display = 'block';
+  const renderedScope = invoiceSearchScope();
+  const renderedSequence = invoiceProductSearchSequence;
+  list.querySelectorAll('.suggestion-item[data-family-index]').forEach(item => {
+    item.addEventListener('click', () => {
+      if (renderedScope !== invoiceSearchScope()
+          || renderedSequence !== invoiceProductSearchSequence) return;
+      const family = matches[Number(item.dataset.familyIndex)];
+      if (!family) return;
+      invoiceProductSearchSequence += 1;
+      clearTimeout(invoiceProductSearchTimer);
+      selectedProductFamilyKey = family.key;
+      selectedProductFamilyScope = renderedScope;
+      input.value = family.baseCode;
+      input.setAttribute('data-selected-family-key', family.key);
+      input.setAttribute('data-matched-variant-id', family.matchedVariantId || '');
+      input.setAttribute('data-exact-variant-id', family.matchRank === 0 ? family.matchedVariantId || '' : '');
+      list.style.display = 'none';
+      void addProductToInvoice();
+    });
+  });
+}
+
+function lookupInvoiceProducts(query, scope) {
+  const key = `${scope}\u0000${query}`;
+  if (invoiceProductSearchPromise && invoiceProductSearchPromiseKey === key) {
+    return invoiceProductSearchPromise;
+  }
+  const promise = dbSearchInvoiceProducts(query, { limit: 40 });
+  invoiceProductSearchPromise = promise;
+  invoiceProductSearchPromiseKey = key;
+  promise.finally(() => {
+    if (invoiceProductSearchPromise === promise) {
+      invoiceProductSearchPromise = null;
+      invoiceProductSearchPromiseKey = '';
+    }
+  }).catch(() => {});
+  return promise;
+}
+
+async function refreshInvoiceProductSuggestions(query, sequence, input, list) {
+  const scope = invoiceSearchScope();
+  try {
+    const products = await lookupInvoiceProducts(query, scope);
+    if (sequence !== invoiceProductSearchSequence || scope !== invoiceSearchScope()
+        || input.value.trim() !== query) return false;
+    invoiceSearchProducts = Array.isArray(products) ? products : [];
+    invoiceProductSearchHasMore = products?.hasMore === true;
+    invoiceProductSearchResolvedQuery = query;
+    invoiceProductSearchScope = scope;
+    renderInvoiceProductSuggestions(
+      list, input,
+      searchProductFamilies(getInvoiceProductFamilies(), query).slice(0, 30),
+      '', invoiceProductSearchHasMore
+    );
+    return true;
+  } catch (error) {
+    if (sequence === invoiceProductSearchSequence && scope === invoiceSearchScope()
+        && input.value.trim() === query) {
+      renderInvoiceProductSuggestions(list, input, getLocalInvoiceProductMatches(query),
+        'Không tải được sản phẩm. Hãy thử lại.');
+    }
+    return false;
+  }
+}
+
+async function completeInvoiceProductFamily(family, preferredVariantId, exactVariantId, scope, sequence) {
+  if (!isCloudActive) return family;
+  const representativeId = family.variants.find(variant => variant.id === preferredVariantId)?.id
+    || family.variants[0]?.id;
+  if (!representativeId) return null;
+  try {
+    const result = await dbFetchInvoiceProductFamily(representativeId, { limit: 50 });
+    if (scope !== invoiceSearchScope() || sequence !== invoiceProductSearchSequence) return null;
+    const rows = Array.isArray(result?.data) ? result.data : [];
+    if (result?.hasMore) {
+      const exactVariant = [...rows, ...family.variants].find(variant => variant.id === exactVariantId);
+      if (exactVariant) {
+        addVariantToInvoice(exactVariant);
+      } else {
+        showToast('Dòng sản phẩm có hơn 50 quy cách. Hãy nhập đúng mã SKU để chọn.', 'warning');
+      }
+      return null;
+    }
+    const complete = getInvoiceProductFamilies(rows).find(candidate =>
+      candidate.variants.some(variant => variant.id === representativeId));
+    if (complete) return complete;
+    showToast('Không tải được quy cách của sản phẩm này. Hãy thử lại.', 'warning');
+    return null;
+  } catch (error) {
+    if (scope !== invoiceSearchScope() || sequence !== invoiceProductSearchSequence) return null;
+    // A cached local catalog still supports offline order drafting. A product
+    // seen only through server search needs the complete family to avoid
+    // silently dropping other active variants from the picker.
+    const localIds = new Set((state.products || []).map(product => product.id));
+    if (family.variants.every(variant => localIds.has(variant.id))) return family;
+    showToast('Không tải được các quy cách của sản phẩm. Hãy thử lại khi có mạng.', 'warning');
+    return null;
+  }
 }
 
 function closeVariantPicker() {
@@ -356,16 +560,25 @@ function addVariantToInvoice(variant) {
     searchInput.value = '';
     searchInput.removeAttribute('data-selected-family-key');
     searchInput.removeAttribute('data-matched-variant-id');
+    searchInput.removeAttribute('data-exact-variant-id');
   }
+  resetInvoiceProductSearch();
   selectedProductFamilyKey = '';
   renderInvoiceTable();
   searchInput?.focus();
   return true;
 }
 
-function openVariantPicker(family, preferredVariantId = '') {
+async function openVariantPicker(family, preferredVariantId = '', exactVariantId = '') {
   if (!family) return;
   if (warnIfInvoicePricingUnavailable()) return;
+  const scope = invoiceSearchScope();
+  const sequence = invoiceProductSearchSequence;
+  const completeFamily = await completeInvoiceProductFamily(
+    family, preferredVariantId, exactVariantId, scope, sequence
+  );
+  if (!completeFamily) return;
+  family = completeFamily;
   if (shouldAutoSelectVariant(family)) {
     addVariantToInvoice(family.variants.find(variant => variant.isActive !== false));
     return;
@@ -385,12 +598,12 @@ function openVariantPicker(family, preferredVariantId = '') {
       <button
         type="button"
         class="variant-choice ${variant.id === preferredVariantId ? 'highlighted' : ''}"
-        data-variant-id="${variant.id}"
+        data-variant-id="${escapeInvoiceHtml(variant.id)}"
         ${hasPrice ? '' : 'disabled'}
       >
         <span class="variant-choice-main">
-          <span class="variant-choice-spec">${variantSpecification(variant)}</span>
-          <span class="variant-choice-code">Mã SKU: ${variant.code}</span>
+          <span class="variant-choice-spec">${escapeInvoiceHtml(variantSpecification(variant))}</span>
+          <span class="variant-choice-code">Mã SKU: ${escapeInvoiceHtml(variant.code)}</span>
         </span>
         <span class="variant-choice-meta">
           <span class="variant-choice-price">${hasPrice ? formatCurrency(Number(price.price)) : 'Chưa có giá'}</span>
@@ -885,17 +1098,48 @@ export async function addProductToInvoice() {
   const searchInput = document.getElementById('invoice-product-search');
   const query = searchInput?.value.trim() || '';
   if (!query) return;
+  const scope = invoiceSearchScope();
+  const sequence = invoiceProductSearchSequence;
+  clearTimeout(invoiceProductSearchTimer);
+  if (isCloudActive && query.length >= 2
+      && (selectedProductFamilyScope !== scope
+        || !searchInput.getAttribute('data-selected-family-key'))
+      && (invoiceProductSearchResolvedQuery !== query || invoiceProductSearchScope !== scope)) {
+    try {
+      const products = await lookupInvoiceProducts(query, scope);
+      if (scope !== invoiceSearchScope() || sequence !== invoiceProductSearchSequence
+          || searchInput.value.trim() !== query) return;
+      invoiceSearchProducts = Array.isArray(products) ? products : [];
+      invoiceProductSearchHasMore = products?.hasMore === true;
+      invoiceProductSearchResolvedQuery = query;
+      invoiceProductSearchScope = scope;
+    } catch (error) {
+      if (scope !== invoiceSearchScope() || sequence !== invoiceProductSearchSequence) return;
+      if (!(state.products || []).length) {
+        showToast('Không tải được sản phẩm. Hãy thử lại khi có mạng.', 'warning');
+        return;
+      }
+    }
+  }
 
   const families = getInvoiceProductFamilies();
-  const selectedKey = searchInput.getAttribute('data-selected-family-key') || selectedProductFamilyKey;
+  const selectedKey = selectedProductFamilyScope === scope
+    ? searchInput.getAttribute('data-selected-family-key') || selectedProductFamilyKey
+    : '';
   let family = selectedKey ? families.find(item => item.key === selectedKey) : null;
   let matchedVariantId = searchInput.getAttribute('data-matched-variant-id') || '';
+  let exactVariantId = searchInput.getAttribute('data-exact-variant-id') || '';
 
   if (!family) {
     const matches = searchProductFamilies(families, query);
     if (matches.length === 1) {
+      if (invoiceProductSearchHasMore && matches[0].matchRank !== 0) {
+        showToast('Còn nhiều sản phẩm phù hợp. Hãy nhập thêm mã hoặc chọn trong danh sách.', 'warning');
+        return;
+      }
       family = matches[0];
       matchedVariantId = matches[0].matchedVariantId || '';
+      exactVariantId = matches[0].matchRank === 0 ? matchedVariantId : '';
     } else if (matches.length > 1) {
       showToast('Có nhiều sản phẩm phù hợp. Vui lòng chọn một sản phẩm trong danh sách.', 'warning');
       return;
@@ -906,7 +1150,7 @@ export async function addProductToInvoice() {
     showToast(`Không tìm thấy sản phẩm phù hợp với "${query}".`, 'danger');
     return;
   }
-  openVariantPicker(family, matchedVariantId);
+  await openVariantPicker(family, matchedVariantId, exactVariantId);
 }
 
 export function compileActiveOrder(customerOverride = null) {
@@ -1420,6 +1664,8 @@ export async function saveActiveOrder(status = 'settled') {
 }
 
 export function resetInvoiceCustomer() {
+  resetInvoiceCustomerSearch();
+  resetInvoiceProductSearch();
   state.activeCustomerId = '';
   state.activeCustomerBrand = 'Tất cả';
   
@@ -1464,6 +1710,8 @@ export function resetInvoiceCustomer() {
 }
 
 export function prepareInvoiceCustomerReselection(searchValue = '', shouldFocus = true) {
+  resetInvoiceCustomerSearch();
+  resetInvoiceProductSearch();
   state.activeCustomerId = '';
   state.activeCustomerBrand = 'Tất cả';
 
@@ -1498,14 +1746,18 @@ export function prepareInvoiceCustomerReselection(searchValue = '', shouldFocus 
 export function resetInvoiceBuilder() {
   clearPendingOrderIdempotencyKey();
   state.invoiceItems = [];
-  document.getElementById('invoice-notes').value = '';
+  const notesInput = document.getElementById('invoice-notes');
+  if (notesInput) notesInput.value = '';
   const productSearch = document.getElementById('invoice-product-search');
   if (productSearch) {
     productSearch.value = '';
     productSearch.removeAttribute('data-selected-family-key');
     productSearch.removeAttribute('data-matched-variant-id');
+    productSearch.removeAttribute('data-exact-variant-id');
   }
+  resetInvoiceProductSearch();
   selectedProductFamilyKey = '';
+  selectedProductFamilyScope = '';
   syncInvoiceBusinessDateControl(currentBusinessDateTimeInputValue(), false, true);
   closeVariantPicker();
   
@@ -2434,48 +2686,25 @@ export function setupInvoiceCreator() {
     searchInput.addEventListener('input', () => {
       searchInput.removeAttribute('data-selected-family-key');
       searchInput.removeAttribute('data-matched-variant-id');
+      searchInput.removeAttribute('data-exact-variant-id');
       selectedProductFamilyKey = '';
+      selectedProductFamilyScope = '';
+      resetInvoiceProductSearch();
       const query = searchInput.value.trim();
       if (!query) {
         suggestionsList.style.display = 'none';
         return;
       }
-
-      const matches = searchProductFamilies(getInvoiceProductFamilies(), query).slice(0, 30);
-
-      if (matches.length === 0) {
-        suggestionsList.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Không tìm thấy sản phẩm</li>`;
-      } else {
-        suggestionsList.innerHTML = matches.map(family => {
-          const matchedVariant = family.variants.find(variant => variant.id === family.matchedVariantId);
-          return `
-          <li class="suggestion-item" data-family-key="${family.key}" data-matched-variant-id="${family.matchedVariantId || ''}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
-            <div class="suggestion-info" style="text-align: left; align-items: flex-start; display: flex; flex-direction: column;">
-              <span class="suggestion-code" style="font-weight: 700; color: var(--text-primary); font-size: 0.8rem;">${family.baseCode}</span>
-              <span class="suggestion-name" style="color: var(--text-secondary); font-size: 0.85rem;">${family.name}</span>
-              <span style="color: var(--text-muted); font-size: 0.75rem;">
-                ${matchedVariant ? `Khớp ${matchedVariant.code} • ${variantSpecification(matchedVariant)}` : `Có ${family.variants.length} quy cách`}
-              </span>
-            </div>
-            <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #047857; border: 1px solid rgba(34, 197, 94, 0.3);">${family.brand}</span>
-          </li>
-        `;
-        }).join('');
+      const localMatches = searchProductFamilies(getInvoiceProductFamilies(state.products || []), query).slice(0, 30);
+      renderInvoiceProductSuggestions(suggestionsList, searchInput, localMatches,
+        isCloudActive && query.length < 2 ? 'Nhập ít nhất 2 ký tự để tìm trên máy chủ.'
+          : isCloudActive ? 'Đang tìm sản phẩm…' : 'Không tìm thấy sản phẩm');
+      if (isCloudActive && query.length >= 2) {
+        const sequence = invoiceProductSearchSequence;
+        invoiceProductSearchTimer = setTimeout(() => {
+          void refreshInvoiceProductSuggestions(query, sequence, searchInput, suggestionsList);
+        }, INVOICE_SEARCH_DELAY_MS);
       }
-      suggestionsList.style.display = 'block';
-
-      suggestionsList.querySelectorAll('.suggestion-item[data-family-key]').forEach(item => {
-        item.addEventListener('click', () => {
-          const family = matches.find(match => match.key === item.dataset.familyKey);
-          if (!family) return;
-          selectedProductFamilyKey = family.key;
-          searchInput.value = family.baseCode;
-          searchInput.setAttribute('data-selected-family-key', family.key);
-          searchInput.setAttribute('data-matched-variant-id', item.dataset.matchedVariantId || '');
-          suggestionsList.style.display = 'none';
-          addProductToInvoice();
-        });
-      });
     });
 
     searchInput.addEventListener('keydown', (e) => {
@@ -2630,7 +2859,6 @@ export function setupInvoiceCreator() {
 
 function setupInvoiceCustomerSearch() {
   const custSearchInput = document.getElementById('invoice-customer-search');
-  const infoCard = document.getElementById('invoice-customer-info-card');
   const clearBtn = document.getElementById('btn-clear-invoice-customer');
 
   if (!custSearchInput) return;
@@ -2643,59 +2871,93 @@ function setupInvoiceCustomerSearch() {
     prepareInvoiceCustomerReselection();
   });
 
-  // Lắng nghe sự kiện để tìm kiếm gợi ý khách hàng giống như tìm sản phẩm
   const suggestions = document.createElement('ul');
   suggestions.className = 'suggestions-list';
   suggestions.id = 'invoice-customer-suggestions';
   suggestions.style.display = 'none';
   custSearchInput.parentNode.appendChild(suggestions);
 
+  const visibleToActor = c => {
+    if (state.currentUser && state.currentUser.role === 'sale') {
+      if (!isSameUser(c.managedBy, state.currentUser.username)) return false;
+    }
+    return true;
+  };
+  const localMatches = query => (state.customers || []).filter(customer =>
+    visibleToActor(customer)
+    && ([customer.code, customer.name, customer.phone].some(value =>
+      String(value || '').toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi')))
+      || (/^[+\d\s()./-]+$/.test(query) && normalizeCustomerPhone(query).length >= 3
+        && normalizeCustomerPhone(customer.phone).includes(normalizeCustomerPhone(query))))
+  ).slice(0, 30);
+  const renderSuggestions = (matches, message, sequence, scope, hasMore = false) => {
+    if (!custSearchInput.value.trim() || state.isQuickCustomerMode) {
+      suggestions.style.display = 'none';
+      return;
+    }
+    if (!matches.length) {
+      suggestions.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">${escapeInvoiceHtml(message || 'Không tìm thấy khách hàng')}</li>`;
+    } else {
+      suggestions.innerHTML = matches.map((customer, index) => `
+        <li class="suggestion-item select-cust-suggestion" data-customer-index="${index}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div class="suggestion-info">
+            <span style="font-weight: 600; color: var(--text-primary);">${escapeInvoiceHtml(customer.name)} (${escapeInvoiceHtml(customer.code)})</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-top: 2px;">SĐT: ${escapeInvoiceHtml(customer.phone || 'N/A')} • Nợ: ${escapeInvoiceHtml(formatCurrency(customer.debt))}</span>
+          </div>
+        </li>`).join('');
+      if (hasMore) {
+        suggestions.insertAdjacentHTML('beforeend', '<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Còn kết quả khác. Nhập thêm tên, mã hoặc số điện thoại.</li>');
+      }
+    }
+    suggestions.style.display = 'block';
+    suggestions.querySelectorAll('.select-cust-suggestion').forEach(item => {
+      item.addEventListener('click', async () => {
+        if (sequence !== invoiceCustomerSearchSequence || scope !== invoiceSearchScope()
+            || state.isQuickCustomerMode) return;
+        const customer = matches[Number(item.dataset.customerIndex)];
+        if (!customer) return;
+        suggestions.style.display = 'none';
+        await selectInvoiceCustomer(customer);
+      });
+    });
+  };
+
   custSearchInput.addEventListener('input', () => {
-    if (state.isQuickCustomerMode) return; // Không cần gợi ý ở chế độ khách lẻ
+    resetInvoiceCustomerSearch();
+    if (state.isQuickCustomerMode) return;
 
     const selectedName = custSearchInput.dataset.selectedCustomerName || '';
     if (state.activeCustomerId && custSearchInput.value.trim() !== selectedName) {
       const typedValue = custSearchInput.value;
       prepareInvoiceCustomerReselection(typedValue, false);
     }
-    
-    const val = custSearchInput.value.trim().toLowerCase();
-    if (val === '') {
+
+    const query = custSearchInput.value.trim();
+    if (!query) {
       suggestions.style.display = 'none';
       return;
     }
-
-    const matches = state.customers.filter(c => {
-      if (state.currentUser && state.currentUser.role === 'sale') {
-        if (!isSameUser(c.managedBy, state.currentUser.username)) return false;
-      }
-      return c.code.toLowerCase().includes(val) || c.name.toLowerCase().includes(val) || (c.phone && c.phone.includes(val));
-    });
-
-    if (matches.length === 0) {
-      suggestions.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Không tìm thấy khách hàng</li>`;
-    } else {
-      suggestions.innerHTML = matches.map(c => `
-        <li class="suggestion-item select-cust-suggestion" data-id="${c.id}" style="text-align: left; display: flex; justify-content: space-between; align-items: center; width: 100%;">
-          <div class="suggestion-info">
-            <span style="font-weight: 600; color: var(--text-primary);">${c.name} (${c.code})</span>
-            <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-top: 2px;">SĐT: ${c.phone || 'N/A'} • Nợ: ${formatCurrency(c.debt)}</span>
-          </div>
-        </li>
-      `).join('');
-    }
-    suggestions.style.display = 'block';
-
-    document.querySelectorAll('.select-cust-suggestion').forEach(item => {
-      item.addEventListener('click', async () => {
-        const id = item.getAttribute('data-id');
-        const customer = state.customers.find(c => c.id === id);
-        if (customer) {
-          await selectInvoiceCustomer(customer);
+    const sequence = invoiceCustomerSearchSequence;
+    const scope = invoiceSearchScope();
+    renderSuggestions(localMatches(query),
+      isCloudActive && query.length < 2 ? 'Nhập ít nhất 2 ký tự để tìm trên máy chủ.'
+        : isCloudActive ? 'Đang tìm khách hàng…' : 'Không tìm thấy khách hàng',
+      sequence, scope);
+    if (isCloudActive && query.length >= 2) {
+      invoiceCustomerSearchTimer = setTimeout(async () => {
+        try {
+          const customers = await dbSearchInvoiceCustomers(query, { limit: 30 });
+          if (sequence !== invoiceCustomerSearchSequence || scope !== invoiceSearchScope()
+              || custSearchInput.value.trim() !== query || state.isQuickCustomerMode) return;
+          renderSuggestions(Array.isArray(customers) ? customers : [],
+            'Không tìm thấy khách hàng', sequence, scope, customers?.hasMore === true);
+        } catch (error) {
+          if (sequence !== invoiceCustomerSearchSequence || scope !== invoiceSearchScope()
+              || custSearchInput.value.trim() !== query || state.isQuickCustomerMode) return;
+          renderSuggestions(localMatches(query), 'Không tải được khách hàng. Hãy thử lại.', sequence, scope);
         }
-        suggestions.style.display = 'none';
-      });
-    });
+      }, INVOICE_SEARCH_DELAY_MS);
+    }
   });
 
   document.addEventListener('click', (e) => {
@@ -2708,8 +2970,40 @@ function setupInvoiceCustomerSearch() {
 }
 
 async function selectInvoiceCustomer(customer) {
+  if (!customer?.id) return;
+  const scope = invoiceSearchScope();
+  resetInvoiceCustomerSearch();
+  const sequence = invoiceCustomerSearchSequence;
+  if (isCloudActive) {
+    try {
+      const current = await dbFetchInvoiceCustomerDetail(customer.id);
+      if (scope !== invoiceSearchScope() || sequence !== invoiceCustomerSearchSequence) return;
+      if (!current) {
+        showToast('Không còn quyền chọn khách hàng này. Hãy tìm lại.', 'warning');
+        return;
+      }
+      customer = current;
+    } catch (error) {
+      if (scope !== invoiceSearchScope() || sequence !== invoiceCustomerSearchSequence) return;
+      const locallyKnown = (state.customers || []).find(item => item.id === customer.id);
+      if (!locallyKnown || (state.currentUser?.role === 'sale'
+          && !isSameUser(locallyKnown.managedBy, state.currentUser.username))) {
+        showToast('Không xác minh được quyền chọn khách hàng. Hãy thử lại khi có mạng.', 'warning');
+        return;
+      }
+      customer = locallyKnown;
+    }
+  } else if (state.currentUser?.role === 'sale'
+      && !isSameUser(customer.managedBy, state.currentUser.username)) {
+    return;
+  }
+  const existingIndex = (state.customers || []).findIndex(item => item.id === customer.id);
+  customer = existingIndex >= 0 ? { ...state.customers[existingIndex], ...customer } : customer;
+  if (existingIndex >= 0) state.customers[existingIndex] = customer;
+  else state.customers.push(customer);
   state.activeCustomerId = customer.id;
   state.activeCustomerBrand = customer.assignedBrand;
+  resetInvoiceProductSearch();
 
   const assignedReference = customer.pricelistId || customer.defaultPriceListId || '';
   let applicablePricing = getApplicablePriceList(
@@ -2739,6 +3033,8 @@ async function selectInvoiceCustomer(customer) {
       showToast('Máy chủ chưa trả được bảng giá đã gắn cho đại lý này. Admin cần áp dụng bản cập nhật 0041.', 'danger');
     }
   }
+  if (scope !== invoiceSearchScope() || sequence !== invoiceCustomerSearchSequence
+      || state.activeCustomerId !== customer.id) return;
   
   document.getElementById('invoice-customer-id').value = customer.id;
   document.getElementById('invoice-customer-search').value = customer.name;

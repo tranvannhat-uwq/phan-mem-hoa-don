@@ -1,5 +1,8 @@
-BEGIN;
+DO $migration$
+BEGIN
 
+-- Keep the reconciliation in one server-side statement so the temp table
+-- survives statement-level autocommit in SQL editors.
 -- Reconcile standalone receipt vouchers whose partner text uniquely and
 -- exactly identifies one active customer. The whole repair is atomic: link
 -- the voucher, create its payment and debt-ledger rows, and correct the
@@ -89,18 +92,14 @@ SELECT
   )::text) AS request_hash
 FROM sequenced;
 
-DO $validation$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM p34_cashbook_reconciliation repair
-    JOIN public.payments payment
-      ON payment.cashbook_transaction_id = repair.cashbook_id
-  ) THEN
-    RAISE EXCEPTION 'Migration 0034 stopped: a candidate voucher already has a payment row';
-  END IF;
-END
-$validation$;
+IF EXISTS (
+  SELECT 1
+  FROM p34_cashbook_reconciliation repair
+  JOIN public.payments payment
+    ON payment.cashbook_transaction_id = repair.cashbook_id
+) THEN
+  RAISE EXCEPTION 'Migration 0034 stopped: a candidate voucher already has a payment row';
+END IF;
 
 UPDATE public.cashbook_transactions cashbook
 SET transaction_type = 'customer_payment',
@@ -202,4 +201,5 @@ INSERT INTO public.schema_migrations(version, description)
 VALUES ('0034', 'Reconcile exact customer cashbook receipts and correct debt history')
 ON CONFLICT (version) DO NOTHING;
 
-COMMIT;
+END
+$migration$;

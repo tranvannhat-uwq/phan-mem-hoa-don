@@ -16,7 +16,8 @@ test('browser synchronization only refreshes from authoritative Cloud', () => {
     service.indexOf('export async function syncLocalToCloud'),
     service.indexOf('async function legacyLocalUploadDisabled')
   );
-  assert.match(safeSync, /await fetchCloudData\(\{ leanBootstrap: true, hydrateCustomerHistory: false \}\)/);
+  assert.match(safeSync, /const requestedDomains = \[\.\.\.new Set\(\[/);
+  assert.match(safeSync, /await fetchCloudData\(\{ onlyDomains: requestedDomains, hydrateCustomerHistory: false \}\)/);
   assert.doesNotMatch(safeSync, /localStorage|\.getItem\(|\.upsert\(|\.insert\(|\.update\(|\.delete\(/);
 });
 

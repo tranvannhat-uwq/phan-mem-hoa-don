@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiểm thử Quản lý kho — dữ liệu giả lập</title><link rel="stylesheet" href="../style.css">
+<script>window.__app_initialized = true;</script></head><body>
+<main style="width:100%;min-width:0;max-width:1200px;margin:auto;padding:24px"><p style="color:#2563eb;margin-bottom:20px">KIỂM THỬ · Dữ liệu giả lập · Không kết nối Supabase</p>
+<section id="inventory-panel" class="panel active"></section><output id="inventory-harness-calls" style="display:block;margin-top:20px"></output></main><div id="toast-container"></div>
+<script type="module">
+import { state } from '../js/state.js';
+import { inventoryGateway } from '../js/services/inventory.js?v=20261015-stock-sync-v1';
+import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261015-stock-sync-v1';
+state.currentUser = {id:'test-admin', authUserId:'test-admin',role:'admin'};
+state.currentTab = 'inventory-panel';
+const rows = Array.from({length:65},(_,i)=>({product_id:`sku-${String(i).padStart(3,'0')}`,sku:`SON-${String(i+1).padStart(3,'0')}-LON`,name:`Sơn kiểm thử ${i+1}`,brand:'Hãng kiểm thử',unit:'Lon',quantity:i===0?10:20,minimum_quantity:5,is_active:true}));
+state.products = rows.map(row=>({id:row.product_id,code:row.sku,name:row.name,brand:row.brand,packageType:'Lon',isActive:true}));
+let reads=0;let posts=0;let active=false;let activatedAt=null;const movements=[];const seen=new Map();
+const stamp=()=>document.getElementById('inventory-harness-calls').textContent=`Số lần đọc: ${reads} · Số phiếu đã lưu: ${posts}`;
+inventoryGateway.read = async filters=>{
+ reads++;stamp();
+ const history=filters.mode==='movements'; const source=history?movements:[...rows].filter(row=>!filters.query||`${row.sku} ${row.name} ${row.brand}`.toLowerCase().includes(filters.query.toLowerCase())).filter(row=>!filters.lowOnly||row.quantity<=row.minimum_quantity);
+ const filtered=filters.cursor?source.filter(row=>history?row.id<Number(filters.cursor):row.product_id>filters.cursor):source;
+ const page=filtered.slice(0,50);
+ return {rows:page,hasMore:filtered.length>50,nextCursor:filtered.length>50?(history?page.at(-1).id:page.at(-1).product_id):null,control:{activatedAt,syncAvailable:true,syncEnabled:active,pendingOrders:0},usage:{databaseBytes:185000000,moduleBytes:512000,budgetUsed:reads*24000,budgetLimit:400000000,cycleStart:'2026-09-21'}};
+};
+inventoryGateway.post = async input=>{
+ if(seen.has(input.requestKey))return seen.get(input.requestKey);
+ for(const item of input.items){const row=rows.find(row=>row.product_id===item.productId);if(input.kind==='count'&&row.quantity!==item.expectedQuantity)throw new Error('Tồn kho đã thay đổi. Tải lại trước khi kiểm kê.');if(input.kind==='issue'&&row.quantity<item.quantity)throw new Error('Không đủ tồn kho.');}
+ for(const item of input.items){const row=rows.find(row=>row.product_id===item.productId);const delta=input.kind==='count'?item.quantity-row.quantity:input.kind==='issue'?-item.quantity:item.quantity;row.quantity+=delta;if(input.kind==='count')row.minimum_quantity=item.minimumQuantity;movements.unshift({...row,id:movements.length+1,delta,balance_after:row.quantity,kind:input.kind,document_id:`TEST-${posts+1}`,note:input.note,created_at:new Date().toISOString()});}
+ posts++;stamp();const result={id:`TEST-${posts}`};seen.set(input.requestKey,result);return result;
+};
+inventoryGateway.setSync=async enabled=>{if(enabled&&!activatedAt&&!movements.some(row=>row.kind==='count'))throw new Error('Cần ghi nhận ít nhất một phiếu kiểm kê tồn đầu kỳ.');active=enabled;if(enabled&&!activatedAt)activatedAt=new Date().toISOString();return{enabled,activatedAt,pendingOrders:0,processed:0,updatedAt:new Date().toISOString()};};
+renderInventoryPanel();
+</script></body></html>

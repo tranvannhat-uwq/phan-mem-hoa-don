@@ -159,7 +159,7 @@ test('online catch-up and later SUBSCRIBED for the same outage read only once', 
   channel.status('SUBSCRIBED');
   await harness.advance();
   assert.equal(harness.requests.length, 1);
-  assert.deepEqual(harness.requests[0].onlyDomains, ['products', 'customers', 'pricelists']);
+  assert.deepEqual(harness.requests[0].onlyDomains, ['pricelists']);
 });
 
 test('a later browser online event reuses the SDK recovery for the same outage', async () => {
@@ -328,13 +328,13 @@ test('logout during channel shutdown cancels the waiting realtime start', async 
   assert.equal(harness.channels.length, 1);
 });
 
-test('dashboard reconnect loads customers and lets its statistics renderer use the RPC', async () => {
+test('dashboard reconnect invalidates the aggregate cache without downloading customer rows', async () => {
   const { harness, channel } = await startSubscribed();
   harness.state.currentTab = 'dashboard-panel';
   channel.status('CHANNEL_ERROR');
   channel.status('SUBSCRIBED');
   await harness.advance();
-  assert.deepEqual(harness.requests[0].onlyDomains, ['customers']);
+  assert.equal(harness.requests.length, 0);
   assert.equal(harness.renderCount, 1);
   assert.equal(harness.dashboardInvalidations, 1);
   assert.deepEqual(harness.effects, ['invalidate', 'render']);

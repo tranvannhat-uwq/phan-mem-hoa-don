@@ -1,16 +1,18 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus } from '../services/supabase.js?v=20261013-order-amend-ledger-v1';
-import { startRealtimeSync, stopRealtimeSync } from '../services/realtime.js?v=20261013-order-amend-ledger-v1';
-import { renderAll, switchTab } from '../main.js?v=20261013-order-amend-ledger-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261013-order-amend-ledger-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261015-stock-sync-v1';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261015-stock-sync-v1';
+import { renderAll, switchTab } from '../main.js?v=20261015-stock-sync-v1';
+import { populateManagedByDropdown } from './customers.js?v=20261015-stock-sync-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261013-order-amend-ledger-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261015-stock-sync-v1';
+import { resetInventoryPanel } from './inventory.js?v=20261015-stock-sync-v1';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261015-stock-sync-v1';
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -373,6 +375,10 @@ let maintenanceMonitor = null;
 let maintenanceVisibilityHandler = null;
 let maintenanceMonitorGeneration = 0;
 let maintenanceStatusRequest = null;
+let maintenanceOnlineHandler = null;
+let maintenancePageShowHandler = null;
+let maintenanceChannel = null;
+const MAINTENANCE_CHECK_INTERVAL_MS = 60_000;
 
 function currentMaintenanceUserId() {
   return String(state.currentUser?.authUserId || state.currentUser?.id || state.currentUser?.username || '');
@@ -383,6 +389,64 @@ function isCurrentMaintenanceSession(userId, generation) {
     && !!state.currentUser
     && state.currentUser.role !== 'admin'
     && currentMaintenanceUserId() === userId;
+}
+
+function maintenanceProjectKey() {
+  try {
+    const url = localStorage.getItem('billing_supabase_url') || '';
+    return new URL(url).hostname.split('.')[0] || 'default';
+  } catch (_error) {
+    return 'default';
+  }
+}
+
+function maintenanceCheckKey(userId = currentMaintenanceUserId()) {
+  return `billing_maintenance_check:${maintenanceProjectKey()}:${encodeURIComponent(userId)}`;
+}
+
+function readLastMaintenanceCheck(userId = currentMaintenanceUserId()) {
+  try {
+    const raw = localStorage.getItem(maintenanceCheckKey(userId)) || '';
+    let value = Number(raw);
+    if (!Number.isFinite(value)) {
+      try { value = Number(JSON.parse(raw)?.at || 0); } catch (_error) { value = 0; }
+    }
+    return Number.isFinite(value) ? value : 0;
+  } catch (_error) {
+    return 0;
+  }
+}
+
+export function noteMaintenanceStatusCheck(userId = currentMaintenanceUserId(), at = Date.now()) {
+  try { localStorage.setItem(maintenanceCheckKey(userId), String(at)); } catch (_error) { /* browser storage can be disabled */ }
+}
+
+function claimMaintenanceFallbackLease(userId, now, force = false) {
+  const key = maintenanceCheckKey(userId);
+  if (!force && now - readLastMaintenanceCheck(userId) < MAINTENANCE_CHECK_INTERVAL_MS) return false;
+  const token = `${now}:${Math.random().toString(36).slice(2)}`;
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: now, token }));
+    return JSON.parse(localStorage.getItem(key) || '{}').token === token;
+  } catch (_error) {
+    // If storage and Web Locks are both unavailable, this tab still checks at
+    // most once per minute, but another open tab cannot be coordinated.
+    return force || now - lastMaintenanceStatusCheckInTab >= MAINTENANCE_CHECK_INTERVAL_MS;
+  }
+}
+
+let lastMaintenanceStatusCheckInTab = 0;
+
+function broadcastMaintenanceStatus(userId, status) {
+  if (!maintenanceChannel) return;
+  try {
+    maintenanceChannel.postMessage({
+      project: maintenanceProjectKey(), userId,
+      enabled: status.enabled === true,
+      message: String(status.message || ''),
+      updatedAt: status.updatedAt || null
+    });
+  } catch (_error) { /* another tab may have closed the channel */ }
 }
 
 function setMaintenanceNotice(message = '', visible = false) {
@@ -398,36 +462,70 @@ export function stopMaintenanceMonitor() {
   if (maintenanceMonitor !== null) clearInterval(maintenanceMonitor);
   maintenanceMonitor = null;
   if (maintenanceVisibilityHandler) document.removeEventListener('visibilitychange', maintenanceVisibilityHandler);
+  if (maintenanceOnlineHandler) window.removeEventListener('online', maintenanceOnlineHandler);
+  if (maintenancePageShowHandler) window.removeEventListener('pageshow', maintenancePageShowHandler);
+  maintenanceChannel?.close();
+  maintenanceChannel = null;
   maintenanceVisibilityHandler = null;
+  maintenanceOnlineHandler = null;
+  maintenancePageShowHandler = null;
 }
 
-async function enforceMaintenanceForActiveEmployee() {
+async function applyMaintenanceStatus(status, userId, generation) {
+  if (!status?.enabled || !isCurrentMaintenanceSession(userId, generation)) return;
+  stopMaintenanceMonitor();
+  const logoutGeneration = maintenanceMonitorGeneration;
+  await stopRealtimeSync();
+  if (!isCurrentMaintenanceSession(userId, logoutGeneration)) return;
+  try { await supabaseClient?.auth.signOut(); } catch (_) { /* clear local session below */ }
+  if (!isCurrentMaintenanceSession(userId, logoutGeneration)) return;
+  clearAuthenticatedSessionState();
+  clearSupabaseAuthStorage();
+  showLoginGate();
+  setMaintenanceNotice(status.message, true);
+  showToast(status.message, 'warning');
+}
+
+async function enforceMaintenanceForActiveEmployee({ force = false } = {}) {
   if (document.hidden || !state.currentUser || state.currentUser.role === 'admin' || maintenanceStatusRequest) return;
   const userId = currentMaintenanceUserId();
   const generation = maintenanceMonitorGeneration;
   const request = { userId, generation };
   maintenanceStatusRequest = request;
   try {
-    const status = await getMaintenanceStatus();
-    if (!isCurrentMaintenanceSession(userId, generation) || !status.enabled) return;
-    stopMaintenanceMonitor();
-    const logoutGeneration = maintenanceMonitorGeneration;
-    await stopRealtimeSync();
-    if (!isCurrentMaintenanceSession(userId, logoutGeneration)) return;
-    try { await supabaseClient?.auth.signOut(); } catch (_) { /* clear local session below */ }
-    if (!isCurrentMaintenanceSession(userId, logoutGeneration)) return;
-    clearAuthenticatedSessionState();
-    clearSupabaseAuthStorage();
-    showLoginGate();
-    setMaintenanceNotice(status.message, true);
-    showToast(status.message, 'warning');
+    const performCheck = async () => {
+      if (!isCurrentMaintenanceSession(userId, generation)) return;
+      const status = await getMaintenanceStatus();
+      if (!isCurrentMaintenanceSession(userId, generation)) return;
+      broadcastMaintenanceStatus(userId, status);
+      await applyMaintenanceStatus(status, userId, generation);
+    };
+
+    const lockManager = globalThis.navigator?.locks;
+    if (lockManager?.request) {
+      await lockManager.request(
+        `billing-maintenance:${maintenanceProjectKey()}:${encodeURIComponent(userId)}`,
+        { mode: 'exclusive', ifAvailable: true },
+        async lock => {
+          if (!lock || !isCurrentMaintenanceSession(userId, generation)) return;
+          const now = Date.now();
+          if (!force && now - readLastMaintenanceCheck(userId) < MAINTENANCE_CHECK_INTERVAL_MS) return;
+          noteMaintenanceStatusCheck(userId, now);
+          lastMaintenanceStatusCheckInTab = now;
+          await performCheck();
+        }
+      );
+    } else if (claimMaintenanceFallbackLease(userId, Date.now(), force)) {
+      lastMaintenanceStatusCheckInTab = Date.now();
+      await performCheck();
+    }
   } catch (error) {
     console.warn('Maintenance status check failed; keeping the current session until the next check.', error);
   } finally {
     if (maintenanceStatusRequest === request) maintenanceStatusRequest = null;
     // A restarted monitor must check its own session after an older request finishes.
     if (generation !== maintenanceMonitorGeneration && maintenanceMonitor !== null && !document.hidden) {
-      void enforceMaintenanceForActiveEmployee();
+      void enforceMaintenanceForActiveEmployee({ force: true });
     }
   }
 }
@@ -435,11 +533,31 @@ async function enforceMaintenanceForActiveEmployee() {
 export function startMaintenanceMonitor() {
   stopMaintenanceMonitor();
   if (!state.currentUser || state.currentUser.role === 'admin') return;
+  const expectedProject = maintenanceProjectKey();
+  const expectedUserId = currentMaintenanceUserId();
+  if (typeof BroadcastChannel !== 'undefined') {
+    maintenanceChannel = new BroadcastChannel('billing-maintenance-status-v1');
+    maintenanceChannel.onmessage = event => {
+      const data = event.data || {};
+      if (data.project !== expectedProject || data.userId !== expectedUserId
+          || !state.currentUser || currentMaintenanceUserId() !== expectedUserId
+          || state.currentUser.role === 'admin') return;
+      if (data.enabled === true) {
+        void applyMaintenanceStatus({ enabled: true, message: data.message, updatedAt: data.updatedAt },
+          expectedUserId, maintenanceMonitorGeneration);
+      }
+    };
+  }
   maintenanceVisibilityHandler = () => {
     if (!document.hidden) void enforceMaintenanceForActiveEmployee();
   };
+  maintenanceOnlineHandler = () => void enforceMaintenanceForActiveEmployee();
+  maintenancePageShowHandler = () => void enforceMaintenanceForActiveEmployee();
   document.addEventListener('visibilitychange', maintenanceVisibilityHandler);
-  maintenanceMonitor = setInterval(() => void enforceMaintenanceForActiveEmployee(), 15000);
+  window.addEventListener('online', maintenanceOnlineHandler);
+  window.addEventListener('pageshow', maintenancePageShowHandler);
+  maintenanceMonitor = setInterval(() => void enforceMaintenanceForActiveEmployee(), MAINTENANCE_CHECK_INTERVAL_MS);
+  void enforceMaintenanceForActiveEmployee();
 }
 
 function createLoginFlowError(code) {
@@ -449,7 +567,13 @@ function createLoginFlowError(code) {
 }
 
 export function clearAuthenticatedSessionState() {
+  resetSupabaseEgressMetrics();
+  resetRealtimeEventMetrics();
   state.currentUser = null;
+  resetAuthenticatedBusinessState();
+  resetInventoryPanel();
+  resetInvoiceLookupSession();
+  resetInvoiceBuilder();
   state.users = [];
   state.cloudLoadStatus = {};
   state.customerSnapshotScope = '';
@@ -572,11 +696,17 @@ export async function handleLogin(e) {
       isActive: profile.is_active !== false
     };
     const maintenance = await getMaintenanceStatus();
+    noteMaintenanceStatusCheck(user.authUserId || user.id);
     if (maintenance.enabled && user.role !== 'admin') {
       const error = createLoginFlowError(LOGIN_ERROR.MAINTENANCE);
       error.message = maintenance.message || error.message;
       throw error;
     }
+    resetAuthenticatedBusinessState();
+    resetInventoryPanel();
+    resetInvoiceLookupSession();
+    resetInvoiceBuilder();
+    resetRealtimeEventMetrics();
     state.currentUser = user;
     const cloudLoad = await fetchCloudData({
       deferSecondary: true,

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { updateDbStatusUI } from '../utils.js';
-import { invalidateDashboardPayloadCache } from '../components/dashboard.js?v=20261013-order-amend-ledger-v1';
+import { invalidateDashboardPayloadCache } from '../components/dashboard.js?v=20261015-stock-sync-v1';
 import {
   applyBrandRealtimePayload,
   applyCashbookRealtimePayload,
@@ -30,7 +30,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20261013-order-amend-ledger-v1';
+} from './supabase.js?v=20261015-stock-sync-v1';
 
 const REALTIME_DEBOUNCE_MS = 250;
 const DASHBOARD_REALTIME_KINDS = new Set(['customer', 'customerFinancial', 'salesReturn', 'salesReturnItem', 'brand']);
@@ -54,6 +54,16 @@ let pendingConnectionGap = null;
 const lastVisiblePanelCatchups = new Map();
 const lastVisiblePanelGapCatchups = new Map();
 const visiblePanelCatchupsInFlight = new Map();
+const realtimeEventCounts = new Map();
+
+export function getRealtimeEventMetricsSnapshot() {
+  const byKind = Object.fromEntries([...realtimeEventCounts.entries()].sort(([a], [b]) => a.localeCompare(b)));
+  return { total: Object.values(byKind).reduce((sum, count) => sum + count, 0), byKind };
+}
+
+export function resetRealtimeEventMetrics() {
+  realtimeEventCounts.clear();
+}
 
 function currentRealtimeUserId() {
   return String(state.currentUser?.authUserId || state.currentUser?.id || '');
@@ -213,16 +223,18 @@ function refreshVisiblePanelFromCloud({ connectionGap = null } = {}) {
   const domainsByPanel = {
     'products-panel': ['products', 'payrollProductGroups'],
     'pricelists-panel': ['pricelists'],
-    'invoice-panel': ['products', 'customers', 'pricelists'],
+    // Invoice search resolves customers and products through bounded RPCs;
+    // reconnecting must not restore the old full-table bootstrap.
+    'invoice-panel': ['pricelists'],
     'history-panel': ['orders', 'salesReturns'],
     'customers-panel': ['customers'],
     'so-quy-panel': ['cashbook', 'startingBalances'],
     'reports-panel': ['orders', 'customers', 'salesReturns'],
-    'dashboard-panel': ['customers']
+    'inventory-panel': ['products'],
+    'dashboard-panel': []
   };
   const panel = state.currentTab;
   const domains = domainsByPanel[panel] || [];
-  if (domains.length === 0) return;
   const generation = realtimeGeneration;
   const userId = currentRealtimeUserId();
   const catchupKey = JSON.stringify([generation, userId, panel]);
@@ -241,6 +253,18 @@ function refreshVisiblePanelFromCloud({ connectionGap = null } = {}) {
 
   const lastCatchupAt = lastVisiblePanelCatchups.get(catchupKey) || 0;
   if (!connectionGap && Date.now() - lastCatchupAt < VISIBLE_PANEL_CATCHUP_COOLDOWN_MS) return;
+
+  if (domains.length === 0) {
+    // Dashboard values come from a compact aggregate RPC during render. Mark
+    // them stale after a connection gap without downloading customer rows.
+    if (panel === 'dashboard-panel' && connectionGap) {
+      invalidateDashboardPayloadCache();
+      lastVisiblePanelCatchups.set(catchupKey, Date.now());
+      lastVisiblePanelGapCatchups.set(catchupKey, connectionGap.id);
+      if (typeof realtimeRender === 'function') realtimeRender();
+    }
+    return;
+  }
 
   const request = { gapId: connectionGap?.id || null, promise: null };
   request.promise = fetchCloudData({ onlyDomains: domains, hydrateCustomerHistory: false })
@@ -326,9 +350,11 @@ export async function startRealtimeSync(renderCallback) {
   realtimeRender = renderCallback;
   let channel = realtimeClient.channel(`billing-live-${state.currentUser.authUserId || state.currentUser.id}`);
   let hasEstablishedRealtimeSubscription = false;
+  const isSalesOnly = String(state.currentUser.role || '').toLowerCase() === 'sale';
 
   const queueScopedRealtimeEvent = event => {
     if (channel !== realtimeChannel || !isRealtimeSessionCurrent(generation, userId)) return;
+    realtimeEventCounts.set(event.kind, (realtimeEventCounts.get(event.kind) || 0) + 1);
     queueRealtimeEvent(event);
   };
 
@@ -340,18 +366,20 @@ export async function startRealtimeSync(renderCallback) {
     payload => queueScopedRealtimeEvent({ kind: 'customer', payload }));
   channel = subscribeTable(channel, tableCustomerDebtTransactionsName,
     payload => queueScopedRealtimeEvent({ kind: 'customerFinancial', payload }));
-  channel = subscribeTable(channel, tableCashbookTransactionsName,
-    payload => queueScopedRealtimeEvent({ kind: 'cashbook', payload }));
-  channel = subscribeTable(channel, tableStartingBalancesName,
-    payload => queueScopedRealtimeEvent({ kind: 'startingBalances', payload }));
+  if (!isSalesOnly) {
+    channel = subscribeTable(channel, tableCashbookTransactionsName,
+      payload => queueScopedRealtimeEvent({ kind: 'cashbook', payload }));
+    channel = subscribeTable(channel, tableStartingBalancesName,
+      payload => queueScopedRealtimeEvent({ kind: 'startingBalances', payload }));
+    channel = subscribeTable(channel, tablePayrollProductGroupsName,
+      payload => queueScopedRealtimeEvent({ kind: 'payrollProductGroup', payload }));
+  }
   channel = subscribeTable(channel, tableSalesReturnsName,
     payload => queueScopedRealtimeEvent({ kind: 'salesReturn', payload }));
   channel = subscribeTable(channel, tableSalesReturnItemsName,
     payload => queueScopedRealtimeEvent({ kind: 'salesReturnItem', payload }));
   channel = subscribeTable(channel, tableProductsName,
     payload => queueScopedRealtimeEvent({ kind: 'product', payload }));
-  channel = subscribeTable(channel, tablePayrollProductGroupsName,
-    payload => queueScopedRealtimeEvent({ kind: 'payrollProductGroup', payload }));
   channel = subscribeTable(channel, tablePricelistsName,
     payload => queueScopedRealtimeEvent({ kind: 'priceList', payload }));
   channel = subscribeTable(channel, tablePriceListItemsName,

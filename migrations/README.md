@@ -90,9 +90,11 @@ Run these files in order on a staging clone first:
 82. `0082_conditional_pricing_snapshot.sql`
 83. `0083_cancel_amended_order_full_debt.sql`
 
-Every file is additive and records its version in `public.schema_migrations`.
-Apply each version once; the migration table is the source of truth for the
-next pending file. None of the P0 migrations deletes business rows.
+Core billing migrations record their version in `public.schema_migrations`.
+The historical external-warehouse sync files 0085–0087 are standalone and do
+not write this registry; the integrated-inventory staging bundle excludes them.
+Apply each relevant version once and check the registry before running a core
+migration. None of the P0 migrations deletes business rows.
 
 The clean-database target is a clean **Supabase** project (the chain depends on
 `auth.users` and `auth.uid()`), not generic PostgreSQL. Migration `0001` stops
@@ -465,3 +467,27 @@ Migration `0084` checks every ledger-backed customer's order-owned debt when an
 order becomes cancelled. An incomplete reversal aborts the cancellation, while
 independent receipts and legacy orders without an order ledger keep their
 existing behavior.
+
+## Kho tích hợp 0088 (yêu cầu mở rộng 14/10/2026)
+
+`0088_integrated_inventory_free_budget.sql` bổ sung ledger kho SKU, nhập/xuất/
+kiểm kê, đồng bộ đơn trong transaction và ngân sách đọc chung. Không bật trừ
+kho hoặc phát lại đơn cũ khi migration chạy. Xem
+[`INVENTORY_FREE_DEPLOYMENT.md`](../docs/INVENTORY_FREE_DEPLOYMENT.md) để tạo
+staging, chạy kiểm thử rollback-only, đối chiếu tồn đầu kỳ và áp dụng dữ liệu thật.
+0088 không phụ thuộc module kho/sản xuất cũ; không cần bật 0085–0087 trên staging
+mới. Không chạy lại migration đã có trong registry.
+
+`0089_inventory_sync_toggle.sql` bổ sung nút bật/tắt cho Admin và hàng đợi đơn
+khi tạm dừng. Bật lại xử lý tối đa 50 đơn mỗi RPC, chỉ bật tự động khi hết hàng
+đợi. Giữ nguyên mốc tồn đầu kỳ và trạng thái hoạt động của 0088; không tự bật
+kho chưa kích hoạt. Cần chạy 0088 trước, không chạy lại 0088 để cập nhật nút.
+Frontend tương ứng: `20261015-stock-sync-v1`. Kiểm thử, chuẩn bị staging và
+điều kiện phát hành được ghi trong hướng dẫn trên.
+
+`0090_bounded_customer_product_lookup.sql` bổ sung RPC tìm kiếm hóa đơn có giới
+hạn và tra cứu chi tiết khách/SKU theo ID. Chạy sau các migration nghiệp vụ mà
+schema ứng dụng đang dùng; RPC chạy dưới quyền RLS của người gọi, giới hạn tối đa
+50 dòng và 32 KiB mỗi phản hồi. Đây là phần giảm tải cho màn hình bán hàng, chưa
+thay thế phân trang server cho các màn quản trị. Chỉ áp dụng sau khi kiểm tra
+staging và xác nhận frontend `20261015-stock-sync-v1` đã sẵn sàng.

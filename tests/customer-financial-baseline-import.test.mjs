@@ -148,7 +148,7 @@ test('unmatched optional associations are left blank without blocking the workbo
   assert.doesNotMatch(customers, /Không tìm thấy nhãn sơn[^\n]+\n\s*continue/);
   assert.doesNotMatch(customers, /Không tìm thấy bảng giá[^\n]+\n\s*continue/);
   assert.doesNotMatch(customers, /Không tìm thấy duy nhất người quản lý[^\n]+\n\s*continue/);
-  assert.match(customers, /notes,\n\s*pricelistId/);
+  assert.match(customers, /notes,\s*pricelistId:\s*pricelistId/);
 });
 
 test('imported last transaction display uses only the authoritative last_order_at field', () => {

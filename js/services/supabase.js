@@ -2,15 +2,55 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261013-order-amend-ledger-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261013-order-amend-ledger-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261015-stock-sync-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261015-stock-sync-v1';
 import { collectAllPages } from '../domain/pagination.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261013-order-amend-ledger-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261013-order-amend-ledger-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261013-order-amend-ledger-v1';
+import { createEgressMeter } from '../domain/egress-metrics.js';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261015-stock-sync-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261015-stock-sync-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261015-stock-sync-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
+
+// Counts only this Supabase client's HTTP responses. Realtime WebSocket and
+// static assets remain visible in the Supabase Usage dashboard, not here.
+const supabaseEgressMeter = createEgressMeter();
+export async function getSupabaseEgressSnapshot() {
+  await supabaseEgressMeter.flush();
+  return supabaseEgressMeter.snapshot();
+}
+export function resetSupabaseEgressMetrics() {
+  supabaseEgressMeter.reset();
+}
+
+export function resetAuthenticatedBusinessState() {
+  for (const domain of [
+    'products', 'payrollProductGroups', 'brands', 'savedOrders', 'customers',
+    'cashbookTransactions', 'suppliers', 'purchases', 'rawMaterials',
+    'semiFinished', 'recipes', 'productionLogs', 'finishedGoodsStock',
+    'salesReturns', 'invoiceItems', 'pricelists', 'allPricelists',
+    'priceListItems', 'allPriceListItems', 'users'
+  ]) state[domain] = [];
+  state.customerSnapshotScope = '';
+  state.activeCustomerId = '';
+  state.activeCustomerBrand = 'Tất cả';
+  state.isQuickCustomerMode = false;
+  state.cloudLoadStatus = {};
+  state.dashboardFilter.customerId = 'all';
+  const dashboardCustomerSearch = globalThis.document?.getElementById('dashboard-customer-search-input');
+  if (dashboardCustomerSearch) dashboardCustomerSearch.value = '';
+  const dashboardCustomerClear = globalThis.document?.getElementById('btn-clear-customer-search');
+  if (dashboardCustomerClear) dashboardCustomerClear.style.display = 'none';
+  state.pricingSnapshotActorId = '';
+  state.pricingSnapshotRole = '';
+  state.pricingSnapshotSource = '';
+  state.pricingSnapshotComplete = false;
+  state.pricingSnapshotCachedAt = '';
+  state.pricingSnapshotRevision = '';
+  state.selectedPriceListIds = [];
+  try { localStorage.removeItem('billing_system_customers'); } catch (_error) { /* optional browser cache */ }
+}
 
 const ORDER_CACHE_KEY = 'billing_system_orders';
 const ORDER_CACHE_MAX_ITEMS = 120;
@@ -67,9 +107,6 @@ function readScopedCustomerCache(scope = getCustomerCacheScope()) {
 function writeCustomerCache(customers) {
   const key = getScopedCustomerCacheKey();
   if (key) writeLocalJsonCache(key, customers);
-  // Keep the existing cache key for older app versions, but never use it as
-  // an authenticated fallback because it is shared by every account.
-  writeLocalJsonCache('billing_system_customers', customers);
 }
 
 // Cloud is authoritative. This browser copy is only a bounded fallback cache and
@@ -295,7 +332,6 @@ export function loadLocalStorageBackup() {
       { name: 'NANO10 MN', companyName: 'Công ty Cổ phần ABS JAPAN - Chi nhánh Miền Nam', companyId: 'ABS_SOUTH', logoFilename: 'absjapan.png' },
       { name: 'TDKAW NANO', companyName: 'Công ty Cổ phần ABS JAPAN (Miền Bắc)', companyId: 'ABS_NORTH', logoFilename: 'absjapan.png' }
     ];
-    localStorage.setItem('billing_system_brands', JSON.stringify(state.brands));
   }
 
   const storedRaw = localStorage.getItem('billing_system_raw_materials');
@@ -345,7 +381,8 @@ export async function connectSupabase(url, key, verbose = true) {
     if (typeof supabase === 'undefined') {
       throw new Error('Thư viện Supabase chưa được tải (vui lòng kiểm tra kết nối mạng).');
     }
-    const client = supabase.createClient(url, key);
+    supabaseEgressMeter.reset();
+    const client = supabase.createClient(url, key, { global: { fetch: supabaseEgressMeter.fetch } });
     const { data: { session: connectionSession } } = await client.auth.getSession();
     
     // Kiểm tra cấu trúc bảng để gán tiền tố wl_ nếu có (Kiểm tra bảng gốc trước để tránh ném lỗi 404 vào Console trình duyệt)
@@ -472,6 +509,7 @@ export function disconnectSupabase() {
   
   supabaseClient = null;
   isCloudActive = false;
+  supabaseEgressMeter.reset();
   if (connectedClient?.removeAllChannels) {
     void connectedClient.removeAllChannels().catch(error => {
       console.warn('Could not close Cloud realtime channels:', error);
@@ -1483,13 +1521,15 @@ export async function fetchCloudData(options = {}) {
           .order('code', { ascending: true })
           .range(offset, end));
         
-        const localProducts = readLocalJsonCache('billing_system_products', []);
-        state.products = (prodData || []).map(row => normalizeProductRow(row, localProducts));
+        if (!isCurrentCloudRequest()) return;
+        state.products = (prodData || []).map(row => normalizeProductRow(row));
         writeLocalJsonCache('billing_system_products', state.products);
       } catch (prodErr) {
-        console.warn("Could not load products from Supabase, fallback to local:", prodErr.message);
+        if (!isCurrentCloudRequest()) return;
+        console.warn('Could not load products from Supabase:', prodErr.message);
         markDomainFailed('products', prodErr);
-        if (!state.products?.length) state.products = readLocalJsonCache('billing_system_products', []);
+        // The global legacy product cache is not account-scoped; never use it
+        // as an authenticated fallback after a failed RLS-scoped request.
       }
     };
 
@@ -1500,16 +1540,16 @@ export async function fetchCloudData(options = {}) {
           .select('*', { count: 'exact' })
           .order('code', { ascending: true })
           .range(offset, end));
+        if (!isCurrentCloudRequest()) return;
         state.payrollProductGroups = (data || []).map(normalizePayrollProductGroupRow);
         writeLocalJsonCache('billing_system_payroll_product_groups', state.payrollProductGroups);
       } catch (error) {
+        if (!isCurrentCloudRequest()) return;
         const missing = isMissingSchemaCacheRelationError(error, `public.${tablePayrollProductGroupsName}`) ||
           isMissingSchemaCacheRelationError(error, tablePayrollProductGroupsName);
         if (!missing) console.warn('Could not load payroll product groups from Supabase:', error.message);
         if (!missing) markDomainFailed('payrollProductGroups', error);
-        if (!state.payrollProductGroups?.length) {
-          state.payrollProductGroups = readLocalJsonCache('billing_system_payroll_product_groups', []);
-        }
+        // A legacy global browser cache cannot prove the current RLS scope.
       }
     };
 
@@ -1785,6 +1825,7 @@ export async function fetchCloudData(options = {}) {
           .select('*');
 
         if (userErr) throw userErr;
+        if (!isCurrentCloudRequest()) return;
 
         const cloudUsers = (userData || []).map(u => {
           return {
@@ -1821,6 +1862,7 @@ export async function fetchCloudData(options = {}) {
 
         state.users = uniqueUsers;
       } catch (uErr) {
+        if (!isCurrentCloudRequest()) return;
         console.warn("Could not load authenticated profiles from Supabase:", uErr.message);
         markDomainFailed('users', uErr);
       }
@@ -1834,9 +1876,9 @@ export async function fetchCloudData(options = {}) {
           .order('name', { ascending: true });
 
         if (brandErr) throw brandErr;
+        if (!isCurrentCloudRequest()) return;
 
-        const localBrands = readLocalJsonCache('billing_system_brands', []);
-        let sourceData = (brandData && brandData.length > 0) ? brandData : localBrands;
+        const sourceData = brandData || [];
 
         const uniqueBrands = [];
         const seenIds = new Set();
@@ -1868,9 +1910,9 @@ export async function fetchCloudData(options = {}) {
         state.brands = uniqueBrands;
         writeLocalJsonCache('billing_system_brands', state.brands);
       } catch (brandErr) {
+        if (!isCurrentCloudRequest()) return;
         console.warn("Could not load brands from Supabase:", brandErr.message);
         markDomainFailed('brands', brandErr);
-        if (!state.brands?.length) state.brands = readLocalJsonCache('billing_system_brands', []);
       }
     };
 
@@ -2238,9 +2280,9 @@ export async function fetchCloudData(options = {}) {
     // needed for the first useful screen is ready. Secondary panels continue
     // loading in the background and are rendered again when complete.
     const coreLoad = Promise.all([
-      runDomain('products'),
+      ...(leanBootstrap ? [] : [runDomain('products')]),
       runDomain('payrollProductGroups'),
-      runDomain('customers'),
+      ...(leanBootstrap ? [] : [runDomain('customers')]),
       runDomain('pricelists', () => fetchPricelists({ includeItems: !leanBootstrap })),
       runDomain('users'),
       runDomain('brands'),
@@ -2289,21 +2331,29 @@ export async function fetchCloudData(options = {}) {
 
 // Đồng bộ an toàn: Supabase là nguồn dữ liệu duy nhất. Khi chưa có outbox,
 // version và conflict resolution, không được phát lại cache trình duyệt lên DB.
-export async function syncLocalToCloud() {
+export async function syncLocalToCloud({ domains = [] } = {}) {
   if (!isCloudActive || !supabaseClient) {
     showToast('Không thể tải dữ liệu vì chưa kết nối Supabase.', 'warning');
     return false;
   }
   try {
     updateDbStatusUI('connecting', 'Đang tải dữ liệu mới nhất từ Cloud...');
-    const result = await fetchCloudData({ leanBootstrap: true, hydrateCustomerHistory: false });
+    const retainedDomains = Object.entries(state.cloudLoadStatus || {})
+      .filter(([, status]) => ['ready', 'partial'].includes(status?.status))
+      .map(([domain]) => domain);
+    const requestedDomains = [...new Set([
+      'payrollProductGroups', 'pricelists', 'users', 'brands',
+      ...retainedDomains,
+      ...(Array.isArray(domains) ? domains : [])
+    ])];
+    const result = await fetchCloudData({ onlyDomains: requestedDomains, hydrateCustomerHistory: false });
     if (result?.failedDomains?.length) {
       updateDbStatusUI('cloud');
       showToast(`Chưa tải được: ${result.failedDomains.join(', ')}. Hãy thử tải lại các mục đang báo lỗi.`, 'warning');
       return false;
     }
     updateDbStatusUI('cloud');
-    showToast('Đã tải lại dữ liệu mới nhất từ Cloud. Cache trình duyệt không được ghi ngược lên database.', 'success');
+    showToast('Đã tải lại dữ liệu Cloud đang dùng. Danh sách lớn sẽ được tải khi mở màn hình tương ứng.', 'success');
     return true;
   } catch (error) {
     console.error('Cloud refresh failed:', error);
@@ -4626,7 +4676,6 @@ export function backfillMultiCompanyAndRevenueData() {
   // 2. Clean Sweep & Normalize Product Brands
   if (state.products && state.products.length > 0) {
     let prodChanged = false;
-    const normalizedProducts = [];
     state.products.forEach(p => {
       const canonical = getBrandById(p.brandId || p.brand);
       if (canonical) {
@@ -4634,29 +4683,11 @@ export function backfillMultiCompanyAndRevenueData() {
           p.brand = canonical.name;
           p.brandId = canonical.id;
           prodChanged = true;
-          normalizedProducts.push(p);
         }
       }
     });
     if (prodChanged) {
       localStorage.setItem('billing_system_products', JSON.stringify(state.products));
-      if (isCloudActive && supabaseClient) {
-        Promise.all(normalizedProducts.map(p =>
-          supabaseClient
-            .from(tableProductsName)
-            .update({
-              brand: p.brand,
-              brand_id: p.brandId,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', p.id)
-        )).then(results => {
-          const failed = results.find(result => result.error);
-          if (failed) console.error('Không thể đồng bộ lại hãng sơn cho một số sản phẩm:', failed.error);
-        }).catch(error => {
-          console.error('Không thể đồng bộ lại hãng sơn cho các sản phẩm:', error);
-        });
-      }
     }
   }
 
@@ -5333,6 +5364,91 @@ export async function dbFetchPhase5Dashboard(filters = {}) {
   const { data, error } = await supabaseClient.rpc('rpc_get_phase5_dashboard', { p_filters: filters });
   if (error) throw error;
   return data;
+}
+
+function invoiceSearchActorScope() {
+  const user = state.currentUser;
+  return user ? [user.authUserId || user.id || '', user.role || '', user.companyId || ''].join('|') : '';
+}
+
+function mapInvoiceCustomerRow(row = {}) {
+  return {
+    id: row.id,
+    code: row.code || '',
+    name: row.name || '',
+    phone: row.phone || '',
+    address: row.address || '',
+    assignedBrand: row.assigned_brand || 'Tất cả',
+    brandDiscounts: parseJsonValue(row.brand_discounts, {}),
+    shippingSupport: row.shipping_support === true,
+    debt: Number(row.debt || 0),
+    pricelistId: row.pricelist_id || row.default_price_list_id || '',
+    defaultPriceListId: row.default_price_list_id || row.pricelist_id || '',
+    customerGroupId: row.customer_group_id || '',
+    managedBy: row.managed_by || '',
+    status: row.status || 'active',
+    notes: row.notes || ''
+  };
+}
+
+async function invoiceReadRpc(name, args) {
+  if (!isCloudActive || !supabaseClient || !state.currentUser) {
+    throw new Error('Cần phiên Cloud hợp lệ để tìm dữ liệu hóa đơn.');
+  }
+  const client = supabaseClient;
+  const actorScope = invoiceSearchActorScope();
+  const { data, error } = await client.rpc(name, args);
+  if (error) throw error;
+  if (client !== supabaseClient || actorScope !== invoiceSearchActorScope()) {
+    throw new Error('Phiên truy cập đã thay đổi. Hãy tìm lại dữ liệu.');
+  }
+  return data;
+}
+
+function boundedInvoiceSearchLimit(value, fallback) {
+  const limit = Number(value);
+  return Number.isInteger(limit) ? Math.min(50, Math.max(1, limit)) : fallback;
+}
+
+export async function dbSearchInvoiceCustomers(query, { limit = 30 } = {}) {
+  const result = await invoiceReadRpc('rpc_egress_search_customers', {
+    p_query: String(query || '').trim(),
+    p_limit: boundedInvoiceSearchLimit(limit, 30)
+  });
+  const rows = (Array.isArray(result?.data) ? result.data : []).map(mapInvoiceCustomerRow);
+  return Object.assign(rows, { hasMore: result?.hasMore === true, nextCursor: result?.nextCursor || null });
+}
+
+export async function dbSearchInvoiceProducts(query, { limit = 40 } = {}) {
+  const result = await invoiceReadRpc('rpc_egress_search_products', {
+    p_query: String(query || '').trim(),
+    p_limit: boundedInvoiceSearchLimit(limit, 40),
+    p_saleable_only: true
+  });
+  const rows = (Array.isArray(result?.data) ? result.data : []).map(row => normalizeProductRow(row));
+  return Object.assign(rows, { hasMore: result?.hasMore === true, nextCursor: result?.nextCursor || null });
+}
+
+export async function dbFetchInvoiceProductFamily(productId, { limit = 50 } = {}) {
+  const result = await invoiceReadRpc('rpc_egress_product_family', {
+    p_product_id: String(productId || ''),
+    p_limit: boundedInvoiceSearchLimit(limit, 50)
+  });
+  return {
+    data: (Array.isArray(result?.data) ? result.data : []).map(row => normalizeProductRow(row)),
+    hasMore: result?.hasMore === true,
+    nextCursor: result?.nextCursor || null
+  };
+}
+
+export async function dbFetchInvoiceCustomerDetail(customerId) {
+  const row = await invoiceReadRpc('rpc_egress_customer_detail', { p_id: String(customerId || '') });
+  return row ? mapInvoiceCustomerRow(row) : null;
+}
+
+export async function dbFetchInvoiceProductDetail(productId) {
+  const row = await invoiceReadRpc('rpc_egress_product_detail', { p_id: String(productId || '') });
+  return row ? normalizeProductRow(row) : null;
 }
 
 export async function dbFetchActivityLogs(filters = {}) {

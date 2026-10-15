@@ -66,7 +66,7 @@ test('receipt creation forwards selected category and preserves clean notes with
     'utf8'
   );
 
-  assert.match(receiptSubmit, /dbRecordCustomerPayment\([\s\S]*category\s*\)/);
+  assert.match(receiptSubmit, /dbRecordCustomerPayment\([\s\S]*category\s*,\s*newTx\.date\s*\)/);
   assert.doesNotMatch(receiptSubmit, /\$\{category\}\s*-\s*\$\{finalCode\}/);
   assert.match(service, /p_category:\s*category/);
   assert.match(migration0060, /p_category\s+text\s+DEFAULT\s+'Thu tiền khách hàng'/);

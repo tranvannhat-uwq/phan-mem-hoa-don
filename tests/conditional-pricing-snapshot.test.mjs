@@ -10,6 +10,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const importSource = async relative => import(`data:text/javascript;base64,${Buffer.from(read(relative)).toString('base64')}`);
 const pricing = await importSource('js/domain/pricing.js');
 const { collectAllPages } = await importSource('js/domain/pagination.js');
+const { createEgressMeter } = await importSource('js/domain/egress-metrics.js');
 const executable = read('js/services/supabase.js').replace(/^import .+;\r?\n/gm, '').replace(/^export /gm, '');
 const executableState = read('js/state.js').replace(/^export /gm, '');
 const actor = { id: 'profile-1', authUserId: 'actor-1', role: 'accounting', companyId: 'company-1' };
@@ -45,7 +46,7 @@ function createHarness({ user = actor, cache = null, cacheLoader = null, tables 
   const storage = new Map();
   let nextTimer = 1;
   const context = vm.createContext({
-    ...pricing, collectAllPages,
+    ...pricing, collectAllPages, createEgressMeter,
     console: { log() {}, warn() {}, error() {} },
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     showToast() {}, rawMaterialsSeed: [],
@@ -322,7 +323,8 @@ test('late customer loads preserve the next account or login customer state and 
     assert.deepEqual(json(harness.state.customers), [{ id: 'new-session-customer', name: 'Current customer', debt: 25 }]);
     assert.equal(harness.state.activeCustomerId, 'new-session-customer');
     assert.equal(harness.run('localStorage.getItem(getScopedCustomerCacheKey())'), expectedCache);
-    assert.equal(harness.run("localStorage.getItem('billing_system_customers')"), expectedCache);
+    assert.equal(harness.run("localStorage.getItem('billing_system_customers')"), null,
+      'customer data stays out of the unscoped legacy cache');
     assert.deepEqual(json(harness.state.cloudLoadStatus), { customers: { status: 'ready' } });
   }
 });

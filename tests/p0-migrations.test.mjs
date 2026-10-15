@@ -88,9 +88,18 @@ const migrationNames = [
   '0079_detailed_customer_activity_changes.sql',
   '0080_sale_managed_customer_order_history_pricing_independence.sql',
   '0081_sale_managed_customer_draft_order_history.sql',
-  '0082_conditional_pricing_snapshot.sql'
+  '0082_conditional_pricing_snapshot.sql',
+  '0083_cancel_amended_order_full_debt.sql',
+  '0084_guard_cancelled_order_debt.sql',
+  '0085_warehouse_inventory_outbox.sql',
+  '0086_inventory_sync_fail_open_pause.sql',
+  '0087_inventory_sync_control.sql',
+  '0088_integrated_inventory_free_budget.sql',
+  '0089_inventory_sync_toggle.sql',
+  '0090_bounded_customer_product_lookup.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+const standaloneWarehouseMigrations = new Set(['0085', '0086', '0087']);
 
 test('P0 migrations are ordered and tracked', () => {
   const actual = fs.readdirSync(migrationDir)
@@ -100,9 +109,17 @@ test('P0 migrations are ordered and tracked', () => {
   migrationNames.forEach((name, index) => {
     const sql = read(path.join('migrations', name));
     const version = String(index + 1).padStart(4, '0');
+    if (standaloneWarehouseMigrations.has(version)) {
+      assert.doesNotMatch(sql, /INSERT INTO public\.schema_migrations\s*\(/i);
+      return;
+    }
     assert.match(sql, new RegExp(`VALUES \\('${version}'`));
-    assert.match(sql, /BEGIN;/);
-    assert.match(sql, /COMMIT;/);
+    if (/^\s*DO \$migration\$/s.test(sql)) {
+      assert.match(sql, /^DO \$migration\$[\s\S]*\$migration\$;\s*$/);
+    } else {
+      assert.match(sql, /BEGIN;/);
+      assert.match(sql, /COMMIT;/);
+    }
   });
 });
 
