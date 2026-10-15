@@ -69,7 +69,8 @@ Chốt từng bước bằng kiểm thử local và staging về tính đúng d�
 đổi phiên, dữ liệu cũ và tác vụ tài chính. Ghi số đo trước/sau, phiên bản mã,
 kết quả khôi phục và vị trí rollback. Staging `ncyaatorabwoxzozvyre` đã nhận
 `0090` và bộ fixture SQL tìm kiếm/ủy quyền đã qua, với ROLLBACK. Production đã
-có `0088`/`0089`/`0090`; frontend mới đang chờ phát hành. Kiểm thử
+có `0088`/`0089`/`0090`; frontend version `20261015-stock-sync-v1` đã phát hành
+trong commit `c9971ba`. Kiểm thử
 local toàn dự án đạt 568/570, không lỗi, 2 bài mobile bỏ qua vì checkout thiếu
 mã tương ứng. Chưa có số đo trước/sau cùng kịch bản qua trình duyệt production;
 phải dùng bộ đo cục bộ và đối chiếu Supabase Usage sau phát hành. Không dùng dữ

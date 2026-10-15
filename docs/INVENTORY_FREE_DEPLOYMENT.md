@@ -170,10 +170,12 @@ bằng truy vấn chỉ đọc.
 
 ## Áp dụng dữ liệu thật
 
-Production đã có `0088`/`0089`/`0090`; không chạy lại. Frontend phát hành cùng
-version `20261015-stock-sync-v1`. Migration không bật trừ kho và không sửa số
-tồn/đơn lịch sử. Bản sao lưu và kết quả khôi phục cục bộ có giới hạn nêu trên
-cần được lưu cùng biên bản phát hành.
+Production đã có `0088`/`0089`/`0090`; không chạy lại. Frontend version
+`20261015-stock-sync-v1` đã được đẩy trong commit `c9971ba`; trang công khai
+và các tệp JS/CSS mới trả HTTP 200, màn hình đăng nhập tải không có lỗi console.
+Chưa thử một phiên đăng nhập thật sau phát hành. Migration không bật trừ kho và
+không sửa số tồn/đơn lịch sử. Bản sao lưu và kết quả khôi phục cục bộ có giới
+hạn nêu trên cần được lưu cùng biên bản phát hành.
 
 Nếu đang dùng đồng bộ kho riêng, tạm dừng và đối chiếu trước khi bật kho tích
 hợp. Nút bật kiểm tra trạng thái để ngăn cả hai kho cùng hoạt động. Nhập kiểm
