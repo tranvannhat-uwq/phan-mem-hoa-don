@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261016-nav-groups-v1">
+  <link rel="stylesheet" href="style.css?v=20261016-nav-topgroups-v1">
 </head>
 <body>
 
@@ -159,85 +159,89 @@
       </div>
 
       <nav class="nav-menu" id="primary-navigation" aria-label="Điều hướng chính">
-        <li class="nav-item nav-shortcut">
+        <li class="nav-item">
           <a class="nav-link active" data-target="dashboard-panel">
             <i data-lucide="layout-dashboard"></i>
             Tổng quan
           </a>
         </li>
         <li class="nav-section" data-nav-section="sales">
-          <button type="button" class="nav-section-toggle" data-nav-group-toggle="sales" aria-expanded="false">
-            <i data-lucide="shopping-bag"></i><span>Bán hàng & khách hàng</span><i data-lucide="chevron-down" class="nav-section-chevron"></i>
+          <button type="button" class="nav-section-toggle" data-nav-group-toggle="sales" aria-expanded="false" aria-controls="nav-group-sales">
+            <i data-lucide="shopping-bag"></i><span class="nav-label-full">Bán hàng & khách hàng</span><span class="nav-label-short">Bán hàng</span><i data-lucide="chevron-down" class="nav-section-chevron"></i>
           </button>
+          <ul class="nav-section-panel" id="nav-group-sales">
+            <li class="nav-item" data-nav-group="sales">
+              <a class="nav-link" data-target="invoice-panel">
+                <i data-lucide="file-spreadsheet"></i>
+                Lên đơn hàng
+              </a>
+            </li>
+            <li class="nav-item" data-nav-group="sales">
+              <a class="nav-link" data-target="history-panel">
+                <i data-lucide="history"></i>
+                Lịch sử đơn
+              </a>
+            </li>
+            <li class="nav-item" data-nav-group="sales">
+              <a class="nav-link" data-target="customers-panel">
+                <i data-lucide="users"></i>
+                Khách hàng
+              </a>
+            </li>
+            <li class="nav-item" data-nav-group="sales">
+              <a class="nav-link" data-target="pricelists-panel">
+                <i data-lucide="tags"></i>
+                Bảng giá
+              </a>
+            </li>
+          </ul>
         </li>
-        <li class="nav-item nav-shortcut" data-nav-group="sales">
-          <a class="nav-link" data-target="invoice-panel">
-            <i data-lucide="file-spreadsheet"></i>
-            Lên đơn hàng
-          </a>
-        </li>
-        <li class="nav-item nav-shortcut" data-nav-group="sales">
-          <a class="nav-link" data-target="history-panel">
-            <i data-lucide="history"></i>
-            Lịch sử đơn
-          </a>
-        </li>
-        <li class="nav-item nav-shortcut nav-shortcut-medium" data-nav-group="sales">
-          <a class="nav-link" data-target="customers-panel">
-            <i data-lucide="users"></i>
-            Khách hàng
-          </a>
-        </li>
-        <li class="nav-item" data-nav-group="sales">
-          <a class="nav-link" data-target="pricelists-panel">
-            <i data-lucide="tags"></i>
-            Bảng giá
-          </a>
-        </li>
-        <li class="nav-item nav-shortcut">
+        <li class="nav-item">
           <a class="nav-link" data-target="so-quy-panel">
             <i data-lucide="wallet"></i>
             Sổ quỹ
           </a>
         </li>
         <li class="nav-section" data-nav-section="stock">
-          <button type="button" class="nav-section-toggle" data-nav-group-toggle="stock" aria-expanded="false">
-            <i data-lucide="boxes"></i><span>Kho & hàng hóa</span><i data-lucide="chevron-down" class="nav-section-chevron"></i>
+          <button type="button" class="nav-section-toggle" data-nav-group-toggle="stock" aria-expanded="false" aria-controls="nav-group-stock">
+            <i data-lucide="boxes"></i><span class="nav-label-full">Kho & hàng hóa</span><span class="nav-label-short">Kho hàng</span><i data-lucide="chevron-down" class="nav-section-chevron"></i>
           </button>
-        </li>
-        <li class="nav-item inventory-nav-item nav-shortcut nav-shortcut-wide" data-nav-group="stock">
-          <a class="nav-link" data-target="inventory-panel">
-            <i data-lucide="warehouse"></i>
-            Quản lý kho
-          </a>
-        </li>
-        <li class="nav-item purchase-nav-item" data-nav-group="stock">
-          <button type="button" class="nav-link purchase-menu-trigger" aria-expanded="false" aria-controls="purchase-submenu">
-            <i data-lucide="shopping-cart"></i>
-            Mua hàng
-            <i data-lucide="chevron-down" class="purchase-menu-chevron"></i>
-          </button>
-          <div class="purchase-menu" id="purchase-submenu">
-            <div class="purchase-menu-section">
-              <div class="purchase-menu-heading">Nhà cung cấp</div>
-              <a class="purchase-menu-link nav-link" data-target="suppliers-panel">Nhà cung cấp</a>
-            </div>
-            <div class="purchase-menu-section">
-              <div class="purchase-menu-heading">Mua hàng</div>
-              <a class="purchase-menu-link nav-link" data-target="goods-panel">Phiếu mua hàng</a>
-            </div>
-          </div>
-        </li>
-        <li class="nav-item" data-nav-group="stock">
-          <a class="nav-link" data-target="products-panel">
-            <i data-lucide="package"></i>
-            Sản phẩm
-          </a>
+          <ul class="nav-section-panel" id="nav-group-stock">
+            <li class="nav-item inventory-nav-item" data-nav-group="stock">
+              <a class="nav-link" data-target="inventory-panel">
+                <i data-lucide="warehouse"></i>
+                Quản lý kho
+              </a>
+            </li>
+            <li class="nav-item purchase-nav-item" data-nav-group="stock">
+              <button type="button" class="nav-link purchase-menu-trigger" aria-expanded="false" aria-controls="purchase-submenu">
+                <i data-lucide="shopping-cart"></i>
+                Mua hàng
+                <i data-lucide="chevron-down" class="purchase-menu-chevron"></i>
+              </button>
+              <div class="purchase-menu" id="purchase-submenu">
+                <div class="purchase-menu-section">
+                  <div class="purchase-menu-heading">Nhà cung cấp</div>
+                  <a class="purchase-menu-link nav-link" data-target="suppliers-panel">Nhà cung cấp</a>
+                </div>
+                <div class="purchase-menu-section">
+                  <div class="purchase-menu-heading">Mua hàng</div>
+                  <a class="purchase-menu-link nav-link" data-target="goods-panel">Phiếu mua hàng</a>
+                </div>
+              </div>
+            </li>
+            <li class="nav-item" data-nav-group="stock">
+              <a class="nav-link" data-target="products-panel">
+                <i data-lucide="package"></i>
+                Sản phẩm
+              </a>
+            </li>
+          </ul>
         </li>
         <li class="nav-item staff-nav-item">
           <button type="button" class="nav-link staff-menu-trigger" aria-expanded="false" aria-controls="staff-submenu">
             <i data-lucide="briefcase-business"></i>
-            Quản lý nhân viên
+            <span class="nav-label-full">Quản lý nhân viên</span><span class="nav-label-short">Nhân viên</span>
             <i data-lucide="chevron-down" class="staff-menu-chevron"></i>
           </button>
           <div class="staff-menu" id="staff-submenu">
@@ -4546,6 +4550,6 @@
 
   <!-- App logic -->
   <script type="module" src="js/customer-care-landing.js?v=20260829-sheet-workspace-v4"></script>
-  <script type="module" src="js/main.js?v=20261016-nav-groups-v1"></script>
+  <script type="module" src="js/main.js?v=20261016-nav-topgroups-v1"></script>
 </body>
 </html>
