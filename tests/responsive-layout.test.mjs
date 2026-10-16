@@ -8,8 +8,7 @@ test('workspace declares a mobile viewport and versioned responsive stylesheet',
   const html = read('index.html');
 
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, viewport-fit=cover"/);
-  const version = html.match(/src="js\/main\.js\?v=([^"]+)"/)[1];
-  assert.ok(html.includes(`style.css?v=${version}`));
+  assert.match(html, /href="style\.css\?v=\d{8}-[a-z0-9-]+"/);
   assert.match(html, /id="btn-mobile-nav-toggle"[\s\S]*aria-controls="primary-navigation"/);
   assert.match(html, /id="btn-toggle-dashboard-filters"[\s\S]*aria-controls="dashboard-filter-content"/);
 });
@@ -17,7 +16,7 @@ test('workspace declares a mobile viewport and versioned responsive stylesheet',
 test('authenticated workspace collapses safely across phone widths', () => {
   const css = read('style.css');
 
-  assert.match(css, /\.main-content[\s\S]*margin-top: calc\(96px \+ env\(safe-area-inset-top, 0px\)\)/);
+  assert.match(css, /\.main-content[\s\S]*margin-top: calc\(64px \+ env\(safe-area-inset-top, 0px\)\)/);
   assert.match(css, /@media \(max-width: 768px\)[\s\S]*\.dashboard-filter-grid\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /@media \(max-width: 768px\)[\s\S]*\.widgets-grid\s*\{[\s\S]*repeat\(2, minmax\(0, 1fr\)/);
   assert.match(css, /@media \(max-width: 350px\)[\s\S]*\.widgets-grid\s*\{[\s\S]*minmax\(0, 1fr\)/);
