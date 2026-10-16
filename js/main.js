@@ -1,23 +1,23 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261015-stock-sync-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261015-stock-sync-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261015-stock-sync-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261015-stock-sync-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261015-stock-sync-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261015-stock-sync-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261015-stock-sync-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261015-stock-sync-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261015-stock-sync-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261015-stock-sync-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261015-stock-sync-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261015-stock-sync-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261015-stock-sync-v1';
-import { renderInventoryPanel } from './components/inventory.js?v=20261015-stock-sync-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261015-stock-sync-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261015-nav-responsive-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261015-nav-responsive-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261015-nav-responsive-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261015-nav-responsive-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261015-nav-responsive-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261015-nav-responsive-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261015-nav-responsive-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261015-nav-responsive-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261015-nav-responsive-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261015-nav-responsive-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261015-nav-responsive-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261015-nav-responsive-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261015-nav-responsive-v1';
+import { renderInventoryPanel } from './components/inventory.js?v=20261015-nav-responsive-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261015-nav-responsive-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261015-stock-sync-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261015-stock-sync-v1';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261015-nav-responsive-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261015-nav-responsive-v1';
 
 if (typeof window !== 'undefined') {
   window.billingEgressMetrics = Object.freeze({
@@ -446,7 +446,7 @@ function setupNavigation() {
   }
 
   window.addEventListener('resize', () => {
-    if (window.innerWidth > 768) {
+    if (window.innerWidth > 1350) {
       closeMobileSidebar();
     }
   });

@@ -11695,7 +11695,7 @@ body.mobile-nav-open {
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1350px) {
   /* The overlay dims the page below the menu; it must never cover or blur the
      fixed header that contains the hamburger and the open navigation panel. */
   .sidebar {
@@ -11904,4 +11904,88 @@ body.mobile-nav-open {
   .inventory-header { align-items: flex-start; }
   .inventory-table { min-width: 700px; }
   .inventory-document-line { grid-template-columns: minmax(100px, 1fr) 90px 35px; }
+}
+
+/* Keep navigation and account controls in separate tracks as destinations grow. */
+@media (min-width: 1351px) {
+  .sidebar {
+    position: sticky;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    height: auto !important;
+    min-height: 72px !important;
+    row-gap: 0 !important;
+    column-gap: 0.75rem !important;
+    padding: 0.4rem 1rem 0.3rem !important;
+  }
+
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .sidebar-actions {
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0 !important;
+  }
+
+  .nav-menu {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    flex: initial !important;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.35rem !important;
+    padding-bottom: 0.2rem;
+    overflow: visible !important;
+  }
+
+  .purchase-menu {
+    right: 0;
+    left: auto;
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  .main-content {
+    margin-top: 0 !important;
+    min-height: 0;
+  }
+}
+
+/* Tablets use the same accessible menu button as phones. */
+@media (min-width: 769px) and (max-width: 1350px) {
+  .sidebar {
+    z-index: 1001 !important;
+  }
+
+  .sidebar.open .nav-menu {
+    top: 72px;
+    max-height: calc(100dvh - 73px);
+  }
+}
+
+@media (max-width: 1350px) {
+  /* Submenus expand inside the scrollable menu and remain reachable by touch. */
+  .sidebar.open .purchase-menu,
+  .sidebar.open .staff-menu {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-top: 0.25rem;
+    box-shadow: none;
+  }
+
+  .sidebar.open .purchase-menu {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar.open .purchase-menu-section + .purchase-menu-section {
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border-color);
+    border-left: 0;
+  }
 }

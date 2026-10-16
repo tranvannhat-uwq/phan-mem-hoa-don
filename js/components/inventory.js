@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { safeCreateIcons, showToast, formatDateTime } from '../utils.js';
-import { inventoryGateway } from '../services/inventory.js?v=20261015-stock-sync-v1';
-import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS } from '../domain/inventory.js?v=20261015-stock-sync-v1';
+import { inventoryGateway } from '../services/inventory.js?v=20261015-nav-responsive-v1';
+import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS } from '../domain/inventory.js?v=20261015-nav-responsive-v1';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const quantity = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 });
