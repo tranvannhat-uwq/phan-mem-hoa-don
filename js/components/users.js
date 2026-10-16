@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261015-nav-responsive-v1';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261015-nav-responsive-v1';
-import { renderAll, switchTab } from '../main.js?v=20261015-nav-responsive-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261015-nav-responsive-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261016-nav-groups-v1';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261016-nav-groups-v1';
+import { renderAll, switchTab } from '../main.js?v=20261016-nav-groups-v1';
+import { populateManagedByDropdown } from './customers.js?v=20261016-nav-groups-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261015-nav-responsive-v1';
-import { resetInventoryPanel } from './inventory.js?v=20261015-nav-responsive-v1';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261015-nav-responsive-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261016-nav-groups-v1';
+import { resetInventoryPanel } from './inventory.js?v=20261016-nav-groups-v1';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261016-nav-groups-v1';
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -812,32 +812,30 @@ export function applyUserPermissions(user) {
     const target = link.getAttribute('data-target');
     const navItem = link.parentElement;
     if (!target) return;
-    
+    let allowed = true;
     if (role === 'sale') {
-      if (target === 'invoice-panel' || target === 'customers-panel' || target === 'history-panel' || target === 'brands-panel') {
-        navItem.style.display = 'block';
-      } else {
-        navItem.style.display = 'none';
-      }
+      allowed = ['invoice-panel', 'customers-panel', 'history-panel', 'brands-panel'].includes(target);
     } else if (role === 'accounting') {
-      if (target === 'settings-panel' || target === 'users-panel') {
-        navItem.style.display = 'none';
-      } else {
-        navItem.style.display = 'block';
-      }
-    } else {
-      navItem.style.display = 'block';
+      allowed = target !== 'settings-panel' && target !== 'users-panel';
     }
+    navItem.style.removeProperty('display');
+    navItem.hidden = !allowed || navItem.dataset.featureStatus === 'deferred';
   });
 
   const purchaseNavItem = document.querySelector('.purchase-nav-item');
   if (purchaseNavItem) {
-    purchaseNavItem.style.display = role === 'sale' ? 'none' : 'block';
+    purchaseNavItem.style.removeProperty('display');
+    purchaseNavItem.hidden = role === 'sale';
   }
   const staffNavItem = document.querySelector('.staff-nav-item');
   if (staffNavItem) {
-    staffNavItem.style.display = role === 'sale' ? 'none' : 'block';
+    staffNavItem.style.removeProperty('display');
+    staffNavItem.hidden = role === 'sale';
   }
+  document.querySelectorAll('.nav-section[data-nav-section]').forEach(section => {
+    const items = document.querySelectorAll(`.nav-item[data-nav-group="${section.dataset.navSection}"]`);
+    section.hidden = ![...items].some(item => !item.hidden);
+  });
 
   // Hiding dropdown items based on role
   const dropdownNavLinks = document.querySelectorAll('.dropdown-nav-link');

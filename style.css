@@ -11952,10 +11952,6 @@ body.mobile-nav-open {
     height: 20px;
   }
 
-  .sidebar:not(.open) .nav-menu > .nav-item:nth-child(n + 7) {
-    display: none;
-  }
-
   .sidebar-actions {
     flex: 0 0 auto;
     margin-left: 0 !important;
@@ -12063,15 +12059,11 @@ body.mobile-nav-open {
 }
 
 @media (min-width: 1351px) and (max-width: 1599px) {
-  .sidebar:not(.open) .nav-menu > .nav-item:nth-child(n + 5) {
-    display: none;
-  }
+  .sidebar:not(.open) .nav-menu > .nav-shortcut-medium { display: none !important; }
 }
 
-@media (min-width: 1600px) and (max-width: 1799px) {
-  .sidebar:not(.open) .nav-menu > .nav-item:nth-child(n + 6) {
-    display: none;
-  }
+@media (min-width: 1351px) and (max-width: 1799px) {
+  .sidebar:not(.open) .nav-menu > .nav-shortcut-wide { display: none !important; }
 }
 
 /* Tablets use the same accessible menu button as phones. */
@@ -12109,3 +12101,52 @@ body.mobile-nav-open {
     border-left: 0;
   }
 }
+
+/* The complete menu is an accordion; only a few links remain on the desktop bar. */
+.nav-section { display: none; list-style: none; }
+.nav-menu [hidden] { display: none !important; }
+.sidebar:not(.open) .nav-menu > .nav-item:not(.nav-shortcut) { display: none !important; }
+.sidebar.open .nav-menu > .nav-section:not([hidden]) { display: block !important; width: 100%; flex: 0 0 auto; }
+.sidebar.open .nav-menu > .nav-item[data-nav-group] { display: none !important; }
+.sidebar.open .nav-menu[data-expanded-group="sales"] > .nav-item[data-nav-group="sales"]:not([hidden]),
+.sidebar.open .nav-menu[data-expanded-group="stock"] > .nav-item[data-nav-group="stock"]:not([hidden]) {
+  display: block !important;
+}
+.nav-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--nav-foreground-color);
+  font: 600 0.9rem var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.nav-section-toggle:hover,
+.nav-section-toggle:focus-visible,
+.nav-section-toggle[aria-expanded="true"] {
+  color: var(--color-primary);
+  background: var(--nav-active-background);
+  outline: none;
+}
+.nav-section-toggle > svg:first-child { width: 20px; height: 20px; flex: 0 0 auto; }
+.nav-section-chevron { width: 16px; height: 16px; margin-left: auto; transition: transform 0.2s ease; }
+.nav-section-toggle[aria-expanded="true"] .nav-section-chevron { transform: rotate(180deg); }
+.sidebar.open .nav-menu > .nav-item[data-nav-group] > .nav-link {
+  width: calc(100% - 0.75rem);
+  margin-left: 0.75rem;
+  padding-left: 1rem !important;
+}
+.sidebar.open .purchase-nav-item .purchase-menu,
+.sidebar.open .staff-nav-item .staff-menu { display: none; }
+.sidebar.open .purchase-nav-item.is-submenu-open .purchase-menu,
+.sidebar.open .staff-nav-item.is-submenu-open .staff-menu { display: grid; }
+.sidebar.open .purchase-nav-item .purchase-menu-chevron,
+.sidebar.open .staff-nav-item .staff-menu-chevron { transform: none; }
+.sidebar.open .purchase-nav-item.is-submenu-open .purchase-menu-chevron,
+.sidebar.open .staff-nav-item.is-submenu-open .staff-menu-chevron { transform: rotate(180deg); }

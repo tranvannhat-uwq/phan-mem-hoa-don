@@ -1,23 +1,23 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261015-nav-responsive-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261015-nav-responsive-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261015-nav-responsive-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261015-nav-responsive-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261015-nav-responsive-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261015-nav-responsive-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261015-nav-responsive-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261015-nav-responsive-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261015-nav-responsive-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261015-nav-responsive-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261015-nav-responsive-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261015-nav-responsive-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261015-nav-responsive-v1';
-import { renderInventoryPanel } from './components/inventory.js?v=20261015-nav-responsive-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261015-nav-responsive-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261016-nav-groups-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261016-nav-groups-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261016-nav-groups-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261016-nav-groups-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261016-nav-groups-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261016-nav-groups-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261016-nav-groups-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261016-nav-groups-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261016-nav-groups-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261016-nav-groups-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261016-nav-groups-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261016-nav-groups-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261016-nav-groups-v1';
+import { renderInventoryPanel } from './components/inventory.js?v=20261016-nav-groups-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261016-nav-groups-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261015-nav-responsive-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261015-nav-responsive-v1';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261016-nav-groups-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261016-nav-groups-v1';
 
 if (typeof window !== 'undefined') {
   window.billingEgressMetrics = Object.freeze({
@@ -420,6 +420,37 @@ function setupNavigation() {
   localStorage.removeItem('sidebar_collapsed');
 
   const mobileNavToggle = document.getElementById('btn-mobile-nav-toggle');
+  const navMenu = document.getElementById('primary-navigation');
+  const groupToggles = [...(navMenu?.querySelectorAll('[data-nav-group-toggle]') || [])];
+  const closeNestedNavMenus = () => {
+    navMenu?.querySelectorAll('.nav-item.is-submenu-open').forEach(item => {
+      item.classList.remove('is-submenu-open');
+      item.querySelector('.purchase-menu-trigger, .staff-menu-trigger')?.setAttribute('aria-expanded', 'false');
+    });
+  };
+  const setExpandedNavGroup = group => {
+    closeNestedNavMenus();
+    navMenu.dataset.expandedGroup = group;
+    groupToggles.forEach(button => {
+      button.setAttribute('aria-expanded', String(button.dataset.navGroupToggle === group));
+    });
+  };
+  groupToggles.forEach(button => {
+    button.addEventListener('click', () => {
+      const group = button.dataset.navGroupToggle;
+      setExpandedNavGroup(navMenu.dataset.expandedGroup === group ? '' : group);
+    });
+  });
+  navMenu?.querySelectorAll('.purchase-menu-trigger, .staff-menu-trigger').forEach(button => {
+    button.addEventListener('click', () => {
+      if (!document.querySelector('.sidebar')?.classList.contains('open')) return;
+      const item = button.closest('.nav-item');
+      const shouldOpen = !item.classList.contains('is-submenu-open');
+      closeNestedNavMenus();
+      item.classList.toggle('is-submenu-open', shouldOpen);
+      button.setAttribute('aria-expanded', String(shouldOpen));
+    });
+  });
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
@@ -436,6 +467,10 @@ function setupNavigation() {
   mobileNavToggle?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (!document.querySelector('.sidebar')?.classList.contains('open')) {
+      const activeItem = navMenu?.querySelector('.nav-item[data-nav-group] > .nav-link.active');
+      setExpandedNavGroup(activeItem?.parentElement?.dataset.navGroup || '');
+    }
     toggleMobileSidebar();
   });
 
@@ -546,6 +581,10 @@ function closeMobileSidebar() {
   const overlay = document.getElementById('sidebar-overlay');
   const toggle = document.getElementById('btn-mobile-nav-toggle');
   if (sidebar) sidebar.classList.remove('open');
+  sidebar?.querySelectorAll('.nav-item.is-submenu-open').forEach(item => {
+    item.classList.remove('is-submenu-open');
+    item.querySelector('.purchase-menu-trigger, .staff-menu-trigger')?.setAttribute('aria-expanded', 'false');
+  });
   if (overlay) overlay.classList.remove('active');
   document.body.classList.remove('mobile-nav-open');
   toggle?.setAttribute('aria-expanded', 'false');
