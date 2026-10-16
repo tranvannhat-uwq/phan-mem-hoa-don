@@ -1,11 +1,12 @@
 import { state } from '../state.js';
 import { safeCreateIcons, showToast, formatDateTime } from '../utils.js';
-import { inventoryGateway } from '../services/inventory.js?v=20261016-page15-v1';
-import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261016-page15-v1';
+import { inventoryGateway } from '../services/inventory.js?v=20261016-bom-v1';
+import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261016-bom-v1';
+import { openBomPanel, resetBomPanel } from './bom.js?v=20261016-bom-v1';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const quantity = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 });
-const kinds = { receipt: 'Nhập kho', issue: 'Xuất kho', count: 'Kiểm kê', sale: 'Đơn bán / hoàn / hủy' };
+const kinds = { receipt: 'Nhập kho', issue: 'Xuất kho', count: 'Kiểm kê', sale: 'Đơn bán / hoàn / hủy', production: 'Sản xuất BOM' };
 let actorScope = '';
 let filters = { mode: 'stock', query: '', lowOnly: false };
 let cursors = [null];
@@ -27,6 +28,7 @@ export function resetInventoryPanel() {
   actorScope = ''; filters = { mode: 'stock', query: '', lowOnly: false }; cursors = [null]; page = 0;
   loaded = null; loadedAt = 0; loading = false; errorText = ''; draft = null; attemptedRequest = null; saving = false; switchingSync = false;
   requestGeneration++; inventoryGateway.clear();
+  resetBomPanel();
   document.getElementById('inventory-document-host')?.remove();
   const panel = document.getElementById('inventory-panel');
   if (panel) { panel.removeEventListener('click', onClick); panel.replaceChildren(); delete panel.dataset.inventoryReady; }
@@ -44,7 +46,8 @@ export function renderInventoryPanel() {
     panel.dataset.inventoryReady = 'true';
     panel.innerHTML = `
       <div class="inventory-header"><div><h2>Quản lý kho</h2><p>Nhập, xuất và kiểm kê theo SKU tại Kho chính.</p></div>
-        <div class="inventory-actions"><button class="btn btn-primary" data-inventory-action="receipt"><i data-lucide="package-plus"></i> Nhập kho</button><button class="btn btn-secondary" data-inventory-action="issue"><i data-lucide="package-minus"></i> Xuất kho</button></div></div>
+        <div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="bom">BOM & sản xuất</button><button class="btn btn-primary" data-inventory-action="receipt"><i data-lucide="package-plus"></i> Nhập kho</button><button class="btn btn-secondary" data-inventory-action="issue"><i data-lucide="package-minus"></i> Xuất kho</button></div></div>
+      <div id="inventory-stock-view">
       <div id="inventory-status" class="inventory-status" role="status"></div>
       <div id="inventory-sync-control" class="inventory-activation inventory-sync-control" hidden>
         <div class="inventory-header"><div><strong>Đồng bộ kho theo đơn hàng</strong><p id="inventory-sync-description"></p></div>
@@ -58,7 +61,7 @@ export function renderInventoryPanel() {
         <button class="btn btn-secondary" data-inventory-action="refresh"><i data-lucide="refresh-cw"></i> Tải lại</button></div>
       <div id="inventory-error" class="inventory-error" role="alert" hidden></div>
       <div class="table-responsive"><table class="table inventory-table"><thead id="inventory-head"></thead><tbody id="inventory-body"></tbody></table></div>
-      <div class="inventory-pagination"><span id="inventory-page-label"></span><div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="previous">Trang trước</button><button class="btn btn-secondary" data-inventory-action="next">Trang sau</button></div></div>`;
+      <div class="inventory-pagination"><span id="inventory-page-label"></span><div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="previous">Trang trước</button><button class="btn btn-secondary" data-inventory-action="next">Trang sau</button></div></div></div>`;
     panel.addEventListener('click', onClick);
     panel.querySelector('#inventory-search-form').addEventListener('submit', event => { event.preventDefault(); if (switchingSync) return; filters.query = new FormData(event.target).get('query').trim(); restart(); });
     panel.querySelector('#inventory-low-only').addEventListener('change', event => { if (switchingSync) return; filters.lowOnly = event.target.checked; restart(); });
@@ -146,6 +149,7 @@ function onClick(event) {
     if (row) openDocument('count', row); return;
   }
   const action = button.dataset.inventoryAction;
+  if (action === 'bom') { openBomPanel(); return; }
   if (['receipt', 'issue'].includes(action)) { openDocument(action); return; }
   if (action === 'refresh') { if (!loading) { loaded = null; void load(true); } }
   if (action === 'previous') { page--; loaded = null; void load(); }

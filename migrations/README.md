@@ -499,3 +499,10 @@ tìm kiếm và cursor tiếp tục duyệt toàn bộ danh mục. Chạy sau 00
 trước khi cập nhật production và frontend. Trên staging trống, chạy
 `tests/0091_inventory_page_limit_integration.sql` để kiểm thử 15/15/5 và tìm
 SKU ngoài trang đầu; fixture kết thúc bằng ROLLBACK.
+
+`0092_bom_two_stage.sql` bổ sung vật tư/bao bì/bán thành phẩm, định mức BOM có
+phiên bản và lệnh sản xuất nguyên tử. Lệnh trừ đầu vào, cộng đầu ra trong một
+giao dịch; bán hàng vẫn trừ SKU thành phẩm. Chạy sau 0091, thử fixture
+`tests/0092_bom_two_stage_integration.sql` trên staging trống trước production.
+Xem [`BOM_DEPLOYMENT.md`](../docs/BOM_DEPLOYMENT.md) về quy đổi đơn vị, giới hạn
+Free, đối chiếu dữ liệu cũ, sao lưu và kiểm thử vai trò.

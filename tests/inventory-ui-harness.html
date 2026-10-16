@@ -6,8 +6,9 @@
 <section id="inventory-panel" class="panel active"></section><output id="inventory-harness-calls" style="display:block;margin-top:20px"></output></main><div id="toast-container"></div>
 <script type="module">
 import { state } from '../js/state.js';
-import { inventoryGateway } from '../js/services/inventory.js?v=20261016-page15-v1';
-import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261016-page15-v1';
+import { inventoryGateway } from '../js/services/inventory.js?v=20261016-bom-v1';
+import { bomGateway } from '../js/services/bom.js?v=20261016-bom-v1';
+import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261016-bom-v1';
 state.currentUser = {id:'test-admin', authUserId:'test-admin',role:'admin'};
 state.currentTab = 'inventory-panel';
 const rows = Array.from({length:65},(_,i)=>({product_id:`sku-${String(i).padStart(3,'0')}`,sku:`SON-${String(i+1).padStart(3,'0')}-LON`,name:`Sơn kiểm thử ${i+1}`,brand:'Hãng kiểm thử',unit:'Lon',quantity:i===0?10:20,minimum_quantity:5,is_active:true}));
@@ -28,5 +29,14 @@ inventoryGateway.post = async input=>{
  posts++;stamp();const result={id:`TEST-${posts}`};seen.set(input.requestKey,result);return result;
 };
 inventoryGateway.setSync=async enabled=>{if(enabled&&!activatedAt&&!movements.some(row=>row.kind==='count'))throw new Error('Cần ghi nhận ít nhất một phiếu kiểm kê tồn đầu kỳ.');active=enabled;if(enabled&&!activatedAt)activatedAt=new Date().toISOString();return{enabled,activatedAt,pendingOrders:0,processed:0,updatedAt:new Date().toISOString()};};
+const bomItems=[{id:'raw-test',code:'RAW-TEST',name:'Nguyên liệu kiểm thử',kind:'raw',base_unit:'kg',purchase_unit:'bao',purchase_to_base:25,quantity:50,is_active:true},
+  {id:'semi-test',code:'SEMI-TEST',name:'Bán thành phẩm kiểm thử',kind:'semi',base_unit:'kg',purchase_unit:'kg',purchase_to_base:1,quantity:10,is_active:true}];
+const bomRecipes=[{id:'recipe-test',output_kind:'semi',output_id:'semi-test',output_name:'Bán thành phẩm kiểm thử',version:1,status:'released',output_quantity:10,note:''}];
+bomGateway.read=async filters=>{
+  if(filters.mode==='detail')return{rows:[{id:'recipe-test',outputKind:'semi',outputId:'semi-test',outputQuantity:10,version:1,status:'released',note:'',lines:[{itemId:'raw-test',code:'RAW-TEST',name:'Nguyên liệu kiểm thử',unit:'kg',quantity:12}]}],hasMore:false,nextCursor:null};
+  const source=filters.mode==='recipes'?bomRecipes:filters.mode==='runs'?[]:filters.mode==='skus'?rows.map(row=>({id:row.product_id,code:row.sku,name:row.name,brand:row.brand,unit:row.unit})):bomItems;
+  const matches=source.filter(row=>(!filters.kind||row.kind===filters.kind)&&(!filters.query||`${row.code||''} ${row.name||row.output_name||''}`.toLowerCase().includes(filters.query.toLowerCase())));
+  return{rows:matches.slice(0,filters.limit||15),hasMore:false,nextCursor:null};
+};
 renderInventoryPanel();
 </script></body></html>
