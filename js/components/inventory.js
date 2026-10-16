@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { safeCreateIcons, showToast, formatDateTime } from '../utils.js';
-import { inventoryGateway } from '../services/inventory.js?v=20261016-nav-topgroups-v1';
-import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS } from '../domain/inventory.js?v=20261016-nav-topgroups-v1';
+import { inventoryGateway } from '../services/inventory.js?v=20261016-modal-viewport-v1';
+import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS } from '../domain/inventory.js?v=20261016-modal-viewport-v1';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const quantity = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 });
@@ -27,6 +27,7 @@ export function resetInventoryPanel() {
   actorScope = ''; filters = { mode: 'stock', query: '', lowOnly: false }; cursors = [null]; page = 0;
   loaded = null; loadedAt = 0; loading = false; errorText = ''; draft = null; attemptedRequest = null; saving = false; switchingSync = false;
   requestGeneration++; inventoryGateway.clear();
+  document.getElementById('inventory-document-host')?.remove();
   const panel = document.getElementById('inventory-panel');
   if (panel) { panel.removeEventListener('click', onClick); panel.replaceChildren(); delete panel.dataset.inventoryReady; }
 }
@@ -57,8 +58,7 @@ export function renderInventoryPanel() {
         <button class="btn btn-secondary" data-inventory-action="refresh"><i data-lucide="refresh-cw"></i> Tải lại</button></div>
       <div id="inventory-error" class="inventory-error" role="alert" hidden></div>
       <div class="table-responsive"><table class="table inventory-table"><thead id="inventory-head"></thead><tbody id="inventory-body"></tbody></table></div>
-      <div class="inventory-pagination"><span id="inventory-page-label"></span><div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="previous">Trang trước</button><button class="btn btn-secondary" data-inventory-action="next">Trang sau</button></div></div>
-      <div id="inventory-document-host"></div>`;
+      <div class="inventory-pagination"><span id="inventory-page-label"></span><div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="previous">Trang trước</button><button class="btn btn-secondary" data-inventory-action="next">Trang sau</button></div></div>`;
     panel.addEventListener('click', onClick);
     panel.querySelector('#inventory-search-form').addEventListener('submit', event => { event.preventDefault(); if (switchingSync) return; filters.query = new FormData(event.target).get('query').trim(); restart(); });
     panel.querySelector('#inventory-low-only').addEventListener('change', event => { if (switchingSync) return; filters.lowOnly = event.target.checked; restart(); });
@@ -159,10 +159,19 @@ function onClick(event) {
 }
 
 function availableProducts() { return state.products.filter(product => product.isActive !== false && product.isLegacy !== true && (product.packagingName || product.packageType)); }
+function closeDocument() {
+  document.getElementById('inventory-document-host')?.remove();
+  draft = null;
+  draw();
+}
 function openDocument(kind, row = null) {
-  if (saving) return;
+  if (saving || draft) return;
   draft = { requestKey: crypto.randomUUID(), kind, row }; attemptedRequest = null;
-  const host = document.getElementById('inventory-document-host');
+  // The panel's entrance animation creates a containing block for fixed children.
+  // Keep the dialog at the document root so it stays in the visible viewport.
+  const host = document.createElement('div');
+  host.id = 'inventory-document-host';
+  document.body.append(host);
   const products = availableProducts();
   host.innerHTML = `<div class="modal-overlay active"><div class="modal-content inventory-document" role="dialog" aria-modal="true" aria-label="${kinds[kind]}"><div class="modal-header"><h3>${kinds[kind]}</h3><button type="button" class="modal-close" aria-label="Đóng phiếu kho">&times;</button></div>
     <form id="inventory-document-form"><div class="modal-body"><p>${kind === 'count' ? 'Nhập số tồn thực tế. Hệ thống sẽ ghi phần chênh lệch so với tồn đang xem.' : 'Phiếu kho ghi số lượng hàng. Các khoản thanh toán được ghi riêng tại Phiếu mua hàng hoặc Sổ quỹ.'}</p>
@@ -170,13 +179,15 @@ function openDocument(kind, row = null) {
       : `<div id="inventory-document-lines"></div><button type="button" class="btn btn-secondary" id="inventory-add-line">Thêm SKU</button><datalist id="inventory-product-options">${products.map(product => `<option value="${escape(product.code)} · ${escape(product.brand)}" label="${escape(product.name)}"></option>`).join('')}</datalist>`}
     <label>Ghi chú<textarea class="form-control" name="note" maxlength="240" rows="2" placeholder="Lý do nhập, xuất hoặc kiểm kê"></textarea></label><p id="inventory-document-error" class="inventory-error" role="alert" hidden></p></div>
     <div class="modal-footer"><button type="submit" class="btn btn-primary" id="inventory-save-document">Lưu phiếu</button></div></form></div></div>`;
-  const close = () => { if (!saving) { host.replaceChildren(); draft = null; draw(); } };
+  const close = () => { if (!saving) closeDocument(); };
   host.querySelector('.modal-close').addEventListener('click', close);
   host.querySelector('.modal-overlay').addEventListener('click', event => { if (event.target === event.currentTarget) close(); });
+  host.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
   host.querySelector('#inventory-document-form').addEventListener('submit', saveDocument);
   const add = host.querySelector('#inventory-add-line');
   if (add) { add.addEventListener('click', addLine); addLine(); }
   draw();
+  host.querySelector(kind === 'count' ? '[name="countQuantity"]' : '[data-inventory-product]')?.focus();
 }
 function addLine() {
   const lines = document.getElementById('inventory-document-lines');
@@ -210,7 +221,7 @@ async function saveDocument(event) {
     saving = true; form.querySelector('#inventory-save-document').disabled = true;
     await inventoryGateway.post(input);
     if (actor !== sessionScope()) return;
-    document.getElementById('inventory-document-host').replaceChildren(); draft = null;
+    closeDocument();
     showToast('Đã ghi nhận phiếu kho.'); loaded = null; await load(true);
   } catch (error) {
     if (actor === sessionScope()) {

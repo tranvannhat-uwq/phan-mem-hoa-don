@@ -11904,6 +11904,18 @@ body.mobile-nav-open {
   .inventory-header { align-items: flex-start; }
   .inventory-table { min-width: 700px; }
   .inventory-document-line { grid-template-columns: minmax(100px, 1fr) 90px 35px; }
+  #inventory-document-host .modal-overlay { padding: 0; align-items: stretch; }
+  #inventory-document-host .inventory-document {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  #inventory-document-host .inventory-document form { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+  #inventory-document-host .inventory-document .modal-body { flex: 1; min-height: 0; max-height: none; }
 }
 
 /* Keep a bounded set of desktop shortcuts; the menu contains every destination. */
