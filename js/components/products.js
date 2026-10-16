@@ -5,8 +5,8 @@ import {
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20261016-modal-viewport-v1';
-import { renderAll } from '../main.js?v=20261016-modal-viewport-v1';
+} from '../services/supabase.js?v=20261016-page15-v1';
+import { renderAll } from '../main.js?v=20261016-page15-v1';
 import {
   buildProductFamilies,
   getProductBaseCode,

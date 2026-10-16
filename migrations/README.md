@@ -491,3 +491,11 @@ schema ứng dụng đang dùng; RPC chạy dưới quyền RLS của người g
 50 dòng và 32 KiB mỗi phản hồi. Đây là phần giảm tải cho màn hình bán hàng, chưa
 thay thế phân trang server cho các màn quản trị. Chỉ áp dụng sau khi kiểm tra
 staging và xác nhận frontend `20261015-stock-sync-v1` đã sẵn sàng.
+
+`0091_inventory_page_limit.sql` cho phép bộ lọc kho yêu cầu 1–50 dòng/trang;
+mặc định vẫn là 50 để giữ tương thích. Màn Tồn kho dùng 15 dòng/trang, còn lịch
+sử giữ 50. Giới hạn được áp dụng ngay trong truy vấn SQL trước khi tạo phản hồi;
+tìm kiếm và cursor tiếp tục duyệt toàn bộ danh mục. Chạy sau 0089 trên staging
+trước khi cập nhật production và frontend. Trên staging trống, chạy
+`tests/0091_inventory_page_limit_integration.sql` để kiểm thử 15/15/5 và tìm
+SKU ngoài trang đầu; fixture kết thúc bằng ROLLBACK.

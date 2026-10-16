@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261016-modal-viewport-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261016-modal-viewport-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261016-page15-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261016-page15-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261016-modal-viewport-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261016-modal-viewport-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261016-modal-viewport-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261016-page15-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261016-page15-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261016-page15-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;

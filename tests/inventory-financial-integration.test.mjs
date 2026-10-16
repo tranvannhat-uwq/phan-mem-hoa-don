@@ -37,6 +37,7 @@ before(async()=>{
   }
   await db.exec(await readFile(new URL('0088_integrated_inventory_free_budget.sql',directory),'utf8'));
   await db.exec(await readFile(new URL('0089_inventory_sync_toggle.sql',directory),'utf8'));
+  await db.exec(await readFile(new URL('0091_inventory_page_limit.sql',directory),'utf8'));
   // Execute the exact cloud staging artifact before other synthetic fixtures.
   // It must succeed and leave no test accounts, products or stock behind.
   let stagingResults;

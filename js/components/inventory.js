@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { safeCreateIcons, showToast, formatDateTime } from '../utils.js';
-import { inventoryGateway } from '../services/inventory.js?v=20261016-modal-viewport-v1';
-import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS } from '../domain/inventory.js?v=20261016-modal-viewport-v1';
+import { inventoryGateway } from '../services/inventory.js?v=20261016-page15-v1';
+import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261016-page15-v1';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const quantity = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 });
@@ -83,7 +83,7 @@ function draw() {
   panel.querySelector('#inventory-error').textContent = errorText;
   panel.querySelector('#inventory-low-control').hidden = history;
   panel.querySelector('#inventory-date-controls').hidden = !history;
-  panel.querySelector('#inventory-page-label').textContent = `Trang ${page + 1} · tối đa 50 dòng mỗi trang`;
+  panel.querySelector('#inventory-page-label').textContent = `Trang ${page + 1} · tối đa ${history ? INVENTORY_PAGE_SIZE : INVENTORY_STOCK_PAGE_SIZE} dòng mỗi trang`;
   panel.querySelectorAll('[data-inventory-view]').forEach(button => button.classList.toggle('active', button.dataset.inventoryView === filters.mode));
   panel.querySelectorAll('.inventory-toolbar button, .inventory-toolbar input, [data-inventory-count], .inventory-header > .inventory-actions button').forEach(element => { element.disabled = switchingSync; });
   panel.querySelector('[data-inventory-action="previous"]').disabled = switchingSync || loading || page === 0;
@@ -119,7 +119,8 @@ async function load(force = false) {
   const generation = ++requestGeneration; const actor = sessionScope();
   loading = true; errorText = ''; draw();
   try {
-    const data = await inventoryGateway.read({ ...filters, cursor: cursors[page] }, { force });
+    const limit = filters.mode === 'stock' ? INVENTORY_STOCK_PAGE_SIZE : INVENTORY_PAGE_SIZE;
+    const data = await inventoryGateway.read({ ...filters, cursor: cursors[page], limit }, { force });
     if (generation === requestGeneration && actor === sessionScope()) { loaded = data; loadedAt = Date.now(); }
   } catch (error) { if (generation === requestGeneration && actor === sessionScope()) errorText = error.message; }
   finally { if (generation === requestGeneration && actor === sessionScope()) { loading = false; draw(); } }

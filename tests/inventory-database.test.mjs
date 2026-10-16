@@ -55,6 +55,7 @@ before(async () => {
     INSERT INTO public.order_items(id,order_id,product_id,variant_id,quantity) VALUES ('old-line','old-order','sku-a','sku-a',5);`);
   await db.exec(await read('0088_integrated_inventory_free_budget.sql'));
   await db.exec(await read('0089_inventory_sync_toggle.sql'));
+  await db.exec(await read('0091_inventory_page_limit.sql'));
 });
 after(async () => { if (db) await db.close(); });
 
@@ -214,7 +215,18 @@ test('catch-up processes at most 50 orders per call and enables only after the q
 test('keyset pages include every SKU, cap UTF-8 output and require a bounded history window', async () => {
   await db.exec('RESET ROLE');
   await db.exec("INSERT INTO public.products(id,code,brand,name,package_type) SELECT 'page-'||lpad(i::text,4,'0'),'PAGE-'||i,'TEST',repeat('Sơn ',50),'Lon' FROM generate_series(1,150) i");
-  await actor(admin); const ids = new Set(); let cursor = null; let pages = 0;
+  await actor(admin);
+  const first = await scalar('SELECT public.rpc_inventory_window($1::jsonb) AS value', [JSON.stringify({mode:'stock',limit:15})]);
+  assert.equal(first.rows.length,15);
+  assert.equal(first.hasMore,true);
+  assert.equal(first.nextCursor,first.rows.at(-1).product_id);
+  const next = await scalar('SELECT public.rpc_inventory_window($1::jsonb) AS value', [JSON.stringify({mode:'stock',limit:15,cursor:first.nextCursor})]);
+  assert.equal(next.rows.length,15);
+  assert.ok(next.rows.every(row => row.product_id > first.nextCursor));
+  const distantMatch = await scalar('SELECT public.rpc_inventory_window($1::jsonb) AS value', [JSON.stringify({mode:'stock',limit:15,query:'PAGE-150'})]);
+  assert.deepEqual(distantMatch.rows.map(row => row.product_id),['page-0150']);
+  await assert.rejects(scalar('SELECT public.rpc_inventory_window($1::jsonb) AS value', [JSON.stringify({mode:'stock',limit:51})]), /1–50 dòng/);
+  const ids = new Set(); let cursor = null; let pages = 0;
   do {
     const result = await scalar('SELECT public.rpc_inventory_window($1::jsonb) AS value',[JSON.stringify({mode:'stock',cursor})]);
     assert.ok(result.rows.length <= 50); assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 32768);

@@ -96,7 +96,8 @@ const migrationNames = [
   '0087_inventory_sync_control.sql',
   '0088_integrated_inventory_free_budget.sql',
   '0089_inventory_sync_toggle.sql',
-  '0090_bounded_customer_product_lookup.sql'
+  '0090_bounded_customer_product_lookup.sql',
+  '0091_inventory_page_limit.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const standaloneWarehouseMigrations = new Set(['0085', '0086', '0087']);

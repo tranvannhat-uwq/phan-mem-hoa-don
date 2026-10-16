@@ -59,6 +59,29 @@ migration này trên database đã có chúng.
 - Phiếu kho chỉ ghi số lượng. Phiếu mua hàng và Sổ quỹ tiếp tục ghi tài chính;
   phiếu mua không tự động cộng kho để tránh nhập hai lần.
 
+### Giới hạn trang Tồn kho 0091
+
+`0091_inventory_page_limit.sql` thêm bộ lọc `limit` 1–50 dòng vào RPC kho. Sau
+khi chạy migration, frontend yêu cầu 15 SKU/trang cho Tồn kho; tìm kiếm vẫn lọc
+toàn bộ danh mục trong PostgreSQL rồi phân trang bằng cursor. Lịch sử nhập/xuất
+và các client cũ tiếp tục dùng tối đa 50 dòng/trang. SQL áp dụng giới hạn trước
+khi tạo JSON nên không tải ngầm 50 dòng để chỉ hiển thị 15. RPC vẫn áp dụng giới
+hạn 32 KiB và cùng ngân sách đọc 400 MB/chu kỳ. Chạy 0091 trên staging, kiểm tra
+trang đầu, trang kế, tìm SKU ngoài trang đầu và vai trò; sau đó mới chạy trên
+production. Không chạy lại 0088/0089/0090.
+
+Ngày 16/10, dự án staging `ncyaatorabwoxzozvyre` đã có 0088–0090 và không có
+đơn hàng, hồ sơ hay phiếu kho. Chạy 0091 thành công; fixture rollback-only
+`migrations/tests/0091_inventory_page_limit_integration.sql` xác nhận 35 SKU
+được phân trang 15/15/5 và tìm được SKU thứ 35. Sau ROLLBACK, số đơn, hồ sơ và
+sản phẩm thử đều bằng 0; registry giữ 0091.
+
+Production `coebrkerpcgwckkwxlfo` đã áp dụng 0091 sau khi sao lưu ngày 16/10
+tại `D:\Desktop\soviet-backups\20261016-before-0091`. Bản custom dump, full SQL
+và schema SQL đều có checksum SHA-256 hợp lệ; `pg_restore --list` đọc được 1.309
+mục trong archive. Truy vấn sau migration xác nhận hàm có giới hạn trang, registry
+có 0091, còn số đơn và sản phẩm giữ nguyên 2.769/1.071.
+
 Bảng mới: `inventory_control`, `inventory_balances`, `inventory_documents`,
 `inventory_movements`, `inventory_order_positions`, `inventory_pending_orders`
 (0089). Nguồn chính là PostgreSQL;

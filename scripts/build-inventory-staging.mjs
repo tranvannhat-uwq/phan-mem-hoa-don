@@ -7,6 +7,7 @@ const names=(await readdir(resolve(root,'migrations'))).filter(name=>/^\d{4}_.*\
 names.push('0088_integrated_inventory_free_budget.sql');
 names.push('0089_inventory_sync_toggle.sql');
 names.push('0090_bounded_customer_product_lookup.sql');
+names.push('0091_inventory_page_limit.sql');
 const parts=[`-- EMPTY SUPABASE STAGING PROJECT ONLY. Never paste into production.
 -- This guard prevents bootstrap against an existing billing database.
 DO $$ BEGIN

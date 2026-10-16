@@ -6,8 +6,8 @@
 <section id="inventory-panel" class="panel active"></section><output id="inventory-harness-calls" style="display:block;margin-top:20px"></output></main><div id="toast-container"></div>
 <script type="module">
 import { state } from '../js/state.js';
-import { inventoryGateway } from '../js/services/inventory.js?v=20261016-modal-viewport-v1';
-import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261016-modal-viewport-v1';
+import { inventoryGateway } from '../js/services/inventory.js?v=20261016-page15-v1';
+import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261016-page15-v1';
 state.currentUser = {id:'test-admin', authUserId:'test-admin',role:'admin'};
 state.currentTab = 'inventory-panel';
 const rows = Array.from({length:65},(_,i)=>({product_id:`sku-${String(i).padStart(3,'0')}`,sku:`SON-${String(i+1).padStart(3,'0')}-LON`,name:`Sơn kiểm thử ${i+1}`,brand:'Hãng kiểm thử',unit:'Lon',quantity:i===0?10:20,minimum_quantity:5,is_active:true}));
@@ -18,8 +18,8 @@ inventoryGateway.read = async filters=>{
  reads++;stamp();
  const history=filters.mode==='movements'; const source=history?movements:[...rows].filter(row=>!filters.query||`${row.sku} ${row.name} ${row.brand}`.toLowerCase().includes(filters.query.toLowerCase())).filter(row=>!filters.lowOnly||row.quantity<=row.minimum_quantity);
  const filtered=filters.cursor?source.filter(row=>history?row.id<Number(filters.cursor):row.product_id>filters.cursor):source;
- const page=filtered.slice(0,50);
- return {rows:page,hasMore:filtered.length>50,nextCursor:filtered.length>50?(history?page.at(-1).id:page.at(-1).product_id):null,control:{activatedAt,syncAvailable:true,syncEnabled:active,pendingOrders:0},usage:{databaseBytes:185000000,moduleBytes:512000,budgetUsed:reads*24000,budgetLimit:400000000,cycleStart:'2026-09-21'}};
+ const limit=filters.limit||50;const page=filtered.slice(0,limit);
+ return {rows:page,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?(history?page.at(-1).id:page.at(-1).product_id):null,control:{activatedAt,syncAvailable:true,syncEnabled:active,pendingOrders:0},usage:{databaseBytes:185000000,moduleBytes:512000,budgetUsed:reads*24000,budgetLimit:400000000,cycleStart:'2026-09-21'}};
 };
 inventoryGateway.post = async input=>{
  if(seen.has(input.requestKey))return seen.get(input.requestKey);

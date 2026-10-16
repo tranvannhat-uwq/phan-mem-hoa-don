@@ -1,4 +1,5 @@
 export const INVENTORY_PAGE_SIZE = 50;
+export const INVENTORY_STOCK_PAGE_SIZE = 15;
 export const INVENTORY_CACHE_MS = 60_000;
 export const INVENTORY_READ_BUDGET = 400_000_000;
 export const INVENTORY_MAX_RESPONSE_BYTES = 32_768;
@@ -67,7 +68,11 @@ export function createInventoryGateway({ rpc, scope, now = Date.now }) {
       const request = (async () => {
         const value = await rpc('rpc_inventory_window', { p_filters: filters });
         if (version !== generation || actor !== scope()) throw new Error('Phiên làm việc đã thay đổi.');
-        if (!Array.isArray(value?.rows) || value.rows.length > INVENTORY_PAGE_SIZE) throw new Error('Cloud trả dữ liệu kho không hợp lệ.');
+        const requestedLimit = Number(filters.limit ?? INVENTORY_PAGE_SIZE);
+        if (!Array.isArray(value?.rows) || !Number.isInteger(requestedLimit) || requestedLimit < 1
+          || requestedLimit > INVENTORY_PAGE_SIZE || value.rows.length > requestedLimit) {
+          throw new Error('Cloud trả dữ liệu kho không hợp lệ.');
+        }
         if (cache.size >= 8) cache.delete(cache.keys().next().value);
         cache.set(key, { at: now(), value });
         return value;

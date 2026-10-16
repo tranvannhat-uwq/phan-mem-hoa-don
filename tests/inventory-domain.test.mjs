@@ -44,6 +44,10 @@ test('pending responses cannot enter the cache of another account', async () => 
   const pending = gateway.read(); actor = 'b'; finish();
   await assert.rejects(pending, /Phiên/);
 });
+test('a 15-row request rejects an oversized Cloud response', async () => {
+  const gateway = createInventoryGateway({ scope: () => 'admin', rpc: async () => ({ rows: Array.from({length:16}, () => ({})) }) });
+  await assert.rejects(gateway.read({ mode:'stock', limit:15 }), /không hợp lệ/);
+});
 test('posting invalidates pages and preserves the supplied idempotency key', async () => {
   const calls = [];
   const gateway = createInventoryGateway({ scope: () => 'a', rpc: async (name, args) => { calls.push({name,args}); return name.endsWith('window') ? {rows:[]} : {id:'doc'}; } });

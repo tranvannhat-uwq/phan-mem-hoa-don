@@ -29,9 +29,20 @@ if ($LASTEXITCODE -ne 0) { throw 'Full SQL pg_dump failed.' }
 & pg_dump --schema-only --format=plain --no-owner --no-privileges --file=$schemaDump $env:P0_DATABASE_URL
 if ($LASTEXITCODE -ne 0) { throw 'Schema pg_dump failed.' }
 
-$fullHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $fullDump).Hash.ToLowerInvariant()
-$fullSqlHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $fullSql).Hash.ToLowerInvariant()
-$schemaHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $schemaDump).Hash.ToLowerInvariant()
+function Get-Sha256Hex([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $sha256.Dispose()
+    $stream.Dispose()
+  }
+}
+
+$fullHash = Get-Sha256Hex $fullDump
+$fullSqlHash = Get-Sha256Hex $fullSql
+$schemaHash = Get-Sha256Hex $schemaDump
 @(
   "$fullHash  $([System.IO.Path]::GetFileName($fullDump))"
   "$fullSqlHash  $([System.IO.Path]::GetFileName($fullSql))"
