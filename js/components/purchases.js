@@ -6,8 +6,10 @@ import {
   dbCreatePurchase,
   dbRecordSupplierPayment
 } from '../services/supabase.js?v=20261017-purchase-ui-live-v3';
+import { bomGateway } from '../services/bom.js?v=20261017-purchase-ui-live-v3';
 
 let pendingPurchaseKey = '';
+let purchaseItemRowSequence = 0;
 const pendingSupplierPaymentKeys = new Map();
 
 function financeRole() {
@@ -41,11 +43,19 @@ function statusLabel(status) {
 }
 
 function itemRow(item = {}) {
+  const manual = item.mode === 'manual';
+  const resultsId = `purchase-material-results-${++purchaseItemRowSequence}`;
   return `
-    <tr class="purchase-entry-item-row">
-      <td><input type="text" class="purchase-entry-code" value="${escapeHtml(item.code || '')}" required placeholder="Mã hàng/dịch vụ"></td>
-      <td><input type="text" class="purchase-entry-name" value="${escapeHtml(item.name || '')}" required placeholder="Tên hàng hóa/dịch vụ"></td>
-      <td><input type="text" class="purchase-entry-unit" value="${escapeHtml(item.unit || '')}" placeholder="ĐVT"></td>
+    <tr class="purchase-entry-item-row" data-mode="${manual ? 'manual' : 'material'}" data-bom-id="${escapeHtml(item.bomId || '')}">
+      <td><input type="text" class="purchase-entry-code" value="${escapeHtml(item.code || '')}" required placeholder="Mã hàng" ${manual ? '' : 'readonly'}></td>
+      <td>
+        <div class="purchase-entry-item-source"><span>${manual ? 'Nhập tay' : 'Từ vật tư'}</span><button type="button" class="purchase-entry-switch-source">${manual ? 'Chọn vật tư' : 'Nhập tay'}</button></div>
+        <div class="purchase-entry-material-picker">
+          <input type="${manual ? 'text' : 'search'}" class="purchase-entry-name ${manual ? '' : 'purchase-entry-material-search'}" value="${escapeHtml(item.name || '')}" required placeholder="${manual ? 'Tên hàng hóa/dịch vụ' : 'Tìm mã hoặc tên vật tư...'}" autocomplete="off" ${manual ? '' : `role="combobox" aria-autocomplete="list" aria-controls="${resultsId}" aria-expanded="false"`}>
+          <div class="purchase-entry-material-results" id="${resultsId}" role="listbox" aria-label="Kết quả vật tư" hidden></div>
+        </div>
+      </td>
+      <td><input type="text" class="purchase-entry-unit" value="${escapeHtml(item.unit || '')}" placeholder="ĐVT" ${manual ? '' : 'readonly'}></td>
       <td><input type="number" class="purchase-entry-qty" min="0.0001" step="any" value="${item.quantity || 1}" required></td>
       <td><input type="number" class="purchase-entry-price" min="0" step="1" value="${item.unitPrice || 0}" required></td>
       <td class="purchase-entry-line-total" style="text-align:right">0 ₫</td>
@@ -105,7 +115,7 @@ function purchaseModal() {
             <section class="purchase-entry-card purchase-entry-items-card">
               <div class="purchase-entry-section-heading purchase-entry-items-heading">
                 <span class="purchase-entry-step">02</span>
-                <div><h4>Hàng hóa / dịch vụ</h4><p>Thêm từng mặt hàng và nhập số lượng, đơn giá mua.</p></div>
+                <div><h4>Hàng hóa / dịch vụ</h4><p>Chọn từ Vật tư & tồn hoặc nhập tay, rồi điền số lượng và đơn giá.</p></div>
                 <button type="button" class="btn btn-secondary purchase-entry-add-row" id="btn-add-purchase-item-row"><i data-lucide="plus"></i><span>Thêm dòng</span></button>
               </div>
               <div class="purchase-entry-items-wrap">
@@ -179,6 +189,88 @@ function updateTotals(modal) {
   const paid = Math.max(0, Number(modal.querySelector('#purchase-paid-input')?.value || 0));
   modal.querySelector('#purchase-entry-total').textContent = formatCurrency(total);
   modal.querySelector('#purchase-entry-debt-total').textContent = formatCurrency(Math.max(0, total - paid));
+}
+
+function closePurchaseMaterialResults(row) {
+  const search = row?.querySelector('.purchase-entry-material-search');
+  const results = row?.querySelector('.purchase-entry-material-results');
+  if (!search || !results) return;
+  clearTimeout(row.materialSearchTimer);
+  row.materialSearchSequence = (row.materialSearchSequence || 0) + 1;
+  results.hidden = true;
+  search.setAttribute('aria-expanded', 'false');
+  search.removeAttribute('aria-activedescendant');
+  row.dataset.materialActiveIndex = '-1';
+}
+
+function setPurchaseMaterialActiveOption(row, index, scroll = false) {
+  const search = row.querySelector('.purchase-entry-material-search');
+  const options = Array.from(row.querySelectorAll('.purchase-entry-material-option'));
+  const activeIndex = options.length ? (index + options.length) % options.length : -1;
+  options.forEach((option, optionIndex) => option.classList.toggle('is-active', optionIndex === activeIndex));
+  if (activeIndex < 0) search.removeAttribute('aria-activedescendant');
+  else {
+    search.setAttribute('aria-activedescendant', options[activeIndex].id);
+    if (scroll) options[activeIndex].scrollIntoView({ block: 'nearest' });
+  }
+  row.dataset.materialActiveIndex = String(activeIndex);
+}
+
+function searchPurchaseMaterials(row, immediate = false) {
+  if (row.dataset.mode !== 'material') return;
+  clearTimeout(row.materialSearchTimer);
+  const sequence = (row.materialSearchSequence || 0) + 1;
+  row.materialSearchSequence = sequence;
+  const search = row.querySelector('.purchase-entry-material-search');
+  const results = row.querySelector('.purchase-entry-material-results');
+  const query = search.value.trim().slice(0, 80);
+  results.hidden = false;
+  results.innerHTML = '<p class="purchase-entry-material-message">Đang tìm vật tư…</p>';
+  search.setAttribute('aria-expanded', 'true');
+  search.removeAttribute('aria-activedescendant');
+  row.materialSearchTimer = setTimeout(async () => {
+    try {
+      const data = await bomGateway.read({ mode: 'items', query, limit: 30 });
+      if (!row.isConnected || row.materialSearchSequence !== sequence || row.dataset.mode !== 'material') return;
+      const materials = (data.rows || []).filter(item => item.is_active !== false);
+      row.purchaseMaterialMatches = materials;
+      results.innerHTML = materials.length
+        ? `${materials.map((item, index) => `<button type="button" class="purchase-entry-material-option" role="option" id="${results.id}-option-${index}" data-item-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code)} · ĐVT mua: ${escapeHtml(item.purchase_unit || item.base_unit || '')}</small></button>`).join('')}${data.hasMore ? '<p class="purchase-entry-material-message">Nhập thêm mã hoặc tên để thu hẹp kết quả.</p>' : ''}`
+        : '<p class="purchase-entry-material-message">Không thấy vật tư phù hợp. Có thể chọn Nhập tay.</p>';
+      setPurchaseMaterialActiveOption(row, 0);
+    } catch (error) {
+      if (!row.isConnected || row.materialSearchSequence !== sequence) return;
+      row.purchaseMaterialMatches = [];
+      results.innerHTML = '<p class="purchase-entry-material-message">Không tải được vật tư. Có thể chọn Nhập tay.</p>';
+      setPurchaseMaterialActiveOption(row, -1);
+    }
+  }, immediate ? 0 : 250);
+}
+
+function choosePurchaseMaterial(row, id) {
+  const item = (row.purchaseMaterialMatches || []).find(material => String(material.id) === String(id));
+  if (!item || item.is_active === false) return;
+  row.dataset.bomId = String(item.id);
+  row.querySelector('.purchase-entry-code').value = item.code || '';
+  row.querySelector('.purchase-entry-unit').value = item.purchase_unit || item.base_unit || '';
+  const search = row.querySelector('.purchase-entry-material-search');
+  search.value = item.name || '';
+  search.setCustomValidity('');
+  search.focus();
+  closePurchaseMaterialResults(row);
+}
+
+function switchPurchaseItemMode(row) {
+  clearTimeout(row.materialSearchTimer);
+  row.materialSearchSequence = (row.materialSearchSequence || 0) + 1;
+  const mode = row.dataset.mode === 'material' ? 'manual' : 'material';
+  const quantity = Number(row.querySelector('.purchase-entry-qty').value || 1);
+  const unitPrice = Number(row.querySelector('.purchase-entry-price').value || 0);
+  row.insertAdjacentHTML('afterend', itemRow({ mode, quantity, unitPrice }));
+  const nextRow = row.nextElementSibling;
+  row.remove();
+  nextRow.querySelector('.purchase-entry-name').focus();
+  updateTotals(nextRow.closest('#purchase-entry-modal'));
 }
 
 function normalizeSupplierSearch(value) {
@@ -266,6 +358,11 @@ function attachEvents(panel, modal) {
   }));
   const close = () => {
     if (modal) renderPurchaseSupplierResults(modal, false);
+    modal?.querySelectorAll('.purchase-entry-item-row').forEach(row => {
+      clearTimeout(row.materialSearchTimer);
+      row.materialSearchSequence = (row.materialSearchSequence || 0) + 1;
+      closePurchaseMaterialResults(row);
+    });
     modal?.classList.remove('active');
     document.body.classList.remove('purchase-entry-modal-open');
   };
@@ -311,18 +408,67 @@ function attachEvents(panel, modal) {
     });
     modal.addEventListener('pointerdown', event => {
       if (!event.target.closest('.purchase-supplier-combobox')) renderPurchaseSupplierResults(modal, false);
+      modal.querySelectorAll('.purchase-entry-item-row').forEach(row => {
+        if (!row.querySelector('.purchase-entry-material-picker')?.contains(event.target)) closePurchaseMaterialResults(row);
+      });
     });
     modal.querySelector('#btn-close-purchase-entry')?.addEventListener('click', close);
     modal.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', close);
     modal.querySelector('#btn-add-purchase-item-row')?.addEventListener('click', () => {
-      modal.querySelector('#purchase-entry-items-body').insertAdjacentHTML('beforeend', itemRow()); updateTotals(modal);
+      const body = modal.querySelector('#purchase-entry-items-body');
+      body.insertAdjacentHTML('beforeend', itemRow());
+      updateTotals(modal);
+      body.lastElementChild.querySelector('.purchase-entry-material-search').focus();
     });
-    modal.querySelector('#purchase-entry-items-body')?.addEventListener('input', () => updateTotals(modal));
+    const itemBody = modal.querySelector('#purchase-entry-items-body');
+    itemBody?.addEventListener('focusin', event => {
+      if (event.target.matches('.purchase-entry-material-search')) searchPurchaseMaterials(event.target.closest('.purchase-entry-item-row'), true);
+    });
+    itemBody?.addEventListener('input', event => {
+      const search = event.target.closest('.purchase-entry-material-search');
+      if (search) {
+        const row = search.closest('.purchase-entry-item-row');
+        row.dataset.bomId = '';
+        row.querySelector('.purchase-entry-code').value = '';
+        row.querySelector('.purchase-entry-unit').value = '';
+        search.setCustomValidity('Chọn vật tư trong danh sách gợi ý hoặc chuyển sang Nhập tay.');
+        searchPurchaseMaterials(row);
+      }
+      updateTotals(modal);
+    });
+    itemBody?.addEventListener('keydown', event => {
+      const search = event.target.closest('.purchase-entry-material-search');
+      if (!search) return;
+      const row = search.closest('.purchase-entry-item-row');
+      const results = row.querySelector('.purchase-entry-material-results');
+      if (event.key === 'Escape') {
+        closePurchaseMaterialResults(row);
+        return;
+      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (results.hidden) searchPurchaseMaterials(row, true);
+        else setPurchaseMaterialActiveOption(row, Number(row.dataset.materialActiveIndex ?? -1) + (event.key === 'ArrowDown' ? 1 : -1), true);
+      }
+      if (event.key === 'Enter' && !results.hidden) {
+        const active = results.querySelector('.purchase-entry-material-option.is-active');
+        if (active) {
+          event.preventDefault();
+          choosePurchaseMaterial(row, active.dataset.itemId);
+        }
+      }
+    });
     modal.querySelector('#purchase-paid-input')?.addEventListener('input', () => updateTotals(modal));
-    modal.querySelector('#purchase-entry-items-body')?.addEventListener('click', event => {
+    itemBody?.addEventListener('click', event => {
+      const row = event.target.closest('.purchase-entry-item-row');
+      const material = event.target.closest('.purchase-entry-material-option');
+      if (material) return choosePurchaseMaterial(row, material.dataset.itemId);
+      if (event.target.closest('.purchase-entry-switch-source')) return switchPurchaseItemMode(row);
       const button = event.target.closest('.purchase-entry-remove-row'); if (!button) return;
       if (modal.querySelectorAll('.purchase-entry-item-row').length <= 1) return showToast('Phiếu mua phải có ít nhất một dòng.', 'warning');
-      button.closest('tr').remove(); updateTotals(modal);
+      clearTimeout(row.materialSearchTimer);
+      row.materialSearchSequence = (row.materialSearchSequence || 0) + 1;
+      row.remove(); updateTotals(modal);
     });
     modal.querySelector('#purchase-entry-form')?.addEventListener('submit', async event => {
       event.preventDefault();
@@ -331,6 +477,15 @@ function attachEvents(panel, modal) {
         supplierSearch.setCustomValidity('Chọn nhà cung cấp trong danh sách gợi ý.');
         supplierSearch.reportValidity();
         supplierSearch.focus();
+        return;
+      }
+      const unselectedMaterial = Array.from(modal.querySelectorAll('.purchase-entry-item-row'))
+        .find(row => row.dataset.mode === 'material' && !row.dataset.bomId);
+      if (unselectedMaterial) {
+        const search = unselectedMaterial.querySelector('.purchase-entry-material-search');
+        search.setCustomValidity('Chọn vật tư trong danh sách gợi ý hoặc chuyển sang Nhập tay.');
+        search.reportValidity();
+        search.focus();
         return;
       }
       const items = Array.from(modal.querySelectorAll('.purchase-entry-item-row')).map(row => ({
