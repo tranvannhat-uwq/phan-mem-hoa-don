@@ -12584,6 +12584,17 @@ body.purchase-entry-modal-open { overflow: hidden; }
   box-shadow: 0 1px 2px rgba(16, 35, 63, .025) !important;
 }
 #purchase-entry-modal .purchase-entry-modal-body .form-control:focus { border-color: #6d9cf0 !important; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12) !important; }
+#purchase-entry-modal .purchase-supplier-combobox { min-width: 0; }
+#purchase-entry-modal .purchase-supplier-results { max-height: 232px; margin-top: 6px; overflow-y: auto; border: 1px solid #d4deea; border-radius: 9px; background: #fff; box-shadow: 0 8px 20px rgba(22, 45, 80, .12); }
+#purchase-entry-modal .purchase-supplier-results[hidden] { display: none; }
+#purchase-entry-modal .purchase-supplier-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; padding: 8px 11px; border: 0; border-bottom: 1px solid #eef2f7; background: #fff; color: #24364d; font: inherit; font-size: .82rem; text-align: left; cursor: pointer; }
+#purchase-entry-modal .purchase-supplier-option:last-of-type { border-bottom: 0; }
+#purchase-entry-modal .purchase-supplier-option:hover,
+#purchase-entry-modal .purchase-supplier-option.is-active { background: #edf4ff; color: #174a9f; }
+#purchase-entry-modal .purchase-supplier-option span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#purchase-entry-modal .purchase-supplier-option small { flex: 0 0 auto; color: #75859a; font-size: .72rem; }
+#purchase-entry-modal .purchase-supplier-empty,
+#purchase-entry-modal .purchase-supplier-more { margin: 0; padding: 10px 11px; color: #718096; font-size: .76rem; }
 #purchase-entry-modal select.default-red ~ .searchable-select-trigger .searchable-select-label { color: #8290a2 !important; font-weight: 500 !important; }
 #purchase-entry-modal .searchable-select-trigger { height: 42px !important; min-height: 42px; padding: 0 11px !important; border-color: #d4deea !important; border-radius: 8px !important; color: #26384e !important; font-size: .84rem !important; font-weight: 500 !important; box-shadow: 0 1px 2px rgba(16, 35, 63, .025) !important; }
 #purchase-entry-modal .searchable-select-dropdown { z-index: 2010 !important; border-color: #d7e1ee !important; border-radius: 10px !important; }

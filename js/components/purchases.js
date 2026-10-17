@@ -5,7 +5,7 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261017-purchase-ui-live-v2';
+} from '../services/supabase.js?v=20261017-purchase-ui-live-v3';
 
 let pendingPurchaseKey = '';
 const pendingSupplierPaymentKeys = new Map();
@@ -53,12 +53,6 @@ function itemRow(item = {}) {
     </tr>`;
 }
 
-function purchaseSupplierOptions(suppliers = state.suppliers || []) {
-  return suppliers.map(supplier =>
-    `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} (${escapeHtml(supplier.code)})</option>`
-  ).join('');
-}
-
 function purchaseModal() {
   return `
     <div class="modal-overlay purchase-entry-overlay" id="purchase-entry-modal">
@@ -79,12 +73,12 @@ function purchaseModal() {
               </div>
               <div class="purchase-entry-info-grid">
                 <div class="form-group">
-                  <label class="form-label" for="purchase-supplier-select">Nhà cung cấp <span>*</span></label>
-                  <input class="form-control purchase-entry-supplier-search" id="purchase-supplier-search" type="search" placeholder="Tìm theo tên hoặc mã nhà cung cấp..." autocomplete="off" aria-label="Tìm nhà cung cấp">
-                  <select class="form-control" id="purchase-supplier-select" required>
-                    <option value="">-- Chọn nhà cung cấp --</option>
-                    ${purchaseSupplierOptions()}
-                  </select>
+                  <label class="form-label" for="purchase-supplier-search">Nhà cung cấp <span>*</span></label>
+                  <div class="purchase-supplier-combobox">
+                    <input class="form-control purchase-entry-supplier-search" id="purchase-supplier-search" type="search" placeholder="Tìm tên hoặc mã nhà cung cấp..." autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="purchase-supplier-results" aria-expanded="false" required>
+                    <input type="hidden" id="purchase-supplier-select" name="supplierId">
+                    <div class="purchase-supplier-results" id="purchase-supplier-results" role="listbox" aria-label="Kết quả nhà cung cấp" hidden></div>
+                  </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label" for="purchase-invoice-number">Số hóa đơn đầu vào</label>
@@ -187,25 +181,71 @@ function updateTotals(modal) {
   modal.querySelector('#purchase-entry-debt-total').textContent = formatCurrency(Math.max(0, total - paid));
 }
 
-function syncPurchaseSupplierOptions(modal) {
-  const select = modal?.querySelector('#purchase-supplier-select');
-  if (!select) return;
+function normalizeSupplierSearch(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+}
+
+function purchaseSupplierLabel(supplier) {
+  const name = String(supplier.name || '').trim();
+  const code = String(supplier.code || '').trim();
+  return code ? `${name} (${code})` : name;
+}
+
+function setPurchaseSupplierActiveOption(modal, index, scroll = false) {
+  const input = modal.querySelector('#purchase-supplier-search');
+  const options = Array.from(modal.querySelectorAll('.purchase-supplier-option'));
+  const activeIndex = options.length ? (index + options.length) % options.length : -1;
+  options.forEach((option, optionIndex) => option.classList.toggle('is-active', optionIndex === activeIndex));
+  if (activeIndex < 0) input.removeAttribute('aria-activedescendant');
+  else {
+    input.setAttribute('aria-activedescendant', options[activeIndex].id);
+    if (scroll) options[activeIndex].scrollIntoView({ block: 'nearest' });
+  }
+  modal.dataset.supplierActiveIndex = String(activeIndex);
+}
+
+function renderPurchaseSupplierResults(modal, open) {
+  const input = modal.querySelector('#purchase-supplier-search');
+  const results = modal.querySelector('#purchase-supplier-results');
+  if (!input || !results) return;
+  results.hidden = !open;
+  input.setAttribute('aria-expanded', String(open));
+  if (!open) {
+    input.removeAttribute('aria-activedescendant');
+    modal.dataset.supplierActiveIndex = '-1';
+    return;
+  }
   const suppliers = state.suppliers || [];
-  const selectedId = select.value;
-  const query = normalizeSupplierSearch(modal.querySelector('#purchase-supplier-search')?.value || '');
+  const query = normalizeSupplierSearch(input.value);
   const filteredSuppliers = query
     ? suppliers.filter(supplier => normalizeSupplierSearch(`${supplier.name || ''} ${supplier.code || ''}`).includes(query))
     : suppliers;
-  const selectedSupplier = suppliers.find(supplier => String(supplier.id) === selectedId);
-  if (selectedSupplier && !filteredSuppliers.some(supplier => String(supplier.id) === selectedId)) {
-    filteredSuppliers.push(selectedSupplier);
-  }
-  select.innerHTML = `<option value="">-- Chọn nhà cung cấp --</option>${purchaseSupplierOptions(filteredSuppliers)}`;
-  select.value = selectedSupplier ? selectedId : '';
+  const visibleSuppliers = filteredSuppliers.slice(0, 25);
+  results.innerHTML = visibleSuppliers.length
+    ? `${visibleSuppliers.map((supplier, index) => `<button type="button" class="purchase-supplier-option" role="option" id="purchase-supplier-option-${index}" data-supplier-id="${escapeHtml(supplier.id)}"><span>${escapeHtml(supplier.name)}</span><small>${escapeHtml(supplier.code || '')}</small></button>`).join('')}${filteredSuppliers.length > visibleSuppliers.length ? `<p class="purchase-supplier-more">Còn ${filteredSuppliers.length - visibleSuppliers.length} nhà cung cấp. Nhập thêm để thu hẹp kết quả.</p>` : ''}`
+    : '<p class="purchase-supplier-empty">Không tìm thấy nhà cung cấp phù hợp.</p>';
+  setPurchaseSupplierActiveOption(modal, 0);
 }
 
-function normalizeSupplierSearch(value) {
-  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+function choosePurchaseSupplier(modal, id) {
+  const supplier = (state.suppliers || []).find(item => String(item.id) === String(id));
+  if (!supplier) return;
+  modal.querySelector('#purchase-supplier-select').value = String(supplier.id);
+  const input = modal.querySelector('#purchase-supplier-search');
+  input.value = purchaseSupplierLabel(supplier);
+  input.setCustomValidity('');
+  input.focus();
+  renderPurchaseSupplierResults(modal, false);
+}
+
+function syncPurchaseSupplierOptions(modal) {
+  const selected = modal?.querySelector('#purchase-supplier-select');
+  if (!selected) return;
+  if (selected.value && !(state.suppliers || []).some(supplier => String(supplier.id) === selected.value)) {
+    selected.value = '';
+    modal.querySelector('#purchase-supplier-search').value = '';
+  }
+  if (!modal.querySelector('#purchase-supplier-results').hidden) renderPurchaseSupplierResults(modal, true);
 }
 
 function printPurchase(purchase) {
@@ -225,6 +265,7 @@ function attachEvents(panel, modal) {
     renderPurchasesPanel(panel);
   }));
   const close = () => {
+    if (modal) renderPurchaseSupplierResults(modal, false);
     modal?.classList.remove('active');
     document.body.classList.remove('purchase-entry-modal-open');
   };
@@ -238,11 +279,38 @@ function attachEvents(panel, modal) {
   });
   if (modal && modal.dataset.eventsBound !== 'true') {
     modal.dataset.eventsBound = 'true';
-    modal.querySelector('#purchase-supplier-search')?.addEventListener('input', () => syncPurchaseSupplierOptions(modal));
-    modal.querySelector('#purchase-supplier-select')?.addEventListener('change', () => {
-      const searchInput = modal.querySelector('#purchase-supplier-search');
-      if (searchInput) searchInput.value = '';
-      syncPurchaseSupplierOptions(modal);
+    const supplierSearch = modal.querySelector('#purchase-supplier-search');
+    modal.querySelector('#purchase-supplier-search')?.addEventListener('input', () => {
+      modal.querySelector('#purchase-supplier-select').value = '';
+      supplierSearch.setCustomValidity('Chọn nhà cung cấp trong danh sách gợi ý.');
+      renderPurchaseSupplierResults(modal, true);
+    });
+    supplierSearch?.addEventListener('focus', () => renderPurchaseSupplierResults(modal, true));
+    supplierSearch?.addEventListener('keydown', event => {
+      const results = modal.querySelector('#purchase-supplier-results');
+      if (event.key === 'Escape') {
+        renderPurchaseSupplierResults(modal, false);
+        return;
+      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (results.hidden) renderPurchaseSupplierResults(modal, true);
+        else setPurchaseSupplierActiveOption(modal, Number(modal.dataset.supplierActiveIndex || 0) + (event.key === 'ArrowDown' ? 1 : -1), true);
+      }
+      if (event.key === 'Enter' && !results.hidden) {
+        const active = results.querySelector('.purchase-supplier-option.is-active');
+        if (active) {
+          event.preventDefault();
+          choosePurchaseSupplier(modal, active.dataset.supplierId);
+        }
+      }
+    });
+    modal.querySelector('#purchase-supplier-results')?.addEventListener('click', event => {
+      const option = event.target.closest('.purchase-supplier-option');
+      if (option) choosePurchaseSupplier(modal, option.dataset.supplierId);
+    });
+    modal.addEventListener('pointerdown', event => {
+      if (!event.target.closest('.purchase-supplier-combobox')) renderPurchaseSupplierResults(modal, false);
     });
     modal.querySelector('#btn-close-purchase-entry')?.addEventListener('click', close);
     modal.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', close);
@@ -258,6 +326,13 @@ function attachEvents(panel, modal) {
     });
     modal.querySelector('#purchase-entry-form')?.addEventListener('submit', async event => {
       event.preventDefault();
+      const supplierId = modal.querySelector('#purchase-supplier-select').value;
+      if (!supplierId) {
+        supplierSearch.setCustomValidity('Chọn nhà cung cấp trong danh sách gợi ý.');
+        supplierSearch.reportValidity();
+        supplierSearch.focus();
+        return;
+      }
       const items = Array.from(modal.querySelectorAll('.purchase-entry-item-row')).map(row => ({
         code: row.querySelector('.purchase-entry-code').value.trim(),
         name: row.querySelector('.purchase-entry-name').value.trim(),
@@ -267,7 +342,7 @@ function attachEvents(panel, modal) {
       }));
       const submit = event.submitter; if (submit) submit.disabled = true;
       const result = await dbCreatePurchase({
-        supplierId: modal.querySelector('#purchase-supplier-select').value,
+        supplierId,
         invoiceNumber: modal.querySelector('#purchase-invoice-number').value.trim(),
         purchaseDate: new Date(modal.querySelector('#purchase-date-input').value).toISOString(),
         paidAmount: Number(modal.querySelector('#purchase-paid-input').value || 0),
