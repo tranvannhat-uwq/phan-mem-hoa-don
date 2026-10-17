@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
 import { switchTab } from '../main.js?v=20261017-purchase-ui-live-v5';
-import { openProductModal } from './products.js';
+import { openProductModal } from './products.js?v=20261017-purchase-ui-live-v5';
 import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261017-purchase-ui-live-v5';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
