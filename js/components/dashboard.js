@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20261017-purchase-ui-live-v3';
+import { switchTab } from '../main.js?v=20261017-purchase-ui-live-v4';
 import { openProductModal } from './products.js';
-import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261017-purchase-ui-live-v3';
+import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261017-purchase-ui-live-v4';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261017-purchase-ui-live-v3';
+import { isActiveUser } from '../domain/user-status.js?v=20261017-purchase-ui-live-v4';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
