@@ -179,44 +179,48 @@ function attachEvents(panel) {
     pendingPurchaseKey ||= newKey('purchase');
     updateTotals(panel); modal?.classList.add('active');
   });
-  panel.querySelector('#btn-close-purchase-entry')?.addEventListener('click', close);
-  panel.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', close);
-  panel.querySelector('#btn-add-purchase-item-row')?.addEventListener('click', () => {
-    panel.querySelector('#purchase-entry-items-body').insertAdjacentHTML('beforeend', itemRow()); updateTotals(panel);
-  });
-  panel.querySelector('#purchase-entry-items-body')?.addEventListener('input', () => updateTotals(panel));
-  panel.querySelector('#purchase-paid-input')?.addEventListener('input', () => updateTotals(panel));
-  panel.querySelector('#purchase-entry-items-body')?.addEventListener('click', event => {
-    const button = event.target.closest('.purchase-entry-remove-row'); if (!button) return;
-    if (panel.querySelectorAll('.purchase-entry-item-row').length <= 1) return showToast('Phiếu mua phải có ít nhất một dòng.', 'warning');
-    button.closest('tr').remove(); updateTotals(panel);
-  });
-  panel.querySelector('#purchase-entry-form')?.addEventListener('submit', async event => {
-    event.preventDefault();
-    const items = Array.from(panel.querySelectorAll('.purchase-entry-item-row')).map(row => ({
-      code: row.querySelector('.purchase-entry-code').value.trim(),
-      name: row.querySelector('.purchase-entry-name').value.trim(),
-      unit: row.querySelector('.purchase-entry-unit').value.trim(),
-      quantity: Number(row.querySelector('.purchase-entry-qty').value),
-      unitPrice: Number(row.querySelector('.purchase-entry-price').value)
-    }));
-    const submit = event.submitter; if (submit) submit.disabled = true;
-    const result = await dbCreatePurchase({
-      supplierId: panel.querySelector('#purchase-supplier-select').value,
-      invoiceNumber: panel.querySelector('#purchase-invoice-number').value.trim(),
-      purchaseDate: new Date(panel.querySelector('#purchase-date-input').value).toISOString(),
-      paidAmount: Number(panel.querySelector('#purchase-paid-input').value || 0),
-      paymentMethod: panel.querySelector('#purchase-payment-method').value,
-      notes: panel.querySelector('#purchase-note-input').value.trim(),
-      idempotencyKey: pendingPurchaseKey || newKey('purchase'), items
+  if (modal && modal.dataset.eventsBound !== 'true') {
+    modal.dataset.eventsBound = 'true';
+    panel.querySelector('#btn-close-purchase-entry')?.addEventListener('click', close);
+    panel.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', close);
+    panel.querySelector('#btn-add-purchase-item-row')?.addEventListener('click', () => {
+      panel.querySelector('#purchase-entry-items-body').insertAdjacentHTML('beforeend', itemRow()); updateTotals(panel);
     });
-    if (submit) submit.disabled = false;
-    if (!result) return;
-    pendingPurchaseKey = '';
-    panel.dataset.activePurchaseId = result.purchase?.id || '';
-    showToast(result.already_recorded ? 'Phiếu mua đã được ghi nhận trước đó.' : 'Đã tạo phiếu mua và cập nhật công nợ.', 'success');
-    renderPurchasesPanel(panel);
-  });
+    panel.querySelector('#purchase-entry-items-body')?.addEventListener('input', () => updateTotals(panel));
+    panel.querySelector('#purchase-paid-input')?.addEventListener('input', () => updateTotals(panel));
+    panel.querySelector('#purchase-entry-items-body')?.addEventListener('click', event => {
+      const button = event.target.closest('.purchase-entry-remove-row'); if (!button) return;
+      if (panel.querySelectorAll('.purchase-entry-item-row').length <= 1) return showToast('Phiếu mua phải có ít nhất một dòng.', 'warning');
+      button.closest('tr').remove(); updateTotals(panel);
+    });
+    panel.querySelector('#purchase-entry-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const items = Array.from(panel.querySelectorAll('.purchase-entry-item-row')).map(row => ({
+        code: row.querySelector('.purchase-entry-code').value.trim(),
+        name: row.querySelector('.purchase-entry-name').value.trim(),
+        unit: row.querySelector('.purchase-entry-unit').value.trim(),
+        quantity: Number(row.querySelector('.purchase-entry-qty').value),
+        unitPrice: Number(row.querySelector('.purchase-entry-price').value)
+      }));
+      const submit = event.submitter; if (submit) submit.disabled = true;
+      const result = await dbCreatePurchase({
+        supplierId: panel.querySelector('#purchase-supplier-select').value,
+        invoiceNumber: panel.querySelector('#purchase-invoice-number').value.trim(),
+        purchaseDate: new Date(panel.querySelector('#purchase-date-input').value).toISOString(),
+        paidAmount: Number(panel.querySelector('#purchase-paid-input').value || 0),
+        paymentMethod: panel.querySelector('#purchase-payment-method').value,
+        notes: panel.querySelector('#purchase-note-input').value.trim(),
+        idempotencyKey: pendingPurchaseKey || newKey('purchase'), items
+      });
+      if (submit) submit.disabled = false;
+      if (!result) return;
+      pendingPurchaseKey = '';
+      panel.dataset.activePurchaseId = result.purchase?.id || '';
+      showToast(result.already_recorded ? 'Phiếu mua đã được ghi nhận trước đó.' : 'Đã tạo phiếu mua và cập nhật công nợ.', 'success');
+      close();
+      renderPurchasesPanel(panel);
+    });
+  }
   panel.querySelectorAll('.purchase-pay-btn').forEach(button => button.addEventListener('click', async event => {
     event.stopPropagation();
     const purchase = state.purchases.find(item => String(item.id) === String(button.dataset.id));
@@ -255,15 +259,28 @@ export function renderPurchasesPanel(panel) {
     panel.innerHTML = '<div class="empty-state">Bạn không có quyền truy cập phân hệ mua hàng.</div>';
     return;
   }
+  const existingModal = panel.querySelector('#purchase-entry-modal');
+  const existingPage = panel.querySelector('.purchase-page');
   const activeId = panel.dataset.activePurchaseId || '';
   const purchases = state.purchases || [];
-  panel.innerHTML = `
+  const pageMarkup = `
     <div class="purchase-page"><main class="purchase-main">
       <div class="purchase-toolbar"><div class="purchase-heading"><h2>Phiếu mua hàng</h2><small>Ghi nhận giá trị mua và công nợ nhà cung cấp</small></div><div class="purchase-actions"><button class="purchase-primary-btn" id="btn-open-purchase-modal">+ Tạo phiếu mua</button></div></div>
       <div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Mã phiếu</th><th>Ngày mua</th><th>Số hóa đơn</th><th>Nhà cung cấp</th><th style="text-align:right">Tổng tiền</th><th style="text-align:right">Đã thanh toán</th><th style="text-align:right">Còn nợ</th><th>Trạng thái</th><th>Người tạo</th><th>Thao tác</th></tr></thead><tbody>
         ${purchases.length ? purchases.map(purchase => `<tr class="purchase-row ${String(activeId) === String(purchase.id) ? 'active' : ''}" data-id="${escapeHtml(purchase.id)}"><td>${escapeHtml(purchase.code)}</td><td>${escapeHtml(purchaseDate(purchase))}</td><td>${escapeHtml(purchase.invoiceNumber || '-')}</td><td>${escapeHtml(purchase.supplierName || purchase.supplierCode)}</td><td style="text-align:right">${formatCurrency(purchaseTotal(purchase))}</td><td style="text-align:right">${formatCurrency(purchase.paidAmount)}</td><td style="text-align:right">${formatCurrency(purchase.balanceDue)}</td><td><span class="purchase-status ${escapeHtml(purchase.status)}">${statusLabel(purchase.status)}</span></td><td>${escapeHtml(purchase.createdBy || '-')}</td><td><button type="button" class="purchase-row-toggle" aria-label="Xem phiếu ${escapeHtml(purchase.code)}">Xem</button></td></tr>${String(activeId) === String(purchase.id) ? purchaseDetail(purchase) : ''}`).join('') : '<tr><td colspan="10" class="purchase-empty">Chưa có phiếu mua hàng trên database.</td></tr>'}
       </tbody></table></div>
-    </main></div>${purchaseModal()}`;
+    </main></div>`;
+  // Cloud and realtime refreshes update the list while keeping the in-progress form mounted.
+  if (existingPage) {
+    existingPage.outerHTML = pageMarkup;
+  } else if (existingModal) {
+    Array.from(panel.children).forEach(child => {
+      if (child !== existingModal) child.remove();
+    });
+    existingModal.insertAdjacentHTML('beforebegin', pageMarkup);
+  } else {
+    panel.innerHTML = `${pageMarkup}${purchaseModal()}`;
+  }
   attachEvents(panel);
   safeCreateIcons();
 }
