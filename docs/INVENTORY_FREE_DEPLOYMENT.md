@@ -168,8 +168,8 @@ bằng truy vấn chỉ đọc.
    secret key hoặc service role vào chat/mã nguồn. Dùng cùng khu vực Seoul.
 2. Chạy `node scripts/build-inventory-staging.mjs` để tạo
    `outputs/inventory-staging-schema.sql`. Bundle gồm schema nghiệp vụ, kho
-   `0088`, nút đồng bộ `0089`, RPC tìm kiếm giới hạn `0090`, phân trang `0091`
-   và BOM `0092`. Chỉ chạy bundle
+   `0088`, nút đồng bộ `0089`, RPC tìm kiếm giới hạn `0090`, phân trang `0091`,
+   BOM `0092` và tìm tên sản phẩm theo từ khóa `0095`. Chỉ chạy bundle
    trên dự án staging **trống**. Bundle có chốt chặn nếu đã có bảng đơn/profiles
    và không bao gồm đồng bộ kho riêng 0085–0087.
 3. Chạy riêng `migrations/tests/0088_inventory_financial_integration.sql` trên

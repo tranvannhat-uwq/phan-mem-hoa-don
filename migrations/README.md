@@ -515,3 +515,7 @@ có tồn, phiếu kho hay liên kết BOM. Kiểm thử cập nhật và khóa 
 `0094_repair_bom_item_unit_edit.sql` sửa lỗi đánh máy tên RPC trong 0093, xóa
 RPC phụ bị tạo nhầm và cài đúng `rpc_bom_save_item`. Nếu 0093 đã chạy, áp dụng
 0094 sau đó; không chạy lại 0093.
+
+`0095_product_name_token_search.sql` cập nhật RPC tìm SKU của đơn hàng để tìm
+đủ các từ khóa tên sản phẩm theo thứ tự bất kỳ, không phân biệt dấu và dấu câu.
+Áp dụng sau 0090 để tìm theo tên nhất quán với bộ lọc trên trình duyệt.

@@ -181,6 +181,12 @@ function searchableFamilyText(family) {
 export function searchProductFamilies(families, query) {
   const normalizedQuery = normalizeCatalogText(query);
   if (!normalizedQuery) return [];
+  const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+
+  const matchesAllTokens = value => {
+    const normalizedValue = normalizeCatalogText(value);
+    return queryTokens.every(token => normalizedValue.includes(token));
+  };
 
   return (families || [])
     .map(family => {
@@ -188,18 +194,18 @@ export function searchProductFamilies(families, query) {
         const code = normalizeCatalogText(variant.code || variant.variantCode);
         return code === normalizedQuery;
       }) || family.variants.find(variant => {
-        const variantText = normalizeCatalogText([
+        const variantText = [
           variant.code,
           variant.variantCode,
           variant.packageType,
           variant.packagingName,
           variantSpecification(variant)
-        ].join(' '));
-        return variantText.includes(normalizedQuery);
+        ].join(' ');
+        return matchesAllTokens(variantText);
       }) || null;
 
       const baseExact = normalizeCatalogText(family.baseCode) === normalizedQuery;
-      const matches = baseExact || matchingVariant || searchableFamilyText(family).includes(normalizedQuery);
+      const matches = baseExact || matchingVariant || matchesAllTokens(searchableFamilyText(family));
       if (!matches) return null;
 
       return {
