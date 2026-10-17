@@ -53,59 +53,90 @@ function itemRow(item = {}) {
     </tr>`;
 }
 
+function purchaseSupplierOptions() {
+  return (state.suppliers || []).map(supplier =>
+    `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} (${escapeHtml(supplier.code)})</option>`
+  ).join('');
+}
+
 function purchaseModal() {
   return `
-    <div class="modal-overlay" id="purchase-entry-modal">
-      <div class="modal-content purchase-entry-modal-content">
-        <div class="modal-header">
-          <h3 class="modal-title">Tạo phiếu mua hàng</h3>
-          <button class="modal-close" id="btn-close-purchase-entry">×</button>
+    <div class="modal-overlay purchase-entry-overlay" id="purchase-entry-modal">
+      <div class="modal-content purchase-entry-modal-content" role="dialog" aria-modal="true" aria-labelledby="purchase-entry-title">
+        <div class="modal-header purchase-entry-header">
+          <div class="purchase-entry-title-group">
+            <span class="purchase-entry-title-icon"><i data-lucide="file-plus-2"></i></span>
+            <div><h3 class="modal-title" id="purchase-entry-title">Tạo phiếu mua hàng</h3><p>Nhập thông tin nhà cung cấp và hàng hóa cần ghi nhận.</p></div>
+          </div>
+          <button type="button" class="modal-close" id="btn-close-purchase-entry" aria-label="Đóng"><i data-lucide="x"></i></button>
         </div>
         <form id="purchase-entry-form">
           <div class="modal-body purchase-entry-modal-body">
-            <div class="form-group">
-              <label class="form-label">Nhà cung cấp *</label>
-              <select class="form-control" id="purchase-supplier-select" required>
-                <option value="">-- Chọn nhà cung cấp --</option>
-                ${state.suppliers.map(supplier => `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} (${escapeHtml(supplier.code)})</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Số hóa đơn đầu vào</label>
-              <input class="form-control" id="purchase-invoice-number" maxlength="100">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Ngày mua *</label>
-              <input type="datetime-local" class="form-control" id="purchase-date-input" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Thanh toán ngay</label>
-              <input type="number" class="form-control" id="purchase-paid-input" min="0" step="1" value="0">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Phương thức chi</label>
-              <select class="form-control" id="purchase-payment-method">
-                <option value="cash">Tiền mặt</option><option value="bank">Ngân hàng</option><option value="wallet">Ví điện tử</option>
-              </select>
-            </div>
-            <div class="form-group" style="grid-column:1/-1">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <label class="form-label">Hàng hóa/dịch vụ *</label>
-                <button type="button" class="btn btn-secondary btn-sm" id="btn-add-purchase-item-row">Thêm dòng</button>
+            <section class="purchase-entry-card purchase-entry-info-card">
+              <div class="purchase-entry-section-heading">
+                <span class="purchase-entry-step">01</span>
+                <div><h4>Thông tin phiếu</h4><p>Nhà cung cấp, hóa đơn và thanh toán</p></div>
+              </div>
+              <div class="purchase-entry-info-grid">
+                <div class="form-group">
+                  <label class="form-label" for="purchase-supplier-select">Nhà cung cấp <span>*</span></label>
+                  <select class="form-control" id="purchase-supplier-select" required>
+                    <option value="">-- Chọn nhà cung cấp --</option>
+                    ${purchaseSupplierOptions()}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="purchase-invoice-number">Số hóa đơn đầu vào</label>
+                  <input class="form-control" id="purchase-invoice-number" maxlength="100" placeholder="Nhập số hóa đơn nếu có">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="purchase-date-input">Ngày mua <span>*</span></label>
+                  <input type="datetime-local" class="form-control" id="purchase-date-input" required>
+                </div>
+                <div class="purchase-entry-payment-fields">
+                  <div class="form-group">
+                    <label class="form-label" for="purchase-paid-input">Thanh toán ngay</label>
+                    <input type="number" class="form-control" id="purchase-paid-input" min="0" step="1" value="0" placeholder="0">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="purchase-payment-method">Phương thức chi</label>
+                    <select class="form-control" id="purchase-payment-method">
+                      <option value="cash">Tiền mặt</option><option value="bank">Ngân hàng</option><option value="wallet">Ví điện tử</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="purchase-entry-card purchase-entry-items-card">
+              <div class="purchase-entry-section-heading purchase-entry-items-heading">
+                <span class="purchase-entry-step">02</span>
+                <div><h4>Hàng hóa / dịch vụ</h4><p>Thêm từng mặt hàng và nhập số lượng, đơn giá mua.</p></div>
+                <button type="button" class="btn btn-secondary purchase-entry-add-row" id="btn-add-purchase-item-row"><i data-lucide="plus"></i><span>Thêm dòng</span></button>
               </div>
               <div class="purchase-entry-items-wrap">
                 <table class="purchase-entry-items-table">
-                  <thead><tr><th>Mã</th><th>Tên hàng hóa/dịch vụ</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền dự kiến</th><th></th></tr></thead>
+                  <thead><tr><th>Mã hàng</th><th>Tên hàng / dịch vụ</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th><th></th></tr></thead>
                   <tbody id="purchase-entry-items-body">${itemRow()}</tbody>
                 </table>
               </div>
-              <div class="purchase-entry-total"><span>Tổng dự kiến</span><strong id="purchase-entry-total">0 ₫</strong></div>
-              <div class="purchase-entry-total"><span>Còn phải trả dự kiến</span><strong id="purchase-entry-debt-total">0 ₫</strong></div>
-              <small>Database sẽ tự tính lại toàn bộ thành tiền và công nợ.</small>
-            </div>
-            <div class="form-group" style="grid-column:1/-1"><label class="form-label">Ghi chú</label><textarea class="form-control" id="purchase-note-input" rows="2"></textarea></div>
+              <div class="purchase-entry-summary">
+                <div class="purchase-entry-summary-card"><span>Tổng dự kiến</span><strong id="purchase-entry-total">0 ₫</strong></div>
+                <div class="purchase-entry-summary-card is-due"><span>Còn phải trả</span><strong id="purchase-entry-debt-total">0 ₫</strong></div>
+              </div>
+              <p class="purchase-entry-helper"><i data-lucide="info"></i><span>Database sẽ tự tính lại toàn bộ thành tiền và công nợ khi hoàn thành phiếu.</span></p>
+            </section>
+            <section class="purchase-entry-card purchase-entry-note-card">
+              <div class="purchase-entry-section-heading">
+                <span class="purchase-entry-step is-muted"><i data-lucide="notebook-pen"></i></span>
+                <div><h4>Ghi chú</h4><p>Thông tin bổ sung cho phiếu mua (nếu có).</p></div>
+              </div>
+              <textarea class="form-control" id="purchase-note-input" rows="2" placeholder="Nhập ghi chú..."></textarea>
+            </section>
           </div>
-          <div class="modal-footer"><button type="button" class="btn btn-secondary" id="btn-cancel-purchase-entry">Đóng</button><button type="submit" class="btn btn-primary">Hoàn thành phiếu mua</button></div>
+          <div class="modal-footer purchase-entry-footer">
+            <span class="purchase-entry-footer-hint"><i data-lucide="shield-check"></i> Kiểm tra thông tin trước khi hoàn thành.</span>
+            <div class="purchase-entry-footer-actions"><button type="button" class="btn btn-secondary" id="btn-cancel-purchase-entry">Hủy</button><button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Hoàn thành phiếu mua</button></div>
+          </div>
         </form>
       </div>
     </div>`;
@@ -140,9 +171,9 @@ function purchaseDetail(purchase) {
     </td></tr>`;
 }
 
-function updateTotals(panel) {
+function updateTotals(modal) {
   let total = 0;
-  panel.querySelectorAll('.purchase-entry-item-row').forEach(row => {
+  modal.querySelectorAll('.purchase-entry-item-row').forEach(row => {
     const quantity = Number(row.querySelector('.purchase-entry-qty')?.value || 0);
     const price = Number(row.querySelector('.purchase-entry-price')?.value || 0);
     const lineTotal = Math.max(0, quantity * price);
@@ -150,9 +181,22 @@ function updateTotals(panel) {
     const cell = row.querySelector('.purchase-entry-line-total');
     if (cell) cell.textContent = formatCurrency(lineTotal);
   });
-  const paid = Math.max(0, Number(panel.querySelector('#purchase-paid-input')?.value || 0));
-  panel.querySelector('#purchase-entry-total').textContent = formatCurrency(total);
-  panel.querySelector('#purchase-entry-debt-total').textContent = formatCurrency(Math.max(0, total - paid));
+  const paid = Math.max(0, Number(modal.querySelector('#purchase-paid-input')?.value || 0));
+  modal.querySelector('#purchase-entry-total').textContent = formatCurrency(total);
+  modal.querySelector('#purchase-entry-debt-total').textContent = formatCurrency(Math.max(0, total - paid));
+}
+
+function syncPurchaseSupplierOptions(modal) {
+  const select = modal?.querySelector('#purchase-supplier-select');
+  if (!select) return;
+  const suppliers = state.suppliers || [];
+  const optionsKey = JSON.stringify(suppliers.map(supplier => [supplier.id, supplier.name, supplier.code]));
+  if (select.dataset.supplierOptionsKey === optionsKey) return;
+
+  const selectedId = select.value;
+  select.innerHTML = `<option value="">-- Chọn nhà cung cấp --</option>${purchaseSupplierOptions()}`;
+  select.dataset.supplierOptionsKey = optionsKey;
+  select.value = suppliers.some(supplier => String(supplier.id) === selectedId) ? selectedId : '';
 }
 
 function printPurchase(purchase) {
@@ -164,39 +208,43 @@ function printPurchase(purchase) {
   popup.print();
 }
 
-function attachEvents(panel) {
+function attachEvents(panel, modal) {
   panel.querySelectorAll('.purchase-row').forEach(row => row.addEventListener('click', event => {
     if (event.target.closest('input,select')) return;
     if (event.target.closest('button') && !event.target.closest('.purchase-row-toggle')) return;
     panel.dataset.activePurchaseId = panel.dataset.activePurchaseId === row.dataset.id ? '' : row.dataset.id;
     renderPurchasesPanel(panel);
   }));
-  const modal = panel.querySelector('#purchase-entry-modal');
-  const close = () => modal?.classList.remove('active');
+  const close = () => {
+    modal?.classList.remove('active');
+    document.body.classList.remove('purchase-entry-modal-open');
+  };
   makeSelectSearchable('purchase-supplier-select', 'Tìm theo tên hoặc mã nhà cung cấp...');
   panel.querySelector('#btn-open-purchase-modal')?.addEventListener('click', () => {
     const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-    panel.querySelector('#purchase-date-input').value = date.toISOString().slice(0, 16);
+    modal.querySelector('#purchase-date-input').value = date.toISOString().slice(0, 16);
     pendingPurchaseKey ||= newKey('purchase');
-    updateTotals(panel); modal?.classList.add('active');
+    updateTotals(modal);
+    modal?.classList.add('active');
+    document.body.classList.add('purchase-entry-modal-open');
   });
   if (modal && modal.dataset.eventsBound !== 'true') {
     modal.dataset.eventsBound = 'true';
-    panel.querySelector('#btn-close-purchase-entry')?.addEventListener('click', close);
-    panel.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', close);
-    panel.querySelector('#btn-add-purchase-item-row')?.addEventListener('click', () => {
-      panel.querySelector('#purchase-entry-items-body').insertAdjacentHTML('beforeend', itemRow()); updateTotals(panel);
+    modal.querySelector('#btn-close-purchase-entry')?.addEventListener('click', close);
+    modal.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', close);
+    modal.querySelector('#btn-add-purchase-item-row')?.addEventListener('click', () => {
+      modal.querySelector('#purchase-entry-items-body').insertAdjacentHTML('beforeend', itemRow()); updateTotals(modal);
     });
-    panel.querySelector('#purchase-entry-items-body')?.addEventListener('input', () => updateTotals(panel));
-    panel.querySelector('#purchase-paid-input')?.addEventListener('input', () => updateTotals(panel));
-    panel.querySelector('#purchase-entry-items-body')?.addEventListener('click', event => {
+    modal.querySelector('#purchase-entry-items-body')?.addEventListener('input', () => updateTotals(modal));
+    modal.querySelector('#purchase-paid-input')?.addEventListener('input', () => updateTotals(modal));
+    modal.querySelector('#purchase-entry-items-body')?.addEventListener('click', event => {
       const button = event.target.closest('.purchase-entry-remove-row'); if (!button) return;
-      if (panel.querySelectorAll('.purchase-entry-item-row').length <= 1) return showToast('Phiếu mua phải có ít nhất một dòng.', 'warning');
-      button.closest('tr').remove(); updateTotals(panel);
+      if (modal.querySelectorAll('.purchase-entry-item-row').length <= 1) return showToast('Phiếu mua phải có ít nhất một dòng.', 'warning');
+      button.closest('tr').remove(); updateTotals(modal);
     });
-    panel.querySelector('#purchase-entry-form')?.addEventListener('submit', async event => {
+    modal.querySelector('#purchase-entry-form')?.addEventListener('submit', async event => {
       event.preventDefault();
-      const items = Array.from(panel.querySelectorAll('.purchase-entry-item-row')).map(row => ({
+      const items = Array.from(modal.querySelectorAll('.purchase-entry-item-row')).map(row => ({
         code: row.querySelector('.purchase-entry-code').value.trim(),
         name: row.querySelector('.purchase-entry-name').value.trim(),
         unit: row.querySelector('.purchase-entry-unit').value.trim(),
@@ -205,12 +253,12 @@ function attachEvents(panel) {
       }));
       const submit = event.submitter; if (submit) submit.disabled = true;
       const result = await dbCreatePurchase({
-        supplierId: panel.querySelector('#purchase-supplier-select').value,
-        invoiceNumber: panel.querySelector('#purchase-invoice-number').value.trim(),
-        purchaseDate: new Date(panel.querySelector('#purchase-date-input').value).toISOString(),
-        paidAmount: Number(panel.querySelector('#purchase-paid-input').value || 0),
-        paymentMethod: panel.querySelector('#purchase-payment-method').value,
-        notes: panel.querySelector('#purchase-note-input').value.trim(),
+        supplierId: modal.querySelector('#purchase-supplier-select').value,
+        invoiceNumber: modal.querySelector('#purchase-invoice-number').value.trim(),
+        purchaseDate: new Date(modal.querySelector('#purchase-date-input').value).toISOString(),
+        paidAmount: Number(modal.querySelector('#purchase-paid-input').value || 0),
+        paymentMethod: modal.querySelector('#purchase-payment-method').value,
+        notes: modal.querySelector('#purchase-note-input').value.trim(),
         idempotencyKey: pendingPurchaseKey || newKey('purchase'), items
       });
       if (submit) submit.disabled = false;
@@ -257,10 +305,12 @@ function attachEvents(panel) {
 export function renderPurchasesPanel(panel) {
   if (!panel) return;
   if (!financeRole()) {
+    document.getElementById('purchase-entry-modal')?.remove();
+    document.body.classList.remove('purchase-entry-modal-open');
     panel.innerHTML = '<div class="empty-state">Bạn không có quyền truy cập phân hệ mua hàng.</div>';
     return;
   }
-  const existingModal = panel.querySelector('#purchase-entry-modal');
+  let modal = document.getElementById('purchase-entry-modal');
   const existingPage = panel.querySelector('.purchase-page');
   const activeId = panel.dataset.activePurchaseId || '';
   const purchases = state.purchases || [];
@@ -271,17 +321,19 @@ export function renderPurchasesPanel(panel) {
         ${purchases.length ? purchases.map(purchase => `<tr class="purchase-row ${String(activeId) === String(purchase.id) ? 'active' : ''}" data-id="${escapeHtml(purchase.id)}"><td>${escapeHtml(purchase.code)}</td><td>${escapeHtml(purchaseDate(purchase))}</td><td>${escapeHtml(purchase.invoiceNumber || '-')}</td><td>${escapeHtml(purchase.supplierName || purchase.supplierCode)}</td><td style="text-align:right">${formatCurrency(purchaseTotal(purchase))}</td><td style="text-align:right">${formatCurrency(purchase.paidAmount)}</td><td style="text-align:right">${formatCurrency(purchase.balanceDue)}</td><td><span class="purchase-status ${escapeHtml(purchase.status)}">${statusLabel(purchase.status)}</span></td><td>${escapeHtml(purchase.createdBy || '-')}</td><td><button type="button" class="purchase-row-toggle" aria-label="Xem phiếu ${escapeHtml(purchase.code)}">Xem</button></td></tr>${String(activeId) === String(purchase.id) ? purchaseDetail(purchase) : ''}`).join('') : '<tr><td colspan="10" class="purchase-empty">Chưa có phiếu mua hàng trên database.</td></tr>'}
       </tbody></table></div>
     </main></div>`;
-  // Cloud and realtime refreshes update the list while keeping the in-progress form mounted.
+  // Keep the modal at document level so panel transforms cannot clip its backdrop or popup.
   if (existingPage) {
     existingPage.outerHTML = pageMarkup;
-  } else if (existingModal) {
-    Array.from(panel.children).forEach(child => {
-      if (child !== existingModal) child.remove();
-    });
-    existingModal.insertAdjacentHTML('beforebegin', pageMarkup);
   } else {
-    panel.innerHTML = `${pageMarkup}${purchaseModal()}`;
+    panel.innerHTML = pageMarkup;
   }
-  attachEvents(panel);
+  if (!modal) {
+    const modalTemplate = document.createElement('template');
+    modalTemplate.innerHTML = purchaseModal().trim();
+    modal = modalTemplate.content.firstElementChild;
+  }
+  if (modal.parentElement !== document.body) document.body.append(modal);
+  syncPurchaseSupplierOptions(modal);
+  attachEvents(panel, modal);
   safeCreateIcons();
 }
