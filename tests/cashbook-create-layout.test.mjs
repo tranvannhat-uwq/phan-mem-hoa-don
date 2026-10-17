@@ -39,6 +39,11 @@ test('creation layout stays responsive and preserves every form binding', () => 
   assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.cashbook-create-grid \{ grid-template-columns: 1fr/);
 });
 
+test('receipt and payment modals stay above the responsive navigation', () => {
+  assert.match(css, /#so-quy-receipt-modal,\s*#so-quy-payment-modal\s*\{ z-index: 1300; \}/);
+  assert.match(css, /#so-quy-receipt-modal \.cashbook-create-modal-content,[\s\S]*#so-quy-payment-modal \.cashbook-create-modal-content[\s\S]*max-height: calc\(100dvh - 16px\)/);
+});
+
 test('receipt and payment amounts are large, color coded and grouped with Vietnamese dots', () => {
   assert.match(html, /type="text" inputmode="numeric"[^>]*id="receipt-value"/);
   assert.match(html, /type="text" inputmode="numeric"[^>]*id="payment-value"/);

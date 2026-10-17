@@ -12667,3 +12667,20 @@ body.purchase-entry-modal-open { overflow: hidden; }
   .purchase-entry-payment-fields { grid-template-columns: minmax(0, 1fr); }
   .purchase-entry-summary { flex-direction: column; }
 }
+
+/* Keep cashbook forms above the responsive navigation and within the viewport. */
+#so-quy-receipt-modal,
+#so-quy-payment-modal { z-index: 1300; }
+
+@media (max-width: 720px) {
+  #so-quy-receipt-modal,
+  #so-quy-payment-modal { padding: 8px; }
+  #so-quy-receipt-modal .cashbook-create-modal-content,
+  #so-quy-payment-modal .cashbook-create-modal-content {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 14px;
+  }
+}
