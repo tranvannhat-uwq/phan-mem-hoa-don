@@ -1,11 +1,21 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, formatDateTime } from '../utils.js';
-import { bomGateway } from '../services/bom.js?v=20261016-bom-v1';
+import { bomGateway } from '../services/bom.js?v=20261017-bom-unit-v1';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const number=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:4});
 const names={raw:'Nguyên liệu',packaging:'Bao bì',semi:'Bán thành phẩm',sku:'SKU thành phẩm'};
 const statuses={draft:'Nháp',released:'Đang áp dụng',superseded:'Đã thay thế'};
+const commonUnits=['mg','g','gam','kg','ml','l','lít','cái','chai','gói','hộp','bao','thùng','mét','cm','cuộn'];
+const unitScales={mg:{dimension:'mass',scale:.001},g:{dimension:'mass',scale:1},gam:{dimension:'mass',scale:1},kg:{dimension:'mass',scale:1000},ml:{dimension:'volume',scale:1},l:{dimension:'volume',scale:1000},lít:{dimension:'volume',scale:1000}};
+const unitSuggestions=`<datalist id="bom-unit-suggestions">${commonUnits.map(unit=>`<option value="${unit}"></option>`).join('')}</datalist>`;
+function convertedPurchaseFactor(fromUnit,toUnit,factor){
+  if(fromUnit===toUnit)return Number(factor);
+  const from=unitScales[fromUnit],to=unitScales[toUnit];
+  if(!from||!to||from.dimension!==to.dimension)return null;
+  const converted=Number(factor)*from.scale/to.scale;
+  return Number.isFinite(converted)&&converted>=.0001?Math.round(converted*10000)/10000:null;
+}
 let host=null, modal=null, mode='items', query='', page=0, cursors=[null], data=null;
 let loading=false, busy=false, requestId=0, actor='', errorText='';
 const session=()=>state.currentUser?`${state.currentUser.authUserId||state.currentUser.id}:${state.currentUser.role}`:'';
@@ -26,11 +36,11 @@ export function openBomPanel(){
   host.innerHTML=`<div class="inventory-header"><div><h2>Cấu hình sản phẩm BOM</h2><p>Nguyên liệu → bán thành phẩm → đóng gói SKU. Định mức được lưu theo phiên bản.</p></div>
     <button type="button" class="btn btn-secondary" data-bom="close">Về tồn kho</button></div>
     <div class="inventory-toolbar bom-toolbar">
-      <div class="inventory-actions"><button type="button" class="btn btn-secondary" data-bom-view="items">Vật tư & tồn</button>
-      <button type="button" class="btn btn-secondary" data-bom-view="recipes">Công thức BOM</button>
-      <button type="button" class="btn btn-secondary" data-bom-view="runs">Lệnh sản xuất</button></div>
-      <form id="bom-search-form" class="inventory-actions"><input class="form-control" name="query" maxlength="80" placeholder="Tìm mã hoặc tên…" aria-label="Tìm BOM"><button class="btn btn-secondary">Tìm</button></form>
-      <div class="inventory-actions" id="bom-create-actions"></div>
+      <div class="inventory-view-switch bom-navigation" role="group" aria-label="Nội dung cấu hình BOM"><button type="button" class="inventory-view-tab" data-bom-view="items" aria-pressed="false">Vật tư & tồn</button>
+      <button type="button" class="inventory-view-tab" data-bom-view="recipes" aria-pressed="false">Công thức BOM</button>
+      <button type="button" class="inventory-view-tab" data-bom-view="runs" aria-pressed="false">Lệnh sản xuất</button></div>
+      <form id="bom-search-form" class="inventory-actions bom-search"><input class="form-control" type="search" name="query" maxlength="80" placeholder="Tìm mã hoặc tên…" aria-label="Tìm BOM"><button type="submit" class="btn btn-secondary">Tìm</button></form>
+      <div class="inventory-actions bom-create" id="bom-create-actions"></div>
     </div><p id="bom-error" class="inventory-error" role="alert" hidden></p>
     <div class="table-responsive"><table class="table bom-table"><thead id="bom-head"></thead><tbody id="bom-body"></tbody></table></div>
     <div class="inventory-pagination"><span id="bom-page-label"></span><div class="inventory-actions"><button type="button" class="btn btn-secondary" data-bom="previous">Trang trước</button><button type="button" class="btn btn-secondary" data-bom="next">Trang sau</button></div></div>`;
@@ -43,7 +53,10 @@ function draw(){
   if(!host)return;
   host.dataset.mode=mode;
   host.querySelector('#bom-error').hidden=!errorText;host.querySelector('#bom-error').textContent=errorText;
-  host.querySelectorAll('[data-bom-view]').forEach(button=>button.classList.toggle('active',button.dataset.bomView===mode));
+  host.querySelectorAll('[data-bom-view]').forEach(button=>{
+    const active=button.dataset.bomView===mode;
+    button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+  });
   host.querySelector('#bom-create-actions').innerHTML=mode==='items'
     ? admin()?'<button type="button" class="btn btn-primary" data-bom="new-item">Thêm vật tư</button>':''
     : mode==='recipes'&&admin()?'<button type="button" class="btn btn-primary" data-bom="new-recipe">Tạo BOM</button>':'';
@@ -55,7 +68,7 @@ function draw(){
   host.querySelector('#bom-body').innerHTML=loading?`<tr><td colspan="6" class="inventory-empty">Đang tải BOM…</td></tr>`
     :!rows.length?`<tr><td colspan="6" class="inventory-empty">Chưa có dữ liệu trong phạm vi đang xem.</td></tr>`
       :rows.map(row=>mode==='items'
-        ? `<tr><td><span class="bom-cell-main"><strong>${esc(row.code)}</strong><small>${esc(row.name)}${row.is_active?'':' · Ngừng sử dụng'}</small></span></td><td>${esc(names[row.kind])}</td><td>${esc(row.base_unit)}</td><td><strong>${number(row.quantity)}</strong></td><td>1 ${esc(row.purchase_unit)} = ${number(row.purchase_to_base)} ${esc(row.base_unit)}</td><td><div class="inventory-actions"><button class="btn btn-secondary btn-sm" data-bom="post-item" data-id="${esc(row.id)}">Phiếu vật tư</button>${admin()?`<button class="btn btn-secondary btn-sm" data-bom="edit-item" data-id="${esc(row.id)}">Sửa</button>`:''}</div></td></tr>`
+        ? `<tr><td><span class="bom-cell-main"><strong>${esc(row.code)}</strong><small>${esc(row.name)}${row.is_active?'':' · Ngừng sử dụng'}</small></span></td><td>${esc(names[row.kind])}</td><td><span class="bom-unit-cell"><strong>${esc(row.base_unit)}</strong>${admin()?`<button type="button" class="btn btn-secondary btn-sm" data-bom="edit-unit" data-id="${esc(row.id)}" aria-label="Đổi đơn vị gốc ${esc(row.code)}">Đổi</button>`:''}</span></td><td><strong>${number(row.quantity)}</strong></td><td>1 ${esc(row.purchase_unit)} = ${number(row.purchase_to_base)} ${esc(row.base_unit)}</td><td><div class="inventory-actions"><button class="btn btn-secondary btn-sm" data-bom="post-item" data-id="${esc(row.id)}">Phiếu vật tư</button>${admin()?`<button class="btn btn-secondary btn-sm" data-bom="edit-item" data-id="${esc(row.id)}">Sửa</button>`:''}</div></td></tr>`
         :mode==='recipes'
           ? `<tr><td><span class="bom-cell-main"><strong>${esc(row.output_name||row.output_id)}</strong><small>${esc(names[row.output_kind])} · ${esc(row.output_id)}</small></span></td><td>v${number(row.version)}</td><td>${esc(statuses[row.status])}</td><td>${number(row.output_quantity)}</td><td><div class="inventory-actions"><button class="btn btn-secondary btn-sm" data-bom="detail" data-id="${esc(row.id)}">Xem</button>${admin()?`<button class="btn btn-secondary btn-sm" data-bom="edit-recipe" data-id="${esc(row.id)}">${row.status==='draft'?'Sửa nháp':'Tạo phiên bản'}</button>`:''}${admin()&&row.status==='draft'?`<button class="btn btn-primary btn-sm" data-bom="publish" data-id="${esc(row.id)}">Áp dụng</button>`:''}${row.status==='released'?`<button class="btn btn-primary btn-sm" data-bom="run" data-id="${esc(row.id)}">Sản xuất</button>`:''}</div></td></tr>`
           :`<tr><td>${esc(formatDateTime(row.created_at))}</td><td>${esc(names[row.output_kind])} · ${esc(row.output_id)}</td><td>v${number(row.version)}</td><td>${number(row.output_quantity)}</td><td><button class="btn btn-secondary btn-sm" data-bom="run-detail" data-id="${esc(row.id)}">Xem</button></td></tr>`).join('');
@@ -88,6 +101,7 @@ async function onClick(event){
   if(action==='next'&&data?.hasMore){cursors[++page]=data.nextCursor;data=null;void load();return;}
   const row=data?.rows?.find(item=>item.id===button.dataset.id);
   if(action==='new-item')return itemEditor();
+  if(action==='edit-unit'&&row)return unitEditor(row);
   if(action==='edit-item'&&row)return itemEditor(row);
   if(action==='post-item'&&row)return itemPostEditor(row);
   if(action==='new-recipe')return recipeEditor();
@@ -137,18 +151,48 @@ function itemEditor(row){
     <label>Mã vật tư<input class="form-control" name="code" maxlength="60" required value="${esc(row?.code)}"></label>
     <label>Tên vật tư<input class="form-control" name="name" maxlength="120" required value="${esc(row?.name)}"></label>
     <label>Loại<select class="form-control" name="kind">${['raw','packaging','semi'].map(kind=>`<option value="${kind}" ${row?.kind===kind?'selected':''}>${names[kind]}</option>`).join('')}</select></label>
-    <div class="bom-grid"><label>Đơn vị gốc<input class="form-control" name="baseUnit" maxlength="24" placeholder="kg, lít, cái…" required value="${esc(row?.base_unit)}"></label>
+    <div class="bom-grid"><label>Đơn vị gốc<input class="form-control" name="baseUnit" list="bom-unit-suggestions" maxlength="24" placeholder="gam, kg, lít, cái…" required value="${esc(row?.base_unit)}"></label>
     <label>Đơn vị mua<input class="form-control" name="purchaseUnit" maxlength="24" placeholder="bao, thùng…" required value="${esc(row?.purchase_unit)}"></label>
     <label>1 đơn vị mua = số đơn vị gốc<input class="form-control" name="purchaseToBase" type="number" min="0.0001" step="0.0001" required value="${esc(row?.purchase_to_base??1)}"></label></div>
+    ${unitSuggestions}
     ${row?`<label><input type="checkbox" name="isActive" ${row.is_active?'checked':''}> Đang sử dụng</label>`:''}
-    <small>Đơn vị gốc và hệ số quy đổi được khóa sau khi vật tư có tồn hoặc nằm trong BOM.</small>`,async element=>{
+    <small>Đổi đơn vị chỉ áp dụng khi vật tư chưa có phiếu và chưa được dùng trong BOM. Hệ số mua tự quy đổi giữa mg/g/kg hoặc ml/l; đơn vị khác cần nhập hệ số phù hợp.</small>`,async element=>{
       const fields=new FormData(element);
       await bomGateway.saveItem({id:row?.id,code:String(fields.get('code')).trim(),name:String(fields.get('name')).trim(),
         kind:fields.get('kind'),baseUnit:String(fields.get('baseUnit')).trim(),purchaseUnit:String(fields.get('purchaseUnit')).trim(),
         purchaseToBase:Number(fields.get('purchaseToBase')),isActive:row?fields.has('isActive'):true});
       showToast('Đã lưu vật tư.','success');
     });
+  const unitField=form.querySelector('[name="baseUnit"]'),factorField=form.querySelector('[name="purchaseToBase"]');
+  const originalUnit=String(row?.base_unit??''),originalFactor=Number(row?.purchase_to_base??0);
+  let priorUnit=unitField.value.trim();
+  unitField.addEventListener('input',()=>{
+    const nextUnit=unitField.value.trim();
+    if(nextUnit===priorUnit)return;
+    const converted=row?convertedPurchaseFactor(originalUnit,nextUnit,originalFactor):null;
+    factorField.value=converted===null?'':converted;
+    priorUnit=nextUnit;
+  });
   return form;
+}
+function unitEditor(row){
+  if(!admin())return;
+  const form=openModal(`Đổi đơn vị gốc · ${row.code}`,`
+    <p>Vật tư <strong>${esc(row.name)}</strong> · tồn hiện tại ${number(row.quantity)} ${esc(row.base_unit)}. Chỉ đổi trước khi ghi phiếu hoặc dùng vật tư trong BOM.</p>
+    <label>Đơn vị gốc<input class="form-control" name="baseUnit" list="bom-unit-suggestions" maxlength="24" required value="${esc(row.base_unit)}" autocomplete="off"></label>
+    <label>1 ${esc(row.purchase_unit)} = số đơn vị gốc<input class="form-control" name="purchaseToBase" type="number" min="0.0001" step="0.0001" required value="${esc(row.purchase_to_base)}"></label>
+    ${unitSuggestions}
+    <small>Nếu đổi giữa mg/g/kg hoặc ml/l, hệ số được quy đổi tự động. Khi đổi sang đơn vị khác, nhập hệ số mới để tránh sai số tồn khi nhập mua.</small>`,async element=>{
+      const fields=new FormData(element),baseUnit=String(fields.get('baseUnit')).trim(),purchaseToBase=Number(fields.get('purchaseToBase'));
+      await bomGateway.saveItem({id:row.id,code:row.code,name:row.name,kind:row.kind,baseUnit,
+        purchaseUnit:row.purchase_unit,purchaseToBase,isActive:row.is_active});
+      showToast('Đã cập nhật đơn vị gốc.','success');
+    });
+  const unitField=form.querySelector('[name="baseUnit"]'),factorField=form.querySelector('[name="purchaseToBase"]');
+  unitField.addEventListener('input',()=>{
+    const converted=convertedPurchaseFactor(row.base_unit,unitField.value.trim(),Number(row.purchase_to_base));
+    factorField.value=converted===null?'':converted;
+  });
 }
 function itemPostEditor(row){
   const key=crypto.randomUUID();

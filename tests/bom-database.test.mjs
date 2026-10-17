@@ -34,12 +34,13 @@ before(async()=>{
     ('accounting','${accounting}','accounting','Accounting','accounting'),
     ('sale','${sale}','sale','Sale','sale');
     INSERT INTO public.products(id,code,brand,name,package_type) VALUES('sku-a','A-LON','TEST','Sơn A','Lon');`);
-  for(const name of ['0088_integrated_inventory_free_budget.sql','0089_inventory_sync_toggle.sql','0091_inventory_page_limit.sql','0092_bom_two_stage.sql'])
+  for(const name of ['0088_integrated_inventory_free_budget.sql','0089_inventory_sync_toggle.sql','0091_inventory_page_limit.sql','0092_bom_two_stage.sql','0093_bom_item_unit_edit.sql','0094_repair_bom_item_unit_edit.sql'])
     try{await db.exec(await read(name));}catch(error){throw new Error(`${name}: ${error.message}\n${error.where||''}`);}
 });
 after(async()=>{if(db)await db.close();});
 
 test('BOM tables and RPCs enforce roles',async()=>{
+  assert.equal(await value("SELECT to_regprocedure('public.rpc_bom_save_iteam(jsonb)') IS NULL AS value"),true);
   await role('', 'anon');
   await assert.rejects(value('SELECT public.rpc_bom_window() AS value'),/permission denied/);
   await role(sale);
@@ -52,6 +53,11 @@ test('BOM tables and RPCs enforce roles',async()=>{
 test('configure two stages, receive units and publish immutable versions',async()=>{
   await role(admin);
   rawId=(await rpc('rpc_bom_save_item',{code:'RAW',name:'Nguyên liệu',kind:'raw',baseUnit:'kg',purchaseUnit:'bao',purchaseToBase:25})).id;
+  await rpc('rpc_bom_save_item',{id:rawId,code:'RAW',name:'Nguyên liệu',kind:'raw',baseUnit:'gam',purchaseUnit:'bao',purchaseToBase:25000,isActive:true});
+  const convertedItem=await rpc('rpc_bom_window',{mode:'items',query:'RAW',limit:1});
+  assert.equal(convertedItem.rows[0].base_unit,'gam');
+  assert.equal(Number(convertedItem.rows[0].purchase_to_base),25000);
+  await rpc('rpc_bom_save_item',{id:rawId,code:'RAW',name:'Nguyên liệu',kind:'raw',baseUnit:'kg',purchaseUnit:'bao',purchaseToBase:25,isActive:true});
   semiId=(await rpc('rpc_bom_save_item',{code:'SEMI',name:'Bán thành phẩm',kind:'semi',baseUnit:'kg',purchaseUnit:'kg',purchaseToBase:1})).id;
   packId=(await rpc('rpc_bom_save_item',{code:'PACK',name:'Bao bì',kind:'packaging',baseUnit:'cái',purchaseUnit:'thùng',purchaseToBase:100})).id;
   const first=await rpc('rpc_bom_save_draft',{outputKind:'semi',outputId:semiId,outputQuantity:10,lines:[{itemId:rawId,quantity:12}]});
@@ -68,6 +74,9 @@ test('configure two stages, receive units and publish immutable versions',async(
   await rpc('rpc_bom_post_item',{requestKey:randomUUID(),kind:'receipt',itemId:packId,quantity:1,unit:'purchase'});
   assert.equal(await balance('bom_item_balances','item_id',rawId),50);
   assert.equal(await balance('bom_item_balances','item_id',packId),100);
+  await role(admin);
+  await assert.rejects(rpc('rpc_bom_save_item',{id:rawId,code:'RAW',name:'Nguyên liệu',kind:'raw',baseUnit:'gam',purchaseUnit:'bao',purchaseToBase:25000,isActive:true}),/Vật tư đã phát sinh/);
+  assert.equal(await balance('bom_item_balances','item_id',rawId),50);
 });
 
 test('production is atomic, idempotent and conserves stock',async()=>{

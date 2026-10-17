@@ -11945,8 +11945,15 @@ body.mobile-nav-open {
 .inventory-document-line { display: grid; grid-template-columns: minmax(120px, 1fr) 130px 40px; gap: .5rem; margin-bottom: .6rem; }
 .inventory-document-line .form-control { min-width: 0; width: 100%; }
 .bom-panel { margin: 1rem 0; }
-.bom-toolbar { justify-content: space-between; }
-.bom-toolbar .active { border-color: var(--accent-primary, #2563eb); color: var(--accent-primary, #2563eb); background: rgba(37,99,235,.08); }
+.bom-toolbar { grid-template-columns: max-content minmax(220px, 1fr) max-content; align-items: center; gap: .75rem; padding: .75rem; }
+.bom-navigation { width: max-content; max-width: 100%; flex-wrap: nowrap; }
+.bom-search { flex-wrap: nowrap; width: 100%; min-width: 0; }
+.bom-search .form-control { flex: 1 1 auto; width: 100%; min-width: 0; height: 44px; }
+.bom-search .btn { flex: 0 0 auto; min-height: 44px; }
+.bom-create { justify-content: flex-end; min-width: max-content; }
+.bom-toolbar .bom-navigation .active { color: #fff; background: linear-gradient(135deg, #3677ee, #2459d6); box-shadow: 0 4px 11px rgba(37,99,235,.19); }
+.bom-unit-cell { display: inline-flex; align-items: center; gap: .45rem; white-space: nowrap; }
+.bom-unit-cell .btn { min-height: 34px; padding: .3rem .55rem; font-size: .76rem; }
 .bom-table small { display: block; color: var(--text-secondary); margin-top: .3rem; overflow-wrap: anywhere; }
 .bom-cell-main { display: block; min-width: 0; }
 .bom-table td { vertical-align: middle; }
@@ -11968,6 +11975,10 @@ body.mobile-nav-open {
   .inventory-status { grid-template-columns: 1fr; gap: .85rem; }
   .inventory-status-metrics { grid-template-columns: .8fr .8fr 1.5fr; }
   .inventory-status-metric:first-child { padding-left: 0; border-left: 0; }
+  .bom-toolbar { grid-template-columns: minmax(0, 1fr) max-content; }
+  .bom-navigation { grid-column: 1 / -1; }
+  .bom-search { grid-column: 1; }
+  .bom-create { grid-column: 2; grid-row: 2; }
 }
 @media (max-width: 680px) {
   #inventory-panel.active { gap: 1rem; }
@@ -12015,6 +12026,13 @@ body.mobile-nav-open {
   .inventory-sync-control .inventory-header { flex-direction: column; align-items: stretch; }
   .inventory-sync-control .inventory-header > button { align-self: flex-start; }
   .inventory-sync-control label { align-items: flex-start; }
+  .bom-toolbar { grid-template-columns: minmax(0, 1fr); gap: .65rem; padding: .7rem; }
+  .bom-navigation { grid-column: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .bom-navigation .inventory-view-tab { min-height: 44px; padding-inline: .3rem; font-size: .78rem; line-height: 1.2; white-space: normal; }
+  .bom-search { grid-column: 1; }
+  .bom-search .btn { padding-inline: .8rem; }
+  .bom-create { grid-column: 1; grid-row: auto; justify-content: stretch; min-width: 0; }
+  .bom-create .btn { width: 100%; justify-content: center; }
   .bom-grid { grid-template-columns: 1fr; }
   .bom-line { grid-template-columns: minmax(0,1fr) 95px 36px; }
   .bom-panel .table-responsive { overflow: visible; }

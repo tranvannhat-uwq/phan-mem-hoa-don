@@ -75,3 +75,10 @@ không chạy `DROP TABLE` tùy tiện. Khi đã có lệnh sản xuất, giữ 
 phiên bản; có thể ngừng dùng màn BOM/frontend trong khi điều tra, không xóa lịch
 sử hoặc sửa trực tiếp tồn. Migration chỉ thêm schema và mở rộng loại movement,
 không sửa đơn hoặc tồn SKU cũ khi áp dụng.
+
+Migration `0093_bom_item_unit_edit.sql` có lỗi đánh máy tên hàm ở bản đầu và
+không thay đúng RPC. Nếu đã chạy 0093, **không chạy lại**; chạy tiếp
+`0094_repair_bom_item_unit_edit.sql` trên staging rồi production. Migration
+0094 xóa RPC sai tên và thay `rpc_bom_save_item`; chỉ cho đổi đơn vị gốc hoặc
+hệ số mua khi vật tư chưa có tồn, phiếu vật tư hoặc liên kết BOM. Kiểm thử bằng
+`node --experimental-default-type=module --test tests/bom-database.test.mjs`.

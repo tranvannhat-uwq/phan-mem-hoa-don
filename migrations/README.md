@@ -506,3 +506,12 @@ giao dịch; bán hàng vẫn trừ SKU thành phẩm. Chạy sau 0091, thử fi
 `tests/0092_bom_two_stage_integration.sql` trên staging trống trước production.
 Xem [`BOM_DEPLOYMENT.md`](../docs/BOM_DEPLOYMENT.md) về quy đổi đơn vị, giới hạn
 Free, đối chiếu dữ liệu cũ, sao lưu và kiểm thử vai trò.
+
+`0093_bom_item_unit_edit.sql` sửa RPC cập nhật vật tư để đổi đơn vị không lỗi
+tên cột/biến trùng nhau. Đơn vị gốc và hệ số mua chỉ được đổi khi vật tư chưa
+có tồn, phiếu kho hay liên kết BOM. Kiểm thử cập nhật và khóa đơn vị chạy bằng
+`node --experimental-default-type=module --test tests/bom-database.test.mjs`.
+
+`0094_repair_bom_item_unit_edit.sql` sửa lỗi đánh máy tên RPC trong 0093, xóa
+RPC phụ bị tạo nhầm và cài đúng `rpc_bom_save_item`. Nếu 0093 đã chạy, áp dụng
+0094 sau đó; không chạy lại 0093.

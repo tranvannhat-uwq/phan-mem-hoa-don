@@ -18,6 +18,7 @@ async function call(name,args) {
   const {data,error}=await supabaseClient.rpc(name,args);
   if(version!==generation||actor!==scope())throw new Error('Phiên làm việc đã thay đổi.');
   if(error){
+    if(error.code==='42702')throw new Error('Cloud cần chạy migration 0094 trước khi sửa vật tư hoặc đổi đơn vị.');
     if(['PGRST202','42883'].includes(error.code))throw new Error('Cloud chưa cập nhật BOM 0092.');
     const failure=new Error(error.message||'Không thể thực hiện thao tác BOM.');
     failure.definitive=/^(?:PGRST\d+|[A-Z0-9]{5})$/.test(error.code||'');
