@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { formatCurrency, formatDateTime, safeCreateIcons, showToast } from '../utils.js';
+import { formatCurrency, formatDateTime, makeSelectSearchable, safeCreateIcons, showToast } from '../utils.js';
 import {
   dbCancelPurchase,
   dbCancelSupplierPayment,
@@ -173,6 +173,7 @@ function attachEvents(panel) {
   }));
   const modal = panel.querySelector('#purchase-entry-modal');
   const close = () => modal?.classList.remove('active');
+  makeSelectSearchable('purchase-supplier-select', 'Tìm theo tên hoặc mã nhà cung cấp...');
   panel.querySelector('#btn-open-purchase-modal')?.addEventListener('click', () => {
     const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
     panel.querySelector('#purchase-date-input').value = date.toISOString().slice(0, 16);
