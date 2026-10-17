@@ -1,23 +1,23 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261017-purchase-ui-live-v3';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261017-purchase-ui-live-v3';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261017-purchase-ui-live-v3';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261017-purchase-ui-live-v3';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261017-purchase-ui-live-v3';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261017-purchase-ui-live-v3';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261017-purchase-ui-live-v3';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261017-purchase-ui-live-v3';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261017-purchase-ui-live-v3';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261017-purchase-ui-live-v3';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261017-purchase-ui-live-v3';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261017-purchase-ui-live-v3';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261017-purchase-ui-live-v3';
-import { renderInventoryPanel } from './components/inventory.js?v=20261017-purchase-ui-live-v3';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261017-purchase-ui-live-v3';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261017-purchase-ui-live-v4';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261017-purchase-ui-live-v4';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261017-purchase-ui-live-v4';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261017-purchase-ui-live-v4';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261017-purchase-ui-live-v4';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261017-purchase-ui-live-v4';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261017-purchase-ui-live-v4';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261017-purchase-ui-live-v4';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261017-purchase-ui-live-v4';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261017-purchase-ui-live-v4';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261017-purchase-ui-live-v4';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261017-purchase-ui-live-v4';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261017-purchase-ui-live-v4';
+import { renderInventoryPanel } from './components/inventory.js?v=20261017-purchase-ui-live-v4';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261017-purchase-ui-live-v4';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261017-purchase-ui-live-v3';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261017-purchase-ui-live-v3';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261017-purchase-ui-live-v4';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261017-purchase-ui-live-v4';
 
 if (typeof window !== 'undefined') {
   window.billingEgressMetrics = Object.freeze({

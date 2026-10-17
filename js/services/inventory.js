@@ -1,6 +1,6 @@
 import { state } from '../state.js';
-import { isCloudActive, supabaseClient } from './supabase.js?v=20261017-purchase-ui-live-v3';
-import { createInventoryGateway } from '../domain/inventory.js?v=20261017-purchase-ui-live-v3';
+import { isCloudActive, supabaseClient } from './supabase.js?v=20261017-purchase-ui-live-v4';
+import { createInventoryGateway } from '../domain/inventory.js?v=20261017-purchase-ui-live-v4';
 
 export const inventoryGateway = createInventoryGateway({
   scope: () => state.currentUser && ['admin', 'accounting'].includes(state.currentUser.role)

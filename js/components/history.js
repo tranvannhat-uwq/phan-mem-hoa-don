@@ -1,20 +1,20 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261017-purchase-ui-live-v3';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20261017-purchase-ui-live-v3';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261017-purchase-ui-live-v3';
-import { openHistoryOrderExportModal } from './customers.js?v=20261017-purchase-ui-live-v3';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261017-purchase-ui-live-v4';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20261017-purchase-ui-live-v4';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261017-purchase-ui-live-v4';
+import { openHistoryOrderExportModal } from './customers.js?v=20261017-purchase-ui-live-v4';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary,
   calculateHistoryFinancialSummary,
   isSalesReturnActive
-} from '../domain/order-financials.js?v=20261017-purchase-ui-live-v3';
+} from '../domain/order-financials.js?v=20261017-purchase-ui-live-v4';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
-import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261017-purchase-ui-live-v3';
+import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261017-purchase-ui-live-v4';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261017-purchase-ui-live-v3';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261017-purchase-ui-live-v4';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
