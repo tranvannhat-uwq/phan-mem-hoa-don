@@ -8,7 +8,7 @@
 import { state } from '../js/state.js';
 import { inventoryGateway } from '../js/services/inventory.js?v=20261016-bom-v1';
 import { bomGateway } from '../js/services/bom.js?v=20261016-bom-v1';
-import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261016-bom-v1';
+import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261017-inventory-ui-v1';
 state.currentUser = {id:'test-admin', authUserId:'test-admin',role:'admin'};
 state.currentTab = 'inventory-panel';
 const rows = Array.from({length:65},(_,i)=>({product_id:`sku-${String(i).padStart(3,'0')}`,sku:`SON-${String(i+1).padStart(3,'0')}-LON`,name:`Sơn kiểm thử ${i+1}`,brand:'Hãng kiểm thử',unit:'Lon',quantity:i===0?10:20,minimum_quantity:5,is_active:true}));

@@ -45,22 +45,33 @@ export function renderInventoryPanel() {
   if (!panel.dataset.inventoryReady) {
     panel.dataset.inventoryReady = 'true';
     panel.innerHTML = `
-      <div class="inventory-header"><div><h2>Quản lý kho</h2><p>Nhập, xuất và kiểm kê theo SKU tại Kho chính.</p></div>
-        <div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="bom">BOM & sản xuất</button><button class="btn btn-primary" data-inventory-action="receipt"><i data-lucide="package-plus"></i> Nhập kho</button><button class="btn btn-secondary" data-inventory-action="issue"><i data-lucide="package-minus"></i> Xuất kho</button></div></div>
+      <div class="inventory-header"><div class="inventory-heading-group"><div class="inventory-context"><i data-lucide="warehouse" aria-hidden="true"></i><span>Kho chính</span><span class="inventory-context-divider">·</span><span>Theo dõi theo SKU</span></div><p>Quản lý nhập, xuất, kiểm kê và định mức sản phẩm.</p></div>
+        <div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="bom"><i data-lucide="boxes"></i> BOM & sản xuất</button><button class="btn btn-primary" data-inventory-action="receipt"><i data-lucide="package-plus"></i> Nhập kho</button><button class="btn btn-secondary" data-inventory-action="issue"><i data-lucide="package-minus"></i> Xuất kho</button></div></div>
       <div id="inventory-stock-view">
-      <div id="inventory-status" class="inventory-status" role="status"></div>
+      <section id="inventory-status" class="inventory-status" aria-label="Trạng thái kho">
+        <div class="inventory-status-summary"><span class="inventory-status-indicator" aria-hidden="true"></span><div class="inventory-status-copy"><strong id="inventory-status-title" role="status" aria-live="polite"></strong><small id="inventory-status-detail"></small></div></div>
+        <div id="inventory-status-metrics" class="inventory-status-metrics">
+          <div class="inventory-status-metric"><span>Database</span><strong id="inventory-database-size">—</strong></div>
+          <div class="inventory-status-metric"><span>Dữ liệu kho</span><strong id="inventory-module-size">—</strong></div>
+          <div class="inventory-status-metric inventory-budget-metric"><div><span>Ngân sách đọc kho</span><strong id="inventory-budget-label">—</strong></div><div class="inventory-budget-track" aria-hidden="true"><span id="inventory-budget-bar"></span></div><small id="inventory-budget-cycle"></small></div>
+        </div>
+      </section>
       <div id="inventory-sync-control" class="inventory-activation inventory-sync-control" hidden>
         <div class="inventory-header"><div><strong>Đồng bộ kho theo đơn hàng</strong><p id="inventory-sync-description"></p></div>
           <button type="button" class="btn btn-primary" data-inventory-action="toggle-sync" role="switch" aria-checked="false">Bật đồng bộ kho</button></div>
         <label id="inventory-opening-control"><input type="checkbox" id="inventory-opening-ack"> Tôi đã đối chiếu tồn đầu kỳ và các đơn đang xử lý.</label>
       </div>
-      <div class="inventory-toolbar"><div class="inventory-actions"><button class="btn btn-secondary" data-inventory-view="stock">Tồn kho</button><button class="btn btn-secondary" data-inventory-view="movements">Lịch sử nhập / xuất</button></div>
-        <form id="inventory-search-form" class="inventory-actions"><input name="query" class="form-control" maxlength="80" placeholder="Tìm mã SKU, tên, hãng…" aria-label="Tìm sản phẩm trong kho"><button class="btn btn-secondary">Tìm kiếm</button></form>
-        <label id="inventory-low-control"><input type="checkbox" id="inventory-low-only"> Dưới mức tối thiểu</label>
-        <div id="inventory-date-controls" class="inventory-actions" hidden><label>Từ ngày <input class="form-control" type="date" id="inventory-start"></label><label>Đến ngày <input class="form-control" type="date" id="inventory-end"></label><button class="btn btn-secondary" data-inventory-action="dates">Áp dụng</button></div>
-        <button class="btn btn-secondary" data-inventory-action="refresh"><i data-lucide="refresh-cw"></i> Tải lại</button></div>
+      <div class="inventory-toolbar">
+        <div class="inventory-toolbar-top"><div class="inventory-view-switch" role="group" aria-label="Nội dung kho"><button type="button" class="inventory-view-tab active" aria-pressed="true" data-inventory-view="stock"><i data-lucide="boxes"></i> Tồn kho</button><button type="button" class="inventory-view-tab" aria-pressed="false" data-inventory-view="movements"><i data-lucide="list-clock"></i> Lịch sử nhập / xuất</button></div>
+          <button class="btn btn-secondary inventory-refresh" type="button" data-inventory-action="refresh"><i data-lucide="refresh-cw"></i> Tải lại</button></div>
+        <div class="inventory-filter-row">
+          <form id="inventory-search-form" class="inventory-search"><label class="sr-only" for="inventory-search-input">Tìm mã SKU, tên hoặc hãng</label><div class="inventory-search-field"><i data-lucide="search" aria-hidden="true"></i><input id="inventory-search-input" name="query" class="form-control" maxlength="80" placeholder="Tìm mã SKU, tên, hãng…" autocomplete="off"></div><button class="btn btn-primary"><i data-lucide="search"></i><span>Tìm kiếm</span></button></form>
+          <label id="inventory-low-control" class="inventory-low-filter"><input type="checkbox" id="inventory-low-only"><span><strong>Dưới mức tối thiểu</strong><small>Chỉ hiện SKU cần bổ sung</small></span></label>
+          <div id="inventory-date-controls" class="inventory-date-controls" hidden><label>Từ ngày<input class="form-control" type="date" id="inventory-start"></label><label>Đến ngày<input class="form-control" type="date" id="inventory-end"></label><button class="btn btn-secondary" data-inventory-action="dates">Áp dụng</button></div>
+        </div>
+      </div>
       <div id="inventory-error" class="inventory-error" role="alert" hidden></div>
-      <div class="table-responsive"><table class="table inventory-table"><thead id="inventory-head"></thead><tbody id="inventory-body"></tbody></table></div>
+      <div class="table-responsive inventory-table-wrap"><table class="table inventory-table" aria-label="Danh sách kho"><thead id="inventory-head"></thead><tbody id="inventory-body"></tbody></table></div>
       <div class="inventory-pagination"><span id="inventory-page-label"></span><div class="inventory-actions"><button class="btn btn-secondary" data-inventory-action="previous">Trang trước</button><button class="btn btn-secondary" data-inventory-action="next">Trang sau</button></div></div></div>`;
     panel.addEventListener('click', onClick);
     panel.querySelector('#inventory-search-form').addEventListener('submit', event => { event.preventDefault(); if (switchingSync) return; filters.query = new FormData(event.target).get('query').trim(); restart(); });
@@ -74,20 +85,25 @@ function draw() {
   const panel = document.getElementById('inventory-panel');
   if (!panel?.dataset.inventoryReady) return;
   const history = filters.mode === 'movements';
+  panel.dataset.inventoryMode = filters.mode;
   panel.querySelector('#inventory-head').innerHTML = history
     ? '<tr><th>Thời gian</th><th>SKU / Sản phẩm</th><th>Nghiệp vụ</th><th>Thay đổi</th><th>Tồn sau</th><th>Tham chiếu / Ghi chú</th></tr>'
     : '<tr><th>SKU / Sản phẩm</th><th>Hãng</th><th>Đơn vị</th><th>Tồn hiện tại</th><th>Tối thiểu</th><th></th></tr>';
   panel.querySelector('#inventory-body').innerHTML = loading ? '<tr><td colspan="6" class="inventory-empty">Đang tải dữ liệu kho…</td></tr>' : !loaded?.rows.length
     ? '<tr><td colspan="6" class="inventory-empty">Chưa có dữ liệu trong phạm vi đang xem.</td></tr>'
     : loaded.rows.map(row => history
-      ? `<tr><td>${escape(formatDateTime(row.created_at))}</td><td><strong>${escape(row.sku)}</strong><small>${escape(row.name)}</small></td><td>${escape(kinds[row.kind])}</td><td class="${Number(row.delta) < 0 ? 'inventory-negative' : 'inventory-positive'}">${Number(row.delta) > 0 ? '+' : ''}${quantity(row.delta)}</td><td>${quantity(row.balance_after)}</td><td>${escape(row.order_id || row.document_id || '')}<small>${escape(row.note)}</small></td></tr>`
-      : `<tr><td><strong>${escape(row.sku)}</strong><small>${escape(row.name)}${row.is_active ? '' : ' · Ngừng sử dụng'}</small></td><td>${escape(row.brand)}</td><td>${escape(row.unit)}</td><td class="${Number(row.quantity) <= Number(row.minimum_quantity) ? 'inventory-negative' : ''}"><strong>${quantity(row.quantity)}</strong></td><td>${quantity(row.minimum_quantity)}</td><td><button class="btn btn-secondary" data-inventory-count="${escape(row.product_id)}">Kiểm kê</button></td></tr>`).join('');
+      ? `<tr><td data-label="Thời gian">${escape(formatDateTime(row.created_at))}</td><td data-label="SKU / Sản phẩm"><strong>${escape(row.sku)}</strong><small>${escape(row.name)}</small></td><td data-label="Nghiệp vụ">${escape(kinds[row.kind])}</td><td data-label="Thay đổi" class="${Number(row.delta) < 0 ? 'inventory-negative' : 'inventory-positive'}">${Number(row.delta) > 0 ? '+' : ''}${quantity(row.delta)}</td><td data-label="Tồn sau">${quantity(row.balance_after)}</td><td data-label="Tham chiếu / Ghi chú">${escape(row.order_id || row.document_id || '')}<small>${escape(row.note)}</small></td></tr>`
+      : `<tr><td data-label="SKU / Sản phẩm"><strong>${escape(row.sku)}</strong><small>${escape(row.name)}${row.is_active ? '' : ' · Ngừng sử dụng'}</small></td><td data-label="Hãng">${escape(row.brand)}</td><td data-label="Đơn vị">${escape(row.unit)}</td><td data-label="Tồn hiện tại" class="${Number(row.quantity) <= Number(row.minimum_quantity) ? 'inventory-negative' : ''}"><strong>${quantity(row.quantity)}</strong></td><td data-label="Mức tối thiểu">${quantity(row.minimum_quantity)}</td><td data-label="Thao tác"><button class="btn btn-secondary" data-inventory-count="${escape(row.product_id)}">Kiểm kê</button></td></tr>`).join('');
   panel.querySelector('#inventory-error').hidden = !errorText;
   panel.querySelector('#inventory-error').textContent = errorText;
   panel.querySelector('#inventory-low-control').hidden = history;
   panel.querySelector('#inventory-date-controls').hidden = !history;
   panel.querySelector('#inventory-page-label').textContent = `Trang ${page + 1} · tối đa ${history ? INVENTORY_PAGE_SIZE : INVENTORY_STOCK_PAGE_SIZE} dòng mỗi trang`;
-  panel.querySelectorAll('[data-inventory-view]').forEach(button => button.classList.toggle('active', button.dataset.inventoryView === filters.mode));
+  panel.querySelectorAll('[data-inventory-view]').forEach(button => {
+    const active = button.dataset.inventoryView === filters.mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
   panel.querySelectorAll('.inventory-toolbar button, .inventory-toolbar input, [data-inventory-count], .inventory-header > .inventory-actions button').forEach(element => { element.disabled = switchingSync; });
   panel.querySelector('[data-inventory-action="previous"]').disabled = switchingSync || loading || page === 0;
   panel.querySelector('[data-inventory-action="next"]').disabled = switchingSync || loading || !loaded?.hasMore;
@@ -95,11 +111,30 @@ function draw() {
   const control = loaded?.control;
   const syncEnabled = control?.syncEnabled ?? Boolean(control?.activatedAt);
   const pendingOrders = Number(control?.pendingOrders || 0);
-  const status = !control?.activatedAt ? 'Chưa bật đồng bộ · Đang đối chiếu tồn đầu kỳ'
-    : syncEnabled ? 'Đồng bộ kho: Đang bật' : `Đồng bộ kho: Đang tắt${pendingOrders ? ` · ${pendingOrders} đơn chờ` : ''}`;
-  panel.querySelector('#inventory-status').textContent = usage
-    ? `${status} · Database ${(usage.databaseBytes / 1e6).toFixed(1)} MB · Kho ${(usage.moduleBytes / 1e6).toFixed(1)} MB · Ngân sách đọc kho ${(usage.budgetUsed / 1e6).toFixed(1)} / ${(usage.budgetLimit / 1e6).toFixed(0)} MB từ ${usage.cycleStart}`
-    : 'Chỉ tải dữ liệu khi bạn mở kho, tìm kiếm hoặc tải lại.';
+  const status = !control ? loading ? 'Đang cập nhật trạng thái kho' : 'Trạng thái kho chưa khả dụng'
+    : !control.activatedAt ? 'Chưa bật đồng bộ'
+      : syncEnabled ? 'Đồng bộ kho đang bật' : `Đang tạm dừng${pendingOrders ? ` · ${pendingOrders} đơn chờ` : ''}`;
+  const detail = !control ? 'Thông tin đồng bộ sẽ xuất hiện sau khi tải xong dữ liệu.'
+    : !control.activatedAt ? 'Đối chiếu tồn đầu kỳ trước lần bật đầu tiên. Đơn cũ không tự động trừ lại tồn.'
+    : syncEnabled ? 'Tồn kho được cập nhật tự động theo đơn hàng, hoàn và hủy.'
+      : pendingOrders ? 'Các đơn mới đang chờ xử lý đồng bộ.' : 'Đơn phát sinh được lưu vào hàng đợi để xử lý khi bật lại.';
+  const statusCard = panel.querySelector('#inventory-status');
+  statusCard.dataset.syncState = !control ? 'unknown' : !control.activatedAt ? 'setup' : syncEnabled ? 'enabled' : 'paused';
+  statusCard.dataset.hasUsage = String(Boolean(usage));
+  panel.querySelector('#inventory-status-title').textContent = status;
+  panel.querySelector('#inventory-status-detail').textContent = control
+    ? detail : `${detail} Dữ liệu chỉ được tải khi bạn mở trang kho hoặc thực hiện tìm kiếm.`;
+  panel.querySelector('#inventory-status-metrics').hidden = !usage;
+  if (usage) {
+    const megabytes = bytes => `${(Number(bytes || 0) / 1e6).toFixed(1)} MB`;
+    const used = Number(usage.budgetUsed || 0); const limit = Number(usage.budgetLimit || 0);
+    const percent = limit > 0 ? Math.min(100, Math.max(0, used / limit * 100)) : 0;
+    panel.querySelector('#inventory-database-size').textContent = megabytes(usage.databaseBytes);
+    panel.querySelector('#inventory-module-size').textContent = megabytes(usage.moduleBytes);
+    panel.querySelector('#inventory-budget-label').textContent = `${megabytes(used)} / ${megabytes(limit)}`;
+    panel.querySelector('#inventory-budget-bar').style.width = `${percent}%`;
+    panel.querySelector('#inventory-budget-cycle').textContent = `Chu kỳ từ ${usage.cycleStart}`;
+  }
   panel.querySelector('#inventory-sync-control').hidden = !control || state.currentUser?.role !== 'admin';
   const toggle = panel.querySelector('[data-inventory-action="toggle-sync"]');
   toggle.setAttribute('aria-checked', String(syncEnabled));
