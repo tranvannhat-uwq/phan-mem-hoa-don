@@ -7,9 +7,9 @@ import {
   dbDeletePriceListItem,
   invalidateAuthorizedPricingRevision,
   persistAuthorizedPricingCache
-} from '../services/supabase.js?v=20261017-purchase-ui-live-v5';
-import { renderAll } from '../main.js?v=20261017-purchase-ui-live-v5';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20261017-purchase-ui-live-v5';
+} from '../services/supabase.js?v=20261017-purchase-ui-live-v6';
+import { renderAll } from '../main.js?v=20261017-purchase-ui-live-v6';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20261017-purchase-ui-live-v6';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -20,8 +20,8 @@ import {
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
-} from '../domain/pricing.js?v=20261017-purchase-ui-live-v5';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261017-purchase-ui-live-v5';
+} from '../domain/pricing.js?v=20261017-purchase-ui-live-v6';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261017-purchase-ui-live-v6';
 
 const pendingChanges = new Map();
 const pendingDeletes = new Set();
