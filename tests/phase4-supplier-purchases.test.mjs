@@ -19,6 +19,12 @@ test('database owns purchase totals and ignores browser totals', () => {
   assert.match(purchases, /Database sẽ tự tính lại toàn bộ thành tiền và công nợ/);
 });
 
+test('purchase supplier search is visible and filters supplier names and codes', () => {
+  assert.match(purchases, /id="purchase-supplier-search"[^>]*type="search"/);
+  assert.match(purchases, /filteredSuppliers = query[\s\S]*supplier\.name[\s\S]*supplier\.code/);
+  assert.match(purchases, /purchase-supplier-search[^\n]*addEventListener\('input'/);
+});
+
 test('purchase, supplier payment and debt ledger are atomic and actor stamped', () => {
   assert.match(migration, /CREATE OR REPLACE FUNCTION public\.rpc_create_purchase\(p_input jsonb\)/);
   assert.match(migration, /INSERT INTO public\.purchases/);
