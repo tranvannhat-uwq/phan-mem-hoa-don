@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, formatDateTime } from '../utils.js';
-import { bomGateway } from '../services/bom.js?v=20261017-bom-modal-v1';
+import { bomGateway } from '../services/bom.js?v=20261017-bom-semi-create-v1';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const number=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:4});
@@ -127,30 +127,35 @@ async function onClick(event){
     }catch(error){showToast(error.message,'danger');}
   }
 }
-function openModal(title,body,onSubmit){
+function openModal(title,body,onSubmit,options={}){
   modal?.remove();modal=document.createElement('div');modal.className='bom-modal-host';
-  modal.innerHTML=`<div class="modal-overlay active"><div class="modal-content bom-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal-header"><h3>${esc(title)}</h3><button type="button" class="modal-close" aria-label="Đóng">&times;</button></div><form><div class="modal-body">${body}<p class="inventory-error bom-form-error" role="alert" hidden></p></div><div class="modal-footer"><button type="submit" class="btn btn-primary">Lưu</button></div></form></div></div>`;
-  document.body.append(modal);
-  const close=()=>{modal?.remove();modal=null;};
-  modal.querySelector('.modal-close').onclick=close;
-  modal.querySelector('.modal-overlay').onclick=event=>{if(event.target===event.currentTarget)close();};
-  modal.onkeydown=event=>{if(event.key==='Escape')close();};
-  if(!onSubmit){modal.querySelector('.modal-footer').remove();return modal;}
-  modal.querySelector('form').onsubmit=async event=>{
+  const currentModal=modal;
+  currentModal.innerHTML=`<div class="modal-overlay active"><div class="modal-content bom-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal-header"><h3>${esc(title)}</h3><button type="button" class="modal-close" aria-label="Đóng">&times;</button></div><form><div class="modal-body">${body}<p class="inventory-error bom-form-error" role="alert" hidden></p></div><div class="modal-footer"><button type="submit" class="btn btn-primary">Lưu</button></div></form></div></div>`;
+  document.body.append(currentModal);
+  const close=()=>{currentModal.remove();if(modal===currentModal)modal=null;};
+  currentModal.querySelector('.modal-close').onclick=close;
+  currentModal.querySelector('.modal-overlay').onclick=event=>{if(event.target===event.currentTarget)close();};
+  currentModal.onkeydown=event=>{if(event.key==='Escape')close();};
+  if(!onSubmit){currentModal.querySelector('.modal-footer').remove();return currentModal;}
+  currentModal.querySelector('form').onsubmit=async event=>{
     event.preventDefault();const form=event.currentTarget,save=form.querySelector('[type="submit"]');
     if(save.disabled)return;save.disabled=true;
     const box=form.querySelector('.bom-form-error');box.hidden=true;
-    try{await onSubmit(form);close();restart();}catch(error){box.textContent=error.message;box.hidden=false;}finally{if(save.isConnected)save.disabled=false;}
+    try{const result=await onSubmit(form);close();if(options.onSuccess)await options.onSuccess(result);restart();}catch(error){
+      if(currentModal.isConnected){box.textContent=error.message;box.hidden=false;}else showToast(error.message,'danger');
+    }finally{if(save.isConnected)save.disabled=false;}
   };
-  modal.querySelector('input,select,button')?.focus();
-  return modal;
+  currentModal.querySelector('input,select,button')?.focus();
+  return currentModal;
 }
-function itemEditor(row){
+function itemEditor(row,options={}){
   if(!admin())return;
-  const form=openModal(row?'Sửa vật tư':'Thêm vật tư',`
+  const kindOptions=options.kindOnly?`<option value="${esc(options.kindOnly)}">${esc(names[options.kindOnly])}</option>`:['raw','packaging','semi'].map(kind=>`<option value="${kind}" ${row?.kind===kind?'selected':''}>${names[kind]}</option>`).join('');
+  const form=openModal(options.kindOnly==='semi'?'Thêm bán thành phẩm':row?'Sửa vật tư':'Thêm vật tư',`
+    ${options.kindOnly?'<p class="bom-quick-item-intro">Tạo mục đầu ra trong danh sách vật tư, rồi quay lại công thức đang nhập.</p>':''}
     <label>Mã vật tư<input class="form-control" name="code" maxlength="60" required value="${esc(row?.code)}"></label>
     <label>Tên vật tư<input class="form-control" name="name" maxlength="120" required value="${esc(row?.name)}"></label>
-    <label>Loại<select class="form-control" name="kind">${['raw','packaging','semi'].map(kind=>`<option value="${kind}" ${row?.kind===kind?'selected':''}>${names[kind]}</option>`).join('')}</select></label>
+    <label>Loại<select class="form-control" name="kind" ${options.kindOnly?'disabled':''}>${kindOptions}</select>${options.kindOnly?`<input type="hidden" name="kind" value="${esc(options.kindOnly)}">`:''}</label>
     <div class="bom-grid"><label>Đơn vị gốc<input class="form-control" name="baseUnit" list="bom-unit-suggestions" maxlength="24" placeholder="gam, kg, lít, cái…" required value="${esc(row?.base_unit)}"></label>
     <label>Đơn vị mua<input class="form-control" name="purchaseUnit" maxlength="24" placeholder="bao, thùng…" required value="${esc(row?.purchase_unit)}"></label>
     <label>1 đơn vị mua = số đơn vị gốc<input class="form-control" name="purchaseToBase" type="number" min="0.0001" step="0.0001" required value="${esc(row?.purchase_to_base??1)}"></label></div>
@@ -158,11 +163,14 @@ function itemEditor(row){
     ${row?`<label><input type="checkbox" name="isActive" ${row.is_active?'checked':''}> Đang sử dụng</label>`:''}
     <small>Đổi đơn vị chỉ áp dụng khi vật tư chưa có phiếu và chưa được dùng trong BOM. Hệ số mua tự quy đổi giữa mg/g/kg hoặc ml/l; đơn vị khác cần nhập hệ số phù hợp.</small>`,async element=>{
       const fields=new FormData(element);
-      await bomGateway.saveItem({id:row?.id,code:String(fields.get('code')).trim(),name:String(fields.get('name')).trim(),
+      const code=String(fields.get('code')).trim(),name=String(fields.get('name')).trim();
+      const result=await bomGateway.saveItem({id:row?.id,code,name,
         kind:fields.get('kind'),baseUnit:String(fields.get('baseUnit')).trim(),purchaseUnit:String(fields.get('purchaseUnit')).trim(),
         purchaseToBase:Number(fields.get('purchaseToBase')),isActive:row?fields.has('isActive'):true});
-      showToast('Đã lưu vật tư.','success');
-    });
+      if(options.kindOnly==='semi'&&!result?.id)throw new Error('Đã lưu nhưng không nhận được mã vật tư để chọn vào BOM.');
+      showToast(options.kindOnly==='semi'?'Đã tạo bán thành phẩm.':'Đã lưu vật tư.','success');
+      return {id:result.id,code,name};
+    },{onSuccess:options.onSuccess});
   const unitField=form.querySelector('[name="baseUnit"]'),factorField=form.querySelector('[name="purchaseToBase"]');
   const originalUnit=String(row?.base_unit??''),originalFactor=Number(row?.purchase_to_base??0);
   let priorUnit=unitField.value.trim();
@@ -231,6 +239,7 @@ function runDetail(run){
 }
 const lookupRow=(kind,selected)=>`<div class="bom-lookup"><div class="bom-lookup-controls"><input class="form-control" type="search" data-bom-search aria-label="Tìm mã hoặc tên" placeholder="Tìm mã hoặc tên…" maxlength="80"><button type="button" class="btn btn-secondary" data-bom-find="${kind}">Tìm</button></div>
   <select class="form-control" data-bom-choice aria-label="Kết quả tìm kiếm" required>${selected?`<option value="${esc(selected.id)}" selected>${esc(selected.label)}</option>`:'<option value="">Chọn kết quả sau khi tìm</option>'}</select></div>`;
+const createSemiButton=(hidden=false)=>`<div class="bom-quick-create" ${hidden?'hidden':''}><span>Chưa có bán thành phẩm?</span><button type="button" class="btn btn-secondary btn-sm" data-bom-create-semi>+ Tạo bán thành phẩm</button></div>`;
 async function lookup(button){
   const holder=button.closest('.bom-lookup'),field=holder.querySelector('[data-bom-search]');
   const mode=button.dataset.bomFind==='sku'?'skus':'items';
@@ -243,17 +252,17 @@ async function lookup(button){
     .map(row=>`<option value="${esc(row.id)}">${esc(row.code)} · ${esc(row.name)}</option>`).join('');
   if(result.hasMore)showToast('Có thêm kết quả; nhập mã chính xác hơn để thu hẹp.','info');
 }
-function recipeLine(stage,selected){return `<article class="bom-line"><div class="bom-line-top"><span class="bom-line-index" aria-hidden="true"></span>
+function recipeLine(stage,selected){const picked=selected&&{id:selected.itemId,label:selected.label||`${selected.code} · ${selected.name}`};return `<article class="bom-line"><div class="bom-line-top"><span class="bom-line-index" aria-hidden="true"></span>
   ${stage==='sku'?`<label class="bom-component-kind"><span>Loại thành phần</span><select class="form-control" data-bom-component-kind aria-label="Loại thành phần"><option value="semi" ${selected?.kind==='semi'?'selected':''}>Bán thành phẩm</option><option value="packaging" ${selected?.kind==='packaging'?'selected':''}>Bao bì</option></select></label>`:'<span class="bom-kind-fixed">Nguyên liệu</span>'}
   <button type="button" class="bom-remove-line" data-bom-remove aria-label="Xóa thành phần">Xóa</button></div>
-  <div class="bom-line-fields"><div class="bom-component-picker"><span class="bom-field-label">Chọn vật tư</span>${lookupRow(stage==='semi'?'raw':'component',selected&&{id:selected.itemId,label:`${selected.code} · ${selected.name}`})}</div>
+  <div class="bom-line-fields"><div class="bom-component-picker"><span class="bom-field-label">Chọn vật tư</span>${lookupRow(stage==='semi'?'raw':'component',picked)}${stage==='sku'?createSemiButton(selected?.kind==='packaging'):''}</div>
   <label class="bom-quantity-field"><span>Định mức cho mẻ chuẩn</span><input class="form-control" data-bom-quantity type="number" min="0.0001" max="100000000" step="0.0001" required placeholder="Ví dụ: 2,5" value="${esc(selected?.quantity)}"><small>Theo đơn vị gốc của vật tư</small></label></div></article>`;}
-function recipeEditor(existing){
+function recipeEditor(existing,prefill={}){
   if(!admin())return;
-  const stage=existing?.outputKind||'semi';
+  const stage=existing?.outputKind||prefill.stage||'semi';
   const outputPicker=existing
     ? `<div class="bom-output-lookup bom-output-locked"><strong>${esc(existing.outputId)}</strong><small>Đầu ra được khóa theo phiên bản này</small><input type="hidden" data-bom-choice value="${esc(existing.outputId)}"></div>`
-    : `<div class="bom-output-lookup">${lookupRow(stage)}</div>`;
+    : `<div class="bom-output-lookup">${lookupRow(stage,prefill.output)}${stage==='semi'?createSemiButton():''}</div>`;
   const shell=openModal(existing?`BOM ${existing.status==='draft'?'nháp':'phiên bản mới'}`:'Tạo BOM',`
     <div class="bom-recipe-intro"><span>${existing?'CHỈNH SỬA CÔNG THỨC':'THIẾT LẬP CÔNG THỨC'}</span><p>Lưu thành bản nháp để rà soát. BOM chỉ ảnh hưởng tồn kho sau khi được áp dụng và có lệnh sản xuất.</p></div>
     <section class="bom-recipe-section"><div class="bom-recipe-section-heading"><span class="bom-step-number">1</span><div><h4>Đầu ra và sản lượng chuẩn</h4><p>Chọn công đoạn, sản phẩm đầu ra và lượng tạo ra trong một mẻ.</p></div></div>
@@ -262,13 +271,13 @@ function recipeEditor(existing){
         <label class="bom-stage-card"><input type="radio" name="stage" value="sku" ${stage==='sku'?'checked':''} ${existing?'disabled':''}><span class="bom-stage-kicker">CÔNG ĐOẠN 2</span><strong>Bán thành phẩm + Bao bì → SKU</strong><small>Đóng gói thành sản phẩm bán</small></label>
       </fieldset>
       <div class="bom-recipe-output-grid"><div class="bom-output-field"><span id="bom-output-label">${stage==='semi'?'Bán thành phẩm đầu ra':'SKU đầu ra'}</span>${outputPicker}</div>
-        <label class="bom-output-quantity"><span>Sản lượng chuẩn / mẻ</span><input class="form-control" name="outputQuantity" type="number" min="0.0001" max="100000000" step="0.0001" required value="${esc(existing?.outputQuantity??1)}"><small>Định mức thành phần bên dưới áp dụng cho lượng này.</small></label></div>
+        <label class="bom-output-quantity"><span>Sản lượng chuẩn / mẻ</span><input class="form-control" name="outputQuantity" type="number" min="0.0001" max="100000000" step="0.0001" required value="${esc(existing?.outputQuantity??prefill.outputQuantity??1)}"><small>Định mức thành phần bên dưới áp dụng cho lượng này.</small></label></div>
     </section>
     <section class="bom-recipe-section"><div class="bom-recipe-section-heading"><span class="bom-step-number">2</span><div><h4>Thành phần cho một mẻ</h4><p id="bom-stage-hint">${stage==='semi'?'Chọn nguyên liệu và lượng tiêu hao theo đơn vị gốc.':'Chọn bán thành phẩm hoặc bao bì cho từng dòng.'}</p></div><span class="bom-line-count" id="bom-line-count"></span></div>
-      <div id="bom-lines" class="bom-lines">${(existing?.lines?.length?existing.lines:[null]).map(line=>recipeLine(stage,line)).join('')}</div>
+      <div id="bom-lines" class="bom-lines">${(existing?.lines?.length?existing.lines:prefill.lines?.length?prefill.lines:[null]).map(line=>recipeLine(stage,line)).join('')}</div>
       <button type="button" class="btn btn-secondary bom-add-line" data-bom-add><span aria-hidden="true">+</span>Thêm thành phần</button>
     </section>
-    <section class="bom-recipe-section bom-note-section"><label><span>Ghi chú <small>Tùy chọn</small></span><textarea class="form-control" name="note" maxlength="240" rows="2" placeholder="Ví dụ: thời gian ủ, lưu ý đóng gói…">${esc(existing?.note)}</textarea></label></section>`,async form=>{
+    <section class="bom-recipe-section bom-note-section"><label><span>Ghi chú <small>Tùy chọn</small></span><textarea class="form-control" name="note" maxlength="240" rows="2" placeholder="Ví dụ: thời gian ủ, lưu ý đóng gói…">${esc(existing?.note??prefill.note)}</textarea></label></section>`,async form=>{
       const outputKind=existing?.outputKind||form.querySelector('[name="stage"]:checked').value;
       const outputId=form.querySelector('.bom-output-lookup [data-bom-choice]').value;
       const lines=[...form.querySelectorAll('.bom-line')].map(line=>({itemId:line.querySelector('[data-bom-choice]').value,
@@ -288,10 +297,34 @@ function recipeEditor(existing){
     shell.querySelector('#bom-line-count').textContent=`${count}/30 thành phần`;
     shell.querySelector('[data-bom-add]').disabled=count>=30;
   };
+  const captureDraft=()=>{
+    const outputSelect=shell.querySelector('.bom-output-lookup [data-bom-choice]');
+    return {stage:shell.querySelector('[name="stage"]:checked').value,
+      output:outputSelect?.value?{id:outputSelect.value,label:outputSelect.selectedOptions[0]?.textContent||''}:undefined,
+      outputQuantity:shell.querySelector('[name="outputQuantity"]').value,note:shell.querySelector('[name="note"]').value,
+      lines:[...shell.querySelectorAll('.bom-line')].map(line=>{
+        const select=line.querySelector('[data-bom-choice]');
+        return {itemId:select.value||undefined,label:select.value?select.selectedOptions[0]?.textContent||'':undefined,
+          kind:line.querySelector('[data-bom-component-kind]')?.value||'raw',quantity:line.querySelector('[data-bom-quantity]').value};
+      })};
+  };
   updateLineCount();
   shell.addEventListener('click',async event=>{
     const button=event.target.closest('button');if(!button)return;
     if(button.dataset.bomFind){button.disabled=true;try{await lookup(button);}catch(error){showToast(error.message,'danger');}finally{button.disabled=false;}}
+    if(button.hasAttribute('data-bom-create-semi')){
+      const draft=captureDraft(),line=button.closest('.bom-line');
+      const lineIndex=line?[...shell.querySelectorAll('.bom-line')].indexOf(line):-1;
+      if(lineIndex>=0)draft.lines[lineIndex].kind='semi';
+      itemEditor(null,{kindOnly:'semi',onSuccess:item=>{
+        if(!item?.id)throw new Error('Đã lưu nhưng không nhận được mã vật tư để chọn vào BOM.');
+        const selected={itemId:item.id,label:`${item.code} · ${item.name}`,kind:'semi',quantity:lineIndex>=0?draft.lines[lineIndex]?.quantity:undefined};
+        if(lineIndex>=0)draft.lines[lineIndex]=selected;
+        else draft.output={id:item.id,label:`${item.code} · ${item.name}`};
+        recipeEditor(null,draft);
+      }});
+      return;
+    }
     if(button.hasAttribute('data-bom-add')){
       const lines=shell.querySelector('#bom-lines');if(lines.children.length>=30)return;
       lines.insertAdjacentHTML('beforeend',recipeLine(shell.querySelector('[name="stage"]:checked').value));updateLineCount();
@@ -300,7 +333,8 @@ function recipeEditor(existing){
   });
   shell.addEventListener('change',event=>{
     if(event.target.matches('[data-bom-component-kind]'))
-      event.target.closest('.bom-line').querySelector('[data-bom-choice]').innerHTML='<option value="">Chọn từ kết quả tìm kiếm</option>';
+      {const line=event.target.closest('.bom-line');line.querySelector('[data-bom-choice]').innerHTML='<option value="">Chọn từ kết quả tìm kiếm</option>';
+        const quickCreate=line.querySelector('[data-bom-create-semi]');if(quickCreate)quickCreate.hidden=event.target.value!=='semi';}
     if(event.target.matches('[name="stage"]')){
       const nextStage=event.target.value;
       shell.querySelector('.bom-output-lookup').innerHTML=lookupRow(nextStage);

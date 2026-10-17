@@ -11968,6 +11968,11 @@ body.mobile-nav-open {
 .bom-line { display: grid; gap: .7rem; padding: .85rem; border: 1px solid #dce6f2; border-radius: 12px; background: #f8fbff; }
 .bom-lookup { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
 .bom-lookup .form-control { min-width: 0; width: 100%; }
+.bom-quick-create { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .55rem; color: #718198; font-size: .75rem; font-weight: 500; }
+.bom-quick-create[hidden] { display: none; }
+.bom-quick-create .btn { min-height: 32px; padding: .3rem .55rem; color: #2459d6; border-color: #d8e5fb; background: #f5f8ff; font-size: .73rem; }
+.bom-quick-create .btn:hover { border-color: #9ab8f5; background: #eaf2ff; }
+.bom-quick-item-intro { margin: 0; padding: .7rem .8rem; border: 1px solid #d7e6fb; border-radius: 9px; color: #526782; background: #f3f8ff; font-size: .82rem; line-height: 1.45; }
 .bom-recipe-modal { display: flex; flex-direction: column; width: min(940px, 96vw); max-width: 940px; max-height: calc(100dvh - 40px); overflow: hidden; }
 .bom-recipe-modal > .modal-header { flex: 0 0 auto; padding: 1rem 1.4rem; }
 .bom-recipe-modal > form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
