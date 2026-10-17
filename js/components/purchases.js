@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { formatCurrency, formatDateTime, makeSelectSearchable, safeCreateIcons, showToast } from '../utils.js';
+import { formatCurrency, formatDateTime, safeCreateIcons, showToast } from '../utils.js';
 import {
   dbCancelPurchase,
   dbCancelSupplierPayment,
@@ -53,8 +53,8 @@ function itemRow(item = {}) {
     </tr>`;
 }
 
-function purchaseSupplierOptions() {
-  return (state.suppliers || []).map(supplier =>
+function purchaseSupplierOptions(suppliers = state.suppliers || []) {
+  return suppliers.map(supplier =>
     `<option value="${escapeHtml(supplier.id)}">${escapeHtml(supplier.name)} (${escapeHtml(supplier.code)})</option>`
   ).join('');
 }
@@ -80,6 +80,7 @@ function purchaseModal() {
               <div class="purchase-entry-info-grid">
                 <div class="form-group">
                   <label class="form-label" for="purchase-supplier-select">Nhà cung cấp <span>*</span></label>
+                  <input class="form-control purchase-entry-supplier-search" id="purchase-supplier-search" type="search" placeholder="Tìm theo tên hoặc mã nhà cung cấp..." autocomplete="off" aria-label="Tìm nhà cung cấp">
                   <select class="form-control" id="purchase-supplier-select" required>
                     <option value="">-- Chọn nhà cung cấp --</option>
                     ${purchaseSupplierOptions()}
@@ -190,13 +191,21 @@ function syncPurchaseSupplierOptions(modal) {
   const select = modal?.querySelector('#purchase-supplier-select');
   if (!select) return;
   const suppliers = state.suppliers || [];
-  const optionsKey = JSON.stringify(suppliers.map(supplier => [supplier.id, supplier.name, supplier.code]));
-  if (select.dataset.supplierOptionsKey === optionsKey) return;
-
   const selectedId = select.value;
-  select.innerHTML = `<option value="">-- Chọn nhà cung cấp --</option>${purchaseSupplierOptions()}`;
-  select.dataset.supplierOptionsKey = optionsKey;
-  select.value = suppliers.some(supplier => String(supplier.id) === selectedId) ? selectedId : '';
+  const query = normalizeSupplierSearch(modal.querySelector('#purchase-supplier-search')?.value || '');
+  const filteredSuppliers = query
+    ? suppliers.filter(supplier => normalizeSupplierSearch(`${supplier.name || ''} ${supplier.code || ''}`).includes(query))
+    : suppliers;
+  const selectedSupplier = suppliers.find(supplier => String(supplier.id) === selectedId);
+  if (selectedSupplier && !filteredSuppliers.some(supplier => String(supplier.id) === selectedId)) {
+    filteredSuppliers.push(selectedSupplier);
+  }
+  select.innerHTML = `<option value="">-- Chọn nhà cung cấp --</option>${purchaseSupplierOptions(filteredSuppliers)}`;
+  select.value = selectedSupplier ? selectedId : '';
+}
+
+function normalizeSupplierSearch(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
 }
 
 function printPurchase(purchase) {
@@ -219,7 +228,6 @@ function attachEvents(panel, modal) {
     modal?.classList.remove('active');
     document.body.classList.remove('purchase-entry-modal-open');
   };
-  makeSelectSearchable('purchase-supplier-select', 'Tìm theo tên hoặc mã nhà cung cấp...');
   panel.querySelector('#btn-open-purchase-modal')?.addEventListener('click', () => {
     const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
     modal.querySelector('#purchase-date-input').value = date.toISOString().slice(0, 16);
@@ -230,6 +238,12 @@ function attachEvents(panel, modal) {
   });
   if (modal && modal.dataset.eventsBound !== 'true') {
     modal.dataset.eventsBound = 'true';
+    modal.querySelector('#purchase-supplier-search')?.addEventListener('input', () => syncPurchaseSupplierOptions(modal));
+    modal.querySelector('#purchase-supplier-select')?.addEventListener('change', () => {
+      const searchInput = modal.querySelector('#purchase-supplier-search');
+      if (searchInput) searchInput.value = '';
+      syncPurchaseSupplierOptions(modal);
+    });
     modal.querySelector('#btn-close-purchase-entry')?.addEventListener('click', close);
     modal.querySelector('#btn-cancel-purchase-entry')?.addEventListener('click', close);
     modal.querySelector('#btn-add-purchase-item-row')?.addEventListener('click', () => {
