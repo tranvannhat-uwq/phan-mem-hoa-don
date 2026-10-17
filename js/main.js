@@ -12,7 +12,7 @@ import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?
 import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261016-bom-v1';
 import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261016-bom-v1';
 import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261016-bom-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261016-bom-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261017-purchase-ui-live-v1';
 import { renderInventoryPanel } from './components/inventory.js?v=20261017-bom-semi-create-v1';
 import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261016-bom-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
