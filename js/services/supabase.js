@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261016-bom-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261016-bom-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261017-product-search-pagination-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261017-product-search-pagination-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261016-bom-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261016-bom-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261016-bom-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261017-product-search-pagination-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261017-product-search-pagination-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261017-product-search-pagination-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -5419,10 +5419,12 @@ export async function dbSearchInvoiceCustomers(query, { limit = 30 } = {}) {
   return Object.assign(rows, { hasMore: result?.hasMore === true, nextCursor: result?.nextCursor || null });
 }
 
-export async function dbSearchInvoiceProducts(query, { limit = 40 } = {}) {
+export async function dbSearchInvoiceProducts(query, { limit = 40, cursor = null } = {}) {
   const result = await invoiceReadRpc('rpc_egress_search_products', {
     p_query: String(query || '').trim(),
     p_limit: boundedInvoiceSearchLimit(limit, 40),
+    p_after_code: cursor?.code || null,
+    p_after_id: cursor?.id || null,
     p_saleable_only: true
   });
   const rows = (Array.isArray(result?.data) ? result.data : []).map(row => normalizeProductRow(row));

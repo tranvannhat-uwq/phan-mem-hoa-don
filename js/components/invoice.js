@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, formatPhoneNumber, safeCreateIcons, formatDateTime, getColorPercentFromCode, calculateColorMarkedUpPrice, isSameUser, getProvinceNameByCode, PROVINCES, makeSelectSearchable, docSoTienBangChu, getUserCompanyId, getRevenueAttributes, getBrandName, getCompanyName, getCustomerName, getUserById, getUserDisplayName, getPricelistName } from '../utils.js';
-import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, dbSearchInvoiceProducts, dbFetchInvoiceProductFamily, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20261016-bom-v1';
-import { renderAll, switchTab } from '../main.js?v=20261016-bom-v1';
-import { populatePricelistsDropdowns } from './pricelists.js?v=20261016-bom-v1';
-import { generateUniqueCustomerCode } from './customers.js?v=20261016-bom-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261016-bom-v1';
-import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20261016-bom-v1';
+import { dbSaveOrder, dbCreateQuickCustomer, dbConfirmOrder, dbAmendOrder, dbFetchOrderDebtSnapshot, dbLoadCustomerAssignedPricing, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, dbSearchInvoiceProducts, dbFetchInvoiceProductFamily, cacheOrdersLocally, isCloudActive } from '../services/supabase.js?v=20261017-product-search-pagination-v1';
+import { renderAll, switchTab } from '../main.js?v=20261017-product-search-pagination-v1';
+import { populatePricelistsDropdowns } from './pricelists.js?v=20261017-product-search-pagination-v1';
+import { generateUniqueCustomerCode } from './customers.js?v=20261017-product-search-pagination-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261017-product-search-pagination-v1';
+import { getApplicablePriceList, resolveCustomerProductPrice, normalizePriceListType, PRICE_LIST_TYPES, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer, isDealerPrivatePriceList, isUsableResolvedPrice, shouldOverrideWithGlobalCustomerPriceList } from '../domain/pricing.js?v=20261017-product-search-pagination-v1';
 import { normalizeCustomerPhone } from '../domain/customer-query.js';
-import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20261016-bom-v1';
-import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js?v=20261017-product-name-search-v1';
-import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20261016-bom-v1';
+import { isPrintOnlyPriceList, parseInvoicePercent, requiresOrderSaveApproval, sanitizeInvoicePercentInput, supportsInvoiceLineDiscount } from '../domain/invoice-discount.js?v=20261017-product-search-pagination-v1';
+import { buildProductFamilies, buildVariantSnapshot, searchProductFamilies, shouldAutoSelectVariant, variantSpecification } from '../domain/product-catalog.js?v=20261017-product-search-pagination-v1';
+import { chargeCustomerDebt, getOrderDebtSnapshot, getOrderOutstandingAmount } from '../domain/customer-debt.js?v=20261017-product-search-pagination-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
-import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, resolveOrderBusinessDateTimeForSave } from '../domain/order-business-date.js?v=20261016-bom-v1';
+import { canAdjustOrderBusinessDate, currentBusinessDateTimeInputValue, resolveOrderBusinessDateTimeForSave } from '../domain/order-business-date.js?v=20261017-product-search-pagination-v1';
 import { reorderOrderItems } from '../domain/order-edit.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261016-bom-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261017-product-search-pagination-v1';
 
 let currentOrderToPrint = null;
 let lastFinalizedOrder = null;
@@ -28,6 +28,9 @@ let invoiceProductSearchResolvedQuery = '';
 let invoiceProductSearchScope = '';
 let invoiceSearchProducts = [];
 let invoiceProductSearchHasMore = false;
+let invoiceProductSearchNextCursor = null;
+let invoiceProductSearchLoadingMore = false;
+let invoiceProductSearchLoadMoreError = '';
 let invoiceCustomerSearchSequence = 0;
 let invoiceCustomerSearchTimer = null;
 const ORDER_IDEMPOTENCY_STORAGE_KEY = 'billing_pending_order_idempotency_key';
@@ -53,6 +56,9 @@ function resetInvoiceProductSearch() {
   invoiceProductSearchScope = '';
   invoiceSearchProducts = [];
   invoiceProductSearchHasMore = false;
+  invoiceProductSearchNextCursor = null;
+  invoiceProductSearchLoadingMore = false;
+  invoiceProductSearchLoadMoreError = '';
   selectedProductFamilyKey = '';
   selectedProductFamilyScope = '';
   const input = document.getElementById('invoice-product-search');
@@ -391,7 +397,10 @@ function renderInvoiceProductSuggestions(list, input, matches, message = '', has
     return;
   }
   if (!matches.length) {
-    list.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">${escapeInvoiceHtml(message || 'Không tìm thấy sản phẩm')}</li>`;
+    const emptyMessage = hasMore
+      ? 'Chưa thấy sản phẩm trong các kết quả đã tải.'
+      : message || 'Không tìm thấy sản phẩm';
+    list.innerHTML = `<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">${escapeInvoiceHtml(emptyMessage)}</li>`;
   } else {
     list.innerHTML = matches.map((family, index) => {
       const matchedVariant = family.variants.find(variant => variant.id === family.matchedVariantId);
@@ -409,9 +418,13 @@ function renderInvoiceProductSuggestions(list, input, matches, message = '', has
           <span class="suggestion-brand-badge" style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #047857; border: 1px solid rgba(34, 197, 94, 0.3);">${escapeInvoiceHtml(family.brand)}</span>
         </li>`;
     }).join('');
-    if (hasMore) {
-      list.insertAdjacentHTML('beforeend', '<li class="suggestion-item" style="color: var(--text-muted); cursor: default;">Còn kết quả khác. Nhập thêm mã hoặc tên để thu hẹp.</li>');
-    }
+  }
+  if (invoiceProductSearchLoadMoreError) {
+    list.insertAdjacentHTML('beforeend', `<li class="suggestion-item" style="color: var(--color-danger, #b91c1c); cursor: default;">${escapeInvoiceHtml(invoiceProductSearchLoadMoreError)}</li>`);
+  }
+  if (hasMore) {
+    const loadMoreLabel = invoiceProductSearchLoadingMore ? 'Đang tải thêm sản phẩm…' : 'Tải thêm kết quả';
+    list.insertAdjacentHTML('beforeend', `<li class="suggestion-item" data-load-more-products role="button" tabindex="0" aria-disabled="${invoiceProductSearchLoadingMore}" style="color: var(--color-primary); font-weight: 600; justify-content: center; cursor: ${invoiceProductSearchLoadingMore ? 'wait' : 'pointer'};">${loadMoreLabel}</li>`);
   }
   list.style.display = 'block';
   const renderedScope = invoiceSearchScope();
@@ -434,14 +447,29 @@ function renderInvoiceProductSuggestions(list, input, matches, message = '', has
       void addProductToInvoice();
     });
   });
+  const loadMoreItem = list.querySelector('[data-load-more-products]');
+  if (loadMoreItem) {
+    const loadMore = () => {
+      if (invoiceProductSearchLoadingMore) return;
+      void loadMoreInvoiceProductSuggestions(input.value.trim(), renderedSequence, renderedScope, input, list);
+    };
+    loadMoreItem.addEventListener('click', loadMore);
+    loadMoreItem.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        loadMore();
+      }
+    });
+  }
 }
 
-function lookupInvoiceProducts(query, scope) {
-  const key = `${scope}\u0000${query}`;
+function lookupInvoiceProducts(query, scope, cursor = null) {
+  const cursorKey = cursor ? `${cursor.code || ''}\u0000${cursor.id || ''}` : '';
+  const key = `${scope}\u0000${query}\u0000${cursorKey}`;
   if (invoiceProductSearchPromise && invoiceProductSearchPromiseKey === key) {
     return invoiceProductSearchPromise;
   }
-  const promise = dbSearchInvoiceProducts(query, { limit: 40 });
+  const promise = dbSearchInvoiceProducts(query, { limit: 40, cursor });
   invoiceProductSearchPromise = promise;
   invoiceProductSearchPromiseKey = key;
   promise.finally(() => {
@@ -461,11 +489,13 @@ async function refreshInvoiceProductSuggestions(query, sequence, input, list) {
         || input.value.trim() !== query) return false;
     invoiceSearchProducts = Array.isArray(products) ? products : [];
     invoiceProductSearchHasMore = products?.hasMore === true;
+    invoiceProductSearchNextCursor = products?.nextCursor || null;
+    invoiceProductSearchLoadMoreError = '';
     invoiceProductSearchResolvedQuery = query;
     invoiceProductSearchScope = scope;
     renderInvoiceProductSuggestions(
       list, input,
-      searchProductFamilies(getInvoiceProductFamilies(), query).slice(0, 30),
+      searchProductFamilies(getInvoiceProductFamilies(), query),
       '', invoiceProductSearchHasMore
     );
     return true;
@@ -476,6 +506,42 @@ async function refreshInvoiceProductSuggestions(query, sequence, input, list) {
         'Không tải được sản phẩm. Hãy thử lại.');
     }
     return false;
+  }
+}
+
+async function loadMoreInvoiceProductSuggestions(query, sequence, scope, input, list) {
+  if (!query || !invoiceProductSearchHasMore || !invoiceProductSearchNextCursor
+      || invoiceProductSearchLoadingMore) return;
+  invoiceProductSearchLoadingMore = true;
+  invoiceProductSearchLoadMoreError = '';
+  const renderCurrentResults = () => renderInvoiceProductSuggestions(
+    list, input,
+    searchProductFamilies(getInvoiceProductFamilies(), query),
+    '', invoiceProductSearchHasMore
+  );
+  renderCurrentResults();
+  try {
+    const page = await lookupInvoiceProducts(query, scope, invoiceProductSearchNextCursor);
+    if (sequence !== invoiceProductSearchSequence || scope !== invoiceSearchScope()
+        || input.value.trim() !== query) return;
+    const merged = new Map(invoiceSearchProducts.map(product => [String(product.id), product]));
+    for (const product of Array.isArray(page) ? page : []) {
+      merged.set(String(product.id), product);
+    }
+    invoiceSearchProducts = [...merged.values()];
+    invoiceProductSearchHasMore = page?.hasMore === true;
+    invoiceProductSearchNextCursor = page?.nextCursor || null;
+  } catch (error) {
+    if (sequence === invoiceProductSearchSequence && scope === invoiceSearchScope()
+        && input.value.trim() === query) {
+      invoiceProductSearchLoadMoreError = 'Không tải thêm được sản phẩm. Hãy thử lại.';
+    }
+  } finally {
+    if (sequence === invoiceProductSearchSequence && scope === invoiceSearchScope()
+        && input.value.trim() === query) {
+      invoiceProductSearchLoadingMore = false;
+      renderCurrentResults();
+    }
   }
 }
 
@@ -1111,6 +1177,8 @@ export async function addProductToInvoice() {
           || searchInput.value.trim() !== query) return;
       invoiceSearchProducts = Array.isArray(products) ? products : [];
       invoiceProductSearchHasMore = products?.hasMore === true;
+      invoiceProductSearchNextCursor = products?.nextCursor || null;
+      invoiceProductSearchLoadMoreError = '';
       invoiceProductSearchResolvedQuery = query;
       invoiceProductSearchScope = scope;
     } catch (error) {
@@ -1147,6 +1215,12 @@ export async function addProductToInvoice() {
   }
 
   if (!family) {
+    if (invoiceProductSearchHasMore && invoiceProductSearchNextCursor) {
+      const suggestions = document.getElementById('invoice-product-suggestions');
+      renderInvoiceProductSuggestions(suggestions, searchInput, [], '', true);
+      showToast('Chưa thấy sản phẩm trong trang kết quả đã tải. Hãy tải thêm kết quả để tiếp tục tìm.', 'warning');
+      return;
+    }
     showToast(`Không tìm thấy sản phẩm phù hợp với "${query}".`, 'danger');
     return;
   }
