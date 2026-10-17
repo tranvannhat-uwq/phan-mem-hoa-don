@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261017-purchase-ui-live-v4';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261017-purchase-ui-live-v4';
-import { renderAll, switchTab } from '../main.js?v=20261017-purchase-ui-live-v4';
-import { populateManagedByDropdown } from './customers.js?v=20261017-purchase-ui-live-v4';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261017-purchase-ui-live-v5';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261017-purchase-ui-live-v5';
+import { renderAll, switchTab } from '../main.js?v=20261017-purchase-ui-live-v5';
+import { populateManagedByDropdown } from './customers.js?v=20261017-purchase-ui-live-v5';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261017-purchase-ui-live-v4';
-import { resetInventoryPanel } from './inventory.js?v=20261017-purchase-ui-live-v4';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261017-purchase-ui-live-v4';
+import { isActiveUser } from '../domain/user-status.js?v=20261017-purchase-ui-live-v5';
+import { resetInventoryPanel } from './inventory.js?v=20261017-purchase-ui-live-v5';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261017-purchase-ui-live-v5';
 
 function normalizeUserSearch(value) {
   return String(value || '')
