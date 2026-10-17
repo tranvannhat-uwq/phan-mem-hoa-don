@@ -5,8 +5,8 @@ import {
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20261017-purchase-ui-live-v2';
-import { renderAll } from '../main.js?v=20261017-purchase-ui-live-v2';
+} from '../services/supabase.js?v=20261017-purchase-ui-live-v3';
+import { renderAll } from '../main.js?v=20261017-purchase-ui-live-v3';
 import {
   buildProductFamilies,
   getProductBaseCode,
