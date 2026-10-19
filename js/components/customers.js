@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory } from '../services/supabase.js?v=20261019-invoice-product-search-v1';
-import { renderAll } from '../main.js?v=20261019-invoice-product-search-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261019-invoice-product-search-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261019-invoice-product-search-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment } from '../services/supabase.js?v=20261019-debt-adjustment-undo-v1';
+import { renderAll } from '../main.js?v=20261019-debt-adjustment-undo-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261019-debt-adjustment-undo-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261019-debt-adjustment-undo-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261019-invoice-product-search-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261019-invoice-product-search-v1';
+} from '../domain/order-financials.js?v=20261019-debt-adjustment-undo-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261019-debt-adjustment-undo-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261019-invoice-product-search-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261019-debt-adjustment-undo-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -3565,11 +3565,15 @@ export async function openCustomerDetailModal(index) {
 
   const loadingHistoryBody = document.getElementById('detail-debt-history-body');
   if (loadingHistoryBody) {
-    loadingHistoryBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
+    loadingHistoryBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
   }
   const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id);
   if (refreshedCustomer) cust = refreshedCustomer;
   modal.dataset.customerId = cust.id;
+  const canRevertOrderAmendments = ['admin', 'accounting'].includes(state.currentUser?.role);
+  const revertibleOrderAmendmentIds = new Set(canRevertOrderAmendments
+    ? await dbFetchRevertibleOrderAmendments(cust.id)
+    : []);
 
   // Điền thông tin cơ bản
   const modalTitle = document.getElementById('customer-detail-modal-title');
@@ -3658,7 +3662,7 @@ export async function openCustomerDetailModal(index) {
     if (sortedHistory.length === 0) {
       historyBody.innerHTML = `
         <tr>
-          <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
             Chưa có lịch sử giao dịch công nợ nào cho đại lý này.
           </td>
         </tr>
@@ -3670,6 +3674,9 @@ export async function openCustomerDetailModal(index) {
         let debtBefore = 0;
         const noteText = h.note || h.notes || '-';
         const isOrderAmendment = h.transactionType === 'order_amend';
+        const canRevertOrderAmendment = canRevertOrderAmendments
+          && isOrderAmendment
+          && revertibleOrderAmendmentIds.has(String(h.id || ''));
         const source = getCustomerDebtSource(h);
         const sourceIcon = source?.kind === 'cashbook' ? 'receipt-text' : source?.kind === 'return' ? 'rotate-ccw' : 'file-text';
         const sourceCell = source
@@ -3736,6 +3743,9 @@ export async function openCustomerDetailModal(index) {
             <td style="text-align: right;">${amountText}</td>
             <td style="text-align: right; font-weight: 600;">${formatCurrency(h.debtAfter)}</td>
             <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeCustomerHtml(noteText)}">${escapeCustomerHtml(noteText)}</td>
+            <td style="text-align:center;">${canRevertOrderAmendment
+              ? `<button type="button" class="btn btn-danger btn-xs customer-debt-revert-amendment" data-ledger-id="${escapeCustomerHtml(h.id)}" title="Hoàn tác lần sửa hóa đơn gần nhất"><i data-lucide="trash-2" aria-hidden="true"></i><span>Xóa</span></button>`
+              : '<span style="color:var(--text-muted);">-</span>'}</td>
           </tr>
         `;
 
@@ -3753,6 +3763,37 @@ export async function openCustomerDetailModal(index) {
             });
           if (!historyEntry) return;
           await openCustomerDebtSourceDetail({ kind: sourceKind, id: sourceId }, historyEntry, cust);
+        });
+      });
+
+      historyBody.querySelectorAll('.customer-debt-revert-amendment').forEach(button => {
+        button.addEventListener('click', async () => {
+          const ledgerId = button.getAttribute('data-ledger-id');
+          const historyEntry = sortedHistory.find(entry => String(entry.id || '') === String(ledgerId || ''));
+          if (!ledgerId || !historyEntry || button.disabled) return;
+          const source = getCustomerDebtSource(historyEntry);
+          const confirmed = confirm(
+            `Xóa điều chỉnh này bằng cách khôi phục hóa đơn ${source?.id || historyEntry.orderId || ''} về trạng thái trước lần sửa gần nhất?\n\nCông nợ và doanh số sẽ được tính lại. Dấu vết gốc vẫn được lưu để kiểm toán. Chỉ hoàn tác được nếu hóa đơn chưa có phiếu thu hoặc trả hàng liên kết và dữ liệu giá cũ còn khôi phục chính xác.`
+          );
+          if (!confirmed) return;
+
+          button.disabled = true;
+          const result = await dbRevertOrderAmendment(ledgerId);
+          if (!result?.success) {
+            showToast(result?.message || 'Không thể hoàn tác điều chỉnh đơn.', 'danger');
+            button.disabled = false;
+            return;
+          }
+
+          const affectedCustomerIds = Array.isArray(result.affected_customer_ids)
+            ? result.affected_customer_ids.map(String)
+            : [String(cust.id)];
+          await Promise.all(affectedCustomerIds
+            .filter(customerId => customerId !== String(cust.id))
+            .map(customerId => dbRefreshCustomerFinancialState(customerId)));
+          showToast(`Đã hoàn tác điều chỉnh của hóa đơn ${result.order_id || source?.id || ''}.`, 'success');
+          const currentIndex = state.customers.findIndex(customer => String(customer.id) === String(cust.id));
+          if (currentIndex >= 0) await openCustomerDetailModal(currentIndex);
         });
       });
 

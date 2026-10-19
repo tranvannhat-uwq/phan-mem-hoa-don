@@ -7215,12 +7215,27 @@ body.customer-filter-drawer-open { overflow: hidden; }
 }
 
 .customer-debt-history-table col:nth-child(1) { width: 12% !important; }
-.customer-debt-history-table col:nth-child(2) { width: 15% !important; }
-.customer-debt-history-table col:nth-child(3) { width: 11% !important; }
+.customer-debt-history-table col:nth-child(2) { width: 14% !important; }
+.customer-debt-history-table col:nth-child(3) { width: 9% !important; }
 .customer-debt-history-table col:nth-child(4),
 .customer-debt-history-table col:nth-child(5),
-.customer-debt-history-table col:nth-child(6) { width: 13% !important; }
-.customer-debt-history-table col:nth-child(7) { width: 23% !important; }
+.customer-debt-history-table col:nth-child(6) { width: 12% !important; }
+.customer-debt-history-table col:nth-child(7) { width: 19% !important; }
+.customer-debt-history-table col:nth-child(8) { width: 10% !important; }
+
+.customer-debt-revert-amendment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 52px;
+  padding: 0.25rem 0.4rem;
+}
+
+.customer-debt-revert-amendment svg {
+  width: 13px;
+  height: 13px;
+}
 
 .customer-debt-history-table th {
   padding: 0.8rem 0.65rem;

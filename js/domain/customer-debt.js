@@ -162,7 +162,8 @@ function debtRelationValue(entry = {}, camelKey, snakeKey) {
  * later invoices retain their real posting-time balance in the history view.
  */
 export function projectEffectiveCustomerDebtHistory(history = []) {
-  const entries = (Array.isArray(history) ? history : []).filter(Boolean);
+  const entries = (Array.isArray(history) ? history : []).filter(entry =>
+    entry && !entry.voidedByAmendmentId && !entry.voided_by_amendment_id);
   const byId = new Map(entries
     .filter(entry => entry.id)
     .map(entry => [String(entry.id), entry]));

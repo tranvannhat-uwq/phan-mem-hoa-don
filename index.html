@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261019-invoice-product-search-v1">
+  <link rel="stylesheet" href="style.css?v=20261019-debt-adjustment-undo-v1">
 </head>
 <body>
 
@@ -2812,13 +2812,14 @@
           <div class="table-container customer-debt-history-scroll">
             <table class="table customer-debt-history-table">
               <colgroup>
-                <col style="width: 17%;">  <!-- Thời gian -->
+                <col style="width: 12%;">  <!-- Thời gian -->
                 <col style="width: 14%;">  <!-- Mã chứng từ -->
-                <col style="width: 10%;">  <!-- Loại -->
-                <col style="width: 13%;">  <!-- Nợ trước GD -->
-                <col style="width: 13%;">  <!-- Giá trị GD -->
-                <col style="width: 13%;">  <!-- Nợ sau GD -->
-                <col style="width: 20%;">  <!-- Ghi chú -->
+                <col style="width: 9%;">   <!-- Loại -->
+                <col style="width: 12%;">  <!-- Nợ trước GD -->
+                <col style="width: 12%;">  <!-- Giá trị GD -->
+                <col style="width: 12%;">  <!-- Nợ sau GD -->
+                <col style="width: 19%;">  <!-- Ghi chú -->
+                <col style="width: 10%;">  <!-- Thao tác -->
               </colgroup>
               <thead>
                 <tr>
@@ -2829,6 +2830,7 @@
                   <th style="text-align: right;">Giá trị GD</th>
                   <th style="text-align: right;">Nợ sau GD</th>
                   <th>Ghi chú</th>
+                  <th style="text-align: center;">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="detail-debt-history-body">
@@ -4549,7 +4551,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261019-invoice-product-search-v1"></script>
-  <script type="module" src="js/main.js?v=20261019-invoice-product-search-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261019-debt-adjustment-undo-v1"></script>
+  <script type="module" src="js/main.js?v=20261019-debt-adjustment-undo-v1"></script>
 </body>
 </html>

@@ -530,3 +530,10 @@ lọc nhãn của khách và FESTIVA trước khi lấy trang kết quả. Cách
 của tất cả hãng rồi mới lọc trên trình duyệt có thể báo không tìm thấy dù SKU
 phù hợp còn ở trang sau. Chạy sau 0096; giữ RPC cũ cho các trình duyệt chưa cập
 nhật. Frontend tương ứng: `20261019-invoice-product-search-v1`.
+
+`0098_revert_latest_order_amendment.sql` cho phép Admin/Kế toán hoàn tác lần
+sửa hoặc chuyển hóa đơn gần nhất từ lịch sử công nợ. RPC khôi phục snapshot cũ
+bằng luồng sửa đơn có sẵn, xác nhận lại giá/SKU khớp hoàn toàn rồi mới ghi sổ;
+nếu không khớp, toàn bộ transaction được rollback. Ledger vẫn được giữ nguyên
+để kiểm toán, còn hai nhóm bút toán đã bù trừ được đánh dấu ẩn trong lịch sử.
+Không áp dụng cho hóa đơn đã có phiếu thu hoặc trả hàng liên kết.
