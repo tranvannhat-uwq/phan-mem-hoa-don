@@ -2074,7 +2074,8 @@ select option {
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(8px);
-  z-index: 1000;
+  /* The responsive fixed navbar reaches z-index 1001 on scaled/tablet viewports. */
+  z-index: 1300;
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
