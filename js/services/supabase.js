@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261019-debt-adjustment-undo-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261019-debt-adjustment-undo-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261019-debt-order-event-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261019-debt-order-event-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261019-debt-adjustment-undo-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261019-debt-adjustment-undo-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261019-debt-adjustment-undo-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261019-debt-order-event-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261019-debt-order-event-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261019-debt-order-event-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -5642,6 +5642,15 @@ export async function dbFetchOrdersPaginated(search = '', status = null, custome
 
 export async function dbFetchCustomerOrderHistory(customerId, startIso, endExclusiveIso, status = 'all') {
   return dbFetchCustomersOrderHistory([customerId], startIso, endExclusiveIso, status);
+}
+
+export async function dbFetchCustomerDebtOrderEventSnapshot(ledgerId) {
+  if (!isCloudActive || !supabaseClient || !ledgerId) return null;
+  const { data, error } = await supabaseClient.rpc('rpc_get_customer_debt_order_event_snapshot', {
+    p_ledger_id: String(ledgerId)
+  });
+  if (error) throw error;
+  return data || null;
 }
 
 export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExclusiveIso, status = 'all') {

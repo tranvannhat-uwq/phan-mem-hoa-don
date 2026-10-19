@@ -14,9 +14,9 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20261019-debt-adjustment-undo-v1';
-import { renderAll } from '../main.js?v=20261019-debt-adjustment-undo-v1';
-import { renderPurchasesPanel } from './purchases.js?v=20261019-debt-adjustment-undo-v1';
+} from '../services/supabase.js?v=20261019-debt-order-event-v1';
+import { renderAll } from '../main.js?v=20261019-debt-order-event-v1';
+import { renderPurchasesPanel } from './purchases.js?v=20261019-debt-order-event-v1';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---
 

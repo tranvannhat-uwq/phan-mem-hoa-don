@@ -537,3 +537,10 @@ bằng luồng sửa đơn có sẵn, xác nhận lại giá/SKU khớp hoàn to
 nếu không khớp, toàn bộ transaction được rollback. Ledger vẫn được giữ nguyên
 để kiểm toán, còn hai nhóm bút toán đã bù trừ được đánh dấu ẩn trong lịch sử.
 Không áp dụng cho hóa đơn đã có phiếu thu hoặc trả hàng liên kết.
+
+`0099_customer_debt_order_event_snapshot.sql` thêm RPC chỉ đọc để mở chi tiết
+đơn hàng theo đúng giao dịch công nợ và khách hàng được phép xem. Bút toán
+chuyển đi dùng snapshot `old_data`, bút toán chuyển đến và sửa cùng khách dùng
+`new_data`; giao dịch gốc dùng snapshot trước lần sửa đầu tiên. Nếu không có
+snapshot thuộc đúng khách, giao diện báo chi tiết không khả dụng và không đọc
+dòng đơn hiện tại. Áp dụng migration này cùng frontend `20261019-debt-order-event-v1`.

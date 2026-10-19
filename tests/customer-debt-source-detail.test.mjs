@@ -9,6 +9,7 @@ const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf
 const html = read('index.html');
 const customerUi = read('js/components/customers.js');
 const styles = read('style.css');
+const debtSnapshotMigration = read('migrations/0099_customer_debt_order_event_snapshot.sql');
 
 test('customer debt history includes a clickable source-document column and detail modal', () => {
   const historyTable = html.slice(html.indexOf('detail-debt-history-body') - 1800, html.indexOf('detail-debt-history-body') + 200);
@@ -19,7 +20,7 @@ test('customer debt history includes a clickable source-document column and deta
   assert.match(customerUi, /openCustomerDebtSourceDetail\(\{ kind: sourceKind, id: sourceId \}, historyEntry, cust\)/);
 });
 
-test('source links use database relations and refresh the authoritative source record', () => {
+test('order source links load an authorized snapshot for the exact customer-debt ledger event', () => {
   const resolverStart = customerUi.indexOf('function getCustomerDebtSource');
   const resolverEnd = customerUi.indexOf('function debtSourceMeta', resolverStart);
   const resolver = customerUi.slice(resolverStart, resolverEnd);
@@ -27,7 +28,17 @@ test('source links use database relations and refresh the authoritative source r
   assert.match(resolver, /historyEntry\.cashbookTransactionId \|\| historyEntry\.cashbook_transaction_id/);
   assert.match(resolver, /historyEntry\.salesReturnId \|\| historyEntry\.sales_return_id/);
   assert.doesNotMatch(resolver, /note|description|match\(/);
-  assert.match(customerUi, /await dbRefreshOrderById\(source\.id\)/);
+  assert.match(customerUi, /await dbFetchCustomerDebtOrderEventSnapshot\(ledgerId\)/);
+  assert.doesNotMatch(resolver, /dbRefreshOrderById/);
+  assert.match(customerUi, /String\(rawOrder\.customer_id\) !== String\(eventSnapshot\.customer_id\)/);
+  assert.match(customerUi, /transfer_out: 'Đơn trước khi chuyển khỏi khách hàng'/);
+  assert.match(customerUi, /Không có bản chụp đơn hàng thuộc khách hàng này/);
+  assert.match(debtSnapshotMigration, /public\.can_access_customer\(ledger\.customer_id\)/);
+  assert.match(debtSnapshotMigration, /DTX-OAM-OUT-/);
+  assert.match(debtSnapshotMigration, /DTX-OAM-IN-/);
+  assert.match(debtSnapshotMigration, /amendment\.old_data/);
+  assert.match(debtSnapshotMigration, /amendment\.new_data/);
+  assert.match(debtSnapshotMigration, /snapshot->>'customer_id' IS DISTINCT FROM ledger\.customer_id/);
   assert.match(customerUi, /await dbFetchCashbookTransactionById\(source\.id\)/);
   assert.doesNotMatch(customerUi, /await dbFetchCashbookTransactions\(\)/);
 });

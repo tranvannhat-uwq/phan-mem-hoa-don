@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbRefreshOrderById, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment } from '../services/supabase.js?v=20261019-debt-adjustment-undo-v1';
-import { renderAll } from '../main.js?v=20261019-debt-adjustment-undo-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261019-debt-adjustment-undo-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261019-debt-adjustment-undo-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot } from '../services/supabase.js?v=20261019-debt-order-event-v1';
+import { renderAll } from '../main.js?v=20261019-debt-order-event-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261019-debt-order-event-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261019-debt-order-event-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261019-debt-adjustment-undo-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261019-debt-adjustment-undo-v1';
+} from '../domain/order-financials.js?v=20261019-debt-order-event-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261019-debt-order-event-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261019-debt-adjustment-undo-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261019-debt-order-event-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -3481,20 +3481,41 @@ async function openCustomerDebtSourceDetail(source, historyEntry, customer) {
 
   try {
     if (source.kind === 'order') {
-      let order = (state.savedOrders || []).find(item => String(item.id) === source.id);
-      if (!order) {
-        const refreshedOrder = await dbRefreshOrderById(source.id);
-        if (refreshedOrder === false) {
-          throw new Error(`Không tải được đơn hàng ${source.id} từ máy chủ. Vui lòng thử lại.`);
-        }
-        order = (state.savedOrders || []).find(item => String(item.id) === source.id);
+      const ledgerId = historyEntry.id || historyEntry.ledgerId || historyEntry.ledger_id;
+      if (!ledgerId) throw new Error('Không xác định được giao dịch công nợ để kiểm tra chứng từ.');
+      const eventSnapshot = await dbFetchCustomerDebtOrderEventSnapshot(ledgerId);
+      if (!eventSnapshot?.available
+        || String(eventSnapshot.order_id || '') !== source.id
+        || String(eventSnapshot.customer_id) !== String(customer?.id || historyEntry.customerId || historyEntry.customer_id || '')) {
+        document.getElementById('customer-debt-source-title').innerText = `Chi tiết đơn hàng ${source.id}`;
+        document.getElementById('customer-debt-source-meta').innerHTML = `<div style="grid-column:1/-1; padding:1rem; color:var(--text-muted); text-align:center;">Không có bản chụp đơn hàng thuộc khách hàng này cho giao dịch công nợ đã chọn. Chi tiết hiện tại không được hiển thị để tránh nhầm dữ liệu giữa khách hàng.</div>`;
+        document.getElementById('customer-debt-source-note').innerText = historyEntry.note || historyEntry.notes || '-';
+        return;
       }
-      if (!order) throw new Error(`Không tìm thấy đơn hàng ${source.id} trong phạm vi được xem.`);
+      const rawOrder = eventSnapshot.order;
+      if (!rawOrder || String(rawOrder.id) !== source.id
+        || String(rawOrder.customer_id) !== String(eventSnapshot.customer_id)) {
+        throw new Error('Bản chụp chứng từ không khớp khách hàng của giao dịch công nợ.');
+      }
+      const order = {
+        id: rawOrder.id,
+        customerName: rawOrder.customer_name,
+        date: rawOrder.order_date,
+        status: rawOrder.status,
+        items: Array.isArray(rawOrder.items) ? rawOrder.items : [],
+        subtotal: rawOrder.subtotal,
+        totalMarket: rawOrder.total_market,
+        discountAmount: rawOrder.discount_amount,
+        totalPayable: rawOrder.total_payable,
+        notes: rawOrder.notes
+      };
+      const contextLabel = ({ transfer_out: 'Đơn trước khi chuyển khỏi khách hàng', transfer_in: 'Đơn tại thời điểm chuyển đến khách hàng', amendment: 'Đơn sau lần điều chỉnh', original_order: 'Đơn tại thời điểm ghi nhận công nợ' })[eventSnapshot.event_context] || 'Đơn hàng';
 
-      document.getElementById('customer-debt-source-title').innerText = `Chi tiết đơn hàng ${source.id}`;
+      document.getElementById('customer-debt-source-title').innerText = `${contextLabel}: ${source.id}`;
       document.getElementById('customer-debt-source-meta').innerHTML = [
         debtSourceMeta('Mã đơn', order.id),
-        debtSourceMeta('Khách hàng', order.customerName || customer?.name),
+        debtSourceMeta('Khách hàng', order.customerName),
+        debtSourceMeta('Ngữ cảnh', contextLabel),
         debtSourceMeta('Thời gian', formatDateOnly(order.date)),
         debtSourceMeta('Trạng thái', order.status === 'settled' ? 'Đã chốt' : order.status === 'cancelled' ? 'Đã hủy' : order.status || '-')
       ].join('');
