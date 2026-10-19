@@ -544,3 +544,14 @@ chuyển đi dùng snapshot `old_data`, bút toán chuyển đến và sửa cù
 `new_data`; giao dịch gốc dùng snapshot trước lần sửa đầu tiên. Nếu không có
 snapshot thuộc đúng khách, giao diện báo chi tiết không khả dụng và không đọc
 dòng đơn hiện tại. Áp dụng migration này cùng frontend `20261019-debt-order-event-v1`.
+
+`0100_customer_debt_history_correction.sql` sửa riêng dữ liệu đơn
+`HD-20261017-00002802` đã bị chuyển từ Duy Cường sang Nguyễn Văn Mạnh. Migration
+kiểm tra số dư Duy Cường còn 292.200 đ và các snapshot đúng như đã rà soát,
+sau đó ghi thêm bút toán bù 545.935 đ để số dư thành 838.135 đ; đơn mới
+`HD-20261019-00002873` và đơn hiện tại của Mạnh được giữ nguyên. Bút toán
+chuyển nhầm và bút toán bù được đánh dấu thành cặp 0 đồng, ẩn trong lịch sử
+thông thường nhưng còn nguyên trong sổ cái và audit log. Nếu dữ liệu phát sinh
+khác trước khi chạy, migration dừng và không ghi gì. Frontend tương ứng:
+`20261019-debt-history-correction-v1`. Vì đây là sửa dữ liệu tài chính thật,
+người quản lý chạy SQL trên dự án SoViet sau khi xem lại các điều kiện ở trên.

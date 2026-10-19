@@ -163,7 +163,8 @@ function debtRelationValue(entry = {}, camelKey, snakeKey) {
  */
 export function projectEffectiveCustomerDebtHistory(history = []) {
   const entries = (Array.isArray(history) ? history : []).filter(entry =>
-    entry && !entry.voidedByAmendmentId && !entry.voided_by_amendment_id);
+    entry && !entry.voidedByAmendmentId && !entry.voided_by_amendment_id
+      && !entry.historyCorrectionKey && !entry.history_correction_key);
   const byId = new Map(entries
     .filter(entry => entry.id)
     .map(entry => [String(entry.id), entry]));

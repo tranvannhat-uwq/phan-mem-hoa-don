@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261019-debt-order-event-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261019-debt-order-event-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261019-debt-history-correction-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261019-debt-history-correction-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261019-debt-order-event-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261019-debt-order-event-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261019-debt-order-event-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261019-debt-history-correction-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261019-debt-history-correction-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261019-debt-history-correction-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -877,7 +877,8 @@ function mapCustomerDebtTransaction(row) {
     cashbookTransactionId: row.cashbook_transaction_id || null,
     reversalOfId: row.reversal_of_id || null,
     amendsLedgerId: row.amends_ledger_id || null,
-    voidedByAmendmentId: row.voided_by_amendment_id || null
+    voidedByAmendmentId: row.voided_by_amendment_id || null,
+    historyCorrectionKey: row.history_correction_key || null
   };
 }
 
@@ -903,12 +904,16 @@ export function applyCustomerDebtRealtimePayload(payload = {}) {
 
 async function hydrateCustomerDebtHistory(customers) {
   if (!Array.isArray(customers) || customers.length === 0) return customers;
-  const [rows, voidRows] = await Promise.all([
+  const [rows, voidRows, correctionRows] = await Promise.all([
     fetchFullTableData(tableCustomerDebtTransactionsName),
-    fetchCustomerDebtAmendmentVoidRows()
+    fetchCustomerDebtAmendmentVoidRows(),
+    fetchCustomerDebtHistorySuppressions()
   ]);
   const voidsByLedgerId = new Map((voidRows || []).map(row => [
     String(row.ledger_id), row.reversal_amendment_id || ''
+  ]));
+  const correctionsByLedgerId = new Map((correctionRows || []).map(row => [
+    String(row.ledger_id), row.correction_key || ''
   ]));
   const byCustomer = new Map();
   (rows || []).forEach(row => {
@@ -917,7 +922,8 @@ async function hydrateCustomerDebtHistory(customers) {
     if (!byCustomer.has(key)) byCustomer.set(key, []);
     byCustomer.get(key).push(mapCustomerDebtTransaction({
       ...row,
-      voided_by_amendment_id: voidsByLedgerId.get(String(row.id)) || null
+      voided_by_amendment_id: voidsByLedgerId.get(String(row.id)) || null,
+      history_correction_key: correctionsByLedgerId.get(String(row.id)) || null
     }));
   });
   customers.forEach(customer => {
@@ -944,14 +950,48 @@ async function fetchCustomerDebtRows(customerId) {
     rows.push(...(data || []));
     if (!data || data.length < pageSize) break;
   }
-  const voidRows = await fetchCustomerDebtAmendmentVoidRows(customerId);
+  const [voidRows, correctionRows] = await Promise.all([
+    fetchCustomerDebtAmendmentVoidRows(customerId),
+    fetchCustomerDebtHistorySuppressions(customerId)
+  ]);
   const voidsByLedgerId = new Map((voidRows || []).map(row => [
     String(row.ledger_id), row.reversal_amendment_id || ''
   ]));
+  const correctionsByLedgerId = new Map((correctionRows || []).map(row => [
+    String(row.ledger_id), row.correction_key || ''
+  ]));
   return rows.map(row => ({
     ...row,
-    voided_by_amendment_id: voidsByLedgerId.get(String(row.id)) || null
+    voided_by_amendment_id: voidsByLedgerId.get(String(row.id)) || null,
+    history_correction_key: correctionsByLedgerId.get(String(row.id)) || null
   }));
+}
+
+async function fetchCustomerDebtHistorySuppressions(customerId = null) {
+  if (!supabaseClient) return [];
+  try {
+    const rows = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      let query = supabaseClient
+        .from('customer_debt_history_suppressions')
+        .select('ledger_id,customer_id,correction_key')
+        .order('ledger_id', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (customerId) query = query.eq('customer_id', customerId);
+      const { data, error } = await query;
+      if (error) {
+        if (['42P01', 'PGRST205'].includes(error.code)) return [];
+        throw error;
+      }
+      rows.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+    return rows;
+  } catch (error) {
+    console.warn('Could not load debt history corrections:', error.message || error);
+    return [];
+  }
 }
 
 async function fetchCustomerDebtAmendmentVoidRows(customerId = null) {
