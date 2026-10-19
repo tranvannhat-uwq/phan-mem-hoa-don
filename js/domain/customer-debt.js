@@ -157,9 +157,8 @@ function debtRelationValue(entry = {}, camelKey, snakeKey) {
  * Build the effective business history shown to users.
  *
  * The database ledger remains append-only for audit. Cancellation rows remove
- * their whole source document from this projection. Non-order amendment rows
- * are folded into their source transaction; order amendments stay separate so
- * later invoices retain their real posting-time balance in the history view.
+ * their whole source document from this projection. Amendments are folded
+ * into their source transaction so users see one current row per document.
  */
 export function projectEffectiveCustomerDebtHistory(history = []) {
   const entries = (Array.isArray(history) ? history : []).filter(entry =>
@@ -221,38 +220,17 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
     const target = targetId ? projected.get(targetId) : null;
     const amendmentChange = toDebtAmount(amendment.debtChange ?? amendment.debt_change);
 
-    if (type === 'order_amend') {
-      // Keep invoice edits at their actual posting time. Folding this delta
-      // into the original order made later invoices appear to have been issued
-      // against a balance that did not exist yet, while their saved snapshots
-      // correctly preserved the balance at issuance.
-      if (amendmentChange !== 0 && amendmentId) {
-        projected.set(amendmentId, {
-          ...amendment,
-          type: 'order_amend',
-          transactionType: 'order_amend',
-          amount: Math.abs(amendmentChange),
-          debtChange: amendmentChange,
-          postedAt: amendment.postedAt || amendment.posted_at
-            || amendment.createdAt || amendment.created_at
-            || getCustomerDebtPostingDate(amendment)
-        });
-        hiddenIds.delete(amendmentId);
-      }
-      continue;
-    }
-
     if (target) {
       const effectiveChange = toDebtAmount(target.debtChange ?? target.debt_change) + amendmentChange;
       target.debtChange = effectiveChange;
       target.amount = Math.abs(effectiveChange);
       target.debtAfter = toDebtAmount(amendment.debtAfter ?? amendment.balance_after);
-      target.date = amendment.date || target.date;
+      if (type !== 'order_amend') target.date = amendment.date || target.date;
       // A date-only amendment is metadata, not a new financial event. Keep
       // the original posting position so changing the voucher date cannot
       // move an old payment above newer transactions and break the visible
       // running-balance sequence.
-      if (amendmentChange !== 0) {
+      if (type !== 'order_amend' && amendmentChange !== 0) {
         target.postedAt = getCustomerDebtPostingDate(amendment) || getCustomerDebtPostingDate(target);
       }
       // Alias the hidden delta to its visible target so a later amendment can
@@ -272,7 +250,11 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
         type: effectiveType,
         transactionType: effectiveType === 'charge' ? 'order' : effectiveType,
         amount: Math.abs(amendmentChange),
-        debtChange: amendmentChange
+        debtChange: amendmentChange,
+        ...(type === 'order_amend' ? {
+          postedAt: amendment.date || amendment.transactionDate || amendment.transaction_date
+            || getCustomerDebtPostingDate(amendment)
+        } : {})
       });
       hiddenIds.delete(amendmentId);
     }
@@ -298,11 +280,9 @@ function getCustomerDebtEntryChange(entry = {}) {
 
 /**
  * Create the effective user-facing ledger. Technical cancellations are
- * removed and non-order amendments are folded. Order amendments remain
- * separate posting events so later invoice snapshots line up with the balance
- * shown at issue time. Preserve stored before/after snapshots whenever they
- * form a continuous ledger; only legacy rows without a valid chain are
- * reconstructed.
+ * removed and amendments are folded into their source document. Preserve
+ * stored before/after snapshots whenever they form a continuous ledger; only
+ * histories without a valid chain are reconstructed to the current balance.
  */
 export function buildCustomerDebtDisplayHistory(history = [], currentDebt = 0) {
   const chronological = projectEffectiveCustomerDebtHistory(history)

@@ -3695,10 +3695,20 @@ export async function openCustomerDetailModal(index) {
         let debtBefore = 0;
         const noteText = h.note || h.notes || '-';
         const isOrderAmendment = h.transactionType === 'order_amend';
-        const canRevertOrderAmendment = canRevertOrderAmendments
-          && isOrderAmendment
-          && revertibleOrderAmendmentIds.has(String(h.id || ''));
         const source = getCustomerDebtSource(h);
+        const rowOrderId = String(h.orderId || h.order_id || (source?.kind === 'order' ? source.id : ''));
+        const revertibleOrderAmendment = canRevertOrderAmendments
+          ? (cust.debtHistory || [])
+            .filter(entry => {
+              const transactionType = String(entry.transactionType ?? entry.transaction_type ?? entry.type ?? '').toLowerCase();
+              const entryOrderId = String(entry.orderId || entry.order_id || '');
+              return transactionType === 'order_amend'
+                && entryOrderId === rowOrderId
+                && revertibleOrderAmendmentIds.has(String(entry.id || ''));
+            })
+            .sort((left, right) => new Date(getCustomerDebtPostingDate(right) || 0) - new Date(getCustomerDebtPostingDate(left) || 0))[0]
+          : null;
+        const canRevertOrderAmendment = Boolean(revertibleOrderAmendment);
         const sourceIcon = source?.kind === 'cashbook' ? 'receipt-text' : source?.kind === 'return' ? 'rotate-ccw' : 'file-text';
         const sourceCell = source
           ? `<button type="button" class="customer-debt-source-link" data-source-kind="${escapeCustomerHtml(source.kind)}" data-source-id="${escapeCustomerHtml(source.id)}" data-history-id="${escapeCustomerHtml(h.id || '')}" title="Mở chứng từ ${escapeCustomerHtml(source.id)}"><i data-lucide="${sourceIcon}" aria-hidden="true"></i><span>${escapeCustomerHtml(getCustomerDebtSourceDisplayCode(source))}</span></button>`
@@ -3765,7 +3775,7 @@ export async function openCustomerDetailModal(index) {
             <td style="text-align: right; font-weight: 600;">${formatCurrency(h.debtAfter)}</td>
             <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeCustomerHtml(noteText)}">${escapeCustomerHtml(noteText)}</td>
             <td style="text-align:center;">${canRevertOrderAmendment
-              ? `<button type="button" class="btn btn-danger btn-xs customer-debt-revert-amendment" data-ledger-id="${escapeCustomerHtml(h.id)}" title="Hoàn tác lần sửa hóa đơn gần nhất"><i data-lucide="trash-2" aria-hidden="true"></i><span>Xóa</span></button>`
+              ? `<button type="button" class="btn btn-danger btn-xs customer-debt-revert-amendment" data-ledger-id="${escapeCustomerHtml(revertibleOrderAmendment.id)}" title="Hoàn tác lần sửa hóa đơn gần nhất"><i data-lucide="rotate-ccw" aria-hidden="true"></i><span>Hoàn tác</span></button>`
               : '<span style="color:var(--text-muted);">-</span>'}</td>
           </tr>
         `;
@@ -3791,10 +3801,12 @@ export async function openCustomerDetailModal(index) {
         button.addEventListener('click', async () => {
           const ledgerId = button.getAttribute('data-ledger-id');
           const historyEntry = sortedHistory.find(entry => String(entry.id || '') === String(ledgerId || ''));
-          if (!ledgerId || !historyEntry || button.disabled) return;
-          const source = getCustomerDebtSource(historyEntry);
+          const amendmentEntry = historyEntry || (cust.debtHistory || [])
+            .find(entry => String(entry.id || '') === String(ledgerId || ''));
+          if (!ledgerId || !amendmentEntry || button.disabled) return;
+          const source = getCustomerDebtSource(amendmentEntry);
           const confirmed = confirm(
-            `Xóa điều chỉnh này bằng cách khôi phục hóa đơn ${source?.id || historyEntry.orderId || ''} về trạng thái trước lần sửa gần nhất?\n\nCông nợ và doanh số sẽ được tính lại. Dấu vết gốc vẫn được lưu để kiểm toán. Chỉ hoàn tác được nếu hóa đơn chưa có phiếu thu hoặc trả hàng liên kết và dữ liệu giá cũ còn khôi phục chính xác.`
+            `Hoàn tác lần sửa gần nhất của hóa đơn ${source?.id || amendmentEntry.orderId || amendmentEntry.order_id || ''}?\n\nCông nợ và doanh số sẽ được tính lại. Dấu vết gốc vẫn được lưu để kiểm toán. Chỉ hoàn tác được nếu hóa đơn chưa có phiếu thu hoặc trả hàng liên kết và dữ liệu giá cũ còn khôi phục chính xác.`
           );
           if (!confirmed) return;
 
@@ -3812,7 +3824,7 @@ export async function openCustomerDetailModal(index) {
           await Promise.all(affectedCustomerIds
             .filter(customerId => customerId !== String(cust.id))
             .map(customerId => dbRefreshCustomerFinancialState(customerId)));
-          showToast(`Đã hoàn tác điều chỉnh của hóa đơn ${result.order_id || source?.id || ''}.`, 'success');
+          showToast(`Đã hoàn tác lần sửa của hóa đơn ${result.order_id || source?.id || ''}.`, 'success');
           const currentIndex = state.customers.findIndex(customer => String(customer.id) === String(cust.id));
           if (currentIndex >= 0) await openCustomerDetailModal(currentIndex);
         });

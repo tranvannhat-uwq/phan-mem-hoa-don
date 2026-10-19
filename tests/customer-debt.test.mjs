@@ -219,24 +219,20 @@ const orderAmendmentHistory = projectEffectiveCustomerDebtHistory([
     date: '2026-08-04T09:15:00+07:00', postedAt: '2026-09-02T09:15:00+07:00'
   }
 ]);
-assert.equal(orderAmendmentHistory.length, 3, 'Order amendments remain visible posting events');
+assert.equal(orderAmendmentHistory.length, 1, 'Order amendments are folded into the original invoice row');
 assert.equal(orderAmendmentHistory[0].id, 'order-charge');
 assert.equal(orderAmendmentHistory[0].orderId, 'HD-OLD');
-assert.deepEqual(orderAmendmentHistory.map(entry => [entry.id, entry.debtChange]), [
-  ['order-charge', 288332],
-  ['order-amend-1', 50000],
-  ['order-amend-2', -10000]
-]);
-assert.equal(orderAmendmentHistory[1].transactionType, 'order_amend');
+assert.equal(orderAmendmentHistory[0].debtChange, 328332);
+assert.equal(orderAmendmentHistory[0].amount, 328332);
 assert.equal(
-  getCustomerDebtPostingDate(orderAmendmentHistory[1]),
-  '2026-09-01T09:15:00+07:00',
-  'The amendment is ordered by when its debt delta was posted'
+  getCustomerDebtPostingDate(orderAmendmentHistory[0]),
+  '2026-08-04T09:15:00+07:00',
+  'The visible invoice keeps its original posting position after edits are folded'
 );
 assert.equal(
-  getCustomerDebtBusinessDate(orderAmendmentHistory[1]),
+  getCustomerDebtBusinessDate(orderAmendmentHistory[0]),
   '2026-08-04T09:15:00+07:00',
-  'The amendment still displays the invoice business date'
+  'The visible invoice keeps its business date after edits are folded'
 );
 
 console.log('customer-debt.test.mjs: all assertions passed');
