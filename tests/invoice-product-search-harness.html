@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kiểm tra tìm sản phẩm khi lên đơn</title>
+  <link rel="stylesheet" href="../style.css">
+  <script>window.__app_initialized = true;</script>
+</head>
+<body style="padding:24px">
+  <main class="glass-panel" style="max-width:1100px;margin:auto;padding:24px">
+    <h1>Kiểm tra tìm sản phẩm · phiên Sale</h1>
+    <p>Dữ liệu mẫu: 60 SKU của COVA đứng trước SKU NANO10. Không kết nối dữ liệu thật.</p>
+    <label for="harness-brand">Khách hàng đã chọn · nhãn sơn</label>
+    <select id="harness-brand" class="form-control">
+      <option>NANO10 MB</option><option>COVA NANO</option><option>Tất cả</option>
+    </select>
+    <label for="harness-mode">Máy chủ mẫu</label>
+    <select id="harness-mode" class="form-control">
+      <option value="current">Đã có 0097</option><option value="legacy">Chỉ có 0096</option><option value="offline">Mất mạng</option>
+    </select>
+    <select id="invoice-pricelist-select" class="form-control"><option value="general">Bảng giá chung</option></select>
+    <div style="position:relative;margin-top:20px">
+      <input id="invoice-product-search" class="form-control-search" placeholder="Nhập mã hoặc tên sản phẩm" autocomplete="off">
+      <ul id="invoice-product-suggestions" class="suggestions-list" style="display:none"></ul>
+    </div>
+    <button id="btn-add-to-invoice-table" type="button" class="btn btn-primary">Thêm</button>
+    <table class="table invoice-items-table" style="margin-top:20px">
+      <thead><tr><th>Mã SP</th><th>Tên sản phẩm</th><th>Màu</th><th>Quy cách</th><th>SL</th><th>Đơn giá</th><th>Ghi chú</th><th>Thành tiền</th><th>Xóa</th></tr></thead>
+      <tbody id="invoice-items-body"></tbody>
+    </table>
+    <output id="harness-status">Đang tải…</output>
+  </main>
+  <div id="toast-container"></div>
+  <div class="modal-overlay invoice-variant-overlay" id="invoice-variant-modal">
+    <div class="modal-content invoice-variant-modal-content">
+      <div class="modal-header"><div><div id="invoice-variant-base-code"></div><h3 id="invoice-variant-modal-title"></h3><div id="invoice-variant-brand"></div></div><button id="btn-close-invoice-variant-modal">Đóng</button></div>
+      <div class="modal-body"><div class="variant-choice-list" id="invoice-variant-options"></div></div>
+    </div>
+  </div>
+  <script type="module">
+    import { state } from '../js/state.js';
+    import { connectSupabase } from '../js/services/supabase.js?v=20261019-invoice-product-search-v1';
+    import { setupInvoiceCreator, renderInvoiceTable } from '../js/components/invoice.js?v=20261019-invoice-product-search-v1';
+    import { normalizeCatalogText } from '../js/domain/product-catalog.js?v=20261019-invoice-product-search-v1';
+
+    window.addEventListener('error', event => document.body.dataset.error = event.message);
+    window.addEventListener('unhandledrejection', event => document.body.dataset.error = event.reason?.message || String(event.reason));
+    const product = (id, code, brand, group, packageType = 'Lon') => ({
+      id, code, variant_code: code, base_code: group, product_group_id: group,
+      name: 'Sơn lót chống kiềm nội thất cao cấp', brand,
+      brand_id: brand === 'NANO10 MB' ? 'brand_nano10mb' : 'brand_covanano',
+      package_type: packageType, packaging_name: packageType,
+      package_weight: packageType === 'Lon' ? 5 : 20, package_weight_unit: 'kg',
+      is_active: true, is_legacy: false
+    });
+    const products = [
+      ...Array.from({length:60}, (_,i) => product(`other-${i}`,`AA-${String(i).padStart(3,'0')}`,'COVA NANO',`other-${i}`)),
+      product('target-lon','NT-Đ1-LON','NANO10 MB','NT-Đ1'),
+      product('target-thung','NT-Đ1-THUNG','NANO10 MB','NT-Đ1','Thùng')
+    ];
+    let calls = 0;
+    const client = {
+      auth: { getSession: async () => ({data:{session:null}}) },
+      async rpc(name, args) {
+        calls += 1;
+        document.getElementById('harness-status').textContent = `Đã gọi ${calls} RPC mẫu · danh mục cục bộ ${state.products.length} SKU`;
+        const mode = document.getElementById('harness-mode').value;
+        if (mode === 'offline') return {data:null,error:{code:'NETWORK',message:'Mất mạng mẫu'}};
+        if (name === 'rpc_egress_search_invoice_products' && mode === 'legacy') return {data:null,error:{code:'PGRST202'}};
+        if (name === 'rpc_egress_product_family') return {data:{data:products.filter(row => row.product_group_id === products.find(row => row.id === args.p_product_id)?.product_group_id),hasMore:false},error:null};
+        if (!['rpc_egress_search_invoice_products','rpc_egress_search_products'].includes(name)) throw new Error('Harness chỉ cho phép đọc sản phẩm');
+        const terms = normalizeCatalogText(args.p_query).split(' ').filter(Boolean);
+        const matched = products.filter(row => {
+          if (name === 'rpc_egress_search_invoice_products' && args.p_brand && !['Tất cả','all'].includes(args.p_brand)
+            && row.brand_id !== args.p_brand && row.brand !== args.p_brand) return false;
+          if (args.p_after_code && (row.code < args.p_after_code || (row.code === args.p_after_code && row.id <= args.p_after_id))) return false;
+          return terms.every(term => normalizeCatalogText([row.code,row.name,row.brand,row.package_type].join(' ')).includes(term));
+        });
+        const rows = matched.slice(0,args.p_limit);
+        const last = rows.at(-1);
+        return {data:{data:rows,hasMore:matched.length > rows.length,nextCursor:last ? {code:last.code,id:last.id} : null},error:null};
+      }
+    };
+    window.supabase = {createClient:() => client};
+    await connectSupabase('https://synthetic.invalid','synthetic-key',false);
+    state.currentUser = {id:'sale-test',authUserId:'sale-test',username:'sale-test',role:'sale'};
+    state.activeCustomerId = 'customer-test';
+    state.activeCustomerBrand = 'NANO10 MB';
+    state.brands = [{id:'brand_nano10mb',name:'NANO10 MB'},{id:'brand_covanano',name:'COVA NANO'}];
+    state.customers = [{id:'customer-test',assignedBrand:'NANO10 MB',pricelistId:'general'}];
+    state.products = [];
+    state.pricelists = [{id:'general',name:'Bảng giá chung',type:'general',isActive:true,isAvailableForSales:true}];
+    state.allPricelists = [...state.pricelists];
+    state.priceListItems = products.map(row => ({productId:row.id,variantId:row.id,priceListId:'general',price:row.package_type === 'Lon' ? 200000 : 700000}));
+    state.allPriceListItems = [...state.priceListItems];
+    state.pricingSnapshotActorId = 'sale-test'; state.pricingSnapshotRole = 'sale'; state.pricingSnapshotComplete = true;
+    setupInvoiceCreator(); renderInvoiceTable();
+    for (const id of ['harness-brand','harness-mode']) document.getElementById(id).addEventListener('change', () => {
+      state.activeCustomerBrand = document.getElementById('harness-brand').value;
+      state.activeCustomerId = `customer-${state.activeCustomerBrand}`;
+      state.customers = [{id:state.activeCustomerId,assignedBrand:state.activeCustomerBrand,pricelistId:'general'}];
+      document.getElementById('invoice-product-search').dispatchEvent(new Event('input'));
+    });
+    document.getElementById('harness-status').textContent = 'Sẵn sàng · danh mục cục bộ 0 SKU';
+    document.body.dataset.ready = 'true';
+  </script>
+</body>
+</html>

@@ -519,3 +519,14 @@ RPC phụ bị tạo nhầm và cài đúng `rpc_bom_save_item`. Nếu 0093 đã
 `0095_product_name_token_search.sql` cập nhật RPC tìm SKU của đơn hàng để tìm
 đủ các từ khóa tên sản phẩm theo thứ tự bất kỳ, không phân biệt dấu và dấu câu.
 Áp dụng sau 0090 để tìm theo tên nhất quán với bộ lọc trên trình duyệt.
+
+`0096_invoice_product_packaging_fallback.sql` sửa RPC tìm SKU và tải quy cách
+trong hóa đơn: một SKU đang bán được nếu có `package_type` hoặc
+`packaging_name`. Dùng migration này sau 0095 khi các dòng sản phẩm cũ chỉ có
+`packaging_name`, nếu không nhân viên kinh doanh sẽ không thấy chúng khi lên đơn.
+
+`0097_invoice_product_brand_search.sql` thêm RPC tìm sản phẩm riêng cho hóa đơn,
+lọc nhãn của khách và FESTIVA trước khi lấy trang kết quả. Cách cũ lấy 40 SKU
+của tất cả hãng rồi mới lọc trên trình duyệt có thể báo không tìm thấy dù SKU
+phù hợp còn ở trang sau. Chạy sau 0096; giữ RPC cũ cho các trình duyệt chưa cập
+nhật. Frontend tương ứng: `20261019-invoice-product-search-v1`.

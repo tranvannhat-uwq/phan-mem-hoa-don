@@ -40,7 +40,10 @@ before(async () => {
   for (const file of [
     '0088_integrated_inventory_free_budget.sql',
     '0089_inventory_sync_toggle.sql',
-    '0090_bounded_customer_product_lookup.sql'
+    '0090_bounded_customer_product_lookup.sql',
+    '0095_product_name_token_search.sql',
+    '0096_invoice_product_packaging_fallback.sql',
+    '0097_invoice_product_brand_search.sql'
   ]) {
     try { await db.exec(await readFile(new URL(file, fixture), 'utf8')); }
     catch (error) { throw new Error(`${file}: ${error.message}\n${error.where || ''}`); }
@@ -65,6 +68,7 @@ after(async () => { if (db) await db.close(); });
 test('anonymous and inactive accounts cannot search; Sale sees only own or assigned customers', async () => {
   await as(null, 'anon');
   await assert.rejects(rpc('rpc_egress_search_customers', ['buyer'], ['text']), /permission denied|authentication required/);
+  await assert.rejects(rpc('rpc_egress_search_invoice_products', ['paint'], ['text']), /permission denied|authentication required/);
   await as(sale);
   const found = await rpc('rpc_egress_search_customers', ['buyer'], ['text']);
   assert.deepEqual(found.data.map(row => row.id).sort(), ['customer-assigned', 'customer-visible']);
@@ -79,6 +83,7 @@ test('anonymous and inactive accounts cannot search; Sale sees only own or assig
   await db.query('UPDATE public.profiles SET is_active=false WHERE auth_user_id=$1', [other]);
   await as(other);
   await assert.rejects(rpc('rpc_egress_search_products', ['FAM'], ['text']), /active profile required/);
+  await assert.rejects(rpc('rpc_egress_search_invoice_products', ['FAM'], ['text']), /active profile required/);
   await db.exec('RESET ROLE');
   await db.query('UPDATE public.profiles SET is_active=true WHERE auth_user_id=$1', [other]);
 });
@@ -166,4 +171,77 @@ test('filters reject oversized input and cursor mismatch; literal wildcard does 
   await assert.rejects(rpc('rpc_egress_search_products', ['', 10, 'A'], ['text','integer','text']), /Invalid product lookup filter/);
   const literal = await rpc('rpc_egress_search_customers', ["%' OR 1=1 --"], ['text']);
   assert.equal(literal.data.length, 0);
+});
+
+test('invoice lookup filters the customer brand before the first 40 matches and retains Festiva', async () => {
+  await db.exec('RESET ROLE');
+  await db.exec(`INSERT INTO public.brands(id,name) VALUES
+    ('lookup-target','Nhãn đích'),('lookup-other','Hãng khác'),('brand_festivanano','FESTIVA NANO')
+    ON CONFLICT(id) DO NOTHING;
+    INSERT INTO public.products(id,code,name,brand,brand_id,package_type,is_active,is_legacy)
+      SELECT 'other-brand-'||g,'AA-'||lpad(g::text,4,'0'),'Sơn lót chống kiềm nội thất',
+        'Hãng khác','lookup-other','Lon',true,false FROM generate_series(1,60) g;
+    INSERT INTO public.products(id,code,variant_code,name,brand,brand_id,packaging_name,base_code,barcode,is_active,is_legacy)
+      VALUES ('target-brand-sku','ZZ-Đ1-LON','ALIAS-Đ1-LON','Sơn lót chống kiềm nội thất',
+        'NHÃN ĐÍCH  ','lookup-target','Lon','ZZ-Đ1','893000000001',true,false);
+    INSERT INTO public.products(id,code,name,brand,brand_id,package_type,is_active,is_legacy)
+      VALUES ('festival-sku','FT-LOT','Sơn lót chung','FESTIVA NANO','brand_festivanano','Lon',true,false);`);
+  await as(sale);
+  const oldPage = await rpc('rpc_egress_search_products', ['Sơn lót', 40, null, null, true], ['text','integer','text','text','boolean']);
+  assert.equal(oldPage.hasMore, true);
+  assert.ok(!oldPage.data.some(row => row.id === 'target-brand-sku'));
+  for (const brand of ['lookup-target', 'nhan dich']) {
+    const page = await rpc('rpc_egress_search_invoice_products', ['Sơn lót', 40, null, null, brand], ['text','integer','text','text','text']);
+    assert.deepEqual(page.data.map(row => row.id), ['festival-sku','target-brand-sku']);
+    assert.equal(page.hasMore, false);
+  }
+  const unknown = await rpc('rpc_egress_search_invoice_products', ['Sơn lót', 40, null, null, 'Unknown brand'], ['text','integer','text','text','text']);
+  assert.deepEqual(unknown.data.map(row => row.id), ['festival-sku']);
+  const all = await rpc('rpc_egress_search_invoice_products', ['Sơn lót', 40], ['text','integer']);
+  assert.equal(all.data.length, 40);
+  assert.equal(all.hasMore, true);
+});
+
+test('invoice lookup accepts names in any word order, alternate SKU codes and packaging_name-only rows', async () => {
+  await as(sale);
+  for (const query of ['noi-that, lot SON', 'ZZ-D1-LON', 'ALIAS-D1-LON', '893000000001']) {
+    const page = await rpc('rpc_egress_search_invoice_products', [query, 40, null, null, 'lookup-target'], ['text','integer','text','text','text']);
+    assert.deepEqual(page.data.map(row => row.id), ['target-brand-sku']);
+  }
+  const family = await rpc('rpc_egress_product_family', ['target-brand-sku'], ['text']);
+  assert.equal(family.data[0].packaging_name, 'Lon');
+  assert.equal(family.data[0].package_type, null);
+  for (const query of ['', '---', '%_']) {
+    const page = await rpc('rpc_egress_search_invoice_products', [query], ['text']);
+    assert.deepEqual(page.data, []);
+    assert.equal(page.hasMore, false);
+  }
+});
+
+test('invoice pagination is lossless after brand and 32 KiB filtering', async () => {
+  await db.exec('RESET ROLE');
+  await db.exec(`INSERT INTO public.products(id,code,name,brand,brand_id,package_type,display_specification,is_active,is_legacy)
+    SELECT 'brand-page-'||g,'PAGE-'||lpad(g::text,3,'0'),'Sơn lót kiểm thử phân trang',
+      'Nhãn đích','lookup-target','Lon',repeat('ơ',1800),true,false FROM generate_series(1,65) g;`);
+  await as(sale);
+  const seen = new Set();
+  let cursor = null;
+  let pages = 0;
+  do {
+    const page = await rpc('rpc_egress_search_invoice_products', ['kiểm thử phân trang',500,cursor?.code ?? null,cursor?.id ?? null,'lookup-target'], ['text','integer','text','text','text']);
+    assert.ok(page.data.length > 0 && page.data.length <= 50);
+    assert.ok(Buffer.byteLength(JSON.stringify(page), 'utf8') <= 32768);
+    for (const row of page.data) {
+      assert.equal(row.brand_id, 'lookup-target');
+      assert.ok(!seen.has(row.id));
+      seen.add(row.id);
+    }
+    cursor = page.hasMore ? page.nextCursor : null;
+    pages += 1;
+    assert.ok(pages < 20);
+  } while (cursor);
+  assert.equal(seen.size, 65);
+  assert.ok(pages > 2);
+  await assert.rejects(rpc('rpc_egress_search_invoice_products', ['son',40,'PAGE-1'], ['text','integer','text']), /Invalid invoice product lookup filter/);
+  await assert.rejects(rpc('rpc_egress_search_invoice_products', ['son',40,null,null,'x'.repeat(257)], ['text','integer','text','text','text']), /Invalid invoice product lookup filter/);
 });

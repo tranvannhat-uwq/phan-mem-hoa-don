@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20261017-purchase-ui-live-v6';
-import { switchTab } from '../main.js?v=20261017-purchase-ui-live-v6';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20261017-purchase-ui-live-v6';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20261019-invoice-product-search-v1';
+import { switchTab } from '../main.js?v=20261019-invoice-product-search-v1';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20261019-invoice-product-search-v1';
 import { safeCreateIcons, showToast, makeSelectSearchable } from '../utils.js';
 
 const PAGE_SIZE = 20;

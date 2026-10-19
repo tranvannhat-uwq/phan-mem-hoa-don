@@ -105,6 +105,12 @@ assert.equal(skuSearch[0].matchedVariantId, 'ct-d1-lon');
 assert.equal(searchProductFamilies(families, '22,5 kg')[0].id, ctFamily.id);
 assert.equal(searchProductFamilies(families, 'COVA NANO').length, 2);
 assert.equal(searchProductFamilies(families, 'Lon 6,3')[0].matchedVariantId, 'ct-d1-lon');
+const aliasFamilies = buildProductFamilies([{ ...products[0], variantCode: 'ALIAS-Đ1-LON', barcode: '893000000001' }]);
+for (const query of ['ALIAS-D1-LON', '893000000001']) {
+  const [match] = searchProductFamilies(aliasFamilies, query);
+  assert.equal(match.matchedVariantId, 'ct-d1-lon');
+  assert.equal(match.matchRank, 0);
+}
 assert.equal(shouldAutoSelectVariant(ctFamily), false);
 assert.equal(shouldAutoSelectVariant(families.find(family => family.baseCode === 'BA-46')), true);
 

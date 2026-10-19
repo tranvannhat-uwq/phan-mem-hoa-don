@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261017-purchase-ui-live-v6';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261017-purchase-ui-live-v6';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261019-invoice-product-search-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261019-invoice-product-search-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261017-purchase-ui-live-v6';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261017-purchase-ui-live-v6';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261017-purchase-ui-live-v6';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261019-invoice-product-search-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261019-invoice-product-search-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261019-invoice-product-search-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -1376,7 +1376,7 @@ function normalizeProductRow(row, localProducts = []) {
     brandId: row.brand_id || (local ? local.brandId : null),
     group: row.product_group || row.group || (local ? local.group : ''),
     payrollProductGroupId: row.payroll_product_group_id || (local ? local.payrollProductGroupId : null) || null,
-    packageType: row.package_type || row.packageType || '',
+    packageType: row.package_type || row.packageType || row.packaging_name || row.packagingName || '',
     packagingName: row.packaging_name || row.package_type || row.packageType || '',
     packageWeight: row.package_weight || row.packageWeight || '',
     weightOrVolume: row.weight_or_volume ?? row.package_weight ?? row.packageWeight ?? '',
@@ -5419,14 +5419,25 @@ export async function dbSearchInvoiceCustomers(query, { limit = 30 } = {}) {
   return Object.assign(rows, { hasMore: result?.hasMore === true, nextCursor: result?.nextCursor || null });
 }
 
-export async function dbSearchInvoiceProducts(query, { limit = 40, cursor = null } = {}) {
-  const result = await invoiceReadRpc('rpc_egress_search_products', {
+export async function dbSearchInvoiceProducts(query, { limit = 40, cursor = null, brand = null } = {}) {
+  const args = {
     p_query: String(query || '').trim(),
     p_limit: boundedInvoiceSearchLimit(limit, 40),
     p_after_code: cursor?.code || null,
-    p_after_id: cursor?.id || null,
-    p_saleable_only: true
-  });
+    p_after_id: cursor?.id || null
+  };
+  let result;
+  try {
+    result = await invoiceReadRpc('rpc_egress_search_invoice_products', {
+      ...args,
+      p_brand: getBrandById(brand)?.id || String(brand || '').trim() || null
+    });
+  } catch (error) {
+    if (!['PGRST202', '42883'].includes(error?.code)) throw error;
+    // Older databases still expose bounded pages. Keep their cursor so the
+    // picker can show Load more even if this page contains another brand.
+    result = await invoiceReadRpc('rpc_egress_search_products', { ...args, p_saleable_only: true });
+  }
   const rows = (Array.isArray(result?.data) ? result.data : []).map(row => normalizeProductRow(row));
   return Object.assign(rows, { hasMore: result?.hasMore === true, nextCursor: result?.nextCursor || null });
 }

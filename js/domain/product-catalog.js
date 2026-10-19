@@ -190,19 +190,23 @@ export function searchProductFamilies(families, query) {
 
   return (families || [])
     .map(family => {
-      const matchingVariant = family.variants.find(variant => {
-        const code = normalizeCatalogText(variant.code || variant.variantCode);
-        return code === normalizedQuery;
-      }) || family.variants.find(variant => {
-        const variantText = [
-          variant.code,
-          variant.variantCode,
-          variant.packageType,
-          variant.packagingName,
-          variantSpecification(variant)
-        ].join(' ');
-        return matchesAllTokens(variantText);
-      }) || null;
+      const variantText = variant => [
+        variant.code,
+        variant.variantCode,
+        variant.packageType,
+        variant.packagingName,
+        variantSpecification(variant)
+      ].join(' ');
+      const exactVariant = family.variants.find(variant =>
+        [variant.code, variant.variantCode, variant.barcode]
+          .some(code => normalizeCatalogText(code) === normalizedQuery)
+      );
+      const phraseVariant = family.variants.find(variant =>
+        normalizeCatalogText(variantText(variant)).includes(normalizedQuery)
+      );
+      const matchingVariant = exactVariant || phraseVariant || family.variants.find(variant =>
+        matchesAllTokens(variantText(variant))
+      ) || null;
 
       const baseExact = normalizeCatalogText(family.baseCode) === normalizedQuery;
       const matches = baseExact || matchingVariant || matchesAllTokens(searchableFamilyText(family));
@@ -211,9 +215,9 @@ export function searchProductFamilies(families, query) {
       return {
         ...family,
         matchedVariantId: matchingVariant?.id || null,
-        matchRank: matchingVariant && normalizeCatalogText(matchingVariant.code || matchingVariant.variantCode) === normalizedQuery
-          ? 0
-          : baseExact ? 1 : matchingVariant ? 2 : 3
+        matchRank: exactVariant ? 0 : baseExact ? 1
+          : phraseVariant || normalizeCatalogText(family.name) === normalizedQuery ? 2
+            : matchingVariant ? 3 : 4
       };
     })
     .filter(Boolean)

@@ -14,9 +14,9 @@ import {
   dbSaveSemiFinishedBulk,
   dbDeleteAllSemiFinished,
   dbSaveCashbookTransaction
-} from '../services/supabase.js?v=20261017-purchase-ui-live-v6';
-import { renderAll } from '../main.js?v=20261017-purchase-ui-live-v6';
-import { renderPurchasesPanel } from './purchases.js?v=20261017-purchase-ui-live-v6';
+} from '../services/supabase.js?v=20261019-invoice-product-search-v1';
+import { renderAll } from '../main.js?v=20261019-invoice-product-search-v1';
+import { renderPurchasesPanel } from './purchases.js?v=20261019-invoice-product-search-v1';
 
 // --- TRÌNH VẼ GIAO DIỆN (RENDERERS) ---
 
