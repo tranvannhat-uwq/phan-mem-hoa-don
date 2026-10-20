@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot } from '../services/supabase.js?v=20261019-debt-history-correction-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261019-debt-history-correction-v1';
 import { renderAll } from '../main.js?v=20261019-debt-history-correction-v1';
 import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261019-debt-history-correction-v1';
 import { addCashbookTransaction } from './so_quy.js?v=20261019-debt-history-correction-v1';
@@ -25,7 +25,7 @@ let activeExportOrderIds = null;
 const DEFAULT_CUSTOMER_QUERY = Object.freeze({
   q: '', searchScope: 'all', sortKey: 'lastTransactionAt', sortDirection: 'desc', nulls: 'last', pageSize: 20,
   createdPreset: '', createdFrom: '', createdTo: '', lastPreset: '', lastFrom: '', lastTo: '',
-  salesMetric: 'netSales', salesPreset: '', salesMin: '', salesMax: '',
+  salesPeriodFrom: '', salesPeriodTo: '',
   debtPreset: '', debtMin: '', debtMax: '', brands: [], pricelists: [], managers: [], provinces: [],
   status: '', phoneState: '', addressState: '', pricelistState: '', managerState: '', brandState: '', notesState: ''
 });
@@ -34,13 +34,16 @@ let customerCurrentPageRows = [];
 let customerFilteredRows = [];
 let customerSearchDebounce = null;
 let customerFilterOptionSignature = null;
+const customerSalesPeriodCache = new Map();
+const customerSalesPeriodLoads = new Map();
+const customerSalesPeriodFailures = new Set();
 
 const CUSTOMER_QUERY_CONTROL_MAP = Object.freeze({
   searchScope: 'customer-search-scope',
   nulls: 'customer-sort-nulls',
   createdPreset: 'customer-created-preset', createdFrom: 'customer-created-from', createdTo: 'customer-created-to',
   lastPreset: 'customer-last-preset', lastFrom: 'customer-last-from', lastTo: 'customer-last-to',
-  salesMetric: 'customer-sales-metric', salesPreset: 'customer-sales-preset', salesMin: 'customer-sales-min', salesMax: 'customer-sales-max',
+  salesPeriodFrom: 'customer-sales-period-from', salesPeriodTo: 'customer-sales-period-to',
   debtPreset: 'customer-debt-preset', debtMin: 'customer-debt-min', debtMax: 'customer-debt-max',
   brands: 'customer-filter-brands', pricelists: 'customer-filter-pricelists', managers: 'customer-filter-managers', provinces: 'customer-filter-provinces',
   status: 'customer-status', phoneState: 'customer-phone-state', addressState: 'customer-address-state', pricelistState: 'customer-pricelist-state',
@@ -326,7 +329,7 @@ export function getCustomerMetrics(c) {
     c.brandDiscounts?.salesBaselineImportedAt ||
     c.brand_discounts?.salesBaselineImportedAt
   );
-  if (baselineImportedAt || storedGrossSales || storedReturns || storedNetSalesRaw) {
+  if (c.salesPeriodOrderCount !== undefined || baselineImportedAt || storedGrossSales || storedReturns || storedNetSalesRaw) {
     const grossSales = storedGrossSales;
     const totalReturns = storedReturns;
     const netSales = storedNetSales;
@@ -459,13 +462,116 @@ function getCustomerDebtExportStatus(row) {
   return due < today ? 'Quá hạn' : (due === today ? 'Đến hạn hôm nay' : 'Chưa đến hạn');
 }
 
+function getCustomerSalesPeriodKey(query = customerViewQuery) {
+  const from = String(query.salesPeriodFrom || '');
+  const to = String(query.salesPeriodTo || '');
+  return from || to ? `${from}|${to}` : '';
+}
+
+function getCustomerSalesPeriodIsoRange(from, to) {
+  const startIso = from ? new Date(`${from}T00:00:00+07:00`).toISOString() : null;
+  const endExclusiveIso = to
+    ? new Date(new Date(`${to}T00:00:00+07:00`).getTime() + 86400000).toISOString()
+    : null;
+  return { startIso, endExclusiveIso };
+}
+
+function isCustomerSalesOrder(order) {
+  if (!order || order.deletedAt || order.deleted_at || order.isDeleted) return false;
+  return ['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']
+    .includes(String(order.status || 'settled').toLowerCase());
+}
+
+function aggregateCustomerSalesPeriod(orders) {
+  const customers = (state.customers || []).filter(Boolean);
+  const customersById = new Map(customers.map(customer => [String(customer.id || ''), String(customer.id || '')]));
+  const customerIdsByName = new Map();
+  customers.forEach(customer => {
+    const name = String(customer.name || '').trim().toLocaleLowerCase('vi');
+    if (!name) return;
+    const ids = customerIdsByName.get(name) || new Set();
+    ids.add(String(customer.id || ''));
+    customerIdsByName.set(name, ids);
+  });
+
+  const totals = new Map();
+  (orders || []).forEach(order => {
+    if (!isCustomerSalesOrder(order)) return;
+    let customerId = String(order.customerId || order.customer_id || '');
+    if (!customersById.has(customerId)) {
+      const name = String(order.customerName || order.customer_name || '').trim().toLocaleLowerCase('vi');
+      const matches = customerIdsByName.get(name);
+      customerId = matches?.size === 1 ? [...matches][0] : '';
+    }
+    if (!customerId) return;
+
+    const gross = finiteCustomerNumber(order.totalPayable ?? order.total_payable) ?? 0;
+    const netValue = finiteCustomerNumber(order.netRevenue ?? order.net_revenue);
+    const returnedValue = finiteCustomerNumber(order.returnedAmount ?? order.returned_amount);
+    const net = returnedValue > 0
+      ? Math.max(0, gross - returnedValue)
+      : (netValue === null ? gross : netValue);
+    const totalReturns = Math.max(0, gross - net);
+    const row = totals.get(customerId) || { grossSales: 0, totalReturns: 0, netSales: 0, salesPeriodOrderCount: 0 };
+    row.grossSales += gross;
+    row.totalReturns += totalReturns;
+    row.netSales += net;
+    row.salesPeriodOrderCount += 1;
+    totals.set(customerId, row);
+  });
+  return totals;
+}
+
+function getLocalCustomerSalesPeriodOrders(from, to) {
+  return (state.savedOrders || []).filter(order => {
+    if (!isCustomerSalesOrder(order)) return false;
+    const date = customerDateKey(order.date || order.orderDate || order.order_date || order.createdAt || order.created_at);
+    return Boolean(date) && (!from || date >= from) && (!to || date <= to);
+  });
+}
+
+function loadCustomerSalesPeriod(key) {
+  if (!key || customerSalesPeriodCache.has(key) || customerSalesPeriodLoads.has(key) || customerSalesPeriodFailures.has(key)) return;
+  const [from, to] = key.split('|');
+  const { startIso, endExclusiveIso } = getCustomerSalesPeriodIsoRange(from, to);
+  const load = (async () => {
+    try {
+      let orders = await dbFetchOrdersForHistoryRange(startIso, endExclusiveIso);
+      if (!Array.isArray(orders)) {
+        if (isCloudActive) throw new Error('Không thể tải lịch sử đơn hàng từ Cloud.');
+        orders = getLocalCustomerSalesPeriodOrders(from, to);
+      }
+      customerSalesPeriodCache.set(key, aggregateCustomerSalesPeriod(orders));
+      while (customerSalesPeriodCache.size > 4) {
+        customerSalesPeriodCache.delete(customerSalesPeriodCache.keys().next().value);
+      }
+    } catch (error) {
+      console.error('Không thể tải doanh số khách hàng theo khoảng ngày:', error);
+      customerSalesPeriodFailures.add(key);
+      if (getCustomerSalesPeriodKey() === key) {
+        showToast('Không thể tải doanh số theo khoảng ngày. Vui lòng thử lại sau.', 'danger');
+      }
+    } finally {
+      customerSalesPeriodLoads.delete(key);
+      if (getCustomerSalesPeriodKey() === key) renderCustomersTable();
+    }
+  })();
+  customerSalesPeriodLoads.set(key, load);
+}
+
 function buildCustomerViewRows() {
+  const periodKey = getCustomerSalesPeriodKey();
+  const periodMetrics = periodKey ? customerSalesPeriodCache.get(periodKey) : null;
   const customers = (state.customers || []).filter(customer => {
     if (!customer) return false;
     return state.currentUser?.role !== 'sale' || isSameUser(customer.managedBy, state.currentUser.username);
   });
   return customers.map(customer => {
-    const metrics = getCustomerMetrics(customer);
+    const baseMetrics = getCustomerMetrics(customer);
+    const customerPeriodMetrics = periodMetrics?.get(String(customer.id || ''));
+    const metrics = periodKey
+      ? (customerPeriodMetrics || { grossSales: 0, totalReturns: 0, netSales: 0, salesPeriodOrderCount: 0 })
+      : baseMetrics;
     const lastTransactionAt = getCustomerLastTransactionDate(customer);
     const debtDays = Math.trunc(finiteCustomerNumber(customer.debtDays ?? customer.brandDiscounts?.debtDays) ?? 0);
     const provinceCode = customer.brandDiscounts?.province || customer.province || '';
@@ -480,6 +586,12 @@ function buildCustomerViewRows() {
       netSales: metrics.netSales, debt: finiteCustomerNumber(customer.debt) ?? 0, debtDays,
       lastTransactionAt, createdAt: customer.createdAt || customer.created_at || ''
     };
+    if (periodKey) {
+      row.totalTransaction = metrics.grossSales;
+      row.totalReturn = metrics.totalReturns;
+      row.netRevenue = metrics.netSales;
+      row.salesPeriodOrderCount = customerPeriodMetrics?.salesPeriodOrderCount || 0;
+    }
     row.daysInactive = customerDaysSince(lastTransactionAt);
     row.dueDate = addBusinessDaysKey(lastTransactionAt, debtDays);
     row.debtStatus = getCustomerDebtExportStatus(row);
@@ -830,7 +942,7 @@ function refreshCustomerQueryOptionsIfNeeded() {
 
 function getActiveCustomerFilterCount() {
   return Object.entries(customerViewQuery).reduce((count, [key, value]) => {
-    if (['q', 'searchScope', 'sortKey', 'sortDirection', 'nulls', 'pageSize', 'salesMetric'].includes(key)) return count;
+    if (['q', 'searchScope', 'sortKey', 'sortDirection', 'nulls', 'pageSize'].includes(key)) return count;
     return count + (Array.isArray(value) ? (value.length ? 1 : 0) : (value ? 1 : 0));
   }, 0);
 }
@@ -861,6 +973,47 @@ export function renderCustomersTable() {
 
   const tableBody = document.getElementById('customers-table-body');
   if (!tableBody) return;
+  const periodKey = getCustomerSalesPeriodKey();
+  const totalSalesLabel = document.getElementById('cust-summary-total-sales-label');
+  const netSalesLabel = document.getElementById('cust-summary-net-sales-label');
+  if (totalSalesLabel) totalSalesLabel.textContent = periodKey ? 'Tổng doanh số trong kỳ' : 'Tổng doanh số nhóm';
+  if (netSalesLabel) netSalesLabel.textContent = periodKey ? 'Doanh số sau trả hàng trong kỳ' : 'Doanh số sau trả hàng';
+  if (periodKey) {
+    const [from, to] = periodKey.split('|');
+    const resultCount = document.getElementById('customer-result-count');
+    const resultButton = document.getElementById('btn-apply-customer-filter-modal');
+    const totalSalesEl = document.getElementById('cust-summary-total-sales');
+    const netSalesEl = document.getElementById('cust-summary-net-sales');
+    if (from && to && from > to) {
+      tableBody.innerHTML = '<tr><td colspan="20" style="text-align:center;padding:1.5rem;color:var(--text-secondary);">Ngày bắt đầu phải trước hoặc cùng ngày kết thúc.</td></tr>';
+      if (resultCount) resultCount.textContent = 'Khoảng ngày không hợp lệ';
+      if (resultButton) resultButton.innerHTML = '<i data-lucide="check"></i> Khoảng ngày không hợp lệ';
+      if (totalSalesEl) totalSalesEl.innerText = formatCurrency(0);
+      if (netSalesEl) netSalesEl.innerText = formatCurrency(0);
+      safeCreateIcons();
+      return;
+    }
+    if (!customerSalesPeriodCache.has(periodKey)) {
+      if (customerSalesPeriodFailures.has(periodKey)) {
+        tableBody.innerHTML = '<tr><td colspan="20" style="text-align:center;padding:1.5rem;color:var(--text-secondary);">Không tải được doanh số theo khoảng ngày. <button class="btn btn-secondary btn-sm" id="btn-retry-customer-sales-period" type="button">Thử lại</button></td></tr>';
+        document.getElementById('btn-retry-customer-sales-period')?.addEventListener('click', () => {
+          customerSalesPeriodFailures.delete(periodKey);
+          renderCustomersTable();
+        });
+        if (resultCount) resultCount.textContent = 'Chưa tải được doanh số trong khoảng ngày';
+        if (resultButton) resultButton.innerHTML = '<i data-lucide="loader-circle"></i> Chưa tải được';
+      } else {
+        tableBody.innerHTML = '<tr><td colspan="20" style="text-align:center;padding:1.5rem;color:var(--text-secondary);">Đang tải doanh số trong khoảng ngày…</td></tr>';
+        if (resultCount) resultCount.textContent = 'Đang tải doanh số trong khoảng ngày…';
+        if (resultButton) resultButton.innerHTML = '<i data-lucide="loader-circle"></i> Đang tải…';
+        if (totalSalesEl) totalSalesEl.innerText = formatCurrency(0);
+        if (netSalesEl) netSalesEl.innerText = formatCurrency(0);
+        loadCustomerSalesPeriod(periodKey);
+      }
+      safeCreateIcons();
+      return;
+    }
+  }
   refreshCustomerQueryOptionsIfNeeded();
   const filtered = getFilteredCustomersForCurrentView();
   customerFilteredRows = filtered;

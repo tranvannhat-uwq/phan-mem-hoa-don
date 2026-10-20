@@ -1152,7 +1152,7 @@ function mapOrderRowForState(order, isDraft = false) {
     shippingFeeAmount: parseFloat(order.shipping_fee_amount !== undefined ? order.shipping_fee_amount : (order.shippingFeeAmount || 0)),
     totalPayable: parseFloat(order.total_payable || 0),
     returnedAmount: parseFloat(order.returned_amount || 0),
-    netRevenue: parseFloat(order.net_revenue || order.total_payable || 0),
+    netRevenue: parseFloat(order.net_revenue ?? order.total_payable ?? 0),
     paidAmount: parseFloat(order.paid_amount !== undefined ? order.paid_amount : (order.other_fee_amount || 0)),
     amountDue: Math.max(
       0,
@@ -1324,6 +1324,17 @@ export async function dbLoadOrdersForHistoryRange(startIso = null, endExclusiveI
     return replaceLoadedOrderWindow(rows, startIso, endExclusiveIso);
   } catch (error) {
     console.warn('Không thể tải lịch sử đơn hàng theo khoảng ngày:', error);
+    return false;
+  }
+}
+
+export async function dbFetchOrdersForHistoryRange(startIso = null, endExclusiveIso = null) {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const rows = await fetchOrderRowsForHistoryWindow(startIso, endExclusiveIso);
+    return (rows || []).map(order => mapOrderRowForState(order, false));
+  } catch (error) {
+    console.warn('Không thể truy vấn đơn hàng theo khoảng ngày:', error);
     return false;
   }
 }

@@ -1702,10 +1702,9 @@
               <div class="customer-filter-range"><input class="form-control" id="customer-last-from" type="date"><input class="form-control" id="customer-last-to" type="date"></div>
             </div>
             <div class="customer-filter-section">
-              <strong>Doanh số</strong>
-              <select class="form-control" id="customer-sales-metric"><option value="netSales">Sau trả hàng</option><option value="grossSales">Tổng doanh số</option><option value="totalReturns">Tổng trả hàng</option></select>
-              <select class="form-control" id="customer-sales-preset"><option value="">Tất cả</option><option value="zero">Chưa có doanh số</option><option value="positive">Có doanh số</option><option value="gt10000000">Trên 10 triệu</option><option value="gt50000000">Trên 50 triệu</option><option value="gt100000000">Trên 100 triệu</option><option value="gt500000000">Trên 500 triệu</option><option value="gt1000000000">Trên 1 tỷ</option></select>
-              <div class="customer-filter-range"><input class="form-control" id="customer-sales-min" type="number" placeholder="Từ"><input class="form-control" id="customer-sales-max" type="number" placeholder="Đến"></div>
+              <strong>Doanh số theo thời gian</strong>
+              <small style="color: var(--text-secondary);">Chỉ tính khách hàng có giao dịch trong khoảng ngày đã chọn.</small>
+              <div class="customer-filter-range"><label class="customer-filter-date-label">Từ ngày<input class="form-control" id="customer-sales-period-from" type="date" aria-label="Doanh số từ ngày"></label><label class="customer-filter-date-label">Đến ngày<input class="form-control" id="customer-sales-period-to" type="date" aria-label="Doanh số đến ngày"></label></div>
             </div>
             <div class="customer-filter-section">
               <strong>Công nợ</strong>
@@ -1751,14 +1750,14 @@
             </div>
             <div style="flex: 1; min-width: 200px; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 10px; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <div style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Tổng doanh số nhóm</div>
+                <div id="cust-summary-total-sales-label" style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Tổng doanh số nhóm</div>
                 <div id="cust-summary-total-sales" style="font-size: 1.2rem; font-weight: 700; color: var(--color-primary); margin-top: 0.25rem;">0 ₫</div>
               </div>
               <i data-lucide="trending-up" style="color: var(--color-primary); width: 24px; height: 24px;"></i>
             </div>
             <div style="flex: 1; min-width: 200px; background: rgba(34, 197, 94, 0.05); border: 1px solid rgba(34, 197, 94, 0.15); border-radius: 10px; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <div style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Doanh số sau trả hàng</div>
+                <div id="cust-summary-net-sales-label" style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500;">Doanh số sau trả hàng</div>
                 <div id="cust-summary-net-sales" style="font-size: 1.2rem; font-weight: 700; color: #10b981; margin-top: 0.25rem;">0 ₫</div>
               </div>
               <i data-lucide="badge-check" style="color: #10b981; width: 24px; height: 24px;"></i>

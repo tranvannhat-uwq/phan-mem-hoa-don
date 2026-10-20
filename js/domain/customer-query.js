@@ -255,6 +255,10 @@ export function sortCustomerRows(rows, query = {}, now = new Date()) {
 
 export function filterCustomerRows(rows, query = {}, now = new Date()) {
   const createdPresetRange = dateRangeForPreset(query.createdPreset, now);
+  const salesPeriodFrom = query.salesPeriodFrom || '';
+  const salesPeriodTo = query.salesPeriodTo || '';
+  const hasSalesPeriod = Boolean(salesPeriodFrom || salesPeriodTo);
+  if (salesPeriodFrom && salesPeriodTo && salesPeriodFrom > salesPeriodTo) return [];
   const salesMin = finiteCustomerNumber(query.salesMin);
   const salesMax = finiteCustomerNumber(query.salesMax);
   const debtMin = finiteCustomerNumber(query.debtMin);
@@ -273,6 +277,8 @@ export function filterCustomerRows(rows, query = {}, now = new Date()) {
     if (!matchesLastTransactionPreset(customer, query.lastPreset, now)) return false;
     if ((query.lastFrom || query.lastTo)
       && !inDateRange(customer.lastTransactionAt, query.lastFrom, query.lastTo)) return false;
+
+    if (hasSalesPeriod && (finiteCustomerNumber(customer.salesPeriodOrderCount) ?? 0) <= 0) return false;
 
     const sales = salesValue(customer, query.salesMetric || 'netSales');
     if (!matchesSalesPreset(sales, query.salesPreset)) return false;
