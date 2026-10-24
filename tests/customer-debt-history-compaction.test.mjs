@@ -14,7 +14,8 @@ test('customer history shows only effective business transactions without an aud
   const service = read('js/services/supabase.js');
 
   assert.doesNotMatch(html, /id="customer-debt-show-technical"/);
-  assert.match(customers, /buildCustomerDebtDisplayHistory\(cust\.debtHistory \|\| \[\], cust\.debt\)/);
+  assert.match(customers, /withCustomerReturnDocuments\(cust\.debtHistory \|\| \[\]/);
+  assert.match(customers, /buildCustomerDebtDisplayHistory\(returnHistory, cust\.debt\)/);
   assert.match(debt, /export function buildCustomerDebtDisplayHistory/);
   assert.match(html, /<th>Thời gian chứng từ<\/th>/);
   assert.match(service, /postedAt:\s*row\.created_at \|\| row\.transaction_date/);

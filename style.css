@@ -12619,6 +12619,7 @@ body.purchase-entry-modal-open { overflow: hidden; }
 
 .purchase-entry-items-heading { margin-bottom: 13px; }
 .purchase-entry-items-heading > div { flex: 1 1 auto; min-width: 0; }
+.purchase-entry-items-heading > .purchase-entry-item-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .purchase-entry-add-row { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 12px; border-radius: 8px; color: #234d8d !important; background: #f2f6fc !important; border-color: #dbe5f1 !important; font-size: .78rem; font-weight: 700; }
 .purchase-entry-add-row:hover { background: #eaf1fb !important; border-color: #c7d8ee !important; }
 .purchase-entry-add-row svg { width: 15px; height: 15px; }
@@ -12637,7 +12638,7 @@ body.purchase-entry-modal-open { overflow: hidden; }
 .purchase-entry-items-table input { box-sizing: border-box; width: 100%; min-width: 0; height: 36px; padding: 0 8px; border: 1px solid #d9e2ec; border-radius: 7px; color: #26384e; background: #fff; font-size: .78rem; font-weight: 500; outline: none; }
 .purchase-entry-items-table input:focus { border-color: #6d9cf0; box-shadow: 0 0 0 3px rgba(37, 99, 235, .1); }
 .purchase-entry-items-table input[readonly] { background: #f6f8fb; color: #475569; }
-.purchase-entry-item-source { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 5px; color: #687b96; font-size: .68rem; font-weight: 700; }
+.purchase-entry-item-source { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 5px; color: #687b96; font-size: .68rem; font-weight: 700; }
 .purchase-entry-switch-source { padding: 2px 6px; border: 0; border-radius: 5px; background: #edf4ff; color: #2459b8; font: inherit; font-size: .68rem; cursor: pointer; }
 .purchase-entry-switch-source:hover { background: #dceaff; }
 .purchase-entry-material-picker { min-width: 0; }
@@ -12656,7 +12657,12 @@ body.purchase-entry-modal-open { overflow: hidden; }
 .purchase-entry-remove-row { width: 30px; height: 30px; border: 1px solid #f2d4d8; border-radius: 7px; color: #c04b5b; background: #fff7f7; }
 .purchase-entry-remove-row:hover { border-color: #e8b9c0; background: #fff0f1; }
 
-.purchase-entry-summary { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.customer-return-debt-breakdown { display: block; margin-top: 3px; color: var(--text-muted); font-size: .68rem; line-height: 1.4; white-space: nowrap; }
+.purchase-entry-tax-settings { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.purchase-entry-tax-settings span { flex: 1 1 240px; color: #708096; font-size: .75rem; }
+.purchase-entry-tax-settings label { color: #233a58; font-size: .8rem; font-weight: 700; }
+#purchase-entry-modal #purchase-vat-rate { width: 100px; height: 38px; }
+.purchase-entry-summary { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 .purchase-entry-summary-card { display: flex; flex-direction: column; gap: 4px; min-width: 170px; padding: 10px 13px; border: 1px solid #e4eaf2; border-radius: 9px; background: #f8fafc; }
 .purchase-entry-summary-card span { color: #708096; font-size: .7rem; font-weight: 650; }
 .purchase-entry-summary-card strong { color: #233a58; font-size: .93rem; font-weight: 800; }
@@ -12696,8 +12702,9 @@ body.purchase-entry-modal-open { overflow: hidden; }
   .purchase-entry-info-grid { grid-template-columns: minmax(0, 1fr); gap: 11px; }
   .purchase-entry-payment-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .purchase-entry-items-heading { flex-wrap: wrap; }
-  .purchase-entry-add-row { margin-left: 41px; }
-  .purchase-entry-summary { justify-content: stretch; }
+  .purchase-entry-items-heading > .purchase-entry-item-actions { flex: 1 1 100%; justify-content: flex-start; margin-left: 41px; }
+  .purchase-entry-tax-settings span { flex-basis: 100%; }
+  .purchase-entry-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .purchase-entry-summary-card { min-width: 0; flex: 1 1 0; }
   #purchase-entry-modal .purchase-entry-footer { align-items: stretch; flex-direction: column; padding: 10px 12px; }
   .purchase-entry-footer-hint { display: none; }

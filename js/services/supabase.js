@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261019-debt-history-correction-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261019-debt-history-correction-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261024-return-debt-display-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261024-return-debt-display-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261019-debt-history-correction-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261019-debt-history-correction-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261019-debt-history-correction-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261024-return-debt-display-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261024-return-debt-display-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261024-return-debt-display-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -2164,6 +2164,9 @@ export async function fetchCloudData(options = {}) {
             status: purchase.status,
             totalAmount: Number(purchase.total_amount || 0),
             totalPayable: Number(purchase.total_amount || 0),
+            subtotalAmount: Number(purchase.subtotal_amount ?? purchase.total_amount ?? 0),
+            vatRate: Number(purchase.vat_rate || 0),
+            vatAmount: Number(purchase.vat_amount || 0),
             paidAmount: Number(purchase.paid_amount || 0),
             balanceDue: Number(purchase.balance_due || 0),
             paymentMethod: purchase.payment_method || 'cash',
@@ -3660,16 +3663,40 @@ export async function dbFetchCashbookTransactionById(cashbookId) {
   }
 }
 
+export async function dbFetchCustomerReturnDocuments(customerId) {
+  if (!isCloudActive || !supabaseClient || !customerId) return null;
+  const rows = [];
+  const pageSize = 100;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabaseClient.from(tableSalesReturnsName)
+      .select('id,customer_id,sale_id,order_id,total_refund,total_return_amount,debt_reduction_amount,refund_amount,refund_cashbook_transaction_id,status,created_at,return_date,reason')
+      .eq('customer_id', customerId).order('created_at', { ascending: true }).order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows.map(row => ({ id: row.id, customerId: row.customer_id,
+    saleId: row.sale_id || row.order_id, totalRefund: Number(row.total_refund || row.total_return_amount || 0),
+    debtReductionAmount: Number(row.debt_reduction_amount || 0), refundAmount: Number(row.refund_amount || 0),
+    refundCashbookId: row.refund_cashbook_transaction_id, status: row.status,
+    createdAt: row.created_at, returnDate: row.return_date || row.created_at, reason: row.reason || '' }));
+}
+
 export async function dbRefreshCustomerFinancialState(customerId, { includeHistory = true } = {}) {
   if (!isCloudActive || !supabaseClient || !customerId) return false;
   try {
-    const [{ data: customerRow, error: customerError }, ledgerRows] = await Promise.all([
+    const [{ data: customerRow, error: customerError }, ledgerRows, returnDocuments] = await Promise.all([
       supabaseClient
         .from(tableCustomersName)
         .select('id,debt,total_transaction,total_return,net_revenue,last_order_at,last_payment_at,updated_at')
         .eq('id', customerId)
         .single(),
-      includeHistory ? fetchCustomerDebtRows(customerId) : Promise.resolve(null)
+      includeHistory ? fetchCustomerDebtRows(customerId) : Promise.resolve(null),
+      includeHistory ? dbFetchCustomerReturnDocuments(customerId).catch(error => {
+        console.warn('Could not load return documents for customer history:', error.message);
+        return null;
+      }) : Promise.resolve(null)
     ]);
     if (customerError) throw customerError;
 
@@ -3682,6 +3709,7 @@ export async function dbRefreshCustomerFinancialState(customerId, { includeHisto
     customer.lastOrderAt = customerRow.last_order_at || null;
     customer.lastPaymentAt = customerRow.last_payment_at || null;
     customer.updatedAt = customerRow.updated_at || null;
+    if (returnDocuments) customer.returnDocuments = returnDocuments;
 
     if (ledgerRows) {
       customer.debtHistory = mergeCustomerDebtHistory(
@@ -4416,6 +4444,9 @@ function applyCanonicalPurchase(purchase) {
     date: purchase.purchaseDate,
     totalAmount: Number(purchase.totalAmount || 0),
     totalPayable: Number(purchase.totalAmount || 0),
+    subtotalAmount: Number(purchase.subtotalAmount ?? purchase.totalAmount ?? 0),
+    vatRate: Number(purchase.vatRate || 0),
+    vatAmount: Number(purchase.vatAmount || 0),
     paidAmount: Number(purchase.paidAmount || 0),
     balanceDue: Number(purchase.balanceDue || 0),
     items: Array.isArray(purchase.items) ? purchase.items.map(item => ({
@@ -4444,12 +4475,18 @@ export async function dbCreatePurchase(input) {
     return false;
   }
   try {
-    const { data, error } = await supabaseClient.rpc('rpc_create_purchase', {
+    const vatRate = Number(input.vatRate ?? 0);
+    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 100
+      || Math.abs(vatRate * 100 - Math.round(vatRate * 100)) > 1e-7) {
+      throw new Error('VAT phải từ 0 đến 100%, tối đa 2 chữ số thập phân.');
+    }
+    const { data, error } = await supabaseClient.rpc('rpc_create_purchase_vat', {
       p_input: {
         supplierId: input.supplierId,
         invoiceNumber: input.invoiceNumber || '',
         purchaseDate: input.purchaseDate,
         paidAmount: Number(input.paidAmount || 0),
+        vatRate,
         paymentMethod: input.paymentMethod || 'cash',
         notes: input.notes || '',
         idempotencyKey: input.idempotencyKey,
@@ -4466,6 +4503,10 @@ export async function dbCreatePurchase(input) {
     return applyPhase4Response(data);
   } catch (err) {
     console.warn('Create purchase RPC failed:', err.message || err);
+    if (['PGRST202', '42883'].includes(err.code)) {
+      showToast('Cloud cần chạy migration 0102 để tạo phiếu mua có VAT.', 'danger');
+      return false;
+    }
     showToast(err.message || 'Không thể tạo phiếu mua.', 'danger');
     return false;
   }
@@ -5396,7 +5437,7 @@ export async function dbCancelOrder(orderId, reason) {
 export async function dbRecordSalesReturn(ret, items) {
   if (isCloudActive && supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.rpc('rpc_record_sales_return', {
+      const { data, error } = await supabaseClient.rpc('rpc_record_sales_return_credit', {
         p_input: {
           orderId: ret.saleId || ret.orderId,
           reason: ret.reason || '',
@@ -5414,6 +5455,10 @@ export async function dbRecordSalesReturn(ret, items) {
       return data || { success: true };
     } catch (err) {
       console.warn('RPC sales return error:', err);
+      if (['PGRST202', '42883'].includes(err.code)) {
+        showToast('Cloud cần chạy migration 0103 để giữ tiền trả hàng cấn trừ công nợ.', 'danger');
+        return false;
+      }
       showToast('Không thể ghi nhận phiếu trả hàng. Dữ liệu chưa thay đổi để tránh lệch công nợ.', 'danger');
       return false;
     }

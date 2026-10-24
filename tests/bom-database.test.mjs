@@ -34,7 +34,7 @@ before(async()=>{
     ('accounting','${accounting}','accounting','Accounting','accounting'),
     ('sale','${sale}','sale','Sale','sale');
     INSERT INTO public.products(id,code,brand,name,package_type) VALUES('sku-a','A-LON','TEST','Sơn A','Lon');`);
-  for(const name of ['0088_integrated_inventory_free_budget.sql','0089_inventory_sync_toggle.sql','0091_inventory_page_limit.sql','0092_bom_two_stage.sql','0093_bom_item_unit_edit.sql','0094_repair_bom_item_unit_edit.sql'])
+  for(const name of ['0088_integrated_inventory_free_budget.sql','0089_inventory_sync_toggle.sql','0091_inventory_page_limit.sql','0092_bom_two_stage.sql','0093_bom_item_unit_edit.sql','0094_repair_bom_item_unit_edit.sql','0101_product_packaging_items.sql'])
     try{await db.exec(await read(name));}catch(error){throw new Error(`${name}: ${error.message}\n${error.where||''}`);}
 });
 after(async()=>{if(db)await db.close();});
@@ -43,9 +43,12 @@ test('BOM tables and RPCs enforce roles',async()=>{
   assert.equal(await value("SELECT to_regprocedure('public.rpc_bom_save_iteam(jsonb)') IS NULL AS value"),true);
   await role('', 'anon');
   await assert.rejects(value('SELECT public.rpc_bom_window() AS value'),/permission denied/);
+  await assert.rejects(value('SELECT public.rpc_bom_add_product_packaging() AS value'),/permission denied/);
   await role(sale);
   await assert.rejects(value('SELECT public.rpc_bom_window() AS value'),/Chỉ Admin/);
+  await assert.rejects(value('SELECT public.rpc_bom_add_product_packaging() AS value'),/Chỉ Admin/);
   await role(accounting);
+  await assert.rejects(value('SELECT public.rpc_bom_add_product_packaging() AS value'),/Chỉ Admin/);
   await assert.rejects(rpc('rpc_bom_save_item',{code:'X',name:'X',kind:'raw',baseUnit:'kg',purchaseUnit:'kg',purchaseToBase:1}),/Chỉ Admin/);
   await assert.rejects(db.query('SELECT * FROM public.bom_items'),/permission denied/);
 });
@@ -132,4 +135,50 @@ test('a new published recipe leaves prior production snapshots unchanged',async(
   const original=await value('SELECT snapshot AS value FROM public.bom_runs WHERE version_id=$1::uuid',[semiVersion]);
   assert.equal(Number(original.lines[0].quantity),12);
   assert.equal(Number(await value('SELECT quantity AS value FROM public.bom_lines WHERE version_id=$1::uuid',[semiVersion])),12);
+});
+
+test('product packaging is seeded per SKU and can be replenished without changing stock or existing materials',async()=>{
+  await db.exec('RESET ROLE');
+  const seeded=(await db.query("SELECT * FROM public.bom_items WHERE source_product_id='sku-a'")).rows[0];
+  assert.ok(seeded.name.startsWith('VỎ LON A-LON'));
+  assert.equal(seeded.base_unit,'cái');
+  assert.equal(seeded.purchase_unit,'cái');
+  assert.equal(Number(seeded.purchase_to_base),1);
+  const before=(await db.query('SELECT item_id, quantity FROM public.bom_item_balances ORDER BY item_id')).rows;
+  await db.exec(`INSERT INTO public.products(id,code,variant_code,brand,name,packaging_name,package_type,is_active,is_legacy) VALUES
+    ('pack-a','SHARED','SKU-A','Brand A','Sơn thùng A',NULL,'Thùng',true,false),
+    ('pack-b','SHARED','SKU-B','Brand B','Sơn lon B','Lon',NULL,true,false),
+    ('pack-c','SHARED','SKU-A','Brand C','Sơn cùng mã khác hãng',NULL,'Thùng',true,false),
+    ('pack-fallback','FALLBACK',NULL,'Brand A','Sơn thùng C','   ','Thùng',true,false),
+    ('pack-off','OFF',NULL,'Brand A','Đã ngừng',NULL,'Thùng',false,false),
+    ('pack-legacy','LEGACY',NULL,'Brand A','Mã cũ',NULL,'Thùng',true,true),
+    ('pack-parent','PARENT',NULL,'Brand A','Sản phẩm gốc',NULL,NULL,true,false);
+    INSERT INTO public.products(id,code,variant_code,brand,name,packaging_name)
+      VALUES('pack-long',repeat('X',80),repeat('Y',80),'Brand A',repeat('Tên rất dài ',30),'Thùng');`);
+  await role(admin);
+  assert.equal((await value('SELECT public.rpc_bom_add_product_packaging() AS value')).created,5);
+  assert.equal((await value('SELECT public.rpc_bom_add_product_packaging() AS value')).created,0);
+  const found=await rpc('rpc_bom_window',{mode:'items',query:'SKU-A',limit:15});
+  assert.equal(found.rows.length,2);
+  assert.ok(found.rows.every(item=>item.name.startsWith('VỎ THÙNG SKU-A')));
+  assert.ok(found.rows.some(item=>item.name.includes('Brand A')));
+  assert.ok(found.rows.some(item=>item.name.includes('Brand C')));
+  await role(accounting);
+  assert.equal((await rpc('rpc_bom_window',{mode:'items',query:'SKU-B',limit:15})).rows.length,1);
+  await db.exec('RESET ROLE');
+  const shells=(await db.query('SELECT * FROM public.bom_items WHERE source_product_id IS NOT NULL')).rows;
+  assert.equal(shells.length,6);
+  assert.equal(new Set(shells.map(item=>item.code)).size,6);
+  assert.ok(shells.every(item=>item.code.length<=60&&item.name.length<=120));
+  assert.deepEqual((await db.query('SELECT item_id, quantity FROM public.bom_item_balances ORDER BY item_id')).rows,before);
+  assert.equal((await db.query('SELECT * FROM public.bom_items WHERE id=$1',[packId])).rows[0].code,'PACK');
+  // Editing a linked material is preserved on retry, including its purchase unit.
+  await db.query("UPDATE public.bom_items SET name='Vỏ đã hiệu chỉnh',purchase_unit='kiện',purchase_to_base=12 WHERE id=$1",[seeded.id]);
+  await role(admin);
+  await value('SELECT public.rpc_bom_add_product_packaging() AS value');
+  await db.exec('RESET ROLE');
+  const retained=(await db.query('SELECT * FROM public.bom_items WHERE id=$1',[seeded.id])).rows[0];
+  assert.equal(retained.name,'Vỏ đã hiệu chỉnh');
+  assert.equal(retained.purchase_unit,'kiện');
+  assert.equal(Number(retained.purchase_to_base),12);
 });

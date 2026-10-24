@@ -555,3 +555,53 @@ thông thường nhưng còn nguyên trong sổ cái và audit log. Nếu dữ l
 khác trước khi chạy, migration dừng và không ghi gì. Frontend tương ứng:
 `20261019-debt-history-correction-v1`. Vì đây là sửa dữ liệu tài chính thật,
 người quản lý chạy SQL trên dự án SoViet sau khi xem lại các điều kiện ở trên.
+
+`0101_product_packaging_items.sql` bổ sung một vật tư vỏ cho mỗi SKU đang hoạt
+động, có quy cách và không phải mã legacy. Áp dụng sau 0094. Vỏ được liên kết
+bằng ID SKU (không gộp các hãng hoặc quy cách trùng mã), tên chứa loại bao bì,
+mã SKU và tên sản phẩm; đơn vị mặc định là cái, hệ số mua 1. Migration thêm
+danh mục hiện tại; Admin dùng **Bổ sung vỏ theo mã SP** trong phiếu mua hàng
+để tạo tiếp khi có SKU mới. Chạy lại thao tác này không tạo trùng hoặc ghi đè
+vỏ đã chỉnh sửa. Vỏ chung, tồn kho, công thức và dữ liệu tài chính được giữ
+nguyên. Frontend tương ứng: `20261024-product-packaging-v1`. Kiểm thử:
+`node --experimental-default-type=module --test tests/bom-database.test.mjs`.
+
+`0102_purchase_vat.sql` bổ sung VAT nhập theo từng phiếu mua (0–100%, tối đa
+2 chữ số thập phân). Đơn giá là giá chưa VAT; tiền hàng được cộng từ các dòng,
+tiền thuế làm tròn đến đồng rồi cộng vào tổng thanh toán và công nợ. Database
+tự tính số tiền; trình duyệt chỉ gửi phần trăm. Phiếu cũ giữ nguyên tổng tiền
+với VAT 0%, bao gồm khả năng gửi lại yêu cầu cũ mà không tạo trùng. Hủy phiếu
+đảo toàn bộ công nợ gồm thuế. Frontend dùng RPC `rpc_create_purchase_vat` để
+báo thiếu migration thay vì gửi thuế đến server cũ chưa hỗ trợ. Áp dụng sau
+0009 (có thể cùng 0101) trước frontend `20261024-purchase-vat-v1`. Kiểm thử:
+`node --experimental-default-type=module --test tests/purchase-vat-database.test.mjs`.
+
+`0103_sales_returns_credit_balance.sql` đổi cách xử lý phiếu trả mới theo yêu
+cầu giữ tiền cấn trừ: toàn bộ giá trị trả giảm công nợ, cho phép số dư âm và
+không tự tạo phiếu chi. Áp dụng sau 0070; giữ các guard về số lượng, đơn giá,
+idempotency, kho, doanh số và hủy phiếu. Không ghi lại phiếu trả hoặc phiếu
+chi cũ. Phiếu đã hoàn tiền cần đối chiếu riêng trước khi thay đổi nghiệp vụ.
+Frontend `20261024-return-debt-display-v1` dùng RPC có phiên bản để dừng thao
+tác nếu Cloud chưa có chính sách mới. Lịch sử hiển thị tổng phiếu, phần giảm
+nợ và phần hoàn tiền (nếu là chứng từ cũ), liên kết đúng phiếu trả thay vì hóa
+đơn gốc. Kiểm thử bằng `tests/inventory-financial-integration.test.mjs` và
+`tests/customer-return-debt-display.test.mjs`.
+
+`0104_bg04m_return_credit_correction.sql` chuyển riêng phiếu trả
+`RET3-20261024-00000025` của BG04M từ hoàn tiền tự động sang khoản giữ cấn trừ.
+Chỉ chạy sau 0103 khi số dư, tổng trả, phiếu chi và fingerprint đúng trạng thái
+đã đối chiếu. Phiếu chi `PC-RET-20261024-00001827` được đánh dấu hủy và giữ bút
+toán đảo; thêm một dòng trả hàng giảm nợ 2.166.592 đ, số dư từ -23 đ thành
+-2.166.615 đ. Giữ nguyên tổng trả, doanh số, chi tiết hàng và tồn kho. Có sao
+lưu trước sửa và audit tương thích bộ lọc log; chạy lại không trừ tiền lần nữa.
+Đây là bản sửa dữ liệu production cụ thể, không đưa vào bootstrap staging.
+Kiểm thử: `tests/return-credit-correction-database.test.mjs`.
+
+Đã áp dụng 0104 trên SoViet ngày 24/10/2026 sau khi chạy thử transaction với
+`SET CONSTRAINTS ALL IMMEDIATE; ROLLBACK;`. Đối chiếu sau commit: số dư khách
+và sổ công nợ đều -2.166.615 đ, giảm nợ từ phiếu trả 2.166.592 đ, tiền hoàn 0,
+phiếu chi gốc đã hủy, có đúng 1 bút toán đảo và 1 audit sửa nghiệp vụ. Bản
+trước/sau nằm trong thư mục sao lưu cục bộ bị loại khỏi Git:
+`backups/20261024-return25-credit/`. Các đơn sau cộng vào số dư âm này để cấn
+trừ tự động; kiểm thử gồm đơn 300.000 đ rồi 2.000.000 đ, số dư lần lượt
+-1.866.615 đ và 133.385 đ.

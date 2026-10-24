@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261019-debt-history-correction-v1';
-import { bomGateway } from '../services/bom.js?v=20261019-debt-history-correction-v1';
+} from '../services/supabase.js?v=20261024-return-debt-display-v1';
+import { bomGateway } from '../services/bom.js?v=20261024-return-debt-display-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -49,11 +49,11 @@ function itemRow(item = {}) {
     <tr class="purchase-entry-item-row" data-mode="${manual ? 'manual' : 'material'}" data-bom-id="${escapeHtml(item.bomId || '')}">
       <td><input type="text" class="purchase-entry-code" value="${escapeHtml(item.code || '')}" required placeholder="Mã hàng" ${manual ? '' : 'readonly'}></td>
       <td>
-        <div class="purchase-entry-item-source"><span>${manual ? 'Nhập tay' : 'Từ vật tư'}</span><button type="button" class="purchase-entry-switch-source">${manual ? 'Chọn vật tư' : 'Nhập tay'}</button></div>
         <div class="purchase-entry-material-picker">
           <input type="${manual ? 'text' : 'search'}" class="purchase-entry-name ${manual ? '' : 'purchase-entry-material-search'}" value="${escapeHtml(item.name || '')}" required placeholder="${manual ? 'Tên hàng hóa/dịch vụ' : 'Tìm mã hoặc tên vật tư...'}" autocomplete="off" ${manual ? '' : `role="combobox" aria-autocomplete="list" aria-controls="${resultsId}" aria-expanded="false"`}>
           <div class="purchase-entry-material-results" id="${resultsId}" role="listbox" aria-label="Kết quả vật tư" hidden></div>
         </div>
+        <div class="purchase-entry-item-source"><span>${manual ? 'Nhập tay' : 'Từ vật tư'}</span><button type="button" class="purchase-entry-switch-source">${manual ? 'Chọn vật tư' : 'Nhập tay'}</button></div>
       </td>
       <td><input type="text" class="purchase-entry-unit" value="${escapeHtml(item.unit || '')}" placeholder="ĐVT" ${manual ? '' : 'readonly'}></td>
       <td><input type="number" class="purchase-entry-qty" min="0.0001" step="any" value="${item.quantity || 1}" required></td>
@@ -116,7 +116,10 @@ function purchaseModal() {
               <div class="purchase-entry-section-heading purchase-entry-items-heading">
                 <span class="purchase-entry-step">02</span>
                 <div><h4>Hàng hóa / dịch vụ</h4><p>Chọn từ Vật tư & tồn hoặc nhập tay, rồi điền số lượng và đơn giá.</p></div>
-                <button type="button" class="btn btn-secondary purchase-entry-add-row" id="btn-add-purchase-item-row"><i data-lucide="plus"></i><span>Thêm dòng</span></button>
+                <div class="purchase-entry-item-actions">
+                  ${state.currentUser?.role === 'admin' ? '<button type="button" class="btn btn-secondary purchase-entry-add-row" id="btn-add-product-packaging">Bổ sung vỏ theo mã SP</button>' : ''}
+                  <button type="button" class="btn btn-secondary purchase-entry-add-row" id="btn-add-purchase-item-row"><i data-lucide="plus"></i><span>Thêm dòng</span></button>
+                </div>
               </div>
               <div class="purchase-entry-items-wrap">
                 <table class="purchase-entry-items-table">
@@ -124,8 +127,15 @@ function purchaseModal() {
                   <tbody id="purchase-entry-items-body">${itemRow()}</tbody>
                 </table>
               </div>
+              <div class="purchase-entry-tax-settings">
+                <span>Đơn giá chưa gồm VAT. Thuế tính trên tổng tiền hàng.</span>
+                <label for="purchase-vat-rate">VAT (%)</label>
+                <input type="number" class="form-control" id="purchase-vat-rate" min="0" max="100" step="0.01" value="0" required inputmode="decimal">
+              </div>
               <div class="purchase-entry-summary">
-                <div class="purchase-entry-summary-card"><span>Tổng dự kiến</span><strong id="purchase-entry-total">0 ₫</strong></div>
+                <div class="purchase-entry-summary-card"><span>Tiền hàng</span><strong id="purchase-entry-subtotal">0 ₫</strong></div>
+                <div class="purchase-entry-summary-card"><span>Tiền VAT</span><strong id="purchase-entry-vat-total">0 ₫</strong></div>
+                <div class="purchase-entry-summary-card"><span>Tổng gồm VAT</span><strong id="purchase-entry-total">0 ₫</strong></div>
                 <div class="purchase-entry-summary-card is-due"><span>Còn phải trả</span><strong id="purchase-entry-debt-total">0 ₫</strong></div>
               </div>
               <p class="purchase-entry-helper"><i data-lucide="info"></i><span>Database sẽ tự tính lại toàn bộ thành tiền và công nợ khi hoàn thành phiếu.</span></p>
@@ -162,6 +172,8 @@ function purchaseDetail(purchase) {
           ${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.unit)}</td><td>${Number(item.quantity).toLocaleString('vi-VN')}</td><td>${formatCurrency(item.unitPrice)}</td><td>${formatCurrency(item.lineTotal)}</td></tr>`).join('')}
         </tbody></table>
         <div class="purchase-summary">
+          <div><span>Tiền hàng</span><strong>${formatCurrency(purchase.subtotalAmount ?? purchaseTotal(purchase))}</strong></div>
+          <div><span>VAT (${Number(purchase.vatRate || 0).toLocaleString('vi-VN')}%)</span><strong>${formatCurrency(purchase.vatAmount || 0)}</strong></div>
           <div><span>Tổng mua</span><strong>${formatCurrency(purchaseTotal(purchase))}</strong></div>
           <div><span>Đã thanh toán</span><strong>${formatCurrency(purchase.paidAmount)}</strong></div>
           <div><span>Còn phải trả</span><strong>${formatCurrency(purchase.balanceDue)}</strong></div>
@@ -177,16 +189,22 @@ function purchaseDetail(purchase) {
 }
 
 function updateTotals(modal) {
-  let total = 0;
+  let subtotal = 0;
   modal.querySelectorAll('.purchase-entry-item-row').forEach(row => {
     const quantity = Number(row.querySelector('.purchase-entry-qty')?.value || 0);
     const price = Number(row.querySelector('.purchase-entry-price')?.value || 0);
-    const lineTotal = Math.max(0, quantity * price);
-    total += lineTotal;
+    const lineTotal = Math.max(0, Math.round(quantity * Math.round(price)));
+    subtotal += lineTotal;
     const cell = row.querySelector('.purchase-entry-line-total');
     if (cell) cell.textContent = formatCurrency(lineTotal);
   });
   const paid = Math.max(0, Number(modal.querySelector('#purchase-paid-input')?.value || 0));
+  const vatRate = Math.min(100, Math.max(0, Number(modal.querySelector('#purchase-vat-rate').value || 0)));
+  const vatAmount = Math.round(subtotal * Math.round(vatRate * 100) / 10000);
+  const total = subtotal + vatAmount;
+  modal.querySelector('#purchase-entry-subtotal').textContent = formatCurrency(subtotal);
+  modal.querySelector('#purchase-entry-vat-total').textContent = formatCurrency(vatAmount);
+  modal.querySelector('#purchase-paid-input').max = String(total);
   modal.querySelector('#purchase-entry-total').textContent = formatCurrency(total);
   modal.querySelector('#purchase-entry-debt-total').textContent = formatCurrency(Math.max(0, total - paid));
 }
@@ -343,7 +361,7 @@ function syncPurchaseSupplierOptions(modal) {
 function printPurchase(purchase) {
   const popup = window.open('', '_blank', 'width=900,height=700');
   if (!popup) return showToast('Trình duyệt đang chặn cửa sổ in.', 'warning');
-  popup.document.write(`<!doctype html><html><head><title>${escapeHtml(purchase.code)}</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #222;padding:7px;text-align:left}.right{text-align:right}</style></head><body><h2>PHIẾU MUA HÀNG</h2><p>Mã: <b>${escapeHtml(purchase.code)}</b></p><p>Nhà cung cấp: <b>${escapeHtml(purchase.supplierName)}</b></p><p>Ngày mua: ${escapeHtml(purchaseDate(purchase))}</p><table><thead><tr><th>Mã</th><th>Tên</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="right">${Number(item.quantity).toLocaleString('vi-VN')}</td><td class="right">${formatCurrency(item.unitPrice)}</td><td class="right">${formatCurrency(item.lineTotal)}</td></tr>`).join('')}</tbody></table><h3 class="right">Tổng: ${formatCurrency(purchaseTotal(purchase))}</h3><p class="right">Đã trả: ${formatCurrency(purchase.paidAmount)} · Còn phải trả: ${formatCurrency(purchase.balanceDue)}</p></body></html>`);
+  popup.document.write(`<!doctype html><html><head><title>${escapeHtml(purchase.code)}</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #222;padding:7px;text-align:left}.right{text-align:right}</style></head><body><h2>PHIẾU MUA HÀNG</h2><p>Mã: <b>${escapeHtml(purchase.code)}</b></p><p>Nhà cung cấp: <b>${escapeHtml(purchase.supplierName)}</b></p><p>Ngày mua: ${escapeHtml(purchaseDate(purchase))}</p><table><thead><tr><th>Mã</th><th>Tên</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="right">${Number(item.quantity).toLocaleString('vi-VN')}</td><td class="right">${formatCurrency(item.unitPrice)}</td><td class="right">${formatCurrency(item.lineTotal)}</td></tr>`).join('')}</tbody></table><p class="right">Tiền hàng: ${formatCurrency(purchase.subtotalAmount ?? purchaseTotal(purchase))}</p><p class="right">VAT (${Number(purchase.vatRate || 0).toLocaleString('vi-VN')}%): ${formatCurrency(purchase.vatAmount || 0)}</p><h3 class="right">Tổng gồm VAT: ${formatCurrency(purchaseTotal(purchase))}</h3><p class="right">Đã trả: ${formatCurrency(purchase.paidAmount)} · Còn phải trả: ${formatCurrency(purchase.balanceDue)}</p></body></html>`);
   popup.document.close();
   popup.focus();
   popup.print();
@@ -376,6 +394,25 @@ function attachEvents(panel, modal) {
   });
   if (modal && modal.dataset.eventsBound !== 'true') {
     modal.dataset.eventsBound = 'true';
+    modal.querySelector('#btn-add-product-packaging')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = 'Đang bổ sung vỏ…';
+      try {
+        const result = await bomGateway.addProductPackaging();
+        if (!modal.isConnected) return;
+        showToast(result.created > 0 ? `Đã thêm ${result.created} mã vỏ sản phẩm.` : 'Các mã sản phẩm đang dùng đã có vỏ riêng.', 'success');
+        modal.querySelectorAll('.purchase-entry-material-search').forEach(search => {
+          if (search.getAttribute('aria-expanded') === 'true') searchPurchaseMaterials(search.closest('.purchase-entry-item-row'), true);
+        });
+      } catch (error) {
+        showToast(error.message, 'danger');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Bổ sung vỏ theo mã SP';
+      }
+    });
     const supplierSearch = modal.querySelector('#purchase-supplier-search');
     modal.querySelector('#purchase-supplier-search')?.addEventListener('input', () => {
       modal.querySelector('#purchase-supplier-select').value = '';
@@ -459,6 +496,7 @@ function attachEvents(panel, modal) {
       }
     });
     modal.querySelector('#purchase-paid-input')?.addEventListener('input', () => updateTotals(modal));
+    modal.querySelector('#purchase-vat-rate')?.addEventListener('input', () => updateTotals(modal));
     itemBody?.addEventListener('click', event => {
       const row = event.target.closest('.purchase-entry-item-row');
       const material = event.target.closest('.purchase-entry-material-option');
@@ -501,6 +539,7 @@ function attachEvents(panel, modal) {
         invoiceNumber: modal.querySelector('#purchase-invoice-number').value.trim(),
         purchaseDate: new Date(modal.querySelector('#purchase-date-input').value).toISOString(),
         paidAmount: Number(modal.querySelector('#purchase-paid-input').value || 0),
+        vatRate: Number(modal.querySelector('#purchase-vat-rate').value || 0),
         paymentMethod: modal.querySelector('#purchase-payment-method').value,
         notes: modal.querySelector('#purchase-note-input').value.trim(),
         idempotencyKey: pendingPurchaseKey || newKey('purchase'), items

@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261019-debt-history-correction-v1';
-import { renderAll } from '../main.js?v=20261019-debt-history-correction-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261019-debt-history-correction-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261019-debt-history-correction-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261024-return-debt-display-v1';
+import { renderAll } from '../main.js?v=20261024-return-debt-display-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261024-return-debt-display-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261024-return-debt-display-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261019-debt-history-correction-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261019-debt-history-correction-v1';
+} from '../domain/order-financials.js?v=20261024-return-debt-display-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261024-return-debt-display-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261019-debt-history-correction-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261024-return-debt-display-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -3587,6 +3587,9 @@ async function exportCustomerOrderHistoryExcel() {
 }
 
 function getCustomerDebtSource(historyEntry = {}) {
+  const returnId = historyEntry.salesReturnId || historyEntry.sales_return_id;
+  const type = historyEntry.transactionType || historyEntry.transaction_type || historyEntry.type;
+  if (returnId && ['return', 'return_cancel', 'return_amend'].includes(type)) return { kind: 'return', id: String(returnId) };
   const orderId = historyEntry.orderId || historyEntry.order_id;
   if (orderId) return { kind: 'order', id: String(orderId) };
   const cashbookId = historyEntry.cashbookTransactionId || historyEntry.cashbook_transaction_id;
@@ -3709,13 +3712,17 @@ async function openCustomerDebtSourceDetail(source, historyEntry, customer) {
       document.getElementById('customer-debt-source-note').innerText = transaction.note || historyEntry.note || '-';
       cashbookSection.style.display = 'block';
     } else {
-      const salesReturn = (state.salesReturns || []).find(item => String(item.id) === source.id);
+      const salesReturn = (customer?.returnDocuments || state.salesReturns || [])
+        .find(item => String(item.id) === source.id && String(item.customerId) === String(customer?.id));
       document.getElementById('customer-debt-source-title').innerText = `Chi tiết phiếu trả ${source.id}`;
       document.getElementById('customer-debt-source-meta').innerHTML = [
         debtSourceMeta('Mã phiếu trả', source.id),
         debtSourceMeta('Khách hàng', customer?.name),
-        debtSourceMeta('Thời gian', formatDateOnly(salesReturn?.date || historyEntry.date)),
-        debtSourceMeta('Giá trị', formatCurrency(salesReturn?.totalRefund || historyEntry.amount || 0))
+        debtSourceMeta('Thời gian', formatDateOnly(salesReturn?.returnDate || salesReturn?.createdAt || historyEntry.date)),
+        debtSourceMeta('Giá trị phiếu trả', formatCurrency(salesReturn?.totalRefund ?? historyEntry.returnTotalAmount ?? historyEntry.amount ?? 0)),
+        debtSourceMeta('Giảm công nợ', formatCurrency(salesReturn?.debtReductionAmount ?? historyEntry.returnDebtReductionAmount ?? Math.abs(historyEntry.debtChange || 0))),
+        debtSourceMeta('Hoàn tiền', formatCurrency(salesReturn?.refundAmount ?? historyEntry.cashRefundAmount ?? 0)),
+        debtSourceMeta('Phiếu chi hoàn tiền', salesReturn?.refundCashbookId || '-')
       ].join('');
       document.getElementById('customer-debt-source-note').innerText = salesReturn?.reason || historyEntry.note || '-';
     }
@@ -3825,7 +3832,9 @@ export async function openCustomerDetailModal(index) {
   // Vẽ danh sách lịch sử biến động công nợ
   const historyBody = document.getElementById('detail-debt-history-body');
   if (historyBody) {
-    const history = buildCustomerDebtDisplayHistory(cust.debtHistory || [], cust.debt)
+    const returnHistory = withCustomerReturnDocuments(cust.debtHistory || [],
+      cust.returnDocuments || state.salesReturns || [], cust.id);
+    const history = buildCustomerDebtDisplayHistory(returnHistory, cust.debt)
       .filter(entry => !customerDebtAdjustmentsHidden
         || (entry.type !== 'adjust' && entry.transactionType !== 'adjust'));
     
@@ -3879,7 +3888,12 @@ export async function openCustomerDetailModal(index) {
         } else if (h.type === 'return') {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(14, 165, 233, 0.15); color: #0284c7; border: 1px solid rgba(14, 165, 233, 0.3); font-weight: 600; white-space: nowrap;">Trả hàng</span>`;
           const returnChange = debtChange ?? -Math.abs(Number(h.amount || 0));
-          amountText = `<span style="color: #0284c7; font-weight: 600;">-${formatCurrency(Math.abs(returnChange))}</span>`;
+          const returnValue = Number(h.returnTotalAmount);
+          const cashRefund = Number(h.cashRefundAmount || 0);
+          const signedChange = returnChange === 0 ? formatCurrency(0) : `-${formatCurrency(Math.abs(returnChange))}`;
+          amountText = Number.isFinite(returnValue)
+            ? `<span style="color:#0284c7;font-weight:600;">${formatCurrency(returnValue)}</span><small class="customer-return-debt-breakdown">Giảm nợ: ${signedChange}${cashRefund > 0 ? `<br>Hoàn tiền: ${formatCurrency(cashRefund)}` : ''}</small>`
+            : `<span style="color: #0284c7; font-weight: 600;">${signedChange}</span>`;
           debtBefore = h.debtBefore ?? (h.debtAfter - returnChange);
         } else if (isOrderAmendment) {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); font-weight: 600; white-space: nowrap;">Điều chỉnh đơn</span>`;

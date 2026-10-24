@@ -4,7 +4,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
-let db; let orderId;
+let db; let orderId; let legacyReturnResult;
 const admin = '88000000-0000-4000-8000-000000000001';
 const sale = '88000000-0000-4000-8000-000000000002';
 async function value(sql, args=[]) { return (await db.query(sql,args)).rows[0].value; }
@@ -127,4 +127,114 @@ test('paused Sale checkout commits debt, queues stock, and resume reconciles wit
   current=await snapshot();assert.equal(Number(current.stock),97);assert.equal(Number(current.debt),0);
   await role(admin);await value('SELECT public.rpc_inventory_set_sync(true) AS value');
   current=await snapshot();assert.equal(Number(current.stock),100);assert.equal(Number(current.debt),0);
+});
+
+test('a return against a -23 credit balance is fully refunded in cash by the existing database rule',async()=>{
+  await role(sale);
+  const saleResult=await value('SELECT public.rpc_confirm_order($1::jsonb) AS value',[JSON.stringify({
+    idempotencyKey:randomUUID(),customerId:'fin-customer',pricelistId:'fin-prices',paidAmount:0,
+    items:[{variantId:'fin-sku',quantity:3,discountType:'percent',discountValue:0}]
+  })]);
+  const returnedOrderId=saleResult.order.id;
+  await role(admin);
+  await value('SELECT public.rpc_adjust_customer_debt($1,$2,$3) AS value',['fin-customer',-23,'Synthetic credit balance']);
+  await db.exec('RESET ROLE');
+  const itemId=await value('SELECT id AS value FROM public.order_items WHERE order_id=$1',[returnedOrderId]);
+  await role(admin);
+  const result=await value('SELECT public.rpc_record_sales_return($1::jsonb) AS value',[JSON.stringify({
+    orderId:returnedOrderId,idempotencyKey:randomUUID(),reason:'Synthetic negative-balance return',paymentMethod:'cash',
+    items:[{saleItemId:itemId,quantity:2,deductionPercent:0}]
+  })]);
+  assert.equal(Number(result.total_refund),200000);
+  assert.equal(Number(result.debt_reduction),0);
+  assert.equal(Number(result.cash_refund),200000);
+  assert.equal(Number(result.new_debt),-23);
+  legacyReturnResult=result;
+  await db.exec('RESET ROLE');
+  assert.equal(Number(await value('SELECT value AS value FROM public.cashbook_transactions WHERE id=$1',[result.refund_cashbook_id])),200000);
+  assert.equal(Number(await value("SELECT count(*) AS value FROM public.customer_debt_transactions WHERE sales_return_id=$1 AND transaction_type='return'",[result.return_id])),0);
+});
+
+test('0103 credits the full return into negative balances, is idempotent and reverses stock/debt exactly',async()=>{
+  await db.exec('RESET ROLE');
+  const legacyBefore=(await db.query('SELECT * FROM public.sales_returns WHERE id=$1',[legacyReturnResult.return_id])).rows[0];
+  await db.exec(await readFile(new URL('../migrations/0103_sales_returns_credit_balance.sql',import.meta.url),'utf8'));
+  assert.deepEqual((await db.query('SELECT * FROM public.sales_returns WHERE id=$1',[legacyReturnResult.return_id])).rows[0],legacyBefore);
+  for(const debtBefore of [-23,0,50000,300000]){
+    await role(sale);
+    const order=await value('SELECT public.rpc_confirm_order($1::jsonb) AS value',[JSON.stringify({
+      idempotencyKey:randomUUID(),customerId:'fin-customer',pricelistId:'fin-prices',paidAmount:0,
+      items:[{variantId:'fin-sku',quantity:3,discountType:'percent',discountValue:0}]
+    })]);
+    await role(admin);
+    await value('SELECT public.rpc_adjust_customer_debt($1,$2,$3) AS value',['fin-customer',debtBefore,'Synthetic credit policy test']);
+    const before=await snapshot();
+    const itemId=await value('SELECT id AS value FROM public.order_items WHERE order_id=$1',[order.order.id]);
+    await role(admin);
+    const request={orderId:order.order.id,idempotencyKey:randomUUID(),reason:'Retain credit',paymentMethod:'cash',
+      items:[{saleItemId:itemId,quantity:2,deductionPercent:0}]};
+    const call=()=>value('SELECT public.rpc_record_sales_return_credit($1::jsonb) AS value',[JSON.stringify(request)]);
+    await role(sale);
+    await assert.rejects(call(),/accounting role required/);
+    await role(admin);
+    await assert.rejects(value('SELECT public.rpc_record_sales_return_credit($1::jsonb) AS value',[JSON.stringify({ ...request,
+      items:[{saleItemId:itemId,quantity:4,deductionPercent:0}] })]),/exceeds remaining/);
+    const result=await call();
+    assert.equal(Number(result.total_refund),200000);
+    assert.equal(Number(result.debt_reduction),200000);
+    assert.equal(Number(result.cash_refund),0);
+    assert.equal(result.refund_cashbook_id,null);
+    assert.equal(Number(result.new_debt),debtBefore-200000);
+    assert.equal((await call()).already_recorded,true);
+    const after=await snapshot();
+    assert.equal(Number(after.stock),Number(before.stock)+2);
+    assert.equal(Number(after.debt),debtBefore-200000);
+    const row=(await db.query("SELECT * FROM public.customer_debt_transactions WHERE sales_return_id=$1 AND transaction_type='return'",[result.return_id])).rows[0];
+    assert.equal(Number(row.debt_change),-200000);
+    assert.equal(Number(row.balance_before),debtBefore);
+    assert.equal(Number(row.balance_after),debtBefore-200000);
+    assert.equal(Number(await value('SELECT count(*) AS value FROM public.cashbook_transactions WHERE sales_return_id=$1',[result.return_id])),0);
+    await role(admin);
+    const cancelled=await value('SELECT public.rpc_cancel_sales_return($1,$2) AS value',[result.return_id,'Synthetic cancellation of credit']);
+    assert.equal(Number(cancelled.new_debt),debtBefore);
+    const restored=await snapshot();
+    assert.equal(Number(restored.stock),Number(before.stock));
+  }
+});
+
+test('legacy cash refunds still cancel correctly after the credit-policy upgrade',async()=>{
+  const before=await snapshot();
+  await role(admin);
+  const cancelled=await value('SELECT public.rpc_cancel_sales_return($1,$2) AS value',[legacyReturnResult.return_id,'Synthetic legacy cash cancellation']);
+  assert.equal(Number(cancelled.new_debt),Number(before.debt));
+  assert.equal(Number(cancelled.new_total_return),Number(legacyReturnResult.new_total_return)-200000);
+  await db.exec('RESET ROLE');
+  const voucher=(await db.query('SELECT status FROM public.cashbook_transactions WHERE id=$1',[legacyReturnResult.refund_cashbook_id])).rows[0];
+  assert.equal(voucher.status,'cancelled');
+});
+
+test('retained return credit automatically offsets later orders before the customer owes new money',async()=>{
+  await role(admin);
+  await value('SELECT public.rpc_adjust_customer_debt($1,$2,$3) AS value',['fin-customer',-2166615,'Synthetic retained credit']);
+  const before=await snapshot();
+  const orders=[];
+  for(const [quantity,expectedDebt] of [[3,-1866615],[20,133385]]){
+    await role(sale);
+    const response=await value('SELECT public.rpc_confirm_order($1::jsonb) AS value',[JSON.stringify({
+      idempotencyKey:randomUUID(),customerId:'fin-customer',pricelistId:'fin-prices',paidAmount:0,
+      items:[{variantId:'fin-sku',quantity,discountType:'percent',discountValue:0}]
+    })]);
+    orders.push(response.order.id);
+    assert.equal(Number(response.new_debt),expectedDebt);
+    const current=await snapshot();
+    assert.equal(Number(current.debt),expectedDebt);
+    assert.equal(Number(await value('SELECT count(*) AS value FROM public.cashbook_transactions WHERE order_id=$1',[response.order.id])),0);
+  }
+  for(const id of orders.reverse()){
+    await role(admin);
+    await value('SELECT public.rpc_cancel_order($1,$2) AS value',[id,'Synthetic credit-offset cancellation']);
+  }
+  const restored=await snapshot();
+  assert.equal(Number(restored.debt),-2166615);
+  assert.equal(Number(restored.stock),Number(before.stock));
 });

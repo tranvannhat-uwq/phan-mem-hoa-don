@@ -1,20 +1,20 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261019-debt-history-correction-v1';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20261019-debt-history-correction-v1';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261019-debt-history-correction-v1';
-import { openHistoryOrderExportModal } from './customers.js?v=20261019-debt-history-correction-v1';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261024-return-debt-display-v1';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20261024-return-debt-display-v1';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261024-return-debt-display-v1';
+import { openHistoryOrderExportModal } from './customers.js?v=20261024-return-debt-display-v1';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary,
   calculateHistoryFinancialSummary,
   isSalesReturnActive
-} from '../domain/order-financials.js?v=20261019-debt-history-correction-v1';
+} from '../domain/order-financials.js?v=20261024-return-debt-display-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
-import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261019-debt-history-correction-v1';
+import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261024-return-debt-display-v1';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261019-debt-history-correction-v1';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261024-return-debt-display-v1';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -1830,7 +1830,6 @@ export function openSalesReturnModal(orderId) {
   document.getElementById('return-meta-date').innerText = formatDateTime(order.date);
   document.getElementById('return-meta-creator').innerText = state.currentUser ? state.currentUser.displayName : 'Administrator';
   document.getElementById('return-reason-input').value = '';
-  document.getElementById('return-refund-method').value = 'cash';
   pendingSalesReturnKey = globalThis.crypto.randomUUID();
 
   const existingReturns = (state.salesReturns || []).filter(r => r.saleId === order.id && r.status !== 'cancelled');
@@ -1941,7 +1940,7 @@ export function openSalesReturnModal(orderId) {
     if (cust && warningDiv && excessAmtLbl) {
       const currentDebt = parseFloat(cust.debt || 0);
       const debtAfter = currentDebt - totalRefund;
-      if (debtAfter < 0) {
+      if (totalRefund > 0 && debtAfter < 0) {
         warningDiv.style.display = 'block';
         excessAmtLbl.innerText = formatCurrency(Math.abs(debtAfter));
       } else {
@@ -2018,7 +2017,7 @@ export async function processSalesReturnSubmit(e) {
   const returnObj = {
     saleId: order.id,
     reason: reason,
-    paymentMethod: document.getElementById('return-refund-method').value,
+    paymentMethod: 'cash',
     idempotencyKey: pendingSalesReturnKey
   };
   const returnResult = await dbRecordSalesReturn(returnObj, returnItems);
@@ -2054,6 +2053,10 @@ export async function processSalesReturnSubmit(e) {
           type: 'return',
           id: localLedgerId,
           amount: Number(returnResult.debt_reduction || 0),
+          debtChange: -Number(returnResult.debt_reduction || 0),
+          returnTotalAmount: Number(returnResult.total_refund || 0),
+          returnDebtReductionAmount: Number(returnResult.debt_reduction || 0),
+          cashRefundAmount: Number(returnResult.cash_refund || 0),
           debtBefore,
           debtAfter: cust.debt,
           salesReturnId: persistedReturn.id,
@@ -2061,6 +2064,7 @@ export async function processSalesReturnSubmit(e) {
           note: `Phiếu trả hàng ${persistedReturn.id} cho đơn ${order.id}: ${reason}`
         });
       }
+      cust.returnDocuments = [persistedReturn, ...(cust.returnDocuments || []).filter(item => item.id !== persistedReturn.id)];
     }
   }
   localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
@@ -2108,6 +2112,7 @@ export async function cancelSalesReturn(returnId) {
           id: `return-cancel-${ret.id}`,
           date: new Date().toISOString(),
           type: 'return_cancel',
+          transactionType: 'return_cancel',
           amount: Number(ret.debtReductionAmount || 0),
           debtBefore,
           debtAfter: cust.debt,
@@ -2116,6 +2121,7 @@ export async function cancelSalesReturn(returnId) {
           note: `Hủy phiếu trả hàng ${ret.id} của đơn ${ret.saleId}`
         });
       }
+      cust.returnDocuments = (cust.returnDocuments || []).map(item => item.id === ret.id ? { ...item, status: 'cancelled' } : item);
     }
   }
 

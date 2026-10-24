@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Return debt history regression</title><link rel="stylesheet" href="../style.css"></head>
+<body><script>window.__app_initialized = true;</script>
+<script type="module">
+  import { state } from '../js/state.js';
+  import { openCustomerDetailModal } from '../js/components/customers.js?v=20261024-return-debt-display-v1';
+  const markup = await (await fetch('../index.html')).text();
+  const parsed = new DOMParser().parseFromString(markup, 'text/html');
+  for (const id of ['customer-detail-modal', 'customer-debt-source-modal']) {
+    document.body.append(parsed.getElementById(id));
+  }
+  state.currentUser = { id:'return-review-admin', username:'test', role:'admin' };
+  const creditPolicy = new URLSearchParams(location.search).get('policy') !== 'legacy';
+  state.customers = [{ id:'return-review-customer', code:'KH-KIEM-THU', name:'Đại lý kiểm thử trả hàng',assignedBrand:'NANO10 MB',
+    debt:-23, totalTransaction:10000000, totalReturn:2166592, netRevenue:7833408,
+    debtHistory:[{ id:'receipt',type:'payment',amount:4185000,debtChange:-4185000,
+      debtBefore:4184977,debtAfter:-23,date:'2026-10-20T02:32:00Z' }],
+    returnDocuments:[{ id:'RET-20261024-00000001', customerId:'return-review-customer', saleId:'HD-ORIGINAL',
+      totalRefund:2166592, debtReductionAmount:0, refundAmount:2166592,
+      refundCashbookId:'PC-RET-20261024-00000001',status:'completed',createdAt:'2026-10-24T07:37:00Z',
+      returnDate:'2026-10-24T07:37:00Z',reason:'Dữ liệu giả tái hiện phiếu trả khi số dư -23đ' }] }];
+  if (creditPolicy) {
+    const customer = state.customers[0], document = customer.returnDocuments[0];
+    customer.debt = -2166615;
+    document.debtReductionAmount = document.totalRefund;
+    document.refundAmount = 0;
+    document.refundCashbookId = null;
+    document.reason = 'Giữ tiền trả hàng để cấn trừ lần sau';
+    customer.debtHistory.push({ id:'return-credit-ledger',type:'return',transactionType:'return',
+      salesReturnId:document.id,orderId:document.saleId,amount:2166592,debtChange:-2166592,
+      debtBefore:-23,debtAfter:-2166615,date:document.createdAt,note:document.reason });
+  }
+  await openCustomerDetailModal(0);
+  document.body.dataset.ready='true';
+</script></body></html>

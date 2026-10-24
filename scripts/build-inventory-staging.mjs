@@ -9,9 +9,14 @@ names.push('0089_inventory_sync_toggle.sql');
 names.push('0090_bounded_customer_product_lookup.sql');
 names.push('0091_inventory_page_limit.sql');
 names.push('0092_bom_two_stage.sql');
+names.push('0093_bom_item_unit_edit.sql');
+names.push('0094_repair_bom_item_unit_edit.sql');
 names.push('0095_product_name_token_search.sql');
 names.push('0096_invoice_product_packaging_fallback.sql');
 names.push('0097_invoice_product_brand_search.sql');
+names.push('0101_product_packaging_items.sql');
+names.push('0102_purchase_vat.sql');
+names.push('0103_sales_returns_credit_balance.sql');
 const parts=[`-- EMPTY SUPABASE STAGING PROJECT ONLY. Never paste into production.
 -- This guard prevents bootstrap against an existing billing database.
 DO $$ BEGIN

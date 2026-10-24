@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { isCloudActive, supabaseClient } from './supabase.js?v=20261019-debt-history-correction-v1';
+import { isCloudActive, supabaseClient } from './supabase.js?v=20261024-return-debt-display-v1';
 
 let generation = 0;
 let session = '';
@@ -40,6 +40,14 @@ export const bomGateway={
     return data;
   },
   async saveItem(input){const data=await call('rpc_bom_save_item',{p_input:input});cache.clear();return data;},
+  async addProductPackaging(){
+    try{
+      const data=await call('rpc_bom_add_product_packaging',{});cache.clear();return data;
+    }catch(error){
+      if(error.message==='Cloud chưa cập nhật BOM 0092.')throw new Error('Cloud cần chạy migration 0101 để bổ sung vỏ theo mã sản phẩm.');
+      throw error;
+    }
+  },
   async postItem(input){const data=await call('rpc_bom_post_item',{p_input:input});cache.clear();return data;},
   async saveDraft(input){const data=await call('rpc_bom_save_draft',{p_input:input});cache.clear();return data;},
   async publish(id){const data=await call('rpc_bom_publish',{p_version_id:id});cache.clear();return data;},

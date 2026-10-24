@@ -31,3 +31,15 @@ test('customer refresh removes an optimistic return-cancellation twin', () => {
   ]);
   assert.deepEqual(history.map(item => item.id), ['DTX-RET3-VOID-ledger-1']);
 });
+
+test('a historical cash-only return placeholder is replaced by its corrected credit ledger', () => {
+  const history=mergeCustomerDebtHistory([
+    {id:'return-RET3-25',type:'return',salesReturnId:'RET3-25',amount:0},
+    {id:'payment-1',type:'payment',amount:100}
+  ],[
+    {id:'DTX-RET3-CREDIT-RET3-25',type:'return',transactionType:'return',salesReturnId:'RET3-25',amount:2166592,debtChange:-2166592}
+  ]);
+  assert.equal(history.filter(entry=>entry.salesReturnId==='RET3-25').length,1);
+  assert.equal(history.find(entry=>entry.salesReturnId==='RET3-25').amount,2166592);
+  assert.ok(history.some(entry=>entry.id==='payment-1'));
+});

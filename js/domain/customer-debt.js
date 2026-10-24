@@ -273,9 +273,49 @@ function getCustomerDebtEntryChange(entry = {}) {
   if (rawExplicit != null && rawExplicit !== '' && Number.isFinite(explicit)) return toDebtAmount(explicit);
   const amount = Math.abs(toDebtAmount(entry.amount));
   const type = debtTransactionType(entry);
-  if (type === 'payment' || type === 'return') return -amount;
+  if (type === 'payment' || type === 'return') return amount === 0 ? 0 : -amount;
   if (type === 'order' || type === 'charge') return amount;
   return toDebtAmount(entry.amount);
+}
+
+/** Add return document values without changing their posted debt impact.
+ * A fully cash-refunded return has no debt ledger row in older databases.
+ * Include it as a document with zero debt movement, never as a new charge.
+ */
+export function withCustomerReturnDocuments(history = [], returns = [], customerId = '') {
+  const cancelledIds = new Set((Array.isArray(returns) ? returns : [])
+    .filter(document => String(document.customerId ?? document.customer_id ?? '') === String(customerId)
+      && ['cancelled', 'canceled'].includes(String(document.status || '').toLowerCase()))
+    .map(document => String(document.id)));
+  const result = (Array.isArray(history) ? history : [])
+    .filter(entry => !cancelledIds.has(String(entry.salesReturnId ?? entry.sales_return_id ?? '')))
+    .map(entry => ({ ...entry }));
+  for (const document of Array.isArray(returns) ? returns : []) {
+    const id = String(document.id || '');
+    if (!id || String(document.customerId ?? document.customer_id ?? '') !== String(customerId)) continue;
+    if (['cancelled', 'canceled'].includes(String(document.status || '').toLowerCase())) continue;
+    const total = Number(document.totalRefund ?? document.total_refund ?? document.totalReturnAmount ?? document.total_return_amount);
+    const reduction = Number(document.debtReductionAmount ?? document.debt_reduction_amount);
+    const cash = Number(document.refundAmount ?? document.refund_amount);
+    if (!Number.isFinite(total) || total < 0) continue;
+    const fields = { returnTotalAmount: toDebtAmount(total),
+      ...(Number.isFinite(reduction) ? { returnDebtReductionAmount: toDebtAmount(reduction) } : {}),
+      ...(Number.isFinite(cash) ? { cashRefundAmount: toDebtAmount(cash) } : {}) };
+    const entries = result.filter(entry =>
+      String(entry.salesReturnId ?? entry.sales_return_id ?? '') === id
+      && debtTransactionType(entry) === 'return');
+    if (entries.length) {
+      entries.forEach(entry => Object.assign(entry, fields));
+    } else if (reduction === 0 && Number.isFinite(cash) && toDebtAmount(cash) === toDebtAmount(total)) {
+      const date = document.createdAt || document.created_at || document.returnDate || document.return_date;
+      result.push({ id: `return-document:${id}`, type: 'return', transactionType: 'return',
+        salesReturnId: id, orderId: document.saleId || document.sale_id || document.orderId || document.order_id,
+        customerId, date: document.returnDate || document.return_date || date, postedAt: date,
+        amount: 0, debtChange: 0, ...fields,
+        note: `Phiếu trả hàng ${id}${document.reason ? `: ${document.reason}` : ''}` });
+    }
+  }
+  return result;
 }
 
 /**
@@ -400,6 +440,12 @@ export function mergeCustomerDebtHistory(existingHistory = [], ledgerHistory = [
         && String(item.salesReturnId) === String(existing.salesReturnId)
         && String(existing.id || '').startsWith('return-cancel-');
       if (sameReturnCancellation) merged.delete(existingKey);
+      const sameReturnPlaceholder = (item?.transactionType === 'return' || item?.type === 'return')
+        && (existing?.transactionType === 'return' || existing?.type === 'return')
+        && item?.salesReturnId && String(item.salesReturnId) === String(existing.salesReturnId)
+        && String(item.id || '') !== String(existing.id || '')
+        && String(existing.id || '').startsWith('return-');
+      if (sameReturnPlaceholder) merged.delete(existingKey);
     }
     const key = String(item?.id || `ledger:${item?.date || ''}:${item?.type || ''}:${item?.amount || 0}`);
     merged.set(key, item);

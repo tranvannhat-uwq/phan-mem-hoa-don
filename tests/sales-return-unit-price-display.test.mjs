@@ -32,11 +32,13 @@ test('sales return applies only the accountant-entered deduction to the order un
   assert.doesNotMatch(returnFlow, /getAttribute\('data-unit-price'\)/);
 });
 
-test('sales return summary shows gross value, effective deduction percent and final refund', () => {
+test('sales return summary shows gross value, effective deduction percent and retained debt credit', () => {
   assert.match(markup, /id="return-gross-total-lbl"/);
   assert.match(markup, /Chiết khấu \(<span id="return-deduction-percent-lbl">0%<\/span>\)/);
   assert.match(markup, /id="return-deduction-amount-lbl"/);
-  assert.match(markup, /Tổng tiền hoàn:/);
+  assert.match(markup, /Giá trị cấn trừ công nợ:/);
+  assert.match(markup, /Phần vượt nợ giữ thành số dư âm/);
+  assert.doesNotMatch(markup, /id="return-refund-method"/);
   assert.match(returnFlow, /grossReturnTotal \+= grossSubtotal/);
   assert.match(returnFlow, /totalDeduction \+= grossSubtotal - subtotal/);
   assert.match(returnFlow, /totalDeduction \* 100 \/ grossReturnTotal/);
