@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { isCloudActive, supabaseClient } from './supabase.js?v=20261024-return-debt-display-v1';
+import { isCloudActive, supabaseClient } from './supabase.js?v=20261024-existing-product-shells-v1';
 
 let generation = 0;
 let session = '';
@@ -40,11 +40,13 @@ export const bomGateway={
     return data;
   },
   async saveItem(input){const data=await call('rpc_bom_save_item',{p_input:input});cache.clear();return data;},
-  async addProductPackaging(){
+  async searchPurchaseItems(filters={}){
     try{
-      const data=await call('rpc_bom_add_product_packaging',{});cache.clear();return data;
+      const data=await call('rpc_purchase_catalog',{p_filters:filters});
+      if(!Array.isArray(data?.rows)||data.rows.length>Number(filters.limit??30))throw new Error('Cloud trả danh mục mua hàng không hợp lệ.');
+      return data;
     }catch(error){
-      if(error.message==='Cloud chưa cập nhật BOM 0092.')throw new Error('Cloud cần chạy migration 0101 để bổ sung vỏ theo mã sản phẩm.');
+      if(error.message==='Cloud chưa cập nhật BOM 0092.')throw new Error('Cloud cần chạy migration 0105 để chọn mã vỏ có trong Danh sách sản phẩm.');
       throw error;
     }
   },

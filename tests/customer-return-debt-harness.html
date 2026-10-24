@@ -4,7 +4,7 @@
 <body><script>window.__app_initialized = true;</script>
 <script type="module">
   import { state } from '../js/state.js';
-  import { openCustomerDetailModal } from '../js/components/customers.js?v=20261024-return-debt-display-v1';
+  import { openCustomerDetailModal } from '../js/components/customers.js?v=20261024-existing-product-shells-v1';
   const markup = await (await fetch('../index.html')).text();
   const parsed = new DOMParser().parseFromString(markup, 'text/html');
   for (const id of ['customer-detail-modal', 'customer-debt-source-modal']) {

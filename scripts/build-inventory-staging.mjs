@@ -17,6 +17,7 @@ names.push('0097_invoice_product_brand_search.sql');
 names.push('0101_product_packaging_items.sql');
 names.push('0102_purchase_vat.sql');
 names.push('0103_sales_returns_credit_balance.sql');
+names.push('0105_purchase_existing_product_shells.sql');
 const parts=[`-- EMPTY SUPABASE STAGING PROJECT ONLY. Never paste into production.
 -- This guard prevents bootstrap against an existing billing database.
 DO $$ BEGIN

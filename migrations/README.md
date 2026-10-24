@@ -605,3 +605,15 @@ trước/sau nằm trong thư mục sao lưu cục bộ bị loại khỏi Git:
 `backups/20261024-return25-credit/`. Các đơn sau cộng vào số dư âm này để cấn
 trừ tự động; kiểm thử gồm đơn 300.000 đ rồi 2.000.000 đ, số dư lần lượt
 -1.866.615 đ và 133.385 đ.
+
+`0105_purchase_existing_product_shells.sql` sửa nguồn chọn vỏ trong phiếu mua:
+lấy đúng SKU vỏ có sẵn trong `products`, ví dụ `VỎ THÙNG NT-B1`, và giữ nguyên
+mã, tên sản phẩm, hãng, đơn vị mua và giá nhập của mục đó. Không tạo vỏ từ SKU
+sơn, không tạo mã VO/hash mới. Khi tìm “vỏ”, kết quả chỉ lấy mã vỏ thực từ danh
+sách sản phẩm; vật tư chung vẫn tìm được bằng mã/tên riêng. Các vỏ tự sinh bởi
+0101 được giữ nguyên để bảo toàn liên kết/lịch sử, nhưng không dùng trong danh
+mục mua mới. RPC bổ sung vỏ cũ được ngừng để trình duyệt lưu cache không tạo
+thêm mục tự sinh. Chạy sau 0092 và 0097; không bắt buộc đã chạy 0101. Frontend
+`20261024-existing-product-shells-v1`. Phân trang cursor tối đa 30 dòng, tìm
+không dấu và nhiều từ, cùng ngân sách/guard vai trò của BOM. Không sửa sản phẩm,
+giá, tồn hoặc giao dịch mua đã ghi. Kiểm thử: `tests/purchase-catalog-database.test.mjs`.

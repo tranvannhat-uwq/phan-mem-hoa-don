@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261024-return-debt-display-v1';
-import { bomGateway } from '../services/bom.js?v=20261024-return-debt-display-v1';
+} from '../services/supabase.js?v=20261024-existing-product-shells-v1';
+import { bomGateway } from '../services/bom.js?v=20261024-existing-product-shells-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -46,14 +46,14 @@ function itemRow(item = {}) {
   const manual = item.mode === 'manual';
   const resultsId = `purchase-material-results-${++purchaseItemRowSequence}`;
   return `
-    <tr class="purchase-entry-item-row" data-mode="${manual ? 'manual' : 'material'}" data-bom-id="${escapeHtml(item.bomId || '')}">
+    <tr class="purchase-entry-item-row" data-mode="${manual ? 'manual' : 'material'}" data-catalog-id="${escapeHtml(item.catalogId || '')}">
       <td><input type="text" class="purchase-entry-code" value="${escapeHtml(item.code || '')}" required placeholder="Mã hàng" ${manual ? '' : 'readonly'}></td>
       <td>
         <div class="purchase-entry-material-picker">
           <input type="${manual ? 'text' : 'search'}" class="purchase-entry-name ${manual ? '' : 'purchase-entry-material-search'}" value="${escapeHtml(item.name || '')}" required placeholder="${manual ? 'Tên hàng hóa/dịch vụ' : 'Tìm mã hoặc tên vật tư...'}" autocomplete="off" ${manual ? '' : `role="combobox" aria-autocomplete="list" aria-controls="${resultsId}" aria-expanded="false"`}>
           <div class="purchase-entry-material-results" id="${resultsId}" role="listbox" aria-label="Kết quả vật tư" hidden></div>
         </div>
-        <div class="purchase-entry-item-source"><span>${manual ? 'Nhập tay' : 'Từ vật tư'}</span><button type="button" class="purchase-entry-switch-source">${manual ? 'Chọn vật tư' : 'Nhập tay'}</button></div>
+        <div class="purchase-entry-item-source"><span>${manual ? 'Nhập tay' : 'Từ danh mục'}</span><button type="button" class="purchase-entry-switch-source">${manual ? 'Chọn danh mục' : 'Nhập tay'}</button></div>
       </td>
       <td><input type="text" class="purchase-entry-unit" value="${escapeHtml(item.unit || '')}" placeholder="ĐVT" ${manual ? '' : 'readonly'}></td>
       <td><input type="number" class="purchase-entry-qty" min="0.0001" step="any" value="${item.quantity || 1}" required></td>
@@ -115,9 +115,8 @@ function purchaseModal() {
             <section class="purchase-entry-card purchase-entry-items-card">
               <div class="purchase-entry-section-heading purchase-entry-items-heading">
                 <span class="purchase-entry-step">02</span>
-                <div><h4>Hàng hóa / dịch vụ</h4><p>Chọn từ Vật tư & tồn hoặc nhập tay, rồi điền số lượng và đơn giá.</p></div>
+                <div><h4>Hàng hóa / dịch vụ</h4><p>Chọn mã vỏ từ Danh sách sản phẩm, vật tư hoặc nhập tay, rồi điền số lượng và đơn giá.</p></div>
                 <div class="purchase-entry-item-actions">
-                  ${state.currentUser?.role === 'admin' ? '<button type="button" class="btn btn-secondary purchase-entry-add-row" id="btn-add-product-packaging">Bổ sung vỏ theo mã SP</button>' : ''}
                   <button type="button" class="btn btn-secondary purchase-entry-add-row" id="btn-add-purchase-item-row"><i data-lucide="plus"></i><span>Thêm dòng</span></button>
                 </div>
               </div>
@@ -248,18 +247,18 @@ function searchPurchaseMaterials(row, immediate = false) {
   search.removeAttribute('aria-activedescendant');
   row.materialSearchTimer = setTimeout(async () => {
     try {
-      const data = await bomGateway.read({ mode: 'items', query, limit: 30 });
+      const data = await bomGateway.searchPurchaseItems({ query, limit: 30 });
       if (!row.isConnected || row.materialSearchSequence !== sequence || row.dataset.mode !== 'material') return;
       const materials = (data.rows || []).filter(item => item.is_active !== false);
       row.purchaseMaterialMatches = materials;
       results.innerHTML = materials.length
-        ? `${materials.map((item, index) => `<button type="button" class="purchase-entry-material-option" role="option" id="${results.id}-option-${index}" data-item-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code)} · ĐVT mua: ${escapeHtml(item.purchase_unit || item.base_unit || '')}</small></button>`).join('')}${data.hasMore ? '<p class="purchase-entry-material-message">Nhập thêm mã hoặc tên để thu hẹp kết quả.</p>' : ''}`
+        ? `${materials.map((item, index) => `<button type="button" class="purchase-entry-material-option" role="option" id="${results.id}-option-${index}" data-item-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code)}${item.brand ? ` · ${escapeHtml(item.brand)}` : ''} · ĐVT mua: ${escapeHtml(item.purchase_unit || item.base_unit || '')}${Number(item.unit_price) > 0 ? ` · Giá nhập: ${formatCurrency(item.unit_price)}` : ''}</small></button>`).join('')}${data.hasMore ? '<p class="purchase-entry-material-message">Nhập thêm mã hoặc tên để thu hẹp kết quả.</p>' : ''}`
         : '<p class="purchase-entry-material-message">Không thấy vật tư phù hợp. Có thể chọn Nhập tay.</p>';
       setPurchaseMaterialActiveOption(row, 0);
     } catch (error) {
       if (!row.isConnected || row.materialSearchSequence !== sequence) return;
       row.purchaseMaterialMatches = [];
-      results.innerHTML = '<p class="purchase-entry-material-message">Không tải được vật tư. Có thể chọn Nhập tay.</p>';
+      results.innerHTML = `<p class="purchase-entry-material-message">${escapeHtml(error.message || 'Không tải được danh mục mua hàng.')}</p>`;
       setPurchaseMaterialActiveOption(row, -1);
     }
   }, immediate ? 0 : 250);
@@ -268,11 +267,15 @@ function searchPurchaseMaterials(row, immediate = false) {
 function choosePurchaseMaterial(row, id) {
   const item = (row.purchaseMaterialMatches || []).find(material => String(material.id) === String(id));
   if (!item || item.is_active === false) return;
-  row.dataset.bomId = String(item.id);
+  row.dataset.catalogId = String(item.id);
   row.querySelector('.purchase-entry-code').value = item.code || '';
   row.querySelector('.purchase-entry-unit').value = item.purchase_unit || item.base_unit || '';
   const search = row.querySelector('.purchase-entry-material-search');
-  search.value = item.name || '';
+  search.value = item.source === 'product' ? `${item.code} · ${item.name}${item.brand ? ` · ${item.brand}` : ''}` : item.name || '';
+  row.querySelector('.purchase-entry-item-source span').textContent = item.source === 'product' ? 'Từ danh sách sản phẩm' : 'Từ vật tư';
+  const price = row.querySelector('.purchase-entry-price');
+  if (item.source === 'product' && Number(item.unit_price) > 0 && !Number(price.value)) price.value = Math.round(Number(item.unit_price));
+  updateTotals(row.closest('#purchase-entry-modal'));
   search.setCustomValidity('');
   search.focus();
   closePurchaseMaterialResults(row);
@@ -394,25 +397,6 @@ function attachEvents(panel, modal) {
   });
   if (modal && modal.dataset.eventsBound !== 'true') {
     modal.dataset.eventsBound = 'true';
-    modal.querySelector('#btn-add-product-packaging')?.addEventListener('click', async event => {
-      const button = event.currentTarget;
-      if (button.disabled) return;
-      button.disabled = true;
-      button.textContent = 'Đang bổ sung vỏ…';
-      try {
-        const result = await bomGateway.addProductPackaging();
-        if (!modal.isConnected) return;
-        showToast(result.created > 0 ? `Đã thêm ${result.created} mã vỏ sản phẩm.` : 'Các mã sản phẩm đang dùng đã có vỏ riêng.', 'success');
-        modal.querySelectorAll('.purchase-entry-material-search').forEach(search => {
-          if (search.getAttribute('aria-expanded') === 'true') searchPurchaseMaterials(search.closest('.purchase-entry-item-row'), true);
-        });
-      } catch (error) {
-        showToast(error.message, 'danger');
-      } finally {
-        button.disabled = false;
-        button.textContent = 'Bổ sung vỏ theo mã SP';
-      }
-    });
     const supplierSearch = modal.querySelector('#purchase-supplier-search');
     modal.querySelector('#purchase-supplier-search')?.addEventListener('input', () => {
       modal.querySelector('#purchase-supplier-select').value = '';
@@ -465,7 +449,7 @@ function attachEvents(panel, modal) {
       const search = event.target.closest('.purchase-entry-material-search');
       if (search) {
         const row = search.closest('.purchase-entry-item-row');
-        row.dataset.bomId = '';
+        row.dataset.catalogId = '';
         row.querySelector('.purchase-entry-code').value = '';
         row.querySelector('.purchase-entry-unit').value = '';
         search.setCustomValidity('Chọn vật tư trong danh sách gợi ý hoặc chuyển sang Nhập tay.');
@@ -518,7 +502,7 @@ function attachEvents(panel, modal) {
         return;
       }
       const unselectedMaterial = Array.from(modal.querySelectorAll('.purchase-entry-item-row'))
-        .find(row => row.dataset.mode === 'material' && !row.dataset.bomId);
+        .find(row => row.dataset.mode === 'material' && !row.dataset.catalogId);
       if (unselectedMaterial) {
         const search = unselectedMaterial.querySelector('.purchase-entry-material-search');
         search.setCustomValidity('Chọn vật tư trong danh sách gợi ý hoặc chuyển sang Nhập tay.');

@@ -5,20 +5,18 @@
 <script>window.__app_initialized = true;</script>
 <script type="module">
   import { state } from '../js/state.js';
-  import { renderPurchasesPanel } from '../js/components/purchases.js?v=20261024-return-debt-display-v1';
-  import { bomGateway } from '../js/services/bom.js?v=20261024-return-debt-display-v1';
+  import { renderPurchasesPanel } from '../js/components/purchases.js?v=20261024-existing-product-shells-v1';
+  import { bomGateway } from '../js/services/bom.js?v=20261024-existing-product-shells-v1';
+  import { normalizeCatalogText } from '../js/domain/product-catalog.js';
   const role = new URLSearchParams(location.search).get('role') || 'admin';
   state.currentUser = { id: 'finance-test', username: 'finance-test', role };
-  const materials = [{ id: 'shell-1', code: 'VO-NT01-THUNG', name: 'VỎ THÙNG NT01 · Sơn nội thất', purchase_unit: 'cái', is_active: true }];
-  window.purchaseHarness = { calls: 0, fail: false };
-  bomGateway.read = async filters => ({ rows: materials.filter(item => `${item.code} ${item.name}`.toLocaleLowerCase('vi').includes((filters.query || '').toLocaleLowerCase('vi'))), hasMore: false });
-  bomGateway.addProductPackaging = async () => {
-    window.purchaseHarness.calls++;
-    if (window.purchaseHarness.fail) throw new Error('Cloud cần chạy migration 0101 để bổ sung vỏ theo mã sản phẩm.');
-    if (materials.length > 1) return { created: 0 };
-    materials.push({ id: 'shell-2', code: 'VO-NT02-LON', name: 'VỎ LON NT02 · Sơn ngoại thất', purchase_unit: 'cái', is_active: true });
-    return { created: 1 };
-  };
+  const materials = [
+    { id:'product:shell-899',source:'product',code:'VỎ THÙNG NT-899',name:'Sơn men sứ nội thất cao cấp 9in1',purchase_unit:'Bộ',unit_price:48296.87,brand:'NANO10 MB',is_active:true },
+    { id:'product:shell-b1',source:'product',code:'VỎ THÙNG NT-B1',name:'Sơn siêu bóng nội thất cao cấp',purchase_unit:'Bộ',unit_price:51250,brand:'NANO10 MB',is_active:true },
+    { id:'product:shell-b2',source:'product',code:'VỎ THÙNG NT-B2',name:'Sơn siêu bóng ngoại thất cao cấp',purchase_unit:'Bộ',unit_price:48867.65,brand:'NANO10 MB',is_active:true },
+    { id:'product:shell-d1',source:'product',code:'VỎ THÙNG NT-Đ1',name:'Sơn lót chống kiềm nội thất cao cấp',purchase_unit:'Bộ',unit_price:51250,brand:'NANO10 MB',is_active:true }
+  ];
+  bomGateway.searchPurchaseItems = async filters => ({rows:materials.filter(item=>normalizeCatalogText(filters.query).split(' ').every(term=>normalizeCatalogText(`${item.code} ${item.name} ${item.brand}`).includes(term))),hasMore:false});
   state.suppliers = [{ id: 'sup-1', code: 'NCC-01', name: 'Nhà cung cấp A' }];
   state.purchases = [{
     id: 'pur-1', code: 'PM-0001', purchaseDate: '2026-08-01T08:00:00Z',
