@@ -4659,10 +4659,7 @@ textarea::placeholder,
   display: block;
   width: 100%;
   max-width: none;
-  min-height: calc(100vh - 105px);
-  background: #f3f4f6;
-  margin: -0.75rem;
-  padding: 0.75rem;
+  min-width: 0;
 }
 
 .purchase-filters {
@@ -4738,7 +4735,7 @@ textarea::placeholder,
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0;
 }
 
 .purchase-toolbar {
@@ -4754,12 +4751,13 @@ textarea::placeholder,
 
 .purchase-heading h2 {
   margin: 0;
-  white-space: nowrap;
 }
 
-.purchase-heading small {
-  display: block;
-  margin-top: 0.2rem;
+.purchase-heading p {
+  margin-top: .4rem;
+  color: var(--text-muted);
+  font-size: .85rem;
+  line-height: 1.5;
 }
 
 .purchase-search {
@@ -4835,7 +4833,6 @@ textarea::placeholder,
   background: #ffffff;
   border-radius: 8px;
   overflow: auto;
-  min-height: calc(100vh - 155px);
   width: 100%;
   max-width: 100%;
 }
@@ -4873,10 +4870,9 @@ textarea::placeholder,
 }
 
 .purchase-table th {
-  background: #e5f1ff !important;
-  border-bottom: 1px solid #b7d5ff;
+  background: #f8fafc !important;
+  border-bottom: 1px solid var(--border-color);
   color: #000000 !important;
-  font-weight: 800 !important;
   padding: 0.75rem;
   text-align: left;
 }
@@ -4885,7 +4881,6 @@ textarea::placeholder,
   border-bottom: 1px solid #e5e7eb;
   color: #000000 !important;
   padding: 0.75rem;
-  font-weight: 500 !important;
 }
 
 .purchase-total-row td {
@@ -4897,18 +4892,17 @@ textarea::placeholder,
 }
 
 .purchase-row.active {
-  outline: 2px solid #006ffd;
-  outline-offset: -2px;
-  background: #f1f7ff;
+  background: var(--color-primary-light);
+  box-shadow: inset 3px 0 var(--color-primary);
 }
 
 .purchase-status {
   display: inline-flex;
   align-items: center;
-  border-radius: 5px;
-  padding: 0.25rem 0.45rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .purchase-status.completed {
@@ -4933,8 +4927,9 @@ textarea::placeholder,
 }
 
 .purchase-detail {
-  border-top: 1px solid #dbeafe;
-  padding: 0.5rem 1.5rem 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
   background: #ffffff;
 }
 
@@ -4971,6 +4966,7 @@ textarea::placeholder,
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .purchase-detail-meta span {
@@ -5056,26 +5052,13 @@ textarea::placeholder,
 }
 
 .purchase-detail-actions {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
   align-items: center;
   border-top: 1px solid #e5e7eb;
   padding-top: 0.9rem;
   margin-top: 1.25rem;
-}
-
-.purchase-detail-actions button {
-  height: 34px;
-  border: 1px solid #cfd8e3;
-  background: #ffffff;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: #111827;
-  font-weight: 700;
-  padding: 0 0.75rem;
 }
 
 .purchase-detail-actions button.primary {
@@ -5087,6 +5070,90 @@ textarea::placeholder,
 .purchase-detail-actions svg {
   width: 16px;
   height: 16px;
+}
+
+/* Purchase management uses the shared panel, search, button and table styles. */
+.purchase-list-controls { align-items: center; }
+.purchase-list-controls .search-wrapper { min-width: 0; flex: 1 1 300px; }
+.purchase-status-filter { display: flex; align-items: center; gap: .65rem; }
+.purchase-status-filter label { white-space: nowrap; }
+.purchase-status-filter .form-control { width: 195px; }
+.purchase-page .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
+.purchase-page .btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.purchase-page .purchase-table th.purchase-money,
+.purchase-page .purchase-table td.purchase-money { text-align: right; font-variant-numeric: tabular-nums; }
+.purchase-page .purchase-supplier-cell { white-space: normal; min-width: 180px; max-width: 290px; overflow-wrap: anywhere; }
+.purchase-supplier-cell small { display: block; margin-top: .25rem; color: var(--text-muted); font-size: .75rem; }
+.purchase-page .purchase-code { color: var(--color-primary) !important; }
+.purchase-page .purchase-outstanding { color: #b45309 !important; }
+.purchase-page .purchase-row:hover { background: #f1f6ff; }
+.purchase-page .purchase-row-toggle { white-space: nowrap; }
+.purchase-page .purchase-table > thead > tr > th:last-child,
+.purchase-page .purchase-row > td:last-child { position: sticky; right: 0; background: #f8fafc; box-shadow: -4px 0 8px rgba(15, 23, 42, .04); }
+.purchase-page .purchase-table > thead > tr > th:last-child { z-index: 1; }
+.purchase-page .purchase-row > td:last-child { background: #fff; }
+.purchase-page .purchase-row.active > td:last-child,
+.purchase-page .purchase-row:hover > td:last-child { background: #f1f6ff; }
+.purchase-page .purchase-row-toggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.purchase-page .purchase-empty { white-space: normal; }
+.purchase-empty > svg { display: block; width: 34px; height: 34px; margin: 0 auto .8rem; color: #94a3b8; }
+.purchase-empty > strong { display: block; }
+.purchase-empty p { margin: .5rem auto 1rem; max-width: 420px; color: var(--text-muted); line-height: 1.6; }
+.purchase-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .8rem; padding-top: 1.25rem; color: var(--text-muted); font-size: .85rem; }
+.purchase-pagination-buttons { display: flex; align-items: center; gap: .8rem; }
+.purchase-page .purchase-detail-row > td { padding: .75rem; background: #f4f8fd; white-space: normal; }
+.purchase-page .purchase-detail-row:hover { background: transparent; }
+.purchase-detail-head > strong { font-size: 1.05rem; }
+.purchase-detail-meta strong { overflow-wrap: anywhere; }
+.purchase-detail .purchase-summary { width: min(100%, 400px); margin: 1.25rem 0 1.25rem auto; padding: 1rem; border: 1px solid var(--border-color); border-radius: 10px; background: #f8fafc; }
+.purchase-detail .purchase-summary div:last-child { padding-top: .75rem; border-top: 1px solid var(--border-color); }
+.purchase-detail .purchase-summary span { color: var(--text-secondary); }
+.purchase-payment-box { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .65rem; }
+.purchase-pay-amount, .purchase-pay-method { min-width: 0; max-width: 100%; height: 38px; border: 1px solid var(--border-color); border-radius: 8px; padding: 0 .75rem; font: inherit; background: #fff; color: var(--text-primary); }
+.purchase-pay-amount { width: 180px; text-align: right; }
+.purchase-payment-history { display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; margin-top: 1rem; }
+.purchase-payment-history > span { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
+.purchase-detail-items-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; }
+.purchase-detail-items-wrap .purchase-items-table { min-width: 760px; table-layout: fixed; }
+.purchase-detail-items-wrap th:nth-child(1) { width: 18%; }
+.purchase-detail-items-wrap th:nth-child(2) { width: 34%; }
+.purchase-detail-items-wrap th:nth-child(3), .purchase-detail-items-wrap th:nth-child(4) { width: 7%; }
+.purchase-detail-items-wrap th:nth-child(5) { width: 16%; }
+.purchase-detail-items-wrap th:nth-child(6) { width: 18%; }
+.purchase-page .purchase-items-table td:nth-child(-n+2) { white-space: normal; overflow-wrap: anywhere; }
+.purchase-page .purchase-items-table th:nth-child(n+4),
+.purchase-page .purchase-items-table td:nth-child(n+4) { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 768px) {
+  .purchase-main.glass-panel { padding: 1rem; }
+  .purchase-toolbar { align-items: flex-start; flex-direction: column; }
+  .purchase-heading .panel-title { font-size: 1.1rem; }
+  .purchase-actions, .purchase-actions > .btn { width: 100%; }
+  .purchase-list-controls { gap: .75rem; }
+  .purchase-list-controls .search-wrapper { flex-basis: 100%; }
+  .purchase-status-filter { width: 100%; }
+  .purchase-status-filter .form-control { flex: 1; width: auto; min-width: 0; }
+  .purchase-pagination { justify-content: center; text-align: center; }
+  .purchase-pagination > span { width: 100%; }
+  .purchase-pagination-buttons { gap: .6rem; }
+  .purchase-detail { padding: 1rem; }
+  .purchase-page .purchase-table-wrap { border: 0; border-radius: 0; overflow: visible; background: transparent; }
+  .purchase-page .purchase-table { display: block; min-width: 0; }
+  .purchase-page .purchase-table > thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .purchase-page .purchase-table > tbody { display: block; }
+  .purchase-page .purchase-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin-bottom: .75rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: 12px; background: #fff; }
+  .purchase-page .purchase-row.active { border-color: #93b4f5; background: #f1f6ff; }
+  .purchase-page .purchase-row > td { display: block; min-width: 0; padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; font-size: .85rem !important; }
+  .purchase-page .purchase-row > td:last-child { position: static; background: transparent; box-shadow: none; }
+  .purchase-page .purchase-row > td::before { content: attr(data-label); display: block; margin-bottom: .25rem; color: var(--text-muted); font-size: .7rem; font-weight: 500; }
+  .purchase-page .purchase-row > td.purchase-money { text-align: left; }
+  .purchase-page .purchase-row > .purchase-supplier-cell { max-width: none; min-width: 0; }
+  .purchase-page .purchase-detail-row { display: block; margin-bottom: .75rem; }
+  .purchase-page .purchase-detail-row > td { display: block; padding: 0; border: 0; background: transparent; }
+  .purchase-page .purchase-detail-meta { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+  .purchase-detail .purchase-summary { width: 100%; }
+  .purchase-detail-head { gap: .5rem; flex-wrap: wrap; }
+  .purchase-detail-actions .btn { flex: 1 1 auto; }
+  .purchase-page .purchase-empty { display: block; padding: 2rem .75rem !important; }
 }
 
 .purchase-entry-modal-content {

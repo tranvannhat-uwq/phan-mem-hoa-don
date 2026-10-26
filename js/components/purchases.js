@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261024-existing-product-shells-v1';
-import { bomGateway } from '../services/bom.js?v=20261024-existing-product-shells-v1';
+} from '../services/supabase.js?v=20261026-purchase-management-ui-v1';
+import { bomGateway } from '../services/bom.js?v=20261026-purchase-management-ui-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -167,9 +167,9 @@ function purchaseDetail(purchase) {
           <div><span>Ngày mua:</span><strong>${escapeHtml(purchaseDate(purchase))}</strong></div>
           <div><span>Người thực hiện:</span><strong>${escapeHtml(purchase.createdBy || '-')}</strong></div>
         </div>
-        <table class="purchase-items-table"><thead><tr><th>Mã</th><th>Tên</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>
+        <div class="purchase-detail-items-wrap"><table class="purchase-items-table"><thead><tr><th>Mã</th><th>Tên</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>
           ${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.unit)}</td><td>${Number(item.quantity).toLocaleString('vi-VN')}</td><td>${formatCurrency(item.unitPrice)}</td><td>${formatCurrency(item.lineTotal)}</td></tr>`).join('')}
-        </tbody></table>
+        </tbody></table></div>
         <div class="purchase-summary">
           <div><span>Tiền hàng</span><strong>${formatCurrency(purchase.subtotalAmount ?? purchaseTotal(purchase))}</strong></div>
           <div><span>VAT (${Number(purchase.vatRate || 0).toLocaleString('vi-VN')}%)</span><strong>${formatCurrency(purchase.vatAmount || 0)}</strong></div>
@@ -177,7 +177,7 @@ function purchaseDetail(purchase) {
           <div><span>Đã thanh toán</span><strong>${formatCurrency(purchase.paidAmount)}</strong></div>
           <div><span>Còn phải trả</span><strong>${formatCurrency(purchase.balanceDue)}</strong></div>
         </div>
-        ${purchase.status === 'completed' && Number(purchase.balanceDue || 0) > 0 ? `<div class="purchase-payment-box"><input type="number" class="purchase-pay-amount" min="1" max="${Number(purchase.balanceDue)}" value="${Number(purchase.balanceDue)}"><select class="purchase-pay-method"><option value="cash">Tiền mặt</option><option value="bank">Ngân hàng</option><option value="wallet">Ví điện tử</option></select><button class="btn btn-primary btn-sm purchase-pay-btn" data-id="${escapeHtml(purchase.id)}">Tạo phiếu chi</button></div>` : ''}
+        ${purchase.status === 'completed' && Number(purchase.balanceDue || 0) > 0 ? `<div class="purchase-payment-box"><input type="number" class="purchase-pay-amount" aria-label="Số tiền thanh toán" min="1" max="${Number(purchase.balanceDue)}" value="${Number(purchase.balanceDue)}"><select class="purchase-pay-method" aria-label="Phương thức thanh toán"><option value="cash">Tiền mặt</option><option value="bank">Ngân hàng</option><option value="wallet">Ví điện tử</option></select><button class="btn btn-primary btn-sm purchase-pay-btn" data-id="${escapeHtml(purchase.id)}">Tạo phiếu chi</button></div>` : ''}
         ${activePayments.length ? `<div class="purchase-payment-history"><strong>Phiếu chi:</strong>${activePayments.map(payment => `<span>${formatCurrency(payment.amount)} · ${escapeHtml(payment.paymentMethod)} <button class="btn btn-danger btn-sm purchase-cancel-payment-btn" data-id="${escapeHtml(payment.id)}">Hủy phiếu chi</button></span>`).join('')}</div>` : ''}
         <div class="purchase-detail-actions">
           <button class="btn btn-secondary btn-sm purchase-print-btn" data-id="${escapeHtml(purchase.id)}">In phiếu mua</button>
@@ -371,6 +371,32 @@ function printPurchase(purchase) {
 }
 
 function attachEvents(panel, modal) {
+  panel.querySelector('#purchase-list-search')?.addEventListener('input', event => {
+    if (event.isComposing) return;
+    panel.dataset.purchaseQuery = event.target.value;
+    panel.dataset.purchasePage = '1';
+    const cursor = event.target.selectionStart;
+    renderPurchasesPanel(panel);
+    const search = panel.querySelector('#purchase-list-search');
+    search.focus();
+    if (cursor !== null) search.setSelectionRange(cursor, cursor);
+  });
+  panel.querySelector('#purchase-list-status')?.addEventListener('change', event => {
+    panel.dataset.purchaseStatus = event.target.value;
+    panel.dataset.purchasePage = '1';
+    renderPurchasesPanel(panel);
+  });
+  panel.querySelectorAll('[data-purchase-page]').forEach(button => button.addEventListener('click', () => {
+    panel.dataset.purchasePage = button.dataset.purchasePage;
+    renderPurchasesPanel(panel);
+  }));
+  panel.querySelector('#btn-clear-purchase-filters')?.addEventListener('click', () => {
+    panel.dataset.purchaseQuery = '';
+    panel.dataset.purchaseStatus = '';
+    panel.dataset.purchasePage = '1';
+    renderPurchasesPanel(panel);
+    panel.querySelector('#purchase-list-search')?.focus();
+  });
   panel.querySelectorAll('.purchase-row').forEach(row => row.addEventListener('click', event => {
     if (event.target.closest('input,select')) return;
     if (event.target.closest('button') && !event.target.closest('.purchase-row-toggle')) return;
@@ -532,6 +558,9 @@ function attachEvents(panel, modal) {
       if (!result) return;
       pendingPurchaseKey = '';
       panel.dataset.activePurchaseId = result.purchase?.id || '';
+      panel.dataset.purchaseQuery = '';
+      panel.dataset.purchaseStatus = '';
+      panel.dataset.purchasePage = '1';
       showToast(result.already_recorded ? 'Phiếu mua đã được ghi nhận trước đó.' : 'Đã tạo phiếu mua và cập nhật công nợ.', 'success');
       close();
       renderPurchasesPanel(panel);
@@ -569,6 +598,16 @@ function attachEvents(panel, modal) {
   }));
 }
 
+function filterPurchaseList(purchases, query, status) {
+  const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+  const terms = normalize(query).trim().split(/\s+/).filter(Boolean);
+  return purchases.filter(purchase => {
+    if (status && purchase.status !== status) return false;
+    const text = normalize([purchase.code, purchase.invoiceNumber, purchase.supplierName, purchase.supplierCode, purchase.createdBy].join(' '));
+    return terms.every(term => text.includes(term));
+  });
+}
+
 export function renderPurchasesPanel(panel) {
   if (!panel) return;
   if (!financeRole()) {
@@ -581,13 +620,27 @@ export function renderPurchasesPanel(panel) {
   const existingPage = panel.querySelector('.purchase-page');
   const activeId = panel.dataset.activePurchaseId || '';
   const purchases = state.purchases || [];
+  const query = panel.dataset.purchaseQuery || '';
+  const status = panel.dataset.purchaseStatus || '';
+  const filtered = filterPurchaseList(purchases, query, status);
+  const pageSize = 20;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.max(1, Math.min(pages, Number(panel.dataset.purchasePage) || 1));
+  panel.dataset.purchasePage = String(page);
+  const start = (page - 1) * pageSize;
+  const visible = filtered.slice(start, start + pageSize);
   const pageMarkup = `
-    <div class="purchase-page"><main class="purchase-main">
-      <div class="purchase-toolbar"><div class="purchase-heading"><h2>Phiếu mua hàng</h2><small>Ghi nhận giá trị mua và công nợ nhà cung cấp</small></div><div class="purchase-actions"><button class="purchase-primary-btn" id="btn-open-purchase-modal">+ Tạo phiếu mua</button></div></div>
-      <div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Mã phiếu</th><th>Ngày mua</th><th>Số hóa đơn</th><th>Nhà cung cấp</th><th style="text-align:right">Tổng tiền</th><th style="text-align:right">Đã thanh toán</th><th style="text-align:right">Còn nợ</th><th>Trạng thái</th><th>Người tạo</th><th>Thao tác</th></tr></thead><tbody>
-        ${purchases.length ? purchases.map(purchase => `<tr class="purchase-row ${String(activeId) === String(purchase.id) ? 'active' : ''}" data-id="${escapeHtml(purchase.id)}"><td>${escapeHtml(purchase.code)}</td><td>${escapeHtml(purchaseDate(purchase))}</td><td>${escapeHtml(purchase.invoiceNumber || '-')}</td><td>${escapeHtml(purchase.supplierName || purchase.supplierCode)}</td><td style="text-align:right">${formatCurrency(purchaseTotal(purchase))}</td><td style="text-align:right">${formatCurrency(purchase.paidAmount)}</td><td style="text-align:right">${formatCurrency(purchase.balanceDue)}</td><td><span class="purchase-status ${escapeHtml(purchase.status)}">${statusLabel(purchase.status)}</span></td><td>${escapeHtml(purchase.createdBy || '-')}</td><td><button type="button" class="purchase-row-toggle" aria-label="Xem phiếu ${escapeHtml(purchase.code)}">Xem</button></td></tr>${String(activeId) === String(purchase.id) ? purchaseDetail(purchase) : ''}`).join('') : '<tr><td colspan="10" class="purchase-empty">Chưa có phiếu mua hàng trên database.</td></tr>'}
+    <div class="purchase-page"><div class="glass-panel purchase-main">
+      <div class="panel-header purchase-toolbar"><div class="purchase-heading"><h2 class="panel-title"><i data-lucide="clipboard-list"></i> Quản lý phiếu mua hàng</h2><p>Ghi nhận mua hàng, thanh toán và công nợ nhà cung cấp.</p></div><div class="purchase-actions"><button type="button" class="btn btn-primary btn-sm" id="btn-open-purchase-modal"><i data-lucide="plus"></i> Tạo phiếu mua</button></div></div>
+      <div class="controls-row purchase-list-controls">
+        <div class="search-wrapper"><i data-lucide="search" class="search-icon" aria-hidden="true"></i><label class="sr-only" for="purchase-list-search">Tìm phiếu mua hàng</label><input type="text" class="form-control-search" id="purchase-list-search" placeholder="Tìm mã phiếu, hóa đơn, nhà cung cấp…" value="${escapeHtml(query)}" autocomplete="off"></div>
+        <div class="purchase-status-filter"><label for="purchase-list-status">Trạng thái</label><select class="form-control" id="purchase-list-status"><option value="" ${!status ? 'selected' : ''}>Tất cả trạng thái</option>${['completed', 'draft', 'cancelled'].map(value => `<option value="${value}" ${status === value ? 'selected' : ''}>${statusLabel(value)}</option>`).join('')}</select></div>
+      </div>
+      <div class="table-responsive purchase-table-wrap"><table class="table purchase-table" aria-label="Danh sách phiếu mua hàng"><thead><tr><th>Mã phiếu</th><th>Ngày mua</th><th>Số hóa đơn</th><th>Nhà cung cấp</th><th class="purchase-money">Tổng gồm VAT</th><th class="purchase-money">Đã thanh toán</th><th class="purchase-money">Còn phải trả</th><th>Trạng thái</th><th>Người tạo</th><th>Thao tác</th></tr></thead><tbody>
+        ${visible.length ? visible.map(purchase => `<tr class="purchase-row ${String(activeId) === String(purchase.id) ? 'active' : ''}" data-id="${escapeHtml(purchase.id)}"><td data-label="Mã phiếu"><strong class="purchase-code">${escapeHtml(purchase.code)}</strong></td><td data-label="Ngày mua">${escapeHtml(purchaseDate(purchase))}</td><td data-label="Số hóa đơn">${escapeHtml(purchase.invoiceNumber || '-')}</td><td class="purchase-supplier-cell" data-label="Nhà cung cấp"><strong>${escapeHtml(purchase.supplierName || purchase.supplierCode)}</strong>${purchase.supplierName && purchase.supplierCode ? `<small>${escapeHtml(purchase.supplierCode)}</small>` : ''}</td><td class="purchase-money" data-label="Tổng gồm VAT">${formatCurrency(purchaseTotal(purchase))}</td><td class="purchase-money" data-label="Đã thanh toán">${formatCurrency(purchase.paidAmount)}</td><td class="purchase-money ${purchase.status === 'completed' && Number(purchase.balanceDue) > 0 ? 'purchase-outstanding' : ''}" data-label="Còn phải trả">${formatCurrency(purchase.balanceDue)}</td><td data-label="Trạng thái"><span class="purchase-status ${escapeHtml(purchase.status)}">${statusLabel(purchase.status)}</span></td><td data-label="Người tạo">${escapeHtml(purchase.createdBy || '-')}</td><td data-label="Thao tác"><button type="button" class="btn btn-secondary btn-sm purchase-row-toggle" aria-label="${String(activeId) === String(purchase.id) ? 'Thu gọn' : 'Xem'} phiếu ${escapeHtml(purchase.code)}" aria-expanded="${String(activeId) === String(purchase.id)}"><i data-lucide="${String(activeId) === String(purchase.id) ? 'chevron-up' : 'eye'}"></i> ${String(activeId) === String(purchase.id) ? 'Thu gọn' : 'Xem'}</button></td></tr>${String(activeId) === String(purchase.id) ? purchaseDetail(purchase) : ''}`).join('') : `<tr><td colspan="10" class="purchase-empty"><i data-lucide="${purchases.length ? 'search-x' : 'clipboard-list'}" aria-hidden="true"></i><strong>${purchases.length ? 'Không tìm thấy phiếu phù hợp' : 'Chưa có phiếu mua hàng'}</strong><p>${purchases.length ? 'Thử đổi từ khóa hoặc trạng thái để tìm lại.' : 'Tạo phiếu mua đầu tiên để theo dõi mua hàng và công nợ nhà cung cấp.'}</p>${purchases.length ? '<button type="button" class="btn btn-secondary btn-sm" id="btn-clear-purchase-filters">Xóa bộ lọc</button>' : ''}</td></tr>`}
       </tbody></table></div>
-    </main></div>`;
+      <div class="purchase-pagination"><span role="status">${filtered.length ? `${start + 1}–${Math.min(start + pageSize, filtered.length)} / ${filtered.length}` : '0'} phiếu mua${query || status ? ` (lọc từ ${purchases.length} phiếu)` : ''}</span><div class="purchase-pagination-buttons"><button type="button" class="btn btn-secondary btn-sm" data-purchase-page="${page - 1}" ${page === 1 ? 'disabled' : ''}><i data-lucide="chevron-left"></i> Trước</button><span>Trang <strong>${page}</strong> / ${pages}</span><button type="button" class="btn btn-secondary btn-sm" data-purchase-page="${page + 1}" ${page === pages ? 'disabled' : ''}>Sau <i data-lucide="chevron-right"></i></button></div></div>
+    </div></div>`;
   // Keep the modal at document level so panel transforms cannot clip its backdrop or popup.
   if (existingPage) {
     existingPage.outerHTML = pageMarkup;

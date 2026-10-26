@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20261024-existing-product-shells-v1';
-import { switchTab } from '../main.js?v=20261024-existing-product-shells-v1';
-import { getOrderDisplayCode } from '../domain/order-display.js?v=20261024-existing-product-shells-v1';
+import { dbFetchActivityLogs, dbFetchOrderActivity } from '../services/supabase.js?v=20261026-purchase-management-ui-v1';
+import { switchTab } from '../main.js?v=20261026-purchase-management-ui-v1';
+import { getOrderDisplayCode } from '../domain/order-display.js?v=20261026-purchase-management-ui-v1';
 import { safeCreateIcons, showToast, makeSelectSearchable } from '../utils.js';
 
 const PAGE_SIZE = 20;
