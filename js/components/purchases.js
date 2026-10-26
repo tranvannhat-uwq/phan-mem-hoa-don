@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261026-purchase-management-ui-v1';
-import { bomGateway } from '../services/bom.js?v=20261026-purchase-management-ui-v1';
+} from '../services/supabase.js?v=20261026-customer-payment-total-v1';
+import { bomGateway } from '../services/bom.js?v=20261026-customer-payment-total-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;

@@ -215,9 +215,11 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
       if (orderEntry?.id) targetId = String(orderEntry.id);
     }
 
-    if (targetId && hiddenIds.has(targetId)
-      && !(type === 'order_amend' && projected.has(targetId))) continue;
     const target = targetId ? projected.get(targetId) : null;
+    const targetsVisibleAlias = target && String(target.id) !== targetId
+      && !hiddenIds.has(String(target.id));
+    if (targetId && hiddenIds.has(targetId) && !targetsVisibleAlias
+      && !(type === 'order_amend' && projected.has(targetId))) continue;
     const amendmentChange = toDebtAmount(amendment.debtChange ?? amendment.debt_change);
 
     if (target) {
@@ -276,6 +278,29 @@ function getCustomerDebtEntryChange(entry = {}) {
   if (type === 'payment' || type === 'return') return amount === 0 ? 0 : -amount;
   if (type === 'order' || type === 'charge') return amount;
   return toDebtAmount(entry.amount);
+}
+
+/** Total effective receipts, using the same amendment/cancellation projection
+ * as the statement. Summing original payment rows ignores later corrections.
+ */
+export function getCustomerTotalPayments(history = []) {
+  const entries = Array.isArray(history) ? history : [];
+  const effective = projectEffectiveCustomerDebtHistory(entries);
+  const collected = effective
+    .filter(entry => debtTransactionType(entry) === 'payment')
+    .reduce((sum, entry) => sum + Math.max(0, -getCustomerDebtEntryChange(entry)), 0);
+  // Old browser histories recorded cancellations without document lineage.
+  // Linked cancellations are already removed by the projection above.
+  const legacyCancellations = [
+    ...effective.filter(entry => debtTransactionType(entry) === 'adjust'
+      && String(entry.notes || entry.note || '').toLowerCase().includes('hủy phiếu thu')),
+    ...entries.filter(entry => debtTransactionType(entry) === 'payment_cancel'
+      && !entry.voidedByAmendmentId && !entry.voided_by_amendment_id
+      && !entry.historyCorrectionKey && !entry.history_correction_key
+      && !debtRelationValue(entry, 'reversalOfId', 'reversal_of_id')
+      && !debtRelationValue(entry, 'cashbookTransactionId', 'cashbook_transaction_id'))
+  ].reduce((sum, entry) => sum + Math.abs(toDebtAmount(entry.amount)), 0);
+  return Math.max(0, collected - legacyCancellations);
 }
 
 /** Add return document values without changing their posted debt impact.

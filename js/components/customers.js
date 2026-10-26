@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261026-purchase-management-ui-v1';
-import { renderAll } from '../main.js?v=20261026-purchase-management-ui-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261026-purchase-management-ui-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261026-purchase-management-ui-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261026-customer-payment-total-v1';
+import { renderAll } from '../main.js?v=20261026-customer-payment-total-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261026-customer-payment-total-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261026-customer-payment-total-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261026-purchase-management-ui-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261026-purchase-management-ui-v1';
+} from '../domain/order-financials.js?v=20261026-customer-payment-total-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261026-customer-payment-total-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261026-purchase-management-ui-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261026-customer-payment-total-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -335,17 +335,7 @@ export function getCustomerMetrics(c) {
     const netSales = storedNetSales;
     const returnRate = grossSales > 0 ? ((totalReturns / grossSales) * 100).toFixed(1) : '0';
     const currentDebt = parseImportedNumber(c.debt || 0);
-    const debtHistory = Array.isArray(c.debtHistory) ? c.debtHistory : [];
-    const collectedPayments = debtHistory
-      .filter(entry => entry.type === 'payment')
-      .reduce((sum, entry) => sum + Math.abs(parseImportedNumber(entry.amount)), 0);
-    const cancelledPayments = debtHistory
-      .filter(entry => entry.type === 'payment_cancel' || (
-        entry.type === 'adjust' &&
-        String(entry.notes || entry.note || '').toLowerCase().includes('hủy phiếu thu')
-      ))
-      .reduce((sum, entry) => sum + Math.abs(parseImportedNumber(entry.amount)), 0);
-    const totalPayments = Math.max(0, collectedPayments - cancelledPayments);
+    const totalPayments = getCustomerTotalPayments(c.debtHistory);
     return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
   }
 
@@ -366,17 +356,7 @@ export function getCustomerMetrics(c) {
   const netSales = Math.max(0, grossSales - totalReturns);
   const returnRate = grossSales > 0 ? ((totalReturns / grossSales) * 100).toFixed(1) : '0';
   const currentDebt = parseFloat(c.debt || 0);
-  const debtHistory = Array.isArray(c.debtHistory) ? c.debtHistory : [];
-  const collectedPayments = debtHistory
-    .filter(entry => entry.type === 'payment')
-    .reduce((sum, entry) => sum + Math.abs(parseFloat(entry.amount) || 0), 0);
-  const cancelledPayments = debtHistory
-    .filter(entry => entry.type === 'payment_cancel' || (
-      entry.type === 'adjust' &&
-      String(entry.notes || entry.note || '').toLowerCase().includes('hủy phiếu thu')
-    ))
-    .reduce((sum, entry) => sum + Math.abs(parseFloat(entry.amount) || 0), 0);
-  const totalPayments = Math.max(0, collectedPayments - cancelledPayments);
+  const totalPayments = getCustomerTotalPayments(c.debtHistory);
   
   return { grossSales, totalReturns, netSales, returnRate, currentDebt, totalPayments };
 }
