@@ -12826,8 +12826,10 @@ body.purchase-entry-modal-open { overflow: hidden; }
 .return-lookup-option small, .return-lookup-hint { color: var(--text-secondary); font-size: .78rem; line-height: 1.4; }
 .return-lookup-hint { padding: .65rem .75rem; }
 #independent-returns-section { margin-bottom: 1.25rem; }
-.return-page-header, .return-items-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.return-page-header .panel-title { margin: 0; }
+#independent-returns-section > .return-page-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; flex-wrap: wrap; }
+.return-items-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.return-page-header .panel-title { margin: 0; flex: 1 1 auto; }
+#independent-return-open { flex: 0 0 auto; margin-left: auto; }
 body.return-modal-open { overflow: hidden; }
 .return-modal { background: rgba(20, 35, 60, .45); backdrop-filter: blur(5px); }
 .return-modal [hidden] { display: none !important; }

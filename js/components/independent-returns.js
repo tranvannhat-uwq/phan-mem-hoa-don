@@ -1,8 +1,8 @@
 import { state } from '../state.js';
-import { dbRecordIndependentReturn, dbListIndependentReturns, dbCancelSalesReturn, dbRefreshCustomerFinancialState, getRetentionSessionScope } from '../services/supabase.js?v=20261027-supplier-export-v1';
+import { dbRecordIndependentReturn, dbListIndependentReturns, dbCancelSalesReturn, dbRefreshCustomerFinancialState, getRetentionSessionScope } from '../services/supabase.js?v=20261027-return-modal-fix-v1';
 import { independentReturnTotal } from '../domain/data-retention.js';
 import { formatCurrency, showToast } from '../utils.js';
-import { printReturnSlip } from './history.js?v=20261027-supplier-export-v1';
+import { printReturnSlip } from './history.js?v=20261027-return-modal-fix-v1';
 
 const el = id => document.getElementById(`independent-return-${id}`);
 let offset = 0; let loadedScope = ''; let loading = false; let saving = false;
@@ -10,6 +10,7 @@ let request = null; let requestScope = ''; let lastPayload = ''; let rows = [];
 let itemSequence = 0;
 let customerLookup = null;
 let modalTrigger = null;
+let initialized = false;
 const finance = () => ['admin', 'accounting'].includes(state.currentUser?.role);
 const normalizeSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
 const customerLabel = customer => [customer.code, customer.name].filter(Boolean).join(' — ');
@@ -221,6 +222,7 @@ async function refreshList(force = false) {
 }
 export function renderIndependentReturns() {
   const section = document.getElementById('independent-returns-section'); if (!section) return;
+  setupIndependentReturns();
   section.hidden = !finance();
   if (!finance()) { loadedScope = ''; rows = []; el('list').replaceChildren(); return; }
   pendingControls();
@@ -234,7 +236,7 @@ export function renderIndependentReturns() {
   void refreshList();
 }
 export function setupIndependentReturns() {
-  if (!el('form')) return;
+  if (initialized || !el('form')) return;
   // Keep fixed-position overlays outside animated panels and glass cards.
   const appLayout = document.getElementById('app-layout');
   (appLayout || document.body).append(el('modal'));
@@ -296,4 +298,5 @@ export function setupIndependentReturns() {
     } finally { saving = false; pendingControls(); }
   };
   window.addEventListener('beforeunload', event => { if (request) { event.preventDefault(); event.returnValue = ''; } });
+  initialized = true;
 }

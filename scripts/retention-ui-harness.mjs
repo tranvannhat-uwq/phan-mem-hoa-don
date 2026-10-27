@@ -47,7 +47,7 @@ export async function dbDealerSupportHistory(){return {total:1,selection_confirm
  product_code:'QUẠT MÀU BÉ',product_name:'Quạt màu bé',brand_name:'NANO10 MB',company_name:'Công ty miền Bắc',quantity:3,returned_quantity:1,unit_name:'Cái',order_cancelled:false,archived:true}],
  summary:[{product_code:'QUẠT MÀU BÉ',brand_name:'NANO10 MB',company_name:'Công ty miền Bắc',issued:3,returned:1,remaining:2,unit_name:'Cái'}]};}`;
 const page=`<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><title>Kiểm thử dọn dữ liệu — dữ liệu giả</title>
-<body style="padding:24px;overflow:auto"><main style="max-width:1000px;margin:auto"><h1>Kiểm thử giao diện — toàn bộ dữ liệu giả</h1><p>Trang này không kết nối Supabase.</p>
+<body style="padding:24px;overflow:auto"><main id="app-layout" class="auth-hidden" style="max-width:1000px;margin:auto"><h1>Kiểm thử giao diện — toàn bộ dữ liệu giả</h1><p>Trang này không kết nối Supabase.</p>
 <nav class="retention-actions" style="margin:1rem 0"><button id="tab-retention" class="btn btn-secondary">Dọn dữ liệu</button><button id="tab-returns" class="btn btn-secondary">Trả hàng</button><button id="tab-support" class="btn btn-secondary">Hàng cấp</button><button id="tab-accounting" class="btn btn-secondary">Xem bằng quyền kế toán</button></nav>
 <section id="wizard" class="glass-panel" style="max-width:680px">${wizard}</section><section id="receiving" hidden>${returns}</section><section id="support" hidden>${supportSettings}<div id="customer-detail-modal" data-customer-id="synthetic-customer">${supportHistory}</div></section><p id="test-toast" role="status"></p>
 <script>window.confirm=()=>true;</script>
@@ -56,6 +56,7 @@ import{state}from'/js/state.js';import{setupRetentionSettings,renderRetentionSet
 import{setupIndependentReturns,renderIndependentReturns}from'/js/components/independent-returns.js';
 import{setupDealerSupport,renderDealerSupportSettings,renderDealerSupportHistory}from'/js/components/dealer-support.js';
 setupRetentionSettings();setupIndependentReturns();setupDealerSupport();renderRetentionSettings();
+document.getElementById('app-layout').classList.remove('auth-hidden');
 const show=id=>{for(const name of ['wizard','receiving','support'])document.getElementById(name).hidden=name!==id;};
 document.querySelector('#tab-retention').onclick=()=>{show('wizard');renderRetentionSettings();};
 document.querySelector('#tab-returns').onclick=()=>{show('receiving');renderIndependentReturns();};

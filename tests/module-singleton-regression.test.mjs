@@ -24,6 +24,8 @@ test('stateful browser modules use one URL identity across the entire import gra
   const versions = new Set(imports.map(item => item.version));
   const entry = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const release = entry.match(/src="js\/main\.js\?v=([^"]+)"/)[1];
+  assert.equal(entry.match(/href="style\.css\?v=([^"]+)"/)[1], release,
+    'HTML must request the same CSS release as the JavaScript that binds new UI controls');
   assert.deepEqual([...versions], [release]);
 
   for (const moduleName of ['main.js', 'services/supabase.js']) {

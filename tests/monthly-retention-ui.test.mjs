@@ -32,7 +32,7 @@ test('a SQL error on reconciliation cannot discard the key of an earlier uncerta
   const nodes=new Map();
   const node=id=>{
     if(!nodes.has(id))nodes.set(id,{textContent:'',disabled:false,hidden:false,onclick:null,
-      addEventListener(){},append(){},querySelectorAll:()=>[],
+      eventCounts:{},addEventListener(type){this.eventCounts[type]=(this.eventCounts[type]||0)+1;},append(){},querySelectorAll:()=>[],
       closest:()=>({querySelector:()=>node('lookup-results'),addEventListener(){}})});
     return nodes.get(id);
   };
@@ -41,9 +41,10 @@ test('a SQL error on reconciliation cannot discard the key of an earlier uncerta
     dbRecordIndependentReturn:async()=>{throw {code:'42501',message:'Synthetic maintenance after the original uncertain request'};},
     document:{getElementById:node},window:{addEventListener(){}},console});
   vm.runInContext(source,context);
-  vm.runInContext(`setupIndependentReturns();request='original-uncertain-key';requestScope='project-one|actor-one';
+  vm.runInContext(`setupIndependentReturns();setupIndependentReturns();request='original-uncertain-key';requestScope='project-one|actor-one';
     lastPayload=JSON.stringify({customerId:'synthetic-customer',items:[]});`,context);
   await node('independent-return-reconcile').onclick();
+  assert.equal(node('independent-return-form').eventCounts.submit,1,'Repeated page setup must not bind duplicate financial submissions');
   assert.equal(vm.runInContext('request',context),'original-uncertain-key');
   assert.equal(vm.runInContext('requestScope',context),'project-one|actor-one');
   assert.ok(node('independent-return-form').querySelectorAll);
