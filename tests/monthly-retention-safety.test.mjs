@@ -41,7 +41,7 @@ test('pending external inventory and unknown foreign keys block deletion before 
   assert.equal(await debt(),100);
 });
 
-test('deferred failure rolls back old orders, checkpoints, archive TRUNCATE and job state',async()=>{
+test('deferred failure rolls back old orders, checkpoints, archive cleanup and job state',async()=>{
   const date=await dates(); const sale=(await order(date.old)).order.id;
   await owner();
   await db.query("INSERT INTO activity_logs_archive_pre_20260804(id,operation_key,actor_id,actor_name,action,module,target_type,target_id,created_at) VALUES('synthetic-archive','synthetic',$2,'Synthetic','TEST','orders','order','synthetic',$1)",[date.old,adminId]);

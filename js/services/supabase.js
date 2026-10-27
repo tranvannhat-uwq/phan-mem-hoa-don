@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-feedback-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-feedback-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-holds-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-holds-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-feedback-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-feedback-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-feedback-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-holds-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-holds-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-holds-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
 
 export let supabaseClient = null;
@@ -77,7 +77,10 @@ async function retentionRpc(name, args = {}) {
   const { data, error } = await client.rpc(name, args);
   if (client !== supabaseClient || user !== state.currentUser) throw new Error('Phiên đăng nhập đã thay đổi. Hãy kiểm tra kết quả trên tài khoản đã thực hiện.');
   if (error) {
-    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Máy chủ chưa cài đầy đủ chức năng. Cần cập nhật migration 0106–0114.');
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error(
+      ['rpc_hold_retention_warnings', 'rpc_retention_review_orders'].includes(name)
+        ? 'Máy chủ chưa cài chức năng giữ chứng từ đối soát. Cần cập nhật migration 0118.'
+        : 'Máy chủ chưa cài đầy đủ chức năng. Cần cập nhật migration 0106–0114.');
     throw error;
   }
   return data;
@@ -89,6 +92,8 @@ export function getRetentionSessionScope() {
 export const dbPreviewMonthlyRetention = includeArchive => retentionRpc('rpc_preview_monthly_retention', { p_include_archive: includeArchive });
 export const dbPrepareMonthlyRetention = (requestKey, includeArchive) => retentionRpc('rpc_prepare_monthly_retention', { p_request_key: requestKey, p_include_archive: includeArchive });
 export const dbRetentionJob = jobId => retentionRpc('rpc_retention_job', { p_job_id: jobId });
+export const dbHoldRetentionWarnings = includeArchive => retentionRpc('rpc_hold_retention_warnings', { p_include_archive: includeArchive });
+export const dbRetentionReviewOrders = (offset = 0) => retentionRpc('rpc_retention_review_orders', { p_offset: offset, p_limit: 25 });
 export async function dbExecuteMonthlyRetention(jobId, backupSha256, confirmation) {
   const result = await retentionRpc('rpc_execute_monthly_retention', { p_job_id: jobId, p_backup_sha256: backupSha256, p_confirmation: confirmation });
   await syncRetentionState();

@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob } from '../services/supabase.js?v=20261027-retention-feedback-v1';
+import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings } from '../services/supabase.js?v=20261027-retention-holds-v1';
 import { encryptRetentionBackup, decryptRetentionBackup } from '../services/retention-backup.js';
 import { retentionConfirmation } from '../domain/data-retention.js';
 
@@ -35,6 +35,7 @@ function controls() {
   el('recover').hidden = !uncertain;
   el('recover').disabled = busy;
   el('restart').disabled = busy || uncertain;
+  if (el('hold')) el('hold').disabled = busy || uncertain;
 }
 function reset() {
   prepared = null; verified = false;
@@ -54,6 +55,14 @@ function showPreview(preview) {
   const blockers = preview.blockers || [];
   el('blockers').replaceChildren();
   blockers.forEach(text => { const row = document.createElement('li'); row.textContent = text; el('blockers').append(row); });
+  if (el('hold')) {
+    el('hold').hidden = !(Number(preview.review_pending) > 0);
+    el('hold').textContent = `Bỏ qua và giữ ${Number(preview.review_pending) || 0} chứng từ để đối soát sau`;
+  }
+  if (el('held-note')) {
+    el('held-note').hidden = !(Number(preview.review_held) > 0);
+    el('held-note').textContent = `Đang giữ ${Number(preview.review_held) || 0} chứng từ gây cảnh báo cùng các chứng từ liên quan. Các bản gốc này được loại khỏi phạm vi xóa và có thể xem tại Lịch sử giao dịch → Chứng từ giữ để đối soát.`;
+  }
   if (prepared) el('confirmation-label').textContent = `Nhập chính xác: ${retentionConfirmation(preview.cutoff)}`;
   return blockers.length === 0;
 }
@@ -80,6 +89,13 @@ export function setupRetentionSettings() {
     reset(); message('Đang kiểm tra công nợ, liên kết và phạm vi xóa…');
     const result = await dbPreviewMonthlyRetention(el('archive').checked);
     message(showPreview(result) ? 'Kiểm tra đạt. Bật bảo trì, đóng các phiên Admin khác rồi tạo bản sao phục hồi.' : 'Chưa thể dọn. Cần xử lý các vấn đề bên dưới.');
+  }));
+  el('hold')?.addEventListener('click', () => action(async () => {
+    reset(); message('Đang giữ riêng chứng từ cảnh báo và kiểm tra các liên kết…');
+    const result = await dbHoldRetentionWarnings(el('archive').checked);
+    const canPrepare = showPreview(result.preview);
+    message(`Đã giữ ${Number(result.preview.review_held) || 0} chứng từ cảnh báo và dữ liệu liên quan để kế toán đối soát. Chưa xóa dữ liệu. `
+      + (canPrepare ? 'Bạn có thể tạo bản sao phục hồi mới cho phần còn lại.' : 'Các điều kiện còn hiển thị màu đỏ vẫn cần xử lý trước khi dọn.'));
   }));
   el('prepare').addEventListener('click', () => action(async () => {
     el('password').removeAttribute('aria-invalid');

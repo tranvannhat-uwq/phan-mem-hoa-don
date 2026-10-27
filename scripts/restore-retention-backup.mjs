@@ -12,7 +12,7 @@ const allowedTables=new Set(['companies','brands','product_groups','payroll_prod
   'inventory_balances','inventory_documents','inventory_movements','inventory_order_positions','inventory_pending_orders',
   'inventory_sync_outbox','bom_items','bom_item_balances','bom_item_documents','bom_versions','bom_lines','bom_runs','bom_item_movements',
   'audit_logs','activity_logs','retention_control','retention_customer_balances','retention_customer_company_balances','retention_supplier_balances',
-  'retention_inventory_balances','retention_retired_requests','dealer_support_control','dealer_support_history','activity_logs_archive_pre_20260804']);
+  'retention_inventory_balances','retention_retired_requests','retention_review_orders','dealer_support_control','dealer_support_history','activity_logs_archive_pre_20260804']);
 const seedTables=new Set(['profiles','companies','retention_control','inventory_control','dealer_support_control']);
 const ident=value=>{if(!/^[a-z_][a-z0-9_]*$/.test(value))throw new Error('Unsupported SQL identifier');return '"'+value+'"';};
 const literal=value=>"'"+String(value).replaceAll("'","''")+"'";
@@ -48,6 +48,7 @@ END $guard$;`];
     parts.push(`DO $guard$ BEGIN IF (SELECT jsonb_agg(column_name ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema='public' AND table_name=${literal(name)}) IS DISTINCT FROM ${literal(JSON.stringify(payload.columns[name]))}::jsonb THEN RAISE EXCEPTION 'Schema columns differ: ${name}'; END IF; END $guard$;`);
   }
   const authIds=(payload.tables.profiles||[]).map(row=>row.auth_user_id).filter(Boolean);
+  if (names.includes('retention_review_orders')) parts.push(`DO $guard$ BEGIN IF NOT EXISTS(SELECT 1 FROM public.schema_migrations WHERE version='0118') THEN RAISE EXCEPTION 'Matching reconciliation-hold schema 0118 is required'; END IF; END $guard$;`);
   parts.push(`DO $guard$ BEGIN IF EXISTS(SELECT 1 FROM jsonb_array_elements_text(${literal(JSON.stringify(authIds))}::jsonb) required(id) WHERE NOT EXISTS(SELECT 1 FROM auth.users u WHERE u.id::text=required.id)) THEN RAISE EXCEPTION 'Required Auth identities are missing'; END IF; END $guard$;`);
   // Owner-only replica mode resolves non-deferrable circular legacy FKs while
   // restoring an empty staging schema. Every FK is explicitly checked below.

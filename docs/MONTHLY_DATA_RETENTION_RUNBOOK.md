@@ -10,6 +10,10 @@ Xem [cách chọn SKU và tra lịch sử hàng cấp](DEALER_SUPPORT_HISTORY.md
 
 ## Quy tắc đã thực hiện
 
+Từ migration **0118**, Admin có thể giữ riêng chứng từ gây cảnh báo hàng cấp cùng
+các chứng từ liên quan để kế toán đối soát sau. Xem [phạm vi, tra cứu và cài đặt](RETENTION_RECONCILIATION_HOLDS.md).
+Nhóm đã giữ được loại khỏi phạm vi xóa và không tự được gỡ giữ ở kỳ sau.
+
 - Giữ tháng hiện tại và tháng trước theo UTC+7. Trong tháng 10/2026: giữ từ 01/09/2026, xóa chi tiết trước mốc đó. Không dùng cách đếm lùi 60 ngày.
 - Giữ nguyên hồ sơ khách và các số cuối cùng: công nợ có dấu, tổng bán, tổng trả, doanh thu ròng lũy kế, ngày mua/thu gần nhất và các số nhập đầu kỳ. Không tính lại các số này chỉ từ đơn còn giữ.
 - Chuyển phần công nợ đã xóa thành số dư mở kỳ. Có số chuyển kỳ thu tiền, công nợ theo công ty và nhà cung cấp; tiền mặt/ngân hàng/ví và tồn kho hiện tại được đối soát riêng.

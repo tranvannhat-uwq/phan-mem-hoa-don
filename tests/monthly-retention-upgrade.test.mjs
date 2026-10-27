@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {buildRetentionDatabase,asActor,scalar} from './helpers/retention-db.mjs';
 import {buildRetentionUpgrade} from '../scripts/build-retention-upgrade.mjs';
+import {readFile} from 'node:fs/promises';
 test('reviewed deployment bundle rolls back the compatibility check and installs atomically without purging',async()=>{
   const db=await buildRetentionDatabase({maxVersion:105});
   try {
@@ -30,4 +31,28 @@ test('reviewed deployment bundle rolls back the compatibility check and installs
     await assert.rejects(db.exec(await buildRetentionUpgrade({dryRun:false})),/already present/);
     await db.exec('ROLLBACK');
   } finally {await db.close();}
+});
+
+test('0118 rehearses and installs on populated 0117 without modifying business rows, and rejects drift',async()=>{
+  const db=await buildRetentionDatabase({maxVersion:117});
+  try {
+    await asActor(db);await scalar(db,'SELECT rpc_confirm_order($1) AS value',[JSON.stringify({customerId:'retention-customer',pricelistId:'retention-prices',idempotencyKey:randomUUID(),items:[{variantId:'retention-sku',quantity:2}]})]);
+    await db.exec('RESET ROLE');
+    const before=await scalar(db,"SELECT p107_fingerprint(true) AS value");
+    const source=await readFile(new URL('../migrations/0118_retention_reconciliation_holds.sql',import.meta.url),'utf8');
+    // SQL Editor and Windows can normalize pasted scripts to CRLF.
+    await db.exec(source.replace(/COMMIT;\s*$/,'ROLLBACK;').replace(/\r?\n/g,'\r\n'));
+    assert.equal(await scalar(db,"SELECT to_regclass('public.retention_review_orders') AS value"),null);
+    assert.equal(await scalar(db,'SELECT p107_fingerprint(true) AS value'),before);
+    await db.exec("BEGIN;CREATE OR REPLACE FUNCTION p107_plan(p_cutoff timestamptz) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public AS $$ SELECT '{}'::jsonb $$;COMMIT;");
+    await assert.rejects(db.exec(source),/unreviewed retention function/);await db.exec('ROLLBACK');
+    const original=(await buildRetentionDatabase({maxVersion:117}));
+    try {const definition=await scalar(original,"SELECT pg_get_functiondef('p107_plan(timestamptz)'::regprocedure) AS value");await db.exec(definition);}finally{await original.close();}
+    await db.exec(source);
+    assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM retention_review_orders')),0);
+    assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM retention_jobs')),0);
+    assert.equal(Number(await scalar(db,'SELECT epoch AS value FROM retention_control')),0);
+    assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM orders')),1);
+    assert.equal(Number(await scalar(db,"SELECT debt AS value FROM customers WHERE id='retention-customer'")),200);
+  }finally{await db.close();}
 });

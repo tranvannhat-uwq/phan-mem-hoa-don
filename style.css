@@ -12810,6 +12810,11 @@ body.purchase-entry-modal-open { overflow: hidden; }
 .retention-form .form-control[aria-invalid="true"] { border-color: var(--color-danger); }
 .retention-section .retention-inline-status { padding: .75rem 1rem; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-surface, #fff); overflow-wrap: anywhere; }
 .retention-section .retention-inline-status[role="alert"] { border-color: var(--color-danger); }
+.retention-review-section { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--border-color); }
+.retention-review-order { padding: 1rem; margin-bottom: .75rem; border: 1px solid var(--border-color); border-radius: 10px; overflow-wrap: anywhere; }
+.retention-review-order summary { cursor: pointer; font-weight: 700; line-height: 1.6; }
+.retention-review-order[open] > * + * { margin-top: .75rem; }
+.retention-review-reasons { color: var(--color-warning, #92400e); }
 .retention-check { display: flex !important; flex-direction: row !important; align-items: flex-start; gap: .6rem; }
 .retention-check input { margin-top: .3rem; }
 .retention-actions { display: flex; gap: .5rem; flex-wrap: wrap; }

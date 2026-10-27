@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261027-retention-feedback-v1">
+  <link rel="stylesheet" href="style.css?v=20261027-retention-holds-v1">
 </head>
 <body>
 
@@ -1385,6 +1385,13 @@
           <div class="history-grid" id="history-orders-container">
             <!-- Dynamic order cards will go here -->
           </div>
+          <section id="retention-review-section" class="retention-section retention-review-section" hidden>
+            <h3>Chứng từ giữ để đối soát</h3>
+            <p>Các chứng từ gây cảnh báo và dữ liệu liên quan được giữ nguyên khi dọn tháng. Mở từng đơn để xem lý do cùng chi tiết gốc; việc tra cứu không thay đổi công nợ.</p>
+            <div id="retention-review-list"></div>
+            <p id="retention-review-status" role="status" aria-live="polite"></p>
+            <div class="retention-actions"><button id="retention-review-prev" class="btn btn-secondary btn-sm" type="button">Trước</button><button id="retention-review-next" class="btn btn-secondary btn-sm" type="button">Sau</button><button id="retention-review-refresh" class="btn btn-secondary btn-sm" type="button">Làm mới danh sách đối soát</button></div>
+          </section>
         </div>
       </section>
 
@@ -2104,6 +2111,8 @@
             <div class="retention-actions"><button id="retention-preview" class="btn btn-secondary" type="button">1. Kiểm tra phạm vi</button><button id="retention-restart" class="btn btn-secondary" type="button">Bỏ lần chuẩn bị</button></div>
             <strong id="retention-boundary"></strong>
             <ul id="retention-counts" class="retention-counts"></ul><ul id="retention-blockers" class="retention-errors"></ul>
+            <button id="retention-hold" class="btn btn-secondary" type="button" hidden>Bỏ qua và giữ chứng từ để đối soát sau</button>
+            <p id="retention-held-note" class="retention-note" role="status" hidden></p>
             <div class="retention-form">
               <label>Mật khẩu mới cho file (ít nhất 12 ký tự)<input id="retention-password" class="form-control" type="password" minlength="12" autocomplete="new-password"></label>
               <label>Nhập lại mật khẩu<input id="retention-password-again" class="form-control" type="password" minlength="12" autocomplete="new-password"></label>
@@ -4576,7 +4585,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261027-retention-feedback-v1"></script>
-  <script type="module" src="js/main.js?v=20261027-retention-feedback-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261027-retention-holds-v1"></script>
+  <script type="module" src="js/main.js?v=20261027-retention-holds-v1"></script>
 </body>
 </html>

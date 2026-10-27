@@ -27,6 +27,7 @@ const preview=()=>({cutoff:retentionCutoffDate()+'T00:00:00+07:00',counts:{order
 let prepared;const records=[];const requests=new Map();
 export function getRetentionSessionScope(){return 'synthetic-project|'+state.currentUser.id;}
 export async function dbPreviewMonthlyRetention(){return preview();}
+export async function dbHoldRetentionWarnings(){return {added:0,preview:preview()};}
 export async function dbPrepareMonthlyRetention(key){
  const payload={format:'soviet-retention-recovery-v1',job_id:key,tables:{customers:[{id:'synthetic-customer',debt:123}]},columns:{customers:['id','debt']}};
  const backup_text=JSON.stringify(payload);prepared={job_id:key,preview:preview(),backup_text,backup_sha256:await sha256Hex(backup_text),expires_at:new Date(Date.now()+1800000).toISOString()};return prepared;}

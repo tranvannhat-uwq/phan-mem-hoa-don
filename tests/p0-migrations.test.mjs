@@ -123,7 +123,8 @@ const migrationNames = [
   '0114_dealer_support_history.sql',
   '0115_customer_baseline_blank_field_safety.sql',
   '0116_cashbook_amendment_unicode_and_trigger_acl.sql',
-  '0117_employee_report_pagination_retention_merge.sql'
+  '0117_employee_report_pagination_retention_merge.sql',
+  '0118_retention_reconciliation_holds.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const standaloneWarehouseMigrations = new Set(['0085', '0086', '0087']);

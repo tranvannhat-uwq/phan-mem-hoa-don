@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source=readFileSync(new URL('../js/components/data-retention.js',import.meta.url),'utf8')
   .replace(/^import .+;\r?\n/gm,'').replace(/^export /gm,'');
 
-function harness(prepare=async()=>{throw new Error('Synthetic server rejection');}) {
+function harness(prepare=async()=>{throw new Error('Synthetic server rejection');},hold=async()=>({added:1,preview:{cutoff:'2026-09-01T00:00:00+07:00',counts:{},blockers:[],review_pending:0,review_held:1}})) {
   const nodes=new Map(),calls=[],downloads=[];
   let focused='';
   function node(id) {
@@ -18,6 +18,7 @@ function harness(prepare=async()=>{throw new Error('Synthetic server rejection')
   const context=vm.createContext({state:{currentUser:{role:'admin'}},
     document:{getElementById:node,createElement:tag=>tag==='a'?{click(){downloads.push(this.download);}}:{textContent:''}},
     dbPrepareMonthlyRetention:async(...args)=>{calls.push(args);return prepare(...args);},
+    dbHoldRetentionWarnings:hold,
     dbExecuteMonthlyRetention:async()=>{throw new Error('Deletion must never run in backup tests');},
     encryptRetentionBackup:async()=> 'synthetic encrypted payload',
     retentionConfirmation:()=> 'XOA TRUOC 01/09/2026',
@@ -73,4 +74,18 @@ test('successful preparation downloads the file but still requires verification 
   assert.match(h.node('prepare-status').textContent,/Đã tạo file mã hóa/);
   assert.equal(h.node('file').disabled,false);assert.equal(h.node('execute').disabled,true);
   assert.equal(h.node('password').value,'');assert.equal(h.node('password-again').value,'');
+});
+
+test('skip refreshes the server plan and invalidates verification without executing deletion',async()=>{
+  const h=harness();await h.node('hold').handlers.click();
+  assert.equal(h.node('hold').hidden,true);assert.equal(h.node('held-note').hidden,false);
+  assert.match(h.node('held-note').textContent,/Đang giữ 1 chứng từ/);
+  assert.match(h.node('prepare-status').textContent,/Chưa xóa dữ liệu/);
+  assert.equal(h.node('execute').disabled,true);assert.equal(h.node('file').disabled,true);
+});
+
+test('skip keeps unrelated red blockers visible and cannot unlock deletion',async()=>{
+  const h=harness(undefined,async()=>({added:1,preview:{cutoff:'2026-09-01',counts:{},blockers:['Có khách lệch công nợ'],review_pending:0,review_held:1}}));
+  await h.node('hold').handlers.click();assert.equal(h.node('execute').disabled,true);
+  assert.match(h.node('prepare-status').textContent,/màu đỏ vẫn cần xử lý/);
 });
