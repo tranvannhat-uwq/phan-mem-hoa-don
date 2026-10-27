@@ -7,17 +7,130 @@ import { printReturnSlip } from './history.js?v=20261027-supplier-export-v1';
 const el = id => document.getElementById(`independent-return-${id}`);
 let offset = 0; let loadedScope = ''; let loading = false; let saving = false;
 let request = null; let requestScope = ''; let lastPayload = ''; let rows = [];
+let itemSequence = 0;
+let customerLookup = null;
+let modalTrigger = null;
 const finance = () => ['admin', 'accounting'].includes(state.currentUser?.role);
+const normalizeSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
+const customerLabel = customer => [customer.code, customer.name].filter(Boolean).join(' — ');
+const productLabel = product => [product.code || product.variantCode, product.name, product.brand, product.packageType || product.packagingName].filter(Boolean).join(' — ');
+
+function setupReturnLookup(input, valueInput, getCandidates, labelFor, detailFor) {
+  const wrapper = input.closest('.return-lookup');
+  const results = wrapper.querySelector('.return-lookup-results');
+  let matches = []; let activeIndex = -1; let scope = '';
+  const close = () => {
+    results.hidden = true;
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    activeIndex = -1;
+  };
+  const select = item => {
+    if (input.disabled || !finance() || scope !== getRetentionSessionScope()) { close(); return; }
+    valueInput.value = item.id;
+    input.value = labelFor(item);
+    input.setCustomValidity('');
+    close();
+    valueInput.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const render = () => {
+    if (input.disabled || !finance() || !input.value.trim()) { close(); return; }
+    scope = getRetentionSessionScope();
+    const tokens = normalizeSearch(input.value).split(/\s+/);
+    const found = getCandidates().filter(item => {
+      const text = normalizeSearch(`${labelFor(item)} ${detailFor(item)} ${String(item.phone || '').replace(/\D/g, '')}`);
+      return tokens.every(token => text.includes(token));
+    });
+    matches = found.slice(0, 20); activeIndex = -1;
+    results.replaceChildren();
+    input.removeAttribute('aria-activedescendant');
+    matches.forEach((item, index) => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'return-lookup-option';
+      button.id = `${results.id}-${index}`;
+      button.setAttribute('role', 'option'); button.setAttribute('aria-selected', 'false');
+      const title = document.createElement('strong'); title.textContent = labelFor(item);
+      const detail = document.createElement('small'); detail.textContent = detailFor(item);
+      button.append(title, detail);
+      button.addEventListener('click', () => select(item));
+      results.append(button);
+    });
+    if (!found.length || found.length > matches.length) {
+      const hint = document.createElement('div'); hint.className = 'return-lookup-hint';
+      hint.setAttribute('role', 'status');
+      hint.textContent = !found.length ? 'Không tìm thấy kết quả.' : 'Còn kết quả khác. Nhập thêm từ khóa để tìm chính xác hơn.';
+      results.append(hint);
+    }
+    results.hidden = false; input.setAttribute('aria-expanded', 'true');
+  };
+  input.addEventListener('input', () => {
+    valueInput.value = '';
+    input.setCustomValidity(input.value ? 'Vui lòng chọn một kết quả tìm kiếm.' : '');
+    render();
+  });
+  input.addEventListener('focus', () => { if (!valueInput.value) render(); });
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !results.hidden) { event.preventDefault(); event.stopPropagation(); close(); return; }
+    if (event.key === 'Tab') { close(); return; }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (results.hidden) render();
+      if (!matches.length || results.hidden) return;
+      activeIndex = activeIndex < 0 ? (event.key === 'ArrowDown' ? 0 : matches.length - 1)
+        : (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length;
+      results.querySelectorAll('[role="option"]').forEach((button, index) => {
+        button.setAttribute('aria-selected', String(index === activeIndex));
+        if (index === activeIndex) {
+          input.setAttribute('aria-activedescendant', button.id);
+          button.scrollIntoView({ block: 'nearest' });
+        }
+      });
+    } else if (event.key === 'Enter' && !results.hidden) {
+      event.preventDefault();
+      if (matches.length) select(matches[Math.max(0, activeIndex)]);
+    }
+  });
+  wrapper.addEventListener('focusout', event => { if (!wrapper.contains(event.relatedTarget)) close(); });
+  return { reset() { valueInput.value = ''; input.value = ''; input.setCustomValidity(''); close(); } };
+}
+
 function option(value, text) { const node = document.createElement('option'); node.value = value; node.textContent = text; return node; }
 function fillSelect(select, values, empty) {
   const prior = select.value; select.replaceChildren(option('', empty), ...values.map(item => option(item.id, item.label)));
   select.value = prior;
 }
-function status(text) { el('status').textContent = text; }
+function status(text, showInForm = false) {
+  el('status').textContent = text;
+  if (showInForm) el('form-status').textContent = text;
+}
+function openReturnModal() {
+  if (!finance()) return;
+  modalTrigger = document.activeElement;
+  renderIndependentReturns();
+  el('modal').classList.add('active');
+  el('modal').setAttribute('aria-hidden', 'false');
+  document.body.classList.add('return-modal-open');
+  (request ? el('reconcile') : el('customer-search')).focus();
+}
+function closeReturnModal(force = false) {
+  if (saving && !force) return;
+  el('modal').classList.remove('active');
+  el('modal').setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('return-modal-open');
+  (modalTrigger?.isConnected ? modalTrigger : el('open')).focus();
+}
 function pendingControls() {
   el('form').querySelectorAll('input,select,textarea,button').forEach(input => { input.disabled = saving || Boolean(request); });
+  if (saving || request) {
+    el('form').querySelectorAll('.return-lookup-results').forEach(results => { results.hidden = true; });
+    el('form').querySelectorAll('[role="combobox"]').forEach(input => {
+      input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant');
+    });
+  }
   el('reconcile').hidden = !request;
   el('reconcile').disabled = saving || !finance() || requestScope !== getRetentionSessionScope();
+  el('close').disabled = saving;
+  el('cancel').disabled = saving;
 }
 async function recordPending() {
   if (!finance() || !requestScope || requestScope !== getRetentionSessionScope()) {
@@ -27,6 +140,8 @@ async function recordPending() {
   const response = await dbRecordIndependentReturn({ ...input, idempotencyKey: request });
   request = null; requestScope = ''; lastPayload = '';
   el('form').reset(); el('items').replaceChildren(); addItem();
+  el('form-status').textContent = '';
+  closeReturnModal(true);
   status(`Đã ghi phiếu ${response.return_id}. Công nợ mới: ${formatCurrency(response.new_debt)}.`);
   showToast(`Đã ghi phiếu ${response.return_id} và cập nhật công nợ.`, 'success');
   try {
@@ -37,13 +152,17 @@ async function recordPending() {
 function addItem() {
   if (el('items').children.length >= 50) return;
   const row = document.createElement('div'); row.className = 'independent-return-item';
-  row.innerHTML = '<label>Sản phẩm<select class="form-control" data-field="productId" required></select></label>'
+  const lookupId = `independent-return-product-${++itemSequence}`;
+  row.innerHTML = `<div class="return-lookup"><label for="${lookupId}">Sản phẩm</label>`
+    + `<input id="${lookupId}" class="form-control" type="text" placeholder="Tìm tên sản phẩm hoặc mã SKU..." autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${lookupId}-results" required>`
+    + `<input type="hidden" data-field="productId"><div id="${lookupId}-results" class="return-lookup-results" role="listbox" aria-label="Sản phẩm tìm được" hidden></div></div>`
     + '<label>Số lượng<input class="form-control" data-field="quantity" type="number" min="0.0001" max="1000000" step="0.0001" value="1" required></label>'
     + '<label>Đơn giá nhận lại (₫)<input class="form-control" data-field="unitPrice" type="number" min="0" max="1000000000" step="1" required></label>'
     + '<label>Khấu trừ (%)<input class="form-control" data-field="deductionPercent" type="number" min="0" max="100" step="0.01" value="0" required></label>'
     + '<button type="button" class="btn btn-secondary" data-remove>Xóa dòng</button>';
-  const products = state.products.filter(p => p.isActive !== false && !p.isLegacy);
-  fillSelect(row.querySelector('select'), products.map(p => ({ id: p.id, label: `${p.code || p.variantCode || ''} — ${p.name} (${p.packageType || p.packagingName || ''})` })), 'Chọn sản phẩm');
+  setupReturnLookup(row.querySelector('[role="combobox"]'), row.querySelector('[data-field="productId"]'),
+    () => state.products.filter(p => p.isActive !== false && !p.isLegacy), productLabel,
+    product => [product.variantCode, product.brand, product.packageType || product.packagingName].filter(Boolean).join(' · '));
   row.querySelector('[data-remove]').onclick = () => { row.remove(); updateTotal(); };
   row.addEventListener('input', updateTotal);
   el('items').append(row); updateTotal();
@@ -106,17 +225,39 @@ export function renderIndependentReturns() {
   if (!finance()) { loadedScope = ''; rows = []; el('list').replaceChildren(); return; }
   pendingControls();
   if (request && requestScope !== getRetentionSessionScope()) {
-    status('Còn lần gửi chờ kết quả ở tài khoản/kết nối trước. Đăng nhập lại đúng tài khoản để kiểm tra trước khi lập phiếu khác.');
+    status('Còn lần gửi chờ kết quả ở tài khoản/kết nối trước. Đăng nhập lại đúng tài khoản để kiểm tra trước khi lập phiếu khác.', true);
     return;
   }
   // Preserve an in-progress receipt when this page rerenders after data updates.
-  fillSelect(el('customer'), state.customers.map(c => ({ id: c.id, label: `${c.code || ''} — ${c.name}` })), 'Chọn khách hàng');
   fillSelect(el('company'), state.companies.map(c => ({ id: c.id, label: c.name })), 'Chọn công ty');
   if (!el('items').children.length && state.products.length) addItem();
   void refreshList();
 }
 export function setupIndependentReturns() {
   if (!el('form')) return;
+  // Keep fixed-position overlays outside animated panels and glass cards.
+  const appLayout = document.getElementById('app-layout');
+  (appLayout || document.body).append(el('modal'));
+  if (appLayout && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(() => { if (appLayout.classList.contains('auth-hidden')) closeReturnModal(true); })
+      .observe(appLayout, { attributes: true, attributeFilter: ['class'] });
+  }
+  el('open').onclick = openReturnModal;
+  el('close').onclick = () => closeReturnModal();
+  el('cancel').onclick = () => closeReturnModal();
+  el('modal').addEventListener('click', event => { if (event.target === el('modal')) closeReturnModal(); });
+  el('modal').addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); closeReturnModal(); }
+    if (event.key !== 'Tab') return;
+    const controls = [...el('modal').querySelectorAll('button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])')]
+      .filter(input => input.getClientRects().length > 0);
+    const first = controls[0]; const last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  });
+  customerLookup = setupReturnLookup(el('customer-search'), el('customer'), () => state.customers, customerLabel,
+    customer => customer.phone || 'Chưa có số điện thoại');
+  el('form').addEventListener('reset', () => customerLookup.reset());
   el('add').onclick = addItem;
   el('refresh').onclick = () => void refreshList(true);
   el('prev').onclick = () => { offset = Math.max(0, offset - 25); void refreshList(true); };
@@ -143,7 +284,7 @@ export function setupIndependentReturns() {
       // A SQL error proves only THIS attempt rolled back. After an uncertain
       // earlier attempt, it cannot prove the original never committed.
       if (firstAttempt && /^[0-9A-Z]{5}$/.test(error.code || '')) { request = null; requestScope = ''; lastPayload = ''; }
-      status(error.message || 'Chưa xác định kết quả. Giữ nguyên thông tin rồi gửi lại để kiểm tra, không tạo phiếu mới.');
+      status(error.message || 'Chưa xác định kết quả. Giữ nguyên thông tin rồi gửi lại để kiểm tra, không tạo phiếu mới.', true);
     } finally { saving = false; pendingControls(); }
   });
   el('reconcile').onclick = async () => {
@@ -151,7 +292,7 @@ export function setupIndependentReturns() {
     saving = true; pendingControls();
     try { await recordPending(); }
     catch (error) {
-      status(`${error.message || 'Chưa nhận được kết quả.'} Lần gửi trước vẫn chưa được đối soát; giữ nguyên mã gửi và kiểm tra lại, không lập phiếu thay thế.`);
+      status(`${error.message || 'Chưa nhận được kết quả.'} Lần gửi trước vẫn chưa được đối soát; giữ nguyên mã gửi và kiểm tra lại, không lập phiếu thay thế.`, true);
     } finally { saving = false; pendingControls(); }
   };
   window.addEventListener('beforeunload', event => { if (request) { event.preventDefault(); event.returnValue = ''; } });

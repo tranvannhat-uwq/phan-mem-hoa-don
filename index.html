@@ -1197,24 +1197,57 @@
       <!-- Independent Returns Panel -->
       <section id="independent-returns-panel" class="panel">
         <div id="independent-returns-section" class="glass-panel retention-section" hidden>
-          <h2 class="panel-title"><i data-lucide="package-check"></i> Nhận hàng trả độc lập</h2>
+          <div class="return-page-header">
+            <h2 class="panel-title"><i data-lucide="package-check"></i> Nhận hàng trả độc lập</h2>
+            <button id="independent-return-open" class="btn btn-primary" type="button" aria-haspopup="dialog" aria-controls="independent-return-modal"><i data-lucide="plus"></i> Tạo phiếu nhận hàng trả</button>
+          </div>
           <p>Tạo phiếu nhận hàng mới, giảm công nợ hiện tại của khách. Nếu khách đã hết nợ, tiền trả được giữ thành số dư để cấn trừ. Kế toán xác nhận đơn giá nhận lại và tem niêm phong.</p>
-          <details>
-            <summary class="btn btn-secondary">Tạo phiếu nhận hàng trả</summary>
-            <form id="independent-return-form" class="retention-form">
-              <div class="retention-grid">
-                <label>Khách hàng<select id="independent-return-customer" class="form-control" required></select></label>
-                <label>Công ty ghi nhận<select id="independent-return-company" class="form-control" required></select></label>
+          <div id="independent-return-modal" class="modal-overlay return-modal" role="dialog" aria-modal="true" aria-labelledby="independent-return-modal-title" aria-describedby="independent-return-modal-description" aria-hidden="true" tabindex="-1">
+            <div class="return-modal-card">
+              <div class="return-modal-header">
+                <span class="return-modal-icon" aria-hidden="true">↩</span>
+                <div>
+                  <h2 id="independent-return-modal-title">Tạo phiếu nhận hàng trả</h2>
+                  <p id="independent-return-modal-description">Chọn khách hàng và hàng hóa để ghi nhận giá trị giảm công nợ.</p>
+                </div>
+                <button id="independent-return-close" class="modal-close" type="button" aria-label="Đóng popup nhận hàng trả">&times;</button>
               </div>
-              <div id="independent-return-items"></div>
-              <button id="independent-return-add" class="btn btn-secondary" type="button">Thêm sản phẩm</button>
-              <label>Lý do / ghi chú tiếp nhận<textarea id="independent-return-reason" class="form-control" minlength="3" maxlength="500" required></textarea></label>
-              <label class="retention-check"><input id="independent-return-seal" type="checkbox" required> Đã kiểm tra tem niêm phong và duyệt giá nhận lại.</label>
-              <strong>Tổng giảm công nợ: <span id="independent-return-total">0 ₫</span></strong>
-              <button id="independent-return-submit" class="btn btn-primary" type="submit">Ghi nhận hàng trả và giảm công nợ</button>
-            </form>
-            <button id="independent-return-reconcile" class="btn btn-secondary" type="button" hidden>Kiểm tra lại lần gửi trước</button>
-          </details>
+              <form id="independent-return-form" class="retention-form">
+                <div class="return-modal-body">
+                  <div class="return-form-section">
+                    <h3>Thông tin tiếp nhận</h3>
+                    <div class="retention-grid">
+                      <div class="return-lookup">
+                        <label for="independent-return-customer-search">Khách hàng</label>
+                        <input id="independent-return-customer-search" class="form-control" type="text" placeholder="Tìm tên, mã khách hoặc số điện thoại..." autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="independent-return-customer-results" required>
+                        <input id="independent-return-customer" type="hidden">
+                        <div id="independent-return-customer-results" class="return-lookup-results" role="listbox" aria-label="Khách hàng tìm được" hidden></div>
+                      </div>
+                      <label>Công ty ghi nhận<select id="independent-return-company" class="form-control" required></select></label>
+                    </div>
+                  </div>
+                  <div class="return-form-section">
+                    <div class="return-items-heading"><h3>Hàng hóa nhận lại</h3><button id="independent-return-add" class="btn btn-secondary btn-sm" type="button"><i data-lucide="plus"></i> Thêm sản phẩm</button></div>
+                    <div id="independent-return-items"></div>
+                  </div>
+                  <div class="return-form-section">
+                    <label for="independent-return-reason">Lý do / ghi chú tiếp nhận</label>
+                    <textarea id="independent-return-reason" class="form-control" rows="2" placeholder="Nhập lý do nhận hàng trả và ghi chú cần thiết..." minlength="3" maxlength="500" required></textarea>
+                    <label class="retention-check return-seal-check"><input id="independent-return-seal" type="checkbox" required> Đã kiểm tra tem niêm phong và duyệt giá nhận lại.</label>
+                  </div>
+                  <p id="independent-return-form-status" class="return-form-status" role="alert" aria-live="polite"></p>
+                </div>
+                <div class="return-modal-footer">
+                  <div class="return-modal-total"><span>Tổng giảm công nợ</span><strong id="independent-return-total">0 ₫</strong></div>
+                  <div class="return-modal-actions">
+                    <button id="independent-return-cancel" class="btn btn-secondary" type="button">Đóng</button>
+                    <button id="independent-return-reconcile" class="btn btn-secondary" type="button" hidden>Kiểm tra lại lần gửi trước</button>
+                    <button id="independent-return-submit" class="btn btn-primary" type="submit"><i data-lucide="check"></i> Ghi nhận phiếu trả</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
           <div class="table-responsive"><table class="table"><thead><tr><th>Mã phiếu</th><th>Khách hàng</th><th>Ngày nhận</th><th>Giá trị</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="independent-return-list"></tbody></table></div>
           <p id="independent-return-status" role="status"></p>
           <div class="retention-actions"><button id="independent-return-prev" class="btn btn-secondary btn-sm" type="button">Trước</button><button id="independent-return-next" class="btn btn-secondary btn-sm" type="button">Sau</button><button id="independent-return-refresh" class="btn btn-secondary btn-sm" type="button">Làm mới phiếu trả</button></div>

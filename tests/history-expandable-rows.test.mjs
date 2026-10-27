@@ -50,9 +50,10 @@ test('expanded panel uses real notes, payment fields and existing action handler
   assert.match(tableBranch, /paymentSummary\.shippingFeeAmount/);
   assert.match(tableBranch, /paymentSummary\.customerPayable/);
   assert.match(tableBranch, /paymentSummary\.paidAmount/);
-  for (const action of ['notes', 'edit', 'copy', 'print', 'return', 'cancel', 'delete']) {
+  for (const action of ['notes', 'edit', 'copy', 'print', 'cancel', 'delete']) {
     assert.match(tableBranch, new RegExp(`history-${action}-btn`));
   }
+  assert.doesNotMatch(tableBranch, /history-return-(?:btn|print-btn|cancel-btn)/);
   assert.doesNotMatch(history, /history-view-btn/);
   assert.match(history, /dbUpdateOrderNotes\(order\.id, nextNotes\.trim\(\), order\.status === 'draft'\)/);
   assert.doesNotMatch(tableBranch, /on(?:click|change|input)=/);

@@ -32,7 +32,8 @@ test('a SQL error on reconciliation cannot discard the key of an earlier uncerta
   const nodes=new Map();
   const node=id=>{
     if(!nodes.has(id))nodes.set(id,{textContent:'',disabled:false,hidden:false,onclick:null,
-      addEventListener(){},querySelectorAll:()=>[]});
+      addEventListener(){},append(){},querySelectorAll:()=>[],
+      closest:()=>({querySelector:()=>node('lookup-results'),addEventListener(){}})});
     return nodes.get(id);
   };
   const context=vm.createContext({state:{currentUser:{id:'actor-one',role:'admin'}},
@@ -47,4 +48,5 @@ test('a SQL error on reconciliation cannot discard the key of an earlier uncerta
   assert.equal(vm.runInContext('requestScope',context),'project-one|actor-one');
   assert.ok(node('independent-return-form').querySelectorAll);
   assert.match(node('independent-return-status').textContent,/chưa được đối soát/);
+  assert.match(node('independent-return-form-status').textContent,/chưa được đối soát/);
 });

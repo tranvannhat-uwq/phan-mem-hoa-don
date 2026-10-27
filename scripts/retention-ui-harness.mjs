@@ -10,11 +10,16 @@ const wizard=html.slice(html.indexOf('<div id="monthly-retention-section"'),html
 const supportSettings=html.slice(html.indexOf('<div id="dealer-support-settings"'),html.indexOf('<div id="maintenance-mode-section"'));
 const supportStart=html.indexOf('<section id="dealer-support-history"');
 const supportHistory=html.slice(supportStart,html.indexOf('</section>',supportStart)+10);
-const returns=html.slice(html.indexOf('<div id="independent-returns-section"'),html.indexOf('<div class="glass-panel">',html.indexOf('<div id="independent-returns-section"')));
+const returnsStart=html.indexOf('<section id="independent-returns-panel"');
+const returns=html.slice(returnsStart,html.indexOf('</section>',returnsStart)+10).replace('class="panel"','class="panel active"');
 const mockState=`export const state={currentUser:{id:'synthetic-admin',role:'admin'},retentionEpoch:0,
-  customers:[{id:'synthetic-customer',code:'KH-TEST',name:'Khách thử nghiệm'}],
+  customers:[{id:'synthetic-customer',code:'KH-TEST',name:'Nguyễn Thị Minh',phone:'0000 123 456'},
+    ...Array.from({length:1800},(_,i)=>({id:'customer-'+i,code:'KH-'+i,name:'Khách thử nghiệm '+i}))],
   companies:[{id:'ABS_NORTH',name:'Công ty thử nghiệm'}],
-  products:[{id:'synthetic-product',code:'TEST-01',name:'Sản phẩm thử nghiệm',packageType:'Thùng',isActive:true,isLegacy:false}]};`;
+  products:[{id:'synthetic-product',code:'TEST-01',name:'Sơn chống thấm',brand:'Hãng thử nghiệm',packageType:'Thùng',isActive:true,isLegacy:false},
+    {id:'synthetic-product-two',code:'TEST-02',name:'Sơn chống thấm',brand:'Hãng thử nghiệm',packageType:'Lon',isActive:true,isLegacy:false},
+    {id:'inactive-product',code:'OLD-01',name:'Sản phẩm ngừng bán',isActive:false},
+    {id:'legacy-product',code:'OLD-02',name:'Sản phẩm lịch sử',isLegacy:true}]};`;
 const mockServices=`import {state} from '../state.js';
 import {independentReturnTotal,retentionCutoffDate} from '../domain/data-retention.js';
 import {sha256Hex} from './retention-backup.js';
@@ -45,6 +50,7 @@ const page=`<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="vie
 <body style="padding:24px;overflow:auto"><main style="max-width:1000px;margin:auto"><h1>Kiểm thử giao diện — toàn bộ dữ liệu giả</h1><p>Trang này không kết nối Supabase.</p>
 <nav class="retention-actions" style="margin:1rem 0"><button id="tab-retention" class="btn btn-secondary">Dọn dữ liệu</button><button id="tab-returns" class="btn btn-secondary">Trả hàng</button><button id="tab-support" class="btn btn-secondary">Hàng cấp</button><button id="tab-accounting" class="btn btn-secondary">Xem bằng quyền kế toán</button></nav>
 <section id="wizard" class="glass-panel" style="max-width:680px">${wizard}</section><section id="receiving" hidden>${returns}</section><section id="support" hidden>${supportSettings}<div id="customer-detail-modal" data-customer-id="synthetic-customer">${supportHistory}</div></section><p id="test-toast" role="status"></p>
+<script>window.confirm=()=>true;</script>
 <script type="module">
 import{state}from'/js/state.js';import{setupRetentionSettings,renderRetentionSettings}from'/js/components/data-retention.js';
 import{setupIndependentReturns,renderIndependentReturns}from'/js/components/independent-returns.js';
