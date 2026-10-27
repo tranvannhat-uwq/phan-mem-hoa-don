@@ -52,3 +52,25 @@ chưa tải/mã hóa file trong trình duyệt người dùng và chưa xóa d�
 Số đo chẩn đoán nằm trong `outputs/retention-review/backup-*-profile.json`
 và `backup-prepare-before-trial.json` (bị Git ignore). Không commit dữ liệu
 khách hàng hoặc nội dung file phục hồi.
+
+## Cập nhật phạm vi sau khi cài 0120
+
+Admin đã chạy bản cài riêng và gửi kết quả: `da_cai_ban_sua=true`, bảo trì
+`true`, 4 chứng từ giữ, 0 job. Sau đó thao tác tạo file trên web báo
+`TypeError: Failed to fetch`; truy vấn trạng thái tiếp theo vẫn 0 job.
+Chưa xác nhận được tạo/tải trọn file trên production; không suy ra nguyên nhân
+chắc chắn là thiếu RAM từ lỗi mạng này.
+
+Theo yêu cầu bỏ nhật ký lưu trữ cũ khỏi file, frontend
+`20261027-retention-no-archive-v1` bỏ tùy chọn archive và gửi
+`p_include_archive=false` ở cả xem trước, giữ chứng từ và tạo sao lưu. Nhánh
+database có sẵn loại bảng archive khỏi snapshot/fingerprint/khóa và không
+TRUNCATE bảng đó khi thực hiện dọn. Nhật ký hiện hành và các dòng dữ liệu
+ứng dụng khác vẫn có trong bản phục hồi. Không cần migration mới.
+
+Theo số đo trước thay đổi, archive chiếm 78.512.085/154.339.495 byte JSON;
+loại phần này giảm khoảng 51%, còn khoảng 76 MB trước metadata/mã hóa/nén.
+Đây là ước tính từ lần đo, không phải kích thước file đã tải thành công.
+Kiểm thử bao gồm payload không chứa archive, SHA-256 khớp, cleanup không đổi
+dòng archive và mọi thao tác giao diện dùng cùng phạm vi `false`.
+Toàn bộ 72/72 ca `npm run test:retention` đạt sau thay đổi này.

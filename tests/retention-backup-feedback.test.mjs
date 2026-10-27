@@ -7,7 +7,7 @@ const source=readFileSync(new URL('../js/components/data-retention.js',import.me
   .replace(/^import .+;\r?\n/gm,'').replace(/^export /gm,'');
 
 function harness(prepare=async()=>{throw new Error('Synthetic server rejection');},hold=async()=>({added:1,preview:{cutoff:'2026-09-01T00:00:00+07:00',counts:{},blockers:[],review_pending:0,review_held:1}})) {
-  const nodes=new Map(),calls=[],downloads=[];
+  const nodes=new Map(),calls=[],downloads=[],previews=[],holds=[];
   let focused='';
   function node(id) {
     if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',hidden:false,disabled:false,checked:true,
@@ -18,14 +18,15 @@ function harness(prepare=async()=>{throw new Error('Synthetic server rejection')
   const context=vm.createContext({state:{currentUser:{role:'admin'}},
     document:{getElementById:node,createElement:tag=>tag==='a'?{click(){downloads.push(this.download);}}:{textContent:''}},
     dbPrepareMonthlyRetention:async(...args)=>{calls.push(args);return prepare(...args);},
-    dbHoldRetentionWarnings:hold,
+    dbPreviewMonthlyRetention:async includeArchive=>{previews.push(includeArchive);return {cutoff:'2026-09-01',counts:{},blockers:[]};},
+    dbHoldRetentionWarnings:async includeArchive=>{holds.push(includeArchive);return hold(includeArchive);},
     dbExecuteMonthlyRetention:async()=>{throw new Error('Deletion must never run in backup tests');},
     encryptRetentionBackup:async()=> 'synthetic encrypted payload',
     retentionConfirmation:()=> 'XOA TRUOC 01/09/2026',
     crypto:{randomUUID:()=> 'synthetic-request'},Blob,URL:{createObjectURL:()=> 'blob:synthetic',revokeObjectURL(){}},
     setTimeout(){},console});
   vm.runInContext(source,context);vm.runInContext('setupRetentionSettings()',context);
-  return {node:id=>node('retention-'+id),calls,downloads,get focused(){return focused;},
+  return {node:id=>node('retention-'+id),calls,downloads,previews,holds,get focused(){return focused;},
     click:()=>node('retention-prepare').handlers.click()};
 }
 
@@ -71,6 +72,7 @@ test('successful preparation downloads the file but still requires verification 
     expires_at:'2099-01-01',preview:{cutoff:'2026-09-01T00:00:00+07:00',counts:{},blockers:[]}}));
   h.node('password').value=h.node('password-again').value='Synthetic password';await h.click();
   assert.deepEqual(h.downloads,['SoViet-phuc-hoi-synthetic-job.encrypted.json']);
+  assert.equal(h.calls[0][1],false,'The file must exclude the legacy archive');
   assert.match(h.node('prepare-status').textContent,/Đã tạo file mã hóa/);
   assert.equal(h.node('file').disabled,false);assert.equal(h.node('execute').disabled,true);
   assert.equal(h.node('password').value,'');assert.equal(h.node('password-again').value,'');
@@ -78,10 +80,18 @@ test('successful preparation downloads the file but still requires verification 
 
 test('skip refreshes the server plan and invalidates verification without executing deletion',async()=>{
   const h=harness();await h.node('hold').handlers.click();
+  assert.deepEqual(h.holds,[false],'The review plan must use the same archive scope as the file');
   assert.equal(h.node('hold').hidden,true);assert.equal(h.node('held-note').hidden,false);
   assert.match(h.node('held-note').textContent,/Đang giữ 1 chứng từ/);
   assert.match(h.node('prepare-status').textContent,/Chưa xóa dữ liệu/);
   assert.equal(h.node('execute').disabled,true);assert.equal(h.node('file').disabled,true);
+});
+
+test('preview excludes the legacy archive and no longer offers the archive checkbox',async()=>{
+  const h=harness();await h.node('preview').handlers.click();
+  assert.deepEqual(h.previews,[false]);
+  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.doesNotMatch(html,/id="retention-archive"/);
 });
 
 test('skip keeps unrelated red blockers visible and cannot unlock deletion',async()=>{

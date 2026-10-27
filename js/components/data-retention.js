@@ -1,11 +1,11 @@
 import { state } from '../state.js';
-import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings } from '../services/supabase.js?v=20261027-retention-holds-v1';
+import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings } from '../services/supabase.js?v=20261027-retention-no-archive-v1';
 import { encryptRetentionBackup, decryptRetentionBackup } from '../services/retention-backup.js';
 import { retentionConfirmation } from '../domain/data-retention.js';
 
 const labels = { orders: 'Đơn hàng', drafts: 'Đơn nháp', returns: 'Phiếu trả', cashbook: 'Chứng từ quỹ',
   payments: 'Thanh toán', ledger: 'Bút toán công nợ', purchases: 'Phiếu mua', supplier_payments: 'Thanh toán NCC',
-  supplier_ledger: 'Công nợ NCC', legacy_archive: 'Nhật ký lưu trữ cũ', support_history: 'Dòng hàng cấp được giữ lịch sử' };
+  supplier_ledger: 'Công nợ NCC', support_history: 'Dòng hàng cấp được giữ lịch sử' };
 let prepared = null;
 let verified = false;
 let busy = false;
@@ -28,7 +28,6 @@ function controls() {
   el('prepare').textContent = busy && activeAction === 'prepare'
     ? 'Đang tạo bản sao phục hồi…' : '2. Tạo và tải file phục hồi mã hóa';
   el('prepare').setAttribute('aria-busy', String(busy && activeAction === 'prepare'));
-  el('archive').disabled = busy || uncertain || Boolean(prepared);
   el('file').disabled = busy || !prepared || uncertain;
   el('execute').disabled = busy || uncertain || !verified || !prepared
     || el('confirmation').value !== retentionConfirmation(prepared.preview.cutoff);
@@ -87,12 +86,12 @@ export function setupRetentionSettings() {
   el('restart').addEventListener('click', () => { reset(); message('Đã bỏ lần chuẩn bị. File sao lưu cũ vẫn do bạn quản lý.'); });
   el('preview').addEventListener('click', () => action(async () => {
     reset(); message('Đang kiểm tra công nợ, liên kết và phạm vi xóa…');
-    const result = await dbPreviewMonthlyRetention(el('archive').checked);
+    const result = await dbPreviewMonthlyRetention(false);
     message(showPreview(result) ? 'Kiểm tra đạt. Bật bảo trì, đóng các phiên Admin khác rồi tạo bản sao phục hồi.' : 'Chưa thể dọn. Cần xử lý các vấn đề bên dưới.');
   }));
   el('hold')?.addEventListener('click', () => action(async () => {
     reset(); message('Đang giữ riêng chứng từ cảnh báo và kiểm tra các liên kết…');
-    const result = await dbHoldRetentionWarnings(el('archive').checked);
+    const result = await dbHoldRetentionWarnings(false);
     const canPrepare = showPreview(result.preview);
     message(`Đã giữ ${Number(result.preview.review_held) || 0} chứng từ cảnh báo và dữ liệu liên quan để kế toán đối soát. Chưa xóa dữ liệu. `
       + (canPrepare ? 'Bạn có thể tạo bản sao phục hồi mới cho phần còn lại.' : 'Các điều kiện còn hiển thị màu đỏ vẫn cần xử lý trước khi dọn.'));
@@ -110,7 +109,7 @@ export function setupRetentionSettings() {
       throw new Error('Chưa tạo bản sao: hai lần nhập mật khẩu chưa giống nhau. Hãy nhập lại.');
     }
     reset(); message('Đang khóa phạm vi ngắn hạn và tạo bản sao phục hồi…');
-    const result = await dbPrepareMonthlyRetention(crypto.randomUUID(), el('archive').checked);
+    const result = await dbPrepareMonthlyRetention(crypto.randomUUID(), false);
     if (!result.backup_text) throw new Error('Không nhận được nội dung sao lưu; chưa được phép xóa.');
     const encrypted = await encryptRetentionBackup(result, passphrase);
     // Keep only verification metadata in memory. Never cache the raw bundle or password.

@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261027-retention-holds-v1">
+  <link rel="stylesheet" href="style.css?v=20261027-retention-no-archive-v1">
 </head>
 <body>
 
@@ -2107,7 +2107,7 @@
             <p>Phạm vi dọn gồm đơn và đơn nháp, phiếu thu chi, thanh toán, trả hàng, mua hàng, lịch sử công nợ, lịch sử sửa và các bản sao liên quan trong nhật ký.</p>
             <p>Lịch sử hàng cấp của SKU đã chọn được giữ riêng với số lượng, ngày và trạng thái trả/hủy; giá và nội dung đơn cũ vẫn được xóa. Cần xác nhận danh sách SKU bên dưới trước lần dọn đầu tiên.</p>
             <p class="retention-note">Bật bảo trì và đóng các phiên Admin khác trước bước sao lưu. Bản sao phục hồi chứa dữ liệu nhạy cảm và được mã hóa bằng mật khẩu riêng; lưu file an toàn, giữ mật khẩu riêng. Đây là bản sao dữ liệu ứng dụng, không gồm tài khoản Auth và cấu hình dự án.</p>
-            <label class="retention-check"><input id="retention-archive" type="checkbox" checked> Dọn cả bảng nhật ký lưu trữ cũ đã kiểm tra</label>
+            <p class="retention-note">Nhật ký lưu trữ cũ không nằm trong file phục hồi và không thuộc phạm vi xóa theo tháng.</p>
             <div class="retention-actions"><button id="retention-preview" class="btn btn-secondary" type="button">1. Kiểm tra phạm vi</button><button id="retention-restart" class="btn btn-secondary" type="button">Bỏ lần chuẩn bị</button></div>
             <strong id="retention-boundary"></strong>
             <ul id="retention-counts" class="retention-counts"></ul><ul id="retention-blockers" class="retention-errors"></ul>
@@ -4585,7 +4585,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261027-retention-holds-v1"></script>
-  <script type="module" src="js/main.js?v=20261027-retention-holds-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261027-retention-no-archive-v1"></script>
+  <script type="module" src="js/main.js?v=20261027-retention-no-archive-v1"></script>
 </body>
 </html>

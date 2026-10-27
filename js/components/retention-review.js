@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbRetentionReviewOrders, getRetentionSessionScope } from '../services/supabase.js?v=20261027-retention-holds-v1';
+import { dbRetentionReviewOrders, getRetentionSessionScope } from '../services/supabase.js?v=20261027-retention-no-archive-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 
 const el = id => document.getElementById(`retention-review-${id}`);
