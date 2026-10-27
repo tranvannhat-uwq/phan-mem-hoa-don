@@ -2,14 +2,15 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-no-archive-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-no-archive-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-staged-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-staged-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-no-archive-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-no-archive-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-no-archive-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-staged-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-staged-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-staged-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261027-retention-staged-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -78,7 +79,9 @@ async function retentionRpc(name, args = {}) {
   if (client !== supabaseClient || user !== state.currentUser) throw new Error('Phiên đăng nhập đã thay đổi. Hãy kiểm tra kết quả trên tài khoản đã thực hiện.');
   if (error) {
     if (['PGRST202', '42883'].includes(error.code)) throw new Error(
-      ['rpc_hold_retention_warnings', 'rpc_retention_review_orders'].includes(name)
+      ['rpc_start_retention_backup', 'rpc_stage_retention_backup_table', 'rpc_finish_retention_backup', 'rpc_retention_backup_parts', 'rpc_release_retention_backup'].includes(name)
+        ? 'Máy chủ chưa cài luồng sao lưu theo từng phần. Cần cập nhật migration 0121.'
+        : ['rpc_hold_retention_warnings', 'rpc_retention_review_orders'].includes(name)
         ? 'Máy chủ chưa cài chức năng giữ chứng từ đối soát. Cần cập nhật migration 0118.'
         : 'Máy chủ chưa cài đầy đủ chức năng. Cần cập nhật migration 0106–0114.');
     throw error;
@@ -90,7 +93,18 @@ export function getRetentionSessionScope() {
   return `${retentionProjectUrl}|${state.currentUser.authUserId || state.currentUser.id || ''}`;
 }
 export const dbPreviewMonthlyRetention = includeArchive => retentionRpc('rpc_preview_monthly_retention', { p_include_archive: includeArchive });
-export const dbPrepareMonthlyRetention = (requestKey, includeArchive) => retentionRpc('rpc_prepare_monthly_retention', { p_request_key: requestKey, p_include_archive: includeArchive });
+export async function dbPrepareMonthlyRetention(requestKey, includeArchive = false, onProgress) {
+  if (includeArchive) throw new Error('Nhật ký lưu trữ cũ không thuộc phạm vi sao lưu trên web.');
+  const scope = getRetentionSessionScope();
+  const assertScope = () => {
+    if (!scope || getRetentionSessionScope() !== scope) throw new Error('Phiên đăng nhập đã thay đổi. Hãy tạo lại bản sao trên tài khoản ban đầu.');
+  };
+  const result = await prepareStagedRetentionBackup(async (name, args) => {
+    assertScope(); const data = await retentionRpc(name, args); assertScope(); return data;
+  }, requestKey, onProgress);
+  assertScope(); return result;
+}
+export const dbReleaseRetentionBackup = jobId => retentionRpc('rpc_release_retention_backup', { p_id: jobId });
 export const dbRetentionJob = jobId => retentionRpc('rpc_retention_job', { p_job_id: jobId });
 export const dbHoldRetentionWarnings = includeArchive => retentionRpc('rpc_hold_retention_warnings', { p_include_archive: includeArchive });
 export const dbRetentionReviewOrders = (offset = 0) => retentionRpc('rpc_retention_review_orders', { p_offset: offset, p_limit: 25 });

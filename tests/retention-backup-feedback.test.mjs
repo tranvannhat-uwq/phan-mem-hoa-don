@@ -8,7 +8,7 @@ const source=readFileSync(new URL('../js/components/data-retention.js',import.me
 
 function harness(prepare=async()=>{throw new Error('Synthetic server rejection');},hold=async()=>({added:1,preview:{cutoff:'2026-09-01T00:00:00+07:00',counts:{},blockers:[],review_pending:0,review_held:1}})) {
   const nodes=new Map(),calls=[],downloads=[],previews=[],holds=[];
-  let focused='';
+  let focused='',generated=0;
   function node(id) {
     if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',hidden:false,disabled:false,checked:true,
       attributes:{},handlers:{},setAttribute(k,v){this.attributes[k]=v;},removeAttribute(k){delete this.attributes[k];},
@@ -20,10 +20,12 @@ function harness(prepare=async()=>{throw new Error('Synthetic server rejection')
     dbPrepareMonthlyRetention:async(...args)=>{calls.push(args);return prepare(...args);},
     dbPreviewMonthlyRetention:async includeArchive=>{previews.push(includeArchive);return {cutoff:'2026-09-01',counts:{},blockers:[]};},
     dbHoldRetentionWarnings:async includeArchive=>{holds.push(includeArchive);return hold(includeArchive);},
+    getRetentionSessionScope:()=> 'synthetic-project|synthetic-user',
+    dbReleaseRetentionBackup:async()=>true,
     dbExecuteMonthlyRetention:async()=>{throw new Error('Deletion must never run in backup tests');},
     encryptRetentionBackup:async()=> 'synthetic encrypted payload',
     retentionConfirmation:()=> 'XOA TRUOC 01/09/2026',
-    crypto:{randomUUID:()=> 'synthetic-request'},Blob,URL:{createObjectURL:()=> 'blob:synthetic',revokeObjectURL(){}},
+    crypto:{randomUUID:()=> `synthetic-request-${++generated}`},Blob,URL:{createObjectURL:()=> 'blob:synthetic',revokeObjectURL(){}},
     setTimeout(){},console});
   vm.runInContext(source,context);vm.runInContext('setupRetentionSettings()',context);
   return {node:id=>node('retention-'+id),calls,downloads,previews,holds,get focused(){return focused;},
@@ -92,6 +94,17 @@ test('preview excludes the legacy archive and no longer offers the archive check
   assert.deepEqual(h.previews,[false]);
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.doesNotMatch(html,/id="retention-archive"/);
+});
+
+test('retry after a lost preparation response keeps its request key and leaves deletion locked',async()=>{
+  const h=harness(async()=>{throw new TypeError('Failed to fetch');});
+  h.node('password').value=h.node('password-again').value='Synthetic password';
+  await h.click();await h.click();
+  assert.equal(h.calls.length,2);assert.equal(h.calls[0][0],h.calls[1][0]);
+  assert.match(h.node('prepare-status').textContent,/tiếp tục các phần/);
+  assert.equal(h.node('execute').disabled,true);
+  h.node('restart').handlers.click();await h.click();
+  assert.notEqual(h.calls[2][0],h.calls[0][0]);
 });
 
 test('skip keeps unrelated red blockers visible and cannot unlock deletion',async()=>{

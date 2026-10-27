@@ -1,4 +1,4 @@
--- Read-only production audit for migrations through 0120.
+-- Read-only production audit for migrations through 0121.
 -- Run the whole file in the intended Supabase project's SQL Editor as owner.
 -- No prepare/execute/maintenance/configuration mutation RPC is invoked.
 -- Results contain catalog metadata and aggregate counts only.
@@ -13,9 +13,9 @@ SELECT pg_advisory_xact_lock_shared(hashtextextended('billing-monthly-retention'
 SELECT jsonb_build_object(
   'checked_at', now(), 'read_only', current_setting('transaction_read_only'),
   'versions', (SELECT jsonb_agg(version ORDER BY version) FROM public.schema_migrations
-    WHERE version BETWEEN '0106' AND '0120'),
+    WHERE version BETWEEN '0106' AND '0121'),
   'missing_versions', (SELECT COALESCE(jsonb_agg(lpad(v::text,4,'0')), '[]'::jsonb)
-    FROM generate_series(106,120) AS v
+    FROM generate_series(106,121) AS v
     WHERE NOT EXISTS(SELECT 1 FROM public.schema_migrations m WHERE m.version=lpad(v::text,4,'0'))),
   'customers', (SELECT count(*) FROM public.customers),
   'orders', (SELECT count(*) FROM public.orders),
@@ -80,7 +80,7 @@ WITH expected(signature,body_md5,security_definer,volatility,settings,authentica
     ('rpc_cancel_sales_return(text,text)', '930b33263e25d944043eb6176e6f8b90', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_dealer_support_history(text,integer,integer)', 'cb2e1230b1458ef28aebb62328443ab0', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_dealer_support_products(text,integer,integer)', 'fb87721b43dbd81465b77af1e0e02053', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
-    ('rpc_execute_monthly_retention(uuid,text,text)', 'c12faec5ad9ab9d193d0ba01d37d1182', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
+    ('rpc_execute_monthly_retention(uuid,text,text)', 'd367de815798b2270a9e67fe62306e1d', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
     ('rpc_get_cashbook_window(timestamp with time zone,timestamp with time zone)', 'de71a4700276c24f80ab48eb09c8ee8c', false, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_get_employee_business_report(jsonb)', '93a9bff8d81f193da0b41dc8953f5384', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_get_phase5_dashboard(jsonb)', 'c30e8597e3f8103bb618f6d94dad1be4', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
@@ -108,7 +108,17 @@ WITH expected(signature,body_md5,security_definer,volatility,settings,authentica
 ,
     ('p119_is_kept(text,text)', 'c3a7e0815c9586a5653a964861135316', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p119_related_rows(text[])', 'fb54ed5989f2a28513f4a6e72327de53', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
-    ('p119_row_key_sql(text,text)', 'df135ea47260897e353b5126d630c97c', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false)
+    ('p119_row_key_sql(text,text)', 'df135ea47260897e353b5126d630c97c', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p121_columns(text[])', '68fb14a18252a43515d1fa77f48d22df', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p121_download_plan(uuid)', '63a47dfa180a5bb0892b29bc8e33eb88', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p121_push(uuid,text,text,text,integer,bigint)', '36c17f063d37df68572d12a671fc9cb8', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p121_session(uuid)', '986fe354eb337e3945695ef0707f28fb', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p121_table_hash(text)', '90a1c56584db4790cf2b2d0e380dd67e', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('rpc_finish_retention_backup(uuid)', 'd4788050c9a7e506b6228812f4a86d68', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
+    ('rpc_release_retention_backup(uuid)', 'ba484386ffdf63ae7ca7d2b1c8bbfbd1', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false),
+    ('rpc_retention_backup_parts(uuid,text,integer)', '60c52184c40e81fd66e01fa491b492af', true, 's', ARRAY['search_path=pg_catalog, public','statement_timeout=15s']::text[], true, false),
+    ('rpc_stage_retention_backup_table(uuid,text)', '07c690c1228b7ab978287fa940788a16', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
+    ('rpc_start_retention_backup(uuid)', '51589c5952de8f83043d62152bf4bfdf', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false)
 ), compared AS (
   SELECT expected.signature,
     p.oid IS NOT NULL AS present,
@@ -154,6 +164,9 @@ SELECT jsonb_build_object(
     AND NOT has_function_privilege(current_user,'public.p118_kept_rows()','EXECUTE')
     AND NOT has_function_privilege(current_user,'public.p107_plan(timestamp with time zone)','EXECUTE'),
   'jobs_private',NOT has_table_privilege(current_user,'public.retention_jobs','SELECT'),
+  'backup_transport_private',NOT has_table_privilege(current_user,'public.retention_backup_sessions','SELECT')
+    AND NOT has_table_privilege(current_user,'public.retention_backup_parts','SELECT')
+    AND NOT has_function_privilege(current_user,'public.p121_download_plan(uuid)','EXECUTE'),
   'support_private',NOT has_table_privilege(current_user,'public.dealer_support_history','SELECT'),
   'epoch_helper_private',NOT has_function_privilege(current_user,'public.p107_assert_epoch()','EXECUTE'),
   'return_response_private',NOT has_function_privilege(current_user,'public.p3_sales_return_response(text)','EXECUTE'),

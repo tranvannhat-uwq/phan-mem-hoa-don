@@ -2,14 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {createHash} from 'node:crypto';
 import {clearRetainedHistoryCaches,openingDebtRow} from '../js/domain/data-retention.js';
+import {prepareStagedRetentionBackup} from '../js/services/retention-download.js';
 const source=readFileSync(new URL('../js/services/supabase.js',import.meta.url),'utf8')
   .replace(/^import .+;\r?\n/gm,'').replace(/^export /gm,'');
 function harness({rpc=async()=>({data:{epoch:1,cutoff:'2026-09-01'},error:null}),storageFails=false,fetcher=async()=>new Response('{}')}={}) {
   const storage=new Map([['billing_system_customers__old','private'],['billing_system_orders','private'],['sb-auth-token','login']]);
   const state={currentUser:{id:'synthetic-user'},retentionEpoch:null,retentionAvailable:false,savedOrders:[{id:'old'}],customers:[{id:'old'}]};
   const events=[]; const requests=[];
-  const context=vm.createContext({state,Headers,Response,clearRetainedHistoryCaches,openingDebtRow,
+  const context=vm.createContext({state,Headers,Response,clearRetainedHistoryCaches,openingDebtRow,prepareStagedRetentionBackup,
     createEgressMeter:()=>({fetch:async(...args)=>{requests.push(args);return fetcher(...args);}}),
     localStorage:{get length(){return storage.size;},key:i=>[...storage.keys()][i],getItem:k=>{if(storageFails)throw Error('Unavailable');return storage.get(k)||null;},
       setItem:(k,v)=>{if(storageFails)throw Error('Unavailable');storage.set(k,v);},removeItem:k=>storage.delete(k)},
@@ -25,6 +27,19 @@ test('new epoch clears all scoped financial caches and notifies the active scree
   assert.ok(!h.storage.has('billing_system_customers__old'));assert.ok(h.storage.has('sb-auth-token'));
   assert.equal(h.events[0].type,'billing-retention-changed');
   assert.equal((await h.run('syncRetentionState()')).changed,false);
+});
+
+test('changing login between staged metadata and download never sends chunk requests under the new user',async()=>{
+  const names=[],key='synthetic-request',sha=createHash('sha256').update('[]').digest('hex');
+  const h=harness({rpc:async(name)=>{
+    names.push(name);
+    if(name==='rpc_start_retention_backup')return {data:{id:key,tables:['customers'],staged:{customers:{parts:1}}},error:null};
+    if(name==='rpc_finish_retention_backup')return {data:{job_id:key,backup_sha256:sha,preview:{},plan:[{table:'customers',parts:1,bytes:2}]},error:null};
+    throw new Error('A chunk must not be requested under another login');
+  }});
+  h.run("testProgress=text=>{if(text.includes('Đang tải'))state.currentUser={id:'another-login'}}");
+  await assert.rejects(h.run("dbPrepareMonthlyRetention('synthetic-request',false,testProgress)"),/đăng nhập đã thay đổi/);
+  assert.deepEqual(names,['rpc_start_retention_backup','rpc_finish_retention_backup']);
 });
 test('missing feature is tolerated before installation, but a known purge epoch fails closed',async()=>{
   const h=harness({rpc:async()=>({data:null,error:{code:'PGRST202'}})});

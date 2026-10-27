@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings } from '../services/supabase.js?v=20261027-retention-no-archive-v1';
+import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings, dbReleaseRetentionBackup, getRetentionSessionScope } from '../services/supabase.js?v=20261027-retention-staged-v1';
 import { encryptRetentionBackup, decryptRetentionBackup } from '../services/retention-backup.js';
 import { retentionConfirmation } from '../domain/data-retention.js';
 
@@ -7,6 +7,7 @@ const labels = { orders: 'Đơn hàng', drafts: 'Đơn nháp', returns: 'Phiếu
   payments: 'Thanh toán', ledger: 'Bút toán công nợ', purchases: 'Phiếu mua', supplier_payments: 'Thanh toán NCC',
   supplier_ledger: 'Công nợ NCC', support_history: 'Dòng hàng cấp được giữ lịch sử' };
 let prepared = null;
+let prepareRequest = null;
 let verified = false;
 let busy = false;
 let activeAction = '';
@@ -36,7 +37,8 @@ function controls() {
   el('restart').disabled = busy || uncertain;
   if (el('hold')) el('hold').disabled = busy || uncertain;
 }
-function reset() {
+function reset(keepRequest = false) {
+  if (!keepRequest) prepareRequest = null;
   prepared = null; verified = false;
   el('file').value = ''; el('confirmation').value = '';
   el('verification').textContent = 'Chưa kiểm tra file đã tải.';
@@ -68,7 +70,13 @@ function showPreview(preview) {
 async function action(fn, name = '') {
   if (busy || !admin()) return;
   busy = true; activeAction = name; controls();
-  try { await fn(); } catch (error) { message(error.message || 'Không thể thực hiện. Hãy kiểm tra kết nối.', true); }
+  try { await fn(); } catch (error) {
+    let text = error.message || 'Không thể thực hiện. Hãy kiểm tra kết nối.';
+    if (name === 'prepare' && prepareRequest && (error.code === '57014' || /fetch|network|timeout/i.test(text))) {
+      text += ' Bấm lại nút tạo file để tiếp tục các phần đã chuẩn bị. Chưa xóa dữ liệu.';
+    }
+    message(text, true);
+  }
   finally { busy = false; activeAction = ''; controls(); }
 }
 export function renderRetentionSettings() {
@@ -108,8 +116,11 @@ export function setupRetentionSettings() {
       el('password-again').setAttribute('aria-invalid', 'true'); el('password-again').focus();
       throw new Error('Chưa tạo bản sao: hai lần nhập mật khẩu chưa giống nhau. Hãy nhập lại.');
     }
-    reset(); message('Đang khóa phạm vi ngắn hạn và tạo bản sao phục hồi…');
-    const result = await dbPrepareMonthlyRetention(crypto.randomUUID(), false);
+    const scope = getRetentionSessionScope();
+    if (prepareRequest && prepareRequest.scope !== scope) throw new Error('Phiên đăng nhập đã thay đổi. Hãy bấm Kiểm tra phạm vi để tạo lại bản sao.');
+    if (!prepareRequest) prepareRequest = { key: crypto.randomUUID(), scope };
+    reset(true); message('Đang chuẩn bị sao lưu theo từng phần…');
+    const result = await dbPrepareMonthlyRetention(prepareRequest.key, false, text => message(text));
     if (!result.backup_text) throw new Error('Không nhận được nội dung sao lưu; chưa được phép xóa.');
     const encrypted = await encryptRetentionBackup(result, passphrase);
     // Keep only verification metadata in memory. Never cache the raw bundle or password.
@@ -119,6 +130,9 @@ export function setupRetentionSettings() {
     const url = URL.createObjectURL(new Blob([encrypted], { type: 'application/json' }));
     const link = document.createElement('a'); link.href = url;
     link.download = `SoViet-phuc-hoi-${prepared.job_id}.encrypted.json`; link.click();
+    prepareRequest = null;
+    // A failed cleanup cannot turn a downloaded file into a failed backup.
+    void dbReleaseRetentionBackup(prepared.job_id).catch(() => {});
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     el('password').value = ''; el('password-again').value = '';
     message('Đã tạo file mã hóa. Chọn lại file vừa tải và nhập mật khẩu để kiểm tra. Lần chuẩn bị hết hạn sau 30 phút; có dữ liệu thay đổi phải làm lại.');
