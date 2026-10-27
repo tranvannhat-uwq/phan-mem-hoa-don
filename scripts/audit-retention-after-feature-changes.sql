@@ -13,9 +13,9 @@ SELECT pg_advisory_xact_lock_shared(hashtextextended('billing-monthly-retention'
 SELECT jsonb_build_object(
   'checked_at', now(), 'read_only', current_setting('transaction_read_only'),
   'versions', (SELECT jsonb_agg(version ORDER BY version) FROM public.schema_migrations
-    WHERE version BETWEEN '0106' AND '0118'),
+    WHERE version BETWEEN '0106' AND '0119'),
   'missing_versions', (SELECT COALESCE(jsonb_agg(lpad(v::text,4,'0')), '[]'::jsonb)
-    FROM generate_series(106,118) AS v
+    FROM generate_series(106,119) AS v
     WHERE NOT EXISTS(SELECT 1 FROM public.schema_migrations m WHERE m.version=lpad(v::text,4,'0'))),
   'customers', (SELECT count(*) FROM public.customers),
   'orders', (SELECT count(*) FROM public.orders),
@@ -56,7 +56,7 @@ WITH expected(signature,body_md5,security_definer,volatility,settings,authentica
     ('p107_lock_scope(boolean)', 'b9aa01c67ed4ed36072defcac7036461', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p107_payload_references_removed(jsonb)', '5e9991251610d1ff1ffe1dd982084bac', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p107_plan(timestamp with time zone)', '6bf78efcff40b6192526403980190255', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
-    ('p107_preview(boolean)', '823d07d1a286143549c770b5bc9cbcba', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p107_preview(boolean)', 'f7ccb9b0c863c65d1290663b546720dc', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p107_require_admin()', '57f4073cc96a6e7ff7d26ffc59c06c9c', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p107_scrub_history_json(jsonb)', 'e5975e2ec88c4040c7dadd2fd850d59d', false, 'i', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p107_snapshot_tables(boolean)', 'b3dadc0057b446d12ff25b03e16ed712', false, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
@@ -80,7 +80,7 @@ WITH expected(signature,body_md5,security_definer,volatility,settings,authentica
     ('rpc_cancel_sales_return(text,text)', '930b33263e25d944043eb6176e6f8b90', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_dealer_support_history(text,integer,integer)', 'cb2e1230b1458ef28aebb62328443ab0', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_dealer_support_products(text,integer,integer)', 'fb87721b43dbd81465b77af1e0e02053', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
-    ('rpc_execute_monthly_retention(uuid,text,text)', 'c264fecda78dca327179c645d0d1f951', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
+    ('rpc_execute_monthly_retention(uuid,text,text)', 'c12faec5ad9ab9d193d0ba01d37d1182', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
     ('rpc_get_cashbook_window(timestamp with time zone,timestamp with time zone)', 'de71a4700276c24f80ab48eb09c8ee8c', false, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_get_employee_business_report(jsonb)', '93a9bff8d81f193da0b41dc8953f5384', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_get_phase5_dashboard(jsonb)', 'c30e8597e3f8103bb618f6d94dad1be4', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
@@ -95,16 +95,20 @@ WITH expected(signature,body_md5,security_definer,volatility,settings,authentica
     ('rpc_retention_status()', '46204f88e4312383021e1cbd64b413f2', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_set_dealer_support_products(jsonb)', '04dac7edddf0b604079c35b764bcf89b', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false)
 ,
-    ('p118_assert_kept()', '43fc74d28f426ef953755251d457f96c', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], false, false),
-    ('p118_cache_kept()', 'bb4799a73ae29122de51384bdfe0ed28', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p118_assert_kept()', '4fc6c5a06063f0dddd29ff5a8bf29bdb', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p118_cache_kept()', '56087446c70f60e97e2cd84ecdaf79f3', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p118_is_kept(text,jsonb)', '8afbcfb5584bb886cdada3765d7a3255', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
-    ('p118_kept_rows()', 'c54105b65993e7fd05311e121212b987', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p118_kept_rows()', 'c1995b19367d6829c45e9eb44319d033', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p118_original_plan(timestamp with time zone)', 'a1943182edc7b89c0e7191f6f8479a4f', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p118_purge_support_lines()', '2da1e09ed59ffadaa2096a2d49d1f235', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p118_row_key(jsonb)', '2ff37427286417ea9165eb3e97e5ea3f', false, 'i', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('p118_support_issues(timestamp with time zone)', '6cfa0ce20a4dac7206ad1abc94796256', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
     ('rpc_hold_retention_warnings(boolean)', '30e6b068082fbf1192574e1e0b8e9f27', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
     ('rpc_retention_review_orders(integer,integer)', '895e34f2b5355ca05d9f160c79029054', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false)
+,
+    ('p119_is_kept(text,text)', 'c3a7e0815c9586a5653a964861135316', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p119_related_rows(text[])', 'fb54ed5989f2a28513f4a6e72327de53', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false),
+    ('p119_row_key_sql(text,text)', 'df135ea47260897e353b5126d630c97c', true, 's', ARRAY['search_path=pg_catalog, public']::text[], false, false)
 ), compared AS (
   SELECT expected.signature,
     p.oid IS NOT NULL AS present,

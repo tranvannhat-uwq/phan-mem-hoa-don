@@ -2,6 +2,9 @@
 
 Migration: `0118_retention_reconciliation_holds.sql`. Cần có bản 0114–0117 đã rà soát.
 
+Bản 0119 sửa timeout với nhật ký lớn mà vẫn giữ cùng phạm vi và điều kiện kiểm tra;
+xem [kết quả đo và cách triển khai](RETENTION_LOOKUP_TIMEOUT_FIX_0119.md).
+
 ## Phạm vi
 
 Nút **Bỏ qua và giữ … chứng từ để đối soát sau** chỉ áp dụng cho cảnh báo hàng cấp
