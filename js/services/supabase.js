@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-support-v3';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-support-v3';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-supplier-export-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-supplier-export-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-support-v3';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-support-v3';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-support-v3';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-supplier-export-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-supplier-export-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-supplier-export-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
 
 export let supabaseClient = null;
@@ -2183,11 +2183,11 @@ export async function fetchCloudData(options = {}) {
     const fetchSuppliers = async () => {
       try {
         const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
-        const { data, error } = await supabaseClient
+        const data = await collectAllPages((offset, end) => supabaseClient
           .from(tableName)
-          .select('*')
-          .order('name', { ascending: true });
-        if (error) throw error;
+          .select('*', { count: 'exact' })
+          .order('id', { ascending: true })
+          .range(offset, end), 1000);
         console.log("[SUPPLIERS] API:", data?.length || 0);
         if (data) {
           state.suppliers = data.map(s => ({

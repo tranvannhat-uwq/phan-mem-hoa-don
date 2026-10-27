@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261027-support-v3';
-import { renderAll } from '../main.js?v=20261027-support-v3';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261027-supplier-export-v1';
+import { renderAll } from '../main.js?v=20261027-supplier-export-v1';
 
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return 0;
@@ -115,25 +115,70 @@ function calculateSupplierMetrics(supplier) {
   };
 }
 
+function getFilteredSuppliers() {
+  const searchVal = (document.getElementById('supplier-search-input')?.value || '').toLowerCase().trim();
+  return (state.suppliers || []).filter(s => s && (
+    String(s.code || s.id || '').toLowerCase().includes(searchVal) ||
+    String(s.name || '').toLowerCase().includes(searchVal) ||
+    String(s.phone || '').includes(searchVal)
+  )).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+
+export function exportSuppliersExcel() {
+  if (!globalThis.XLSX) {
+    showToast('Chưa tải được thư viện Excel. Hãy tải lại trang rồi thử lại.', 'warning');
+    return;
+  }
+  const suppliers = getFilteredSuppliers();
+  if (!suppliers.length) {
+    showToast('Không có nhà cung cấp phù hợp để xuất Excel.', 'warning');
+    return;
+  }
+  try {
+    const headers = ['STT', 'Mã nhà cung cấp', 'Tên nhà cung cấp', 'Số điện thoại',
+      'Địa chỉ', 'Nợ cần trả', 'Tổng mua', 'Ghi chú'];
+    let totalDebt = 0;
+    let totalPurchase = 0;
+    const rows = suppliers.map((supplier, index) => {
+      const metrics = calculateSupplierMetrics(supplier);
+      totalDebt += metrics.payableDebt;
+      totalPurchase += metrics.totalPurchase;
+      return [index + 1, String(supplier.code || supplier.id || ''), String(supplier.name || ''),
+        String(supplier.phone || ''), String(supplier.address || ''),
+        metrics.payableDebt, metrics.totalPurchase, String(supplier.notes || '')];
+    });
+    const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows,
+      ['', '', 'TỔNG CỘNG', '', '', totalDebt, totalPurchase, '']]);
+    sheet['!cols'] = [7, 22, 40, 20, 50, 22, 22, 50].map(wch => ({ wch }));
+    sheet['!autofilter'] = { ref: XLSX.utils.encode_range({
+      s: { r: 0, c: 0 }, e: { r: rows.length, c: headers.length - 1 }
+    }) };
+    for (let r = 1; r <= rows.length + 1; r++) {
+      for (let c = 0; c < headers.length; c++) {
+        const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+        if (!cell) continue;
+        if (c === 5 || c === 6) cell.z = '#,##0;[Red]-#,##0';
+        else if (c !== 0) { cell.t = 's'; cell.z = '@'; }
+      }
+    }
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'DanhSachNhaCungCap');
+    const stamp = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+    XLSX.writeFile(workbook, `DanhSachNhaCungCap_${stamp}.xlsx`);
+    showToast(`Đã xuất ${suppliers.length} nhà cung cấp theo bộ lọc hiện tại.`, 'success');
+  } catch (error) {
+    console.error('Supplier Excel export failed:', error);
+    showToast('Không thể xuất Excel nhà cung cấp. Vui lòng thử lại.', 'danger');
+  }
+}
+
 export function renderSuppliersTable() {
   const tableBody = document.getElementById('suppliers-table-body');
   if (!tableBody) return;
   
   console.log("[SUPPLIERS] RENDER INPUT:", state.suppliers?.length || 0);
 
-  const searchInput = document.getElementById('supplier-search-input');
-  const searchVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
-  
-  const filtered = (state.suppliers || []).filter(s => {
-    if (!s) return false;
-    const sCode = (s.code || s.id || '').toLowerCase();
-    const sName = (s.name || '').toLowerCase();
-    const sPhone = (s.phone || '');
-    return sCode.includes(searchVal) || sName.includes(searchVal) || sPhone.includes(searchVal);
-  });
-  
-  // Sắp xếp theo tên nhà cung cấp
-  filtered.sort((a, b) => a.name.localeCompare(b.name));
+  const filtered = getFilteredSuppliers();
   
   const ITEMS_PER_PAGE = 20;
   const totalItems = filtered.length;
@@ -245,6 +290,8 @@ export function populateSupplierDatalist() {
 }
 
 export function setupSupplierManagement() {
+  const exportBtn = document.getElementById('btn-export-suppliers-excel');
+  if (exportBtn) exportBtn.onclick = exportSuppliersExcel;
   const btnOpenAdd = document.getElementById('btn-open-add-supplier-modal');
   const modal = document.getElementById('supplier-modal');
   const form = document.getElementById('supplier-form');

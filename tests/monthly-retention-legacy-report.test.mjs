@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {buildRetentionDatabase,asActor,scalar,adminId} from './helpers/retention-db.mjs';
 import {buildRetentionUpgrade} from '../scripts/build-retention-upgrade.mjs';
+import {buildDatabaseAuditFixes} from '../scripts/build-database-audit-fixes.mjs';
 
 test('legacy CRLF employee report keeps company opening and cross-period return series after purge',async()=>{
   const db=await buildRetentionDatabase({maxVersion:105});
@@ -15,6 +16,12 @@ test('legacy CRLF employee report keeps company opening and cross-period return 
     await db.exec(legacy.replace(/\r?\n/g,'\r\n'));
     // The SQL editor can also convert the upgrade script itself to CRLF.
     await db.exec((await buildRetentionUpgrade({dryRun:false})).replace(/\r?\n/g,'\r\n'));
+    // Upgrade the actual 0066+retention legacy definition to the merged report,
+    // and exercise SQL-editor CRLF normalization and rollback before install.
+    await db.exec((await buildDatabaseAuditFixes({dryRun:true})).replace(/\r?\n/g,'\r\n'));
+    assert.equal(Number(await scalar(db,"SELECT count(*) AS value FROM schema_migrations WHERE version IN('0115','0116','0117')")),0);
+    await db.exec((await buildDatabaseAuditFixes({dryRun:false})).replace(/\r?\n/g,'\r\n'));
+    await db.exec(await buildDatabaseAuditFixes({dryRun:false})); // Safe retry.
     await db.exec('UPDATE dealer_support_control SET selection_confirmed=true WHERE id');
     await asActor(db);
     const cutoff=(await call('rpc_retention_status')).next_cutoff;

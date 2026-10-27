@@ -1,8 +1,8 @@
 import { state } from '../state.js';
-import { dbRecordIndependentReturn, dbListIndependentReturns, dbCancelSalesReturn, dbRefreshCustomerFinancialState, getRetentionSessionScope } from '../services/supabase.js?v=20261027-support-v3';
+import { dbRecordIndependentReturn, dbListIndependentReturns, dbCancelSalesReturn, dbRefreshCustomerFinancialState, getRetentionSessionScope } from '../services/supabase.js?v=20261027-supplier-export-v1';
 import { independentReturnTotal } from '../domain/data-retention.js';
 import { formatCurrency, showToast } from '../utils.js';
-import { printReturnSlip } from './history.js?v=20261027-support-v3';
+import { printReturnSlip } from './history.js?v=20261027-supplier-export-v1';
 
 const el = id => document.getElementById(`independent-return-${id}`);
 let offset = 0; let loadedScope = ''; let loading = false; let saving = false;
