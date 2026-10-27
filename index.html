@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261027-return-modal-fix-v1">
+  <link rel="stylesheet" href="style.css?v=20261027-retention-feedback-v1">
 </head>
 <body>
 
@@ -2109,6 +2109,7 @@
               <label>Nhập lại mật khẩu<input id="retention-password-again" class="form-control" type="password" minlength="12" autocomplete="new-password"></label>
               <p>Ứng dụng không lưu mật khẩu bản sao. Mất mật khẩu sẽ không đọc được file.</p>
               <button id="retention-prepare" class="btn btn-primary" type="button">2. Tạo và tải file phục hồi mã hóa</button>
+              <p id="retention-prepare-status" class="retention-inline-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
               <label>Mật khẩu để kiểm tra file vừa tải<input id="retention-verify-password" class="form-control" type="password" autocomplete="off"></label>
               <label>3. Chọn lại file vừa tải<input id="retention-file" class="form-control" type="file" accept=".json,application/json" disabled></label>
               <p id="retention-verification">Chưa kiểm tra file đã tải.</p>
@@ -4575,7 +4576,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261027-return-modal-fix-v1"></script>
-  <script type="module" src="js/main.js?v=20261027-return-modal-fix-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261027-retention-feedback-v1"></script>
+  <script type="module" src="js/main.js?v=20261027-retention-feedback-v1"></script>
 </body>
 </html>

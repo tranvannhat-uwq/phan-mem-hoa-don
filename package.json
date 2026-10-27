@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
-    "test:retention": "node --experimental-default-type=module --test --test-concurrency=1 tests/monthly-retention-client.test.mjs tests/monthly-retention-domain.test.mjs tests/monthly-retention-database.test.mjs tests/monthly-retention-safety.test.mjs tests/monthly-retention-recovery.test.mjs tests/monthly-retention-upgrade.test.mjs tests/monthly-retention-read-only.test.mjs tests/monthly-retention-legacy-report.test.mjs tests/monthly-retention-ui.test.mjs tests/dealer-support-database.test.mjs tests/dealer-support-ui.test.mjs",
+    "test:retention": "node --experimental-default-type=module --test --test-concurrency=1 tests/monthly-retention-client.test.mjs tests/monthly-retention-domain.test.mjs tests/monthly-retention-database.test.mjs tests/monthly-retention-safety.test.mjs tests/monthly-retention-recovery.test.mjs tests/monthly-retention-upgrade.test.mjs tests/monthly-retention-read-only.test.mjs tests/monthly-retention-legacy-report.test.mjs tests/monthly-retention-ui.test.mjs tests/retention-backup-feedback.test.mjs tests/dealer-support-database.test.mjs tests/dealer-support-ui.test.mjs",
     "test:inventory": "node --experimental-default-type=module --test tests/inventory-domain.test.mjs tests/inventory-database.test.mjs tests/inventory-financial-integration.test.mjs"
   },
   "engines": {

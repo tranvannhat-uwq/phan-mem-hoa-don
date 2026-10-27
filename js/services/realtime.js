@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { updateDbStatusUI } from '../utils.js';
-import { invalidateDashboardPayloadCache } from '../components/dashboard.js?v=20261027-return-modal-fix-v1';
+import { invalidateDashboardPayloadCache } from '../components/dashboard.js?v=20261027-retention-feedback-v1';
 import {
   applyBrandRealtimePayload,
   applyCashbookRealtimePayload,
@@ -30,7 +30,7 @@ import {
   tableSalesReturnItemsName,
   tableSalesReturnsName,
   tableStartingBalancesName
-} from './supabase.js?v=20261027-return-modal-fix-v1';
+} from './supabase.js?v=20261027-retention-feedback-v1';
 
 const REALTIME_DEBOUNCE_MS = 250;
 const DASHBOARD_REALTIME_KINDS = new Set(['customer', 'customerFinancial', 'salesReturn', 'salesReturnItem', 'brand']);

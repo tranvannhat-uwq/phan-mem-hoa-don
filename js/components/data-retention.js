@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob } from '../services/supabase.js?v=20261027-return-modal-fix-v1';
+import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob } from '../services/supabase.js?v=20261027-retention-feedback-v1';
 import { encryptRetentionBackup, decryptRetentionBackup } from '../services/retention-backup.js';
 import { retentionConfirmation } from '../domain/data-retention.js';
 
@@ -9,18 +9,25 @@ const labels = { orders: 'Đơn hàng', drafts: 'Đơn nháp', returns: 'Phiếu
 let prepared = null;
 let verified = false;
 let busy = false;
+let activeAction = '';
 let uncertain = false;
 let setup = false;
 const el = id => document.getElementById(`retention-${id}`);
 const admin = () => state.currentUser?.role === 'admin';
 function message(text, failed = false) {
-  el('status').textContent = text;
-  el('status').setAttribute('role', failed ? 'alert' : 'status');
+  for (const node of [el('status'), el('prepare-status')].filter(Boolean)) {
+    node.textContent = text;
+    node.hidden = false;
+    node.setAttribute('role', failed ? 'alert' : 'status');
+  }
 }
 function controls() {
   if (!el('execute')) return;
   el('preview').disabled = busy || uncertain;
   el('prepare').disabled = busy || uncertain;
+  el('prepare').textContent = busy && activeAction === 'prepare'
+    ? 'Đang tạo bản sao phục hồi…' : '2. Tạo và tải file phục hồi mã hóa';
+  el('prepare').setAttribute('aria-busy', String(busy && activeAction === 'prepare'));
   el('archive').disabled = busy || uncertain || Boolean(prepared);
   el('file').disabled = busy || !prepared || uncertain;
   el('execute').disabled = busy || uncertain || !verified || !prepared
@@ -50,11 +57,11 @@ function showPreview(preview) {
   if (prepared) el('confirmation-label').textContent = `Nhập chính xác: ${retentionConfirmation(preview.cutoff)}`;
   return blockers.length === 0;
 }
-async function action(fn) {
+async function action(fn, name = '') {
   if (busy || !admin()) return;
-  busy = true; controls();
+  busy = true; activeAction = name; controls();
   try { await fn(); } catch (error) { message(error.message || 'Không thể thực hiện. Hãy kiểm tra kết nối.', true); }
-  finally { busy = false; controls(); }
+  finally { busy = false; activeAction = ''; controls(); }
 }
 export function renderRetentionSettings() {
   const section = document.getElementById('monthly-retention-section');
@@ -64,6 +71,9 @@ export function renderRetentionSettings() {
 export function setupRetentionSettings() {
   if (setup || !el('preview')) return;
   setup = true;
+  for (const id of ['password', 'password-again']) {
+    el(id).addEventListener('input', () => el(id).removeAttribute('aria-invalid'));
+  }
   el('confirmation').addEventListener('input', controls);
   el('restart').addEventListener('click', () => { reset(); message('Đã bỏ lần chuẩn bị. File sao lưu cũ vẫn do bạn quản lý.'); });
   el('preview').addEventListener('click', () => action(async () => {
@@ -72,8 +82,17 @@ export function setupRetentionSettings() {
     message(showPreview(result) ? 'Kiểm tra đạt. Bật bảo trì, đóng các phiên Admin khác rồi tạo bản sao phục hồi.' : 'Chưa thể dọn. Cần xử lý các vấn đề bên dưới.');
   }));
   el('prepare').addEventListener('click', () => action(async () => {
+    el('password').removeAttribute('aria-invalid');
+    el('password-again').removeAttribute('aria-invalid');
     const passphrase = el('password').value;
-    if (passphrase.length < 12 || passphrase !== el('password-again').value) throw new Error('Mật khẩu cần ít nhất 12 ký tự và hai lần nhập phải giống nhau.');
+    if (passphrase.length < 12) {
+      el('password').setAttribute('aria-invalid', 'true'); el('password').focus();
+      throw new Error('Chưa tạo bản sao: mật khẩu cần ít nhất 12 ký tự. Hãy nhập mật khẩu dài hơn.');
+    }
+    if (passphrase !== el('password-again').value) {
+      el('password-again').setAttribute('aria-invalid', 'true'); el('password-again').focus();
+      throw new Error('Chưa tạo bản sao: hai lần nhập mật khẩu chưa giống nhau. Hãy nhập lại.');
+    }
     reset(); message('Đang khóa phạm vi ngắn hạn và tạo bản sao phục hồi…');
     const result = await dbPrepareMonthlyRetention(crypto.randomUUID(), el('archive').checked);
     if (!result.backup_text) throw new Error('Không nhận được nội dung sao lưu; chưa được phép xóa.');
@@ -88,7 +107,7 @@ export function setupRetentionSettings() {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     el('password').value = ''; el('password-again').value = '';
     message('Đã tạo file mã hóa. Chọn lại file vừa tải và nhập mật khẩu để kiểm tra. Lần chuẩn bị hết hạn sau 30 phút; có dữ liệu thay đổi phải làm lại.');
-  }));
+  }, 'prepare'));
   el('file').addEventListener('change', () => action(async () => {
     verified = false;
     const file = el('file').files?.[0];

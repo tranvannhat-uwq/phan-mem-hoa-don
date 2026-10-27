@@ -12807,6 +12807,9 @@ body.purchase-entry-modal-open { overflow: hidden; }
 .retention-form { display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; }
 .retention-form label, .independent-return-item label { display: flex; flex-direction: column; gap: .4rem; font-size: .87rem; }
 .retention-form .form-control { width: 100%; }
+.retention-form .form-control[aria-invalid="true"] { border-color: var(--color-danger); }
+.retention-section .retention-inline-status { padding: .75rem 1rem; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-surface, #fff); overflow-wrap: anywhere; }
+.retention-section .retention-inline-status[role="alert"] { border-color: var(--color-danger); }
 .retention-check { display: flex !important; flex-direction: row !important; align-items: flex-start; gap: .6rem; }
 .retention-check input { margin-top: .3rem; }
 .retention-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
