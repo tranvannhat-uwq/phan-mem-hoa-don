@@ -2,13 +2,14 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261026-customer-payment-total-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261026-customer-payment-total-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-v2';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-v2';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261026-customer-payment-total-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261026-customer-payment-total-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261026-customer-payment-total-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-v2';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-v2';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-v2';
+import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -16,6 +17,85 @@ export let isCloudActive = false;
 // Counts only this Supabase client's HTTP responses. Realtime WebSocket and
 // static assets remain visible in the Supabase Usage dashboard, not here.
 const supabaseEgressMeter = createEgressMeter();
+let retentionProjectUrl = '';
+
+function retentionAwareFetch(input, init = {}) {
+  const url = typeof input === 'string' ? input : String(input?.url || input || '');
+  const isRest = url.includes('/rest/v1/');
+  const epochAtStart = state.retentionEpoch;
+  const headers = new Headers(init.headers || input?.headers || {});
+  if (isRest && epochAtStart !== null) headers.set('x-retention-epoch', String(epochAtStart));
+  return supabaseEgressMeter.fetch(input, { ...init, headers, ...(isRest ? { cache: 'no-store' } : {}) })
+    .then(response => {
+      if (isRest && !url.includes('/rpc/rpc_retention_status') && state.retentionEpoch !== epochAtStart) {
+        throw new Error('RETENTION_EPOCH_CHANGED: Phiên dữ liệu đã đổi. Hãy tải lại màn hình.');
+      }
+      return response;
+    });
+}
+
+export async function syncRetentionState() {
+  if (!supabaseClient || !state.currentUser) return { available: false };
+  const client = supabaseClient; const user = state.currentUser; const project = retentionProjectUrl;
+  const { data, error } = await client.rpc('rpc_retention_status');
+  if (client !== supabaseClient || user !== state.currentUser || project !== retentionProjectUrl) throw new Error('Phiên đăng nhập đã thay đổi.');
+  const markerKey = `billing_retention_epoch:${project}`;
+  let storedEpoch = 0;
+  try { storedEpoch = Number(localStorage.getItem(markerKey) || 0); } catch (_) { /* optional storage */ }
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code) && !storedEpoch && !state.retentionAvailable) {
+      state.retentionAvailable = false;
+      return { available: false };
+    }
+    throw new Error('Không thể xác minh mốc dữ liệu còn lưu. Hãy kết nối lại trước khi tiếp tục.');
+  }
+  const epoch = Number(data.epoch);
+  if (!Number.isSafeInteger(epoch) || epoch < 0) throw new Error('Phiên dữ liệu máy chủ không hợp lệ.');
+  const initialSync = state.retentionEpoch === null;
+  const changed = epoch !== (initialSync ? storedEpoch : state.retentionEpoch);
+  state.retentionAvailable = true;
+  state.retentionEpoch = epoch;
+  state.retentionCutoff = data.cutoff || null;
+  try {
+    if (changed) clearRetainedHistoryCaches(localStorage);
+    localStorage.setItem(markerKey, String(epoch));
+  } catch (_) { /* storage failure cannot restore purged records */ }
+  if (changed) {
+    for (const domain of ['savedOrders', 'customers', 'salesReturns', 'cashbookTransactions', 'purchases', 'suppliers']) state[domain] = [];
+    state.cashbookOpeningNetByMethod = null;
+    state.cashbookOpeningStartIso = '';
+    state.cloudLoadStatus = {};
+    state.customerSnapshotScope = '';
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('billing-retention-changed', { detail: { ...data, initial_sync: initialSync } }));
+  }
+  return { ...data, changed };
+}
+
+async function retentionRpc(name, args = {}) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Chức năng này cần kết nối Supabase.');
+  const client = supabaseClient; const user = state.currentUser;
+  const { data, error } = await client.rpc(name, args);
+  if (client !== supabaseClient || user !== state.currentUser) throw new Error('Phiên đăng nhập đã thay đổi. Hãy kiểm tra kết quả trên tài khoản đã thực hiện.');
+  if (error) {
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Máy chủ chưa cài đầy đủ chức năng. Cần cập nhật migration 0106–0113.');
+    throw error;
+  }
+  return data;
+}
+export function getRetentionSessionScope() {
+  if (!supabaseClient || !state.currentUser) return '';
+  return `${retentionProjectUrl}|${state.currentUser.authUserId || state.currentUser.id || ''}`;
+}
+export const dbPreviewMonthlyRetention = includeArchive => retentionRpc('rpc_preview_monthly_retention', { p_include_archive: includeArchive });
+export const dbPrepareMonthlyRetention = (requestKey, includeArchive) => retentionRpc('rpc_prepare_monthly_retention', { p_request_key: requestKey, p_include_archive: includeArchive });
+export const dbRetentionJob = jobId => retentionRpc('rpc_retention_job', { p_job_id: jobId });
+export async function dbExecuteMonthlyRetention(jobId, backupSha256, confirmation) {
+  const result = await retentionRpc('rpc_execute_monthly_retention', { p_job_id: jobId, p_backup_sha256: backupSha256, p_confirmation: confirmation });
+  await syncRetentionState();
+  return result;
+}
+export const dbRecordIndependentReturn = input => retentionRpc('rpc_record_independent_return', { p_input: input });
+export const dbListIndependentReturns = input => retentionRpc('rpc_list_independent_returns', { p_input: input });
 export async function getSupabaseEgressSnapshot() {
   await supabaseEgressMeter.flush();
   return supabaseEgressMeter.snapshot();
@@ -383,7 +463,11 @@ export async function connectSupabase(url, key, verbose = true) {
       throw new Error('Thư viện Supabase chưa được tải (vui lòng kiểm tra kết nối mạng).');
     }
     supabaseEgressMeter.reset();
-    const client = supabase.createClient(url, key, { global: { fetch: supabaseEgressMeter.fetch } });
+    retentionProjectUrl = url;
+    state.retentionEpoch = null;
+    state.retentionAvailable = false;
+    state.retentionCutoff = null;
+    const client = supabase.createClient(url, key, { global: { fetch: retentionAwareFetch } });
     const { data: { session: connectionSession } } = await client.auth.getSession();
     
     // Kiểm tra cấu trúc bảng để gán tiền tố wl_ nếu có (Kiểm tra bảng gốc trước để tránh ném lỗi 404 vào Console trình duyệt)
@@ -878,7 +962,9 @@ function mapCustomerDebtTransaction(row) {
     reversalOfId: row.reversal_of_id || null,
     amendsLedgerId: row.amends_ledger_id || null,
     voidedByAmendmentId: row.voided_by_amendment_id || null,
-    historyCorrectionKey: row.history_correction_key || null
+    historyCorrectionKey: row.history_correction_key || null,
+    retentionOpening: row.retention_opening === true,
+    paymentCarry: Number(row.payment_carry || 0)
   };
 }
 
@@ -904,11 +990,13 @@ export function applyCustomerDebtRealtimePayload(payload = {}) {
 
 async function hydrateCustomerDebtHistory(customers) {
   if (!Array.isArray(customers) || customers.length === 0) return customers;
-  const [rows, voidRows, correctionRows] = await Promise.all([
+  const [rows, voidRows, correctionRows, checkpoints] = await Promise.all([
     fetchFullTableData(tableCustomerDebtTransactionsName),
     fetchCustomerDebtAmendmentVoidRows(),
-    fetchCustomerDebtHistorySuppressions()
+    fetchCustomerDebtHistorySuppressions(),
+    state.retentionCutoff ? fetchFullTableData('retention_customer_balances') : Promise.resolve([])
   ]);
+  rows.unshift(...checkpoints.map(openingDebtRow));
   const voidsByLedgerId = new Map((voidRows || []).map(row => [
     String(row.ledger_id), row.reversal_amendment_id || ''
   ]));
@@ -950,10 +1038,13 @@ async function fetchCustomerDebtRows(customerId) {
     rows.push(...(data || []));
     if (!data || data.length < pageSize) break;
   }
-  const [voidRows, correctionRows] = await Promise.all([
+  const [voidRows, correctionRows, checkpoint] = await Promise.all([
     fetchCustomerDebtAmendmentVoidRows(customerId),
-    fetchCustomerDebtHistorySuppressions(customerId)
+    fetchCustomerDebtHistorySuppressions(customerId),
+    state.retentionCutoff ? supabaseClient.from('retention_customer_balances').select('*').eq('customer_id', customerId).maybeSingle() : Promise.resolve({ data: null, error: null })
   ]);
+  if (checkpoint.error) throw checkpoint.error;
+  if (checkpoint.data) rows.unshift(openingDebtRow(checkpoint.data));
   const voidsByLedgerId = new Map((voidRows || []).map(row => [
     String(row.ledger_id), row.reversal_amendment_id || ''
   ]));
@@ -1245,6 +1336,10 @@ export async function dbLoadCashbookForRange(startIso, endExclusiveIso) {
       || (message.includes('rpc_get_cashbook_window') && message.includes('schema cache'));
     if (!migrationMissing) {
       console.warn('Không thể tải Sổ quỹ theo khoảng ngày:', error);
+      return false;
+    }
+    if (state.retentionCutoff) {
+      showToast('Không thể tải số chuyển kỳ của Sổ quỹ. Hãy kiểm tra bản cài đặt máy chủ.', 'danger');
       return false;
     }
     console.warn('Migration 0051 chưa có; tạm tải toàn bộ Sổ quỹ để giữ số dư chính xác.');
@@ -1602,10 +1697,12 @@ export function applyBrandRealtimePayload(payload = {}) {
 // Tải toàn bộ dữ liệu từ Supabase về State
 export async function fetchCloudData(options = {}) {
   if (!supabaseClient) return;
+  await syncRetentionState();
   const cloudClientAtRequest = supabaseClient;
+  const cloudEpochAtRequest = state.retentionEpoch;
   const cloudUserAtRequest = state.currentUser;
   const cloudScopeAtRequest = currentPricingScope();
-  const isCurrentCloudRequest = () => supabaseClient === cloudClientAtRequest && state.currentUser === cloudUserAtRequest && currentPricingScope() === cloudScopeAtRequest;
+  const isCurrentCloudRequest = () => supabaseClient === cloudClientAtRequest && state.currentUser === cloudUserAtRequest && currentPricingScope() === cloudScopeAtRequest && state.retentionEpoch === cloudEpochAtRequest;
   const deferSecondary = options.deferSecondary === true;
   const leanBootstrap = options.leanBootstrap === true;
   const hydrateCustomerHistory = options.hydrateCustomerHistory === true;
@@ -2190,6 +2287,7 @@ export async function fetchCloudData(options = {}) {
         if (data && data.length > 0) {
           state.rawMaterials = data.map(r => ({
             id: r.id,
+            sourceKind: r.source_kind || 'order',
             code: r.code,
             name: r.name,
             unit: r.unit || 'kg',
@@ -3597,6 +3695,7 @@ export async function dbRefreshSalesReturnById(returnId, { deleted = false } = {
     const mapped = {
       id: row.id,
       saleId: row.sale_id,
+      sourceKind: row.source_kind || 'order',
       orderId: row.order_id || row.sale_id,
       customerId: row.customer_id,
       customerName: customer?.name || sourceOrder?.customerName || '',

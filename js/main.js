@@ -1,23 +1,26 @@
 import { state } from './state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261026-customer-payment-total-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261026-customer-payment-total-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions } from './components/dashboard.js?v=20261026-customer-payment-total-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261026-customer-payment-total-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261026-customer-payment-total-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261026-customer-payment-total-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261026-customer-payment-total-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261026-customer-payment-total-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261026-customer-payment-total-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261026-customer-payment-total-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261026-customer-payment-total-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261026-customer-payment-total-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261026-customer-payment-total-v1';
-import { renderInventoryPanel } from './components/inventory.js?v=20261026-customer-payment-total-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport } from './components/reports.js?v=20261026-customer-payment-total-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261027-retention-v2';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261027-retention-v2';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions, invalidateDashboardPayloadCache } from './components/dashboard.js?v=20261027-retention-v2';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261027-retention-v2';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261027-retention-v2';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261027-retention-v2';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261027-retention-v2';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261027-retention-v2';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261027-retention-v2';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261027-retention-v2';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261027-retention-v2';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261027-retention-v2';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261027-retention-v2';
+import { renderInventoryPanel } from './components/inventory.js?v=20261027-retention-v2';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport, invalidateEmployeeBusinessReportCache } from './components/reports.js?v=20261027-retention-v2';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261026-customer-payment-total-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261026-customer-payment-total-v1';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261027-retention-v2';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261027-retention-v2';
+import { setupRetentionSettings, renderRetentionSettings } from './components/data-retention.js?v=20261027-retention-v2';
+import { setupIndependentReturns, renderIndependentReturns } from './components/independent-returns.js?v=20261027-retention-v2';
+import { syncRetentionState } from './services/supabase.js?v=20261027-retention-v2';
 
 if (typeof window !== 'undefined') {
   window.billingEgressMetrics = Object.freeze({
@@ -66,6 +69,28 @@ let panelCloudSessionId = '';
 let panelCloudClient = null;
 const loadedPanelDomains = new Set();
 const pendingPanelDomainLoads = new Map();
+
+function setupRetentionMonitor() {
+  let checking = false;
+  window.addEventListener('billing-retention-changed', event => {
+    loadedPanelDomains.clear(); pendingPanelDomainLoads.clear();
+    invalidateDashboardPayloadCache(); invalidateEmployeeBusinessReportCache();
+    if (!event.detail?.initial_sync) window.location.reload();
+  });
+  const check = async () => {
+    if (checking || !state.currentUser || !isCloudActive || document.hidden) return;
+    checking = true;
+    try {
+      const result = await syncRetentionState();
+      if (result.changed) window.location.reload();
+    } catch (_) { /* Financial RPCs still enforce the server epoch and reject stale writes. */ }
+    finally { checking = false; }
+  };
+  window.addEventListener('focus', check);
+  window.addEventListener('online', check);
+  document.addEventListener('visibilitychange', check);
+  setInterval(check, 60000);
+}
 
 function currentPanelCloudSessionId() {
   const user = state.currentUser;
@@ -233,6 +258,12 @@ export function renderAll() {
   }
 
   renderCloudLoadWarning();
+  renderRetentionSettings();
+  const retainedNotice = document.getElementById('retained-period-notice');
+  if (retainedNotice) {
+    retainedNotice.hidden = !state.retentionCutoff;
+    if (state.retentionCutoff) retainedNotice.textContent = `Chi tiết giao dịch chỉ còn từ ${new Date(state.retentionCutoff).toLocaleDateString('vi-VN')}. Báo cáo khoảng thời gian trước mốc này không đầy đủ. Hồ sơ khách và các số tổng lũy kế vẫn được giữ nguyên.`;
+  }
 
   backfillMultiCompanyAndRevenueData();
 
@@ -257,6 +288,7 @@ export function renderAll() {
       break;
     case 'history-panel':
       renderHistoryOrders();
+      renderIndependentReturns();
       break;
     case 'so-quy-panel':
       renderSoQuyTable();
@@ -682,6 +714,9 @@ async function initApp() {
   setupPricelistManagement();
   setupInvoiceCreator();
   setupHistoryPanel();
+  setupRetentionSettings();
+  setupIndependentReturns();
+  setupRetentionMonitor();
   setupSoQuyPanel();
   setupDashboardQuickActions();
   setupDashboardFilters();

@@ -1,20 +1,20 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261026-customer-payment-total-v1';
-import { ensurePanelCloudData, renderAll } from '../main.js?v=20261026-customer-payment-total-v1';
-import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261026-customer-payment-total-v1';
-import { openHistoryOrderExportModal } from './customers.js?v=20261026-customer-payment-total-v1';
+import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261027-retention-v2';
+import { ensurePanelCloudData, renderAll } from '../main.js?v=20261027-retention-v2';
+import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261027-retention-v2';
+import { openHistoryOrderExportModal } from './customers.js?v=20261027-retention-v2';
 import {
   getOrderFinancialBreakdown,
   isOrderIncludedInFinancialSummary,
   calculateHistoryFinancialSummary,
   isSalesReturnActive
-} from '../domain/order-financials.js?v=20261026-customer-payment-total-v1';
+} from '../domain/order-financials.js?v=20261027-retention-v2';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 import { matchesHistoryOrderStatuses } from '../domain/order-status.js';
-import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261026-customer-payment-total-v1';
+import { currentBusinessDateTimeInputValue, orderDateToDateTimeInputValue } from '../domain/order-business-date.js?v=20261027-retention-v2';
 import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '../domain/order-edit.js';
-import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261026-customer-payment-total-v1';
+import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261027-retention-v2';
 
 const selectedHistoryOrderIdsForExport = new Set();
 let pendingSalesReturnKey = '';
@@ -2141,7 +2141,7 @@ export function printReturnSlip(ret) {
   if (!ret) return;
 
   document.getElementById('print-return-id').innerText = ret.id;
-  document.getElementById('print-return-sale-id').innerText = ret.saleId;
+  document.getElementById('print-return-sale-id').innerText = ret.saleId || 'Phiếu trả độc lập';
   document.getElementById('print-return-customer-name').innerText = ret.customerName;
   document.getElementById('print-return-date').innerText = formatDateTime(ret.createdAt);
   document.getElementById('print-return-creator').innerText = ret.creatorName || ret.createdBy;
@@ -2153,8 +2153,8 @@ export function printReturnSlip(ret) {
     tbody.innerHTML = (ret.items || []).map((item, idx) => `
       <tr>
         <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
-        <td style="border: 1px solid #000; padding: 6px;">${item.productName}</td>
-        <td style="border: 1px solid #000; padding: 6px; text-align: center;">${item.packageType || ''}</td>
+        <td style="border: 1px solid #000; padding: 6px;">${escapeHistoryHtml(item.productName || '')}</td>
+        <td style="border: 1px solid #000; padding: 6px; text-align: center;">${escapeHistoryHtml(item.packageType || '')}</td>
         <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${item.quantity}</td>
         <td style="border: 1px solid #000; padding: 6px; text-align: right;">${formatCurrency(item.importPrice)}</td>
         <td style="border: 1px solid #000; padding: 6px; text-align: right;">${formatCurrency(item.refundPrice)}</td>

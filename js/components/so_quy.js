@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20261026-customer-payment-total-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261026-customer-payment-total-v1';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261026-customer-payment-total-v1';
+import { renderAll } from '../main.js?v=20261027-retention-v2';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261027-retention-v2';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-v2';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -1575,6 +1575,15 @@ function renderCashbookPagination(totalItems) {
 export function renderSoQuyTable() {
   const tableBody = document.getElementById('so-quy-table-body');
   if (!tableBody) return;
+  const retainedRange = getCashbookDateWindow();
+  if (state.retentionCutoff && retainedRange && retainedRange.start < new Date(state.retentionCutoff)) {
+    tableBody.innerHTML = '<tr><td colspan="9" class="text-center py-4">Khoảng ngày này có dữ liệu đã xóa. Hãy chọn từ mốc còn lưu ghi ở đầu màn hình.</td></tr>';
+    ['start','income','expense','balance'].forEach(key => {
+      const target = document.getElementById(`so-quy-stat-${key}`); if (target) target.textContent = '—';
+    });
+    renderCashbookPagination(0);
+    return;
+  }
 
   const allTxs = getCashbookTransactions();
   // Refresh dynamic dropdown options

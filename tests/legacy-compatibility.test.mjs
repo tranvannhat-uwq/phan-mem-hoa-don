@@ -62,7 +62,9 @@ test('purchase table uses the full scoped layout and all ten columns', async () 
   assert.match(css, /\.purchase-page\s*\{[^}]*width:\s*100%/s);
   assert.match(css, /\.purchase-table\s*\{[^}]*min-width:\s*1120px/s);
   assert.match(purchases, /colspan="10"/);
-  for (const header of ['Mã phiếu', 'Ngày mua', 'Số hóa đơn', 'Nhà cung cấp', 'Tổng tiền', 'Đã thanh toán', 'Còn nợ', 'Trạng thái', 'Người tạo', 'Thao tác']) {
+  // Migration 0102's VAT UI renamed these existing labels; retain the exact
+  // ten-column contract instead of requiring the retired pre-VAT wording.
+  for (const header of ['Mã phiếu', 'Ngày mua', 'Số hóa đơn', 'Nhà cung cấp', 'Tổng gồm VAT', 'Đã thanh toán', 'Còn phải trả', 'Trạng thái', 'Người tạo', 'Thao tác']) {
     assert.match(purchases, new RegExp(header));
   }
 });

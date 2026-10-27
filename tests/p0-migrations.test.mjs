@@ -98,7 +98,28 @@ const migrationNames = [
   '0089_inventory_sync_toggle.sql',
   '0090_bounded_customer_product_lookup.sql',
   '0091_inventory_page_limit.sql',
-  '0092_bom_two_stage.sql'
+  '0092_bom_two_stage.sql',
+  '0093_bom_item_unit_edit.sql',
+  '0094_repair_bom_item_unit_edit.sql',
+  '0095_product_name_token_search.sql',
+  '0096_invoice_product_packaging_fallback.sql',
+  '0097_invoice_product_brand_search.sql',
+  '0098_revert_latest_order_amendment.sql',
+  '0099_customer_debt_order_event_snapshot.sql',
+  '0100_customer_debt_history_correction.sql',
+  '0101_product_packaging_items.sql',
+  '0102_purchase_vat.sql',
+  '0103_sales_returns_credit_balance.sql',
+  '0104_bg04m_return_credit_correction.sql',
+  '0105_purchase_existing_product_shells.sql',
+  '0106_independent_customer_returns.sql',
+  '0107_monthly_data_retention.sql',
+  '0108_retention_reports_and_return_compatibility.sql',
+  '0109_retention_read_only_rpc_locks.sql',
+  '0110_retention_backup_and_lookup_bounds.sql',
+  '0111_private_sales_return_response.sql',
+  '0112_retention_legacy_report_patch_guards.sql',
+  '0113_retention_cross_period_commission_guard.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const standaloneWarehouseMigrations = new Set(['0085', '0086', '0087']);

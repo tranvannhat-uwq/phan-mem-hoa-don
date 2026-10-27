@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261026-customer-payment-total-v1">
+  <link rel="stylesheet" href="style.css?v=20261027-retention-v2">
 </head>
 <body>
 
@@ -321,6 +321,7 @@
 
     <!-- Main Content Area -->
     <main class="main-content">
+      <div id="retained-period-notice" class="retention-period-notice" role="status" hidden></div>
       <!-- Top Header -->
       <header class="top-header">
         <div>
@@ -1189,6 +1190,29 @@
 
       <!-- History Panel -->
       <section id="history-panel" class="panel">
+        <div id="independent-returns-section" class="glass-panel retention-section" hidden>
+          <h2 class="panel-title">Nhận hàng trả độc lập</h2>
+          <p>Tạo phiếu nhận hàng mới, giảm công nợ hiện tại của khách. Nếu khách đã hết nợ, tiền trả được giữ thành số dư để cấn trừ. Kế toán xác nhận đơn giá nhận lại và tem niêm phong.</p>
+          <details>
+            <summary class="btn btn-secondary">Tạo phiếu nhận hàng trả</summary>
+            <form id="independent-return-form" class="retention-form">
+              <div class="retention-grid">
+                <label>Khách hàng<select id="independent-return-customer" class="form-control" required></select></label>
+                <label>Công ty ghi nhận<select id="independent-return-company" class="form-control" required></select></label>
+              </div>
+              <div id="independent-return-items"></div>
+              <button id="independent-return-add" class="btn btn-secondary" type="button">Thêm sản phẩm</button>
+              <label>Lý do / ghi chú tiếp nhận<textarea id="independent-return-reason" class="form-control" minlength="3" maxlength="500" required></textarea></label>
+              <label class="retention-check"><input id="independent-return-seal" type="checkbox" required> Đã kiểm tra tem niêm phong và duyệt giá nhận lại.</label>
+              <strong>Tổng giảm công nợ: <span id="independent-return-total">0 ₫</span></strong>
+              <button id="independent-return-submit" class="btn btn-primary" type="submit">Ghi nhận hàng trả và giảm công nợ</button>
+            </form>
+            <button id="independent-return-reconcile" class="btn btn-secondary" type="button" hidden>Kiểm tra lại lần gửi trước</button>
+          </details>
+          <div class="table-responsive"><table class="table"><thead><tr><th>Mã phiếu</th><th>Khách hàng</th><th>Ngày nhận</th><th>Giá trị</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="independent-return-list"></tbody></table></div>
+          <p id="independent-return-status" role="status"></p>
+          <div class="retention-actions"><button id="independent-return-prev" class="btn btn-secondary btn-sm" type="button">Trước</button><button id="independent-return-next" class="btn btn-secondary btn-sm" type="button">Sau</button><button id="independent-return-refresh" class="btn btn-secondary btn-sm" type="button">Làm mới phiếu trả</button></div>
+        </div>
         <div class="glass-panel">
           <div class="panel-header">
             <h2 class="panel-title"><i data-lucide="clock"></i> Lịch sử hóa đơn đã lập</h2>
@@ -2024,6 +2048,29 @@
       <!-- Settings Panel -->
       <section id="settings-panel" class="panel">
         <div class="glass-panel" style="max-width: 650px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
+          <div id="monthly-retention-section" class="retention-section" hidden>
+            <h2 class="panel-title">Dọn dữ liệu theo tháng</h2>
+            <p>Giữ chi tiết tháng hiện tại và tháng trước. Giữ nguyên hồ sơ khách, công nợ hiện tại, doanh số lũy kế, số dư quỹ và tồn kho. Chi tiết cũ sẽ bị xóa trên Supabase.</p>
+            <p>Phạm vi dọn gồm đơn và đơn nháp, phiếu thu chi, thanh toán, trả hàng, mua hàng, lịch sử công nợ, lịch sử sửa và các bản sao liên quan trong nhật ký.</p>
+            <p class="retention-note">Bật bảo trì và đóng các phiên Admin khác trước bước sao lưu. Bản sao phục hồi chứa dữ liệu nhạy cảm và được mã hóa bằng mật khẩu riêng; lưu file an toàn, giữ mật khẩu riêng. Đây là bản sao dữ liệu ứng dụng, không gồm tài khoản Auth và cấu hình dự án.</p>
+            <label class="retention-check"><input id="retention-archive" type="checkbox" checked> Dọn cả bảng nhật ký lưu trữ cũ đã kiểm tra</label>
+            <div class="retention-actions"><button id="retention-preview" class="btn btn-secondary" type="button">1. Kiểm tra phạm vi</button><button id="retention-restart" class="btn btn-secondary" type="button">Bỏ lần chuẩn bị</button></div>
+            <strong id="retention-boundary"></strong>
+            <ul id="retention-counts" class="retention-counts"></ul><ul id="retention-blockers" class="retention-errors"></ul>
+            <div class="retention-form">
+              <label>Mật khẩu mới cho file (ít nhất 12 ký tự)<input id="retention-password" class="form-control" type="password" minlength="12" autocomplete="new-password"></label>
+              <label>Nhập lại mật khẩu<input id="retention-password-again" class="form-control" type="password" minlength="12" autocomplete="new-password"></label>
+              <p>Ứng dụng không lưu mật khẩu bản sao. Mất mật khẩu sẽ không đọc được file.</p>
+              <button id="retention-prepare" class="btn btn-primary" type="button">2. Tạo và tải file phục hồi mã hóa</button>
+              <label>Mật khẩu để kiểm tra file vừa tải<input id="retention-verify-password" class="form-control" type="password" autocomplete="off"></label>
+              <label>3. Chọn lại file vừa tải<input id="retention-file" class="form-control" type="file" accept=".json,application/json" disabled></label>
+              <p id="retention-verification">Chưa kiểm tra file đã tải.</p>
+              <label><span id="retention-confirmation-label">4. Nhập dòng xác nhận sau khi kiểm tra file</span><input id="retention-confirmation" class="form-control" type="text" autocomplete="off" spellcheck="false"></label>
+              <button id="retention-execute" class="btn btn-danger" type="button" disabled>Xóa chi tiết cũ và giữ số cuối kỳ</button>
+              <button id="retention-recover" class="btn btn-secondary" type="button" hidden>Kiểm tra kết quả trên máy chủ</button>
+            </div>
+            <p id="retention-status" role="status" aria-live="polite">Chỉ Admin được dọn dữ liệu. Chưa có dữ liệu nào bị xóa.</p>
+          </div>
           <div id="maintenance-mode-section" data-enabled="false" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 12px; padding: 1rem; background: rgba(239, 68, 68, 0.06);">
             <h2 class="panel-title" style="margin-bottom: 0.5rem;"><i data-lucide="shield-alert"></i> Chế độ bảo trì</h2>
             <p id="maintenance-status-label" class="maintenance-status">Đang tải trạng thái...</p>
@@ -4543,7 +4590,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261026-customer-payment-total-v1"></script>
-  <script type="module" src="js/main.js?v=20261026-customer-payment-total-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261027-retention-v2"></script>
+  <script type="module" src="js/main.js?v=20261027-retention-v2"></script>
 </body>
 </html>

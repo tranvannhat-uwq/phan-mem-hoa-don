@@ -1,19 +1,19 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261026-customer-payment-total-v1';
-import { renderAll } from '../main.js?v=20261026-customer-payment-total-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261026-customer-payment-total-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261026-customer-payment-total-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261027-retention-v2';
+import { renderAll } from '../main.js?v=20261027-retention-v2';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261027-retention-v2';
+import { addCashbookTransaction } from './so_quy.js?v=20261027-retention-v2';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261026-customer-payment-total-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261026-customer-payment-total-v1';
+} from '../domain/order-financials.js?v=20261027-retention-v2';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261027-retention-v2';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261026-customer-payment-total-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261027-retention-v2';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -3857,7 +3857,11 @@ export async function openCustomerDetailModal(index) {
           : '<span style="color:var(--text-muted);">-</span>';
         
         const debtChange = Number.isFinite(Number(h.debtChange)) ? Number(h.debtChange) : null;
-        if (h.type === 'payment') {
+        if (h.retentionOpening) {
+          typeBadge = '<span class="customer-debt-opening-badge">Số dư chuyển kỳ</span>';
+          amountText = '<span style="color:var(--text-muted)">—</span>';
+          debtBefore = h.debtBefore;
+        } else if (h.type === 'payment') {
           typeBadge = `<span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600; white-space: nowrap;">Thu nợ</span>`;
           amountText = `<span style="color: var(--color-primary); font-weight: 600;">-${formatCurrency(h.amount)}</span>`;
           debtBefore = h.debtBefore ?? (h.debtAfter + h.amount);
@@ -3900,7 +3904,7 @@ export async function openCustomerDetailModal(index) {
         }).format(transactionDate);
         const postingDate = new Date(getCustomerDebtPostingDate(h));
         const postingDateDifference = Math.abs(postingDate.getTime() - transactionDate.getTime());
-        const postingDateDiffers = Number.isFinite(postingDate.getTime())
+        const postingDateDiffers = !h.retentionOpening && Number.isFinite(postingDate.getTime())
           && (isOrderAmendment ? postingDateDifference > 0 : postingDateDifference >= 60000);
         const postingDateFormatOptions = {
           day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'

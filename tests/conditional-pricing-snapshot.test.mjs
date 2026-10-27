@@ -63,6 +63,7 @@ function createHarness({ user = actor, cache = null, cacheLoader = null, tables 
   vm.runInContext(executable, context, { filename: 'js/services/supabase.js' });
   context.testClient = {
     async rpc(name, params) {
+      if (name === 'rpc_retention_status') return { data: { available: true, epoch: 0, cutoff: null }, error: null };
       rpcCalls.push({ name, params: json(params || {}) });
       return rpc(name, params, rpcCalls.length);
     },

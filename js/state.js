@@ -13,6 +13,9 @@ export const state = {
   invoiceItems: [], // [{ product, brand, package, colorCode, colorPercent, quantity, discountPercent, price }]
   savedOrders: [],
   cloudLoadStatus: {},
+  retentionAvailable: false,
+  retentionEpoch: null,
+  retentionCutoff: null,
   cashbookOpeningNetByMethod: null,
   cashbookOpeningStartIso: '',
   customers: [],

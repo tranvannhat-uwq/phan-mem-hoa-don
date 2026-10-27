@@ -285,6 +285,8 @@ function getCustomerDebtEntryChange(entry = {}) {
  */
 export function getCustomerTotalPayments(history = []) {
   const entries = Array.isArray(history) ? history : [];
+  const openingPayments = entries.filter(entry => entry.retentionOpening || entry.retention_opening)
+    .reduce((sum, entry) => sum + toDebtAmount(entry.paymentCarry ?? entry.payment_carry ?? 0), 0);
   const effective = projectEffectiveCustomerDebtHistory(entries);
   const collected = effective
     .filter(entry => debtTransactionType(entry) === 'payment')
@@ -300,7 +302,7 @@ export function getCustomerTotalPayments(history = []) {
       && !debtRelationValue(entry, 'reversalOfId', 'reversal_of_id')
       && !debtRelationValue(entry, 'cashbookTransactionId', 'cashbook_transaction_id'))
   ].reduce((sum, entry) => sum + Math.abs(toDebtAmount(entry.amount)), 0);
-  return Math.max(0, collected - legacyCancellations);
+  return Math.max(0, openingPayments + collected - legacyCancellations);
 }
 
 /** Add return document values without changing their posted debt impact.
