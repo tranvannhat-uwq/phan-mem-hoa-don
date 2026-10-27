@@ -51,6 +51,7 @@ const PANEL_CLOUD_DOMAINS = Object.freeze({
   'invoice-panel': ['pricelists'],
   'pricelists-panel': ['pricelists', 'products', 'customers'],
   'history-panel': ['orders', 'salesReturns', 'products', 'customers'],
+  'independent-returns-panel': ['products', 'customers'],
   'so-quy-panel': ['cashbook', 'startingBalances', 'customers'],
   'suppliers-panel': ['suppliers'],
   'goods-panel': ['suppliers', 'purchases', 'products'],
@@ -290,6 +291,8 @@ export function renderAll() {
       break;
     case 'history-panel':
       renderHistoryOrders();
+      break;
+    case 'independent-returns-panel':
       renderIndependentReturns();
       break;
     case 'so-quy-panel':
@@ -336,6 +339,9 @@ export function switchTab(panelId) {
   if (panelId === 'inventory-panel' && !['admin', 'accounting'].includes(state.currentUser?.role)) {
     panelId = 'invoice-panel';
   }
+  if (panelId === 'independent-returns-panel' && !['admin', 'accounting'].includes(state.currentUser?.role)) {
+    panelId = 'invoice-panel';
+  }
   if (state.currentUser?.role === 'sale' && panelId === 'dashboard-panel') {
     panelId = 'invoice-panel';
   }
@@ -374,6 +380,7 @@ export function switchTab(panelId) {
   else if (panelId === 'products-panel') heading.innerText = 'Quản lý sản phẩm';
   else if (panelId === 'invoice-panel') heading.innerText = 'Lập hóa đơn bán hàng';
   else if (panelId === 'history-panel') heading.innerText = 'Lịch sử giao dịch';
+  else if (panelId === 'independent-returns-panel') heading.innerText = 'Nhận hàng trả độc lập';
   else if (panelId === 'so-quy-panel') heading.innerText = 'Sổ quỹ thu chi';
   else if (panelId === 'customers-panel') heading.innerText = 'Danh sách khách hàng & Đại lý';
   else if (panelId === 'suppliers-panel') heading.innerText = 'Danh sách nhà cung cấp';

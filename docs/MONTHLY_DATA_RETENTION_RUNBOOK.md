@@ -24,7 +24,7 @@ Sổ công nợ không bắt buộc phải xóa theo một tiền tố liên t�
 
 ## Trả hàng sau khi đơn gốc đã xóa
 
-Vào **Lịch sử → Nhận hàng trả độc lập**. Admin hoặc kế toán chọn khách, công ty, SKU đang hoạt động, số lượng và đơn giá nhận lại đã duyệt; nhập lý do và xác nhận tem niêm phong.
+Vào **Bán hàng & khách hàng → Nhận hàng trả**. Admin hoặc kế toán chọn khách, công ty, SKU đang hoạt động, số lượng và đơn giá nhận lại đã duyệt; nhập lý do và xác nhận tem niêm phong.
 
 Phiếu mới giảm công nợ hiện tại. Nếu khách đã hết nợ, số dư thành tiền khách được cấn trừ ở các giao dịch sau. Không truy tìm đơn đã xóa, không tự sinh phiếu hoàn tiền. Nếu kho tích hợp đã được kích hoạt, lượng nhận trả được nhập kho trong cùng giao dịch.
 

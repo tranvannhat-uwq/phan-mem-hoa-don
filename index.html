@@ -183,6 +183,12 @@
               </a>
             </li>
             <li class="nav-item" data-nav-group="sales">
+              <a class="nav-link" data-target="independent-returns-panel">
+                <i data-lucide="package-check"></i>
+                Nhận hàng trả
+              </a>
+            </li>
+            <li class="nav-item" data-nav-group="sales">
               <a class="nav-link" data-target="customers-panel">
                 <i data-lucide="users"></i>
                 Khách hàng
@@ -1188,10 +1194,10 @@
         </div>
       </section>
 
-      <!-- History Panel -->
-      <section id="history-panel" class="panel">
+      <!-- Independent Returns Panel -->
+      <section id="independent-returns-panel" class="panel">
         <div id="independent-returns-section" class="glass-panel retention-section" hidden>
-          <h2 class="panel-title">Nhận hàng trả độc lập</h2>
+          <h2 class="panel-title"><i data-lucide="package-check"></i> Nhận hàng trả độc lập</h2>
           <p>Tạo phiếu nhận hàng mới, giảm công nợ hiện tại của khách. Nếu khách đã hết nợ, tiền trả được giữ thành số dư để cấn trừ. Kế toán xác nhận đơn giá nhận lại và tem niêm phong.</p>
           <details>
             <summary class="btn btn-secondary">Tạo phiếu nhận hàng trả</summary>
@@ -1213,6 +1219,10 @@
           <p id="independent-return-status" role="status"></p>
           <div class="retention-actions"><button id="independent-return-prev" class="btn btn-secondary btn-sm" type="button">Trước</button><button id="independent-return-next" class="btn btn-secondary btn-sm" type="button">Sau</button><button id="independent-return-refresh" class="btn btn-secondary btn-sm" type="button">Làm mới phiếu trả</button></div>
         </div>
+      </section>
+
+      <!-- History Panel -->
+      <section id="history-panel" class="panel">
         <div class="glass-panel">
           <div class="panel-header">
             <h2 class="panel-title"><i data-lucide="clock"></i> Lịch sử hóa đơn đã lập</h2>

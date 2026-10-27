@@ -818,6 +818,7 @@ export function applyUserPermissions(user) {
     } else if (role === 'accounting') {
       allowed = target !== 'settings-panel' && target !== 'users-panel';
     }
+    if (target === 'independent-returns-panel') allowed = role === 'admin' || role === 'accounting';
     navItem.style.removeProperty('display');
     navItem.hidden = !allowed || navItem.dataset.featureStatus === 'deferred';
   });

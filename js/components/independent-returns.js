@@ -109,7 +109,7 @@ export function renderIndependentReturns() {
     status('Còn lần gửi chờ kết quả ở tài khoản/kết nối trước. Đăng nhập lại đúng tài khoản để kiểm tra trước khi lập phiếu khác.');
     return;
   }
-  // Preserve an in-progress receipt while the parent history table rerenders.
+  // Preserve an in-progress receipt when this page rerenders after data updates.
   fillSelect(el('customer'), state.customers.map(c => ({ id: c.id, label: `${c.code || ''} — ${c.name}` })), 'Chọn khách hàng');
   fillSelect(el('company'), state.companies.map(c => ({ id: c.id, label: c.name })), 'Chọn công ty');
   if (!el('items').children.length && state.products.length) addItem();
