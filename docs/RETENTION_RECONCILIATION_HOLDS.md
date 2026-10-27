@@ -69,7 +69,18 @@ SQL audit READ ONLY khớp **60/60** hợp đồng hàm trên database PGlite d�
 không đổi chứng từ/số dư, không tự tạo job hoặc giữ chứng từ. Diễn tập hai kỳ và
 phục hồi file mã hóa có danh sách giữ vào staging trống cũng đạt.
 
-Đây chưa phải kết quả cài production. Công cụ trình duyệt bị tắt trong Work settings
-tại thời điểm chuẩn bị; chưa chạy migration hoặc thao tác giữ/xóa trên Supabase thật.
+Đối chiếu production SoViet lúc **18:40:33 ngày 27/10/2026 (UTC+7)**: bản 0118
+đã có sẵn nên không cài lại. Đã chạy audit trong transaction READ ONLY và ROLLBACK:
+**60/60 hợp đồng hàm khớp**, đủ phiên bản 0106–0118, trigger và ACL đúng; dashboard,
+báo cáo nhân viên, sổ quỹ, trả độc lập và danh sách đối soát đọc được dưới quyền
+ứng dụng. Có 1.750 khách, 3.271 đơn; 0 lệch công nợ khách/NCC và 0 bút toán sai.
+Epoch vẫn 0, cutoff null, chưa có job xóa. Có 4 chứng từ chờ và 0 chứng từ đã giữ;
+chưa gọi hold/prepare/execute trên dữ liệu thật trong lần kiểm chứng này.
+
+Frontend `20261027-retention-holds-v1` đã được hosting phục vụ, có nút giữ và danh
+sách đối soát. Admin bấm **Kiểm tra phạm vi** để hiện nút giữ 4 chứng từ; đây vẫn là
+thao tác riêng trước bước tạo/xác minh file và xác nhận xóa phần còn lại.
+
 Nhật ký được Git bỏ qua nằm tại `outputs/retention-review/holds-full-tests.log`,
-`holds-audit-local.json` và `reconciliation-tests.log`.
+`holds-audit-local.json`, `reconciliation-tests.log`, `holds-production-preflight.json`,
+`holds-production-verification.json` và `holds-production-verification.png`.
