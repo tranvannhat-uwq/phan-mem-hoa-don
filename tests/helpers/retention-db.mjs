@@ -45,6 +45,7 @@ export async function buildRetentionDatabase({maxVersion=Infinity}={}) {
       VALUES ('retention-prices','Synthetic prices','general','general',true,true);
     INSERT INTO public.price_list_items(id,price_list_id,product_id,variant_id,price)
       VALUES ('retention-price','retention-prices','retention-sku','retention-sku',100);`);
+  if(maxVersion>=114)await db.exec('UPDATE public.dealer_support_control SET selection_confirmed=true WHERE id');
   return db;
 }
 export async function asActor(db,id=adminId,epoch=0) {

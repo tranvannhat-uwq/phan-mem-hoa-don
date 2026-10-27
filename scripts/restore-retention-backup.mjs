@@ -12,8 +12,8 @@ const allowedTables=new Set(['companies','brands','product_groups','payroll_prod
   'inventory_balances','inventory_documents','inventory_movements','inventory_order_positions','inventory_pending_orders',
   'inventory_sync_outbox','bom_items','bom_item_balances','bom_item_documents','bom_versions','bom_lines','bom_runs','bom_item_movements',
   'audit_logs','activity_logs','retention_control','retention_customer_balances','retention_customer_company_balances','retention_supplier_balances',
-  'retention_inventory_balances','retention_retired_requests','activity_logs_archive_pre_20260804']);
-const seedTables=new Set(['profiles','companies','retention_control','inventory_control']);
+  'retention_inventory_balances','retention_retired_requests','dealer_support_control','dealer_support_history','activity_logs_archive_pre_20260804']);
+const seedTables=new Set(['profiles','companies','retention_control','inventory_control','dealer_support_control']);
 const ident=value=>{if(!/^[a-z_][a-z0-9_]*$/.test(value))throw new Error('Unsupported SQL identifier');return '"'+value+'"';};
 const literal=value=>"'"+String(value).replaceAll("'","''")+"'";
 
@@ -30,7 +30,7 @@ export function buildStagingRecoverySql(payload) {
     ident(name);payload.columns[name].forEach(ident);
   }
   const parts=[`-- DECRYPTED PERSONAL/FINANCIAL DATA: store securely and remove this temporary SQL after rehearsal.
--- ISOLATED, EMPTY STAGING ONLY. Install schema 0106-0113 and matching Auth identities first.
+-- ISOLATED, EMPTY STAGING ONLY. Install schema 0106-0114 and matching Auth identities first.
 -- No connection is made by the exporter. This script refuses existing business/catalog data.
 BEGIN;
 SET LOCAL lock_timeout='3s';
@@ -39,7 +39,7 @@ DO $guard$ BEGIN
   IF current_setting('app.retention_restore_target',true) IS DISTINCT FROM 'ISOLATED_EMPTY_STAGING' THEN
     RAISE EXCEPTION 'Set app.retention_restore_target=ISOLATED_EMPTY_STAGING on an isolated empty staging connection first';
   END IF;
-  IF (SELECT count(*) FROM public.schema_migrations WHERE version IN('0106','0107','0108','0109','0110','0111','0112','0113'))<>8 THEN
+  IF (SELECT count(*) FROM public.schema_migrations WHERE version IN('0106','0107','0108','0109','0110','0111','0112','0113','0114'))<>9 THEN
     RAISE EXCEPTION 'Matching retention schema is required';
   END IF;
 END $guard$;`];

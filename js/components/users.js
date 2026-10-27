@@ -1,18 +1,18 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261027-retention-v2';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261027-retention-v2';
-import { renderAll, switchTab } from '../main.js?v=20261027-retention-v2';
-import { populateManagedByDropdown } from './customers.js?v=20261027-retention-v2';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261027-support-v3';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261027-support-v3';
+import { renderAll, switchTab } from '../main.js?v=20261027-support-v3';
+import { populateManagedByDropdown } from './customers.js?v=20261027-support-v3';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261027-retention-v2';
-import { resetInventoryPanel } from './inventory.js?v=20261027-retention-v2';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261027-retention-v2';
+import { isActiveUser } from '../domain/user-status.js?v=20261027-support-v3';
+import { resetInventoryPanel } from './inventory.js?v=20261027-support-v3';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261027-support-v3';
 
 function normalizeUserSearch(value) {
   return String(value || '')

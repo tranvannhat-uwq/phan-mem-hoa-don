@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, formatDateTime } from '../utils.js';
-import { bomGateway } from '../services/bom.js?v=20261027-retention-v2';
+import { bomGateway } from '../services/bom.js?v=20261027-support-v3';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const number=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:4});

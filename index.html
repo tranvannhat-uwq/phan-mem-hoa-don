@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261027-retention-v2">
+  <link rel="stylesheet" href="style.css?v=20261027-support-v3">
 </head>
 <body>
 
@@ -2052,6 +2052,7 @@
             <h2 class="panel-title">Dọn dữ liệu theo tháng</h2>
             <p>Giữ chi tiết tháng hiện tại và tháng trước. Giữ nguyên hồ sơ khách, công nợ hiện tại, doanh số lũy kế, số dư quỹ và tồn kho. Chi tiết cũ sẽ bị xóa trên Supabase.</p>
             <p>Phạm vi dọn gồm đơn và đơn nháp, phiếu thu chi, thanh toán, trả hàng, mua hàng, lịch sử công nợ, lịch sử sửa và các bản sao liên quan trong nhật ký.</p>
+            <p>Lịch sử hàng cấp của SKU đã chọn được giữ riêng với số lượng, ngày và trạng thái trả/hủy; giá và nội dung đơn cũ vẫn được xóa. Cần xác nhận danh sách SKU bên dưới trước lần dọn đầu tiên.</p>
             <p class="retention-note">Bật bảo trì và đóng các phiên Admin khác trước bước sao lưu. Bản sao phục hồi chứa dữ liệu nhạy cảm và được mã hóa bằng mật khẩu riêng; lưu file an toàn, giữ mật khẩu riêng. Đây là bản sao dữ liệu ứng dụng, không gồm tài khoản Auth và cấu hình dự án.</p>
             <label class="retention-check"><input id="retention-archive" type="checkbox" checked> Dọn cả bảng nhật ký lưu trữ cũ đã kiểm tra</label>
             <div class="retention-actions"><button id="retention-preview" class="btn btn-secondary" type="button">1. Kiểm tra phạm vi</button><button id="retention-restart" class="btn btn-secondary" type="button">Bỏ lần chuẩn bị</button></div>
@@ -2070,6 +2071,14 @@
               <button id="retention-recover" class="btn btn-secondary" type="button" hidden>Kiểm tra kết quả trên máy chủ</button>
             </div>
             <p id="retention-status" role="status" aria-live="polite">Chỉ Admin được dọn dữ liệu. Chưa có dữ liệu nào bị xóa.</p>
+          </div>
+          <div id="dealer-support-settings" class="retention-section" hidden>
+            <h3>Giữ lịch sử hàng cấp đại lý</h3>
+            <p>Chọn SKU một lần. Khi dọn đơn cũ, giữ khách, sản phẩm, hãng/công ty, số lượng, ngày và trạng thái trả/hủy. Mọi dòng của SKU đã chọn đều được theo dõi, kể cả giá 0 đồng hoặc có thu tiền. Bỏ chọn chỉ ngừng giữ cho lần dọn sau; lịch sử đã lưu vẫn còn.</p>
+            <div class="retention-actions"><input id="dealer-support-search" class="form-control" maxlength="100" aria-label="Tìm SKU giữ lịch sử" placeholder="Tìm mã, tên, hãng hoặc công ty"><button type="button" class="btn btn-secondary" id="dealer-support-find">Tìm sản phẩm</button></div>
+            <div class="table-container"><table class="table"><thead><tr><th>Giữ</th><th>Mã SKU</th><th>Sản phẩm</th><th>Hãng</th><th>Công ty</th></tr></thead><tbody id="dealer-support-products"></tbody></table></div>
+            <p id="dealer-support-config-status" role="status"></p>
+            <div class="retention-actions"><button type="button" class="btn btn-secondary" id="dealer-support-prev">Trước</button><button type="button" class="btn btn-secondary" id="dealer-support-next">Sau</button><button type="button" class="btn btn-primary" id="dealer-support-save">Lưu danh sách và xác nhận</button></div>
           </div>
           <div id="maintenance-mode-section" data-enabled="false" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 12px; padding: 1rem; background: rgba(239, 68, 68, 0.06);">
             <h2 class="panel-title" style="margin-bottom: 0.5rem;"><i data-lucide="shield-alert"></i> Chế độ bảo trì</h2>
@@ -2842,6 +2851,14 @@
           
         </div>
 
+        <section id="dealer-support-history" class="dealer-support-history">
+          <h4>Lịch sử hàng cấp</h4>
+          <p class="dealer-support-note">Ghi nhận theo đơn của các SKU được chọn, gồm cả lịch sử đã giữ khi xóa đơn cũ. Đây không phải xác nhận giao nhận. Trả/hủy chỉ tính theo chứng từ đã liên kết; phiếu trả độc lập không tự gán vào lần cấp cũ.</p>
+          <ul id="dealer-support-summary"></ul>
+          <div class="table-container"><table class="table"><thead><tr><th>Ngày</th><th>Sản phẩm</th><th>Hãng / công ty</th><th>Số lượng</th><th>Đã trả</th><th>Trạng thái</th></tr></thead><tbody id="dealer-support-history-body"></tbody></table></div>
+          <p id="dealer-support-history-status" role="status"></p>
+          <div class="retention-actions"><button type="button" class="btn btn-secondary btn-sm" id="dealer-support-history-prev">Trước</button><button type="button" class="btn btn-secondary btn-sm" id="dealer-support-history-next">Sau</button></div>
+        </section>
         <!-- Debt History Section -->
         <div>
           <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem; flex-wrap:wrap;">
@@ -4590,7 +4607,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261027-retention-v2"></script>
-  <script type="module" src="js/main.js?v=20261027-retention-v2"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261027-support-v3"></script>
+  <script type="module" src="js/main.js?v=20261027-support-v3"></script>
 </body>
 </html>

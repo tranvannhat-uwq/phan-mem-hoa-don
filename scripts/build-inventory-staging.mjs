@@ -29,6 +29,7 @@ names.push('0110_retention_backup_and_lookup_bounds.sql');
 names.push('0111_private_sales_return_response.sql');
 names.push('0112_retention_legacy_report_patch_guards.sql');
 names.push('0113_retention_cross_period_commission_guard.sql');
+names.push('0114_dealer_support_history.sql');
 const parts=[`-- EMPTY SUPABASE STAGING PROJECT ONLY. Never paste into production.
 -- This guard prevents bootstrap against an existing billing database.
 DO $$ BEGIN

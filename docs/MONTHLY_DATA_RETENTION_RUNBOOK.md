@@ -1,10 +1,12 @@
 # Vận hành dọn dữ liệu theo tháng
 
-Ngày cập nhật: 27/10/2026. Tài liệu này mô tả bản triển khai 0106–0113; báo cáo `MONTHLY_DATA_RETENTION_REVIEW.md` là hồ sơ rà soát trước khi viết chức năng. Xem [kết quả rà soát lại ngày 27/10](MONTHLY_DATA_RETENTION_RECHECK_2026-10-27.md) về các ngoại lệ đã sửa.
+Ngày cập nhật: 27/10/2026. Tài liệu này mô tả bản triển khai 0106–0114; báo cáo `MONTHLY_DATA_RETENTION_REVIEW.md` là hồ sơ rà soát trước khi viết chức năng. Xem [kết quả rà soát lại ngày 27/10](MONTHLY_DATA_RETENTION_RECHECK_2026-10-27.md) về các ngoại lệ đã sửa.
 
 **Chưa thực hiện xóa dữ liệu thật. Việc cài migration và việc bấm xóa là hai bước riêng.** Các bài diễn tập dùng dữ liệu giả trên PostgreSQL/PGlite và trang kiểm thử cục bộ, không tạo chứng từ thử trên Supabase production.
 
-**Đã cài 0106–0113 trên production SoViet.** Kiểm tra lúc 27/10/2026 08:35:49 UTC+7: phiên dữ liệu vẫn 0, mốc đã xóa và lần dọn cuối đều null; xem trước không có điều kiện chặn. Có 1.749 khách, 3.243 đơn, không có lần dọn nào và không có sai lệch công nợ. Dashboard, báo cáo nhân viên, sổ quỹ và danh sách trả độc lập chạy thành công dưới quyền authenticated trong giao dịch READ ONLY. Đã xác nhận helper đọc trả hàng bị khóa và bản vá công nợ công ty/biểu đồ đầy đủ. Giao diện v2 đã có trong mã nguồn; cần phát hành cùng bản mã này nếu trang web đang dùng được host ở nơi khác.
+**Đã cài 0106–0114 trên production SoViet.** Kiểm tra chỉ đọc lúc 27/10/2026 09:40:26 UTC+7: 1.749 khách, 3.250 đơn, 0 lệch công nợ, 0 lần dọn; epoch vẫn 0 và cutoff đã dọn vẫn null. Các báo cáo, cấu hình SKU và tra lịch sử hàng cấp chạy được dưới quyền ứng dụng; 48 hàm khớp bản legacy đã kiểm thử. Danh sách SKU chưa được xác nhận, nên hệ thống chủ động chặn chuẩn bị dọn cho đến khi Admin chọn và lưu lần đầu. Frontend dùng phiên bản `20261027-support-v3`; cần xác nhận hosting phục vụ đúng bản này trước khi thao tác.
+
+Xem [cách chọn SKU và tra lịch sử hàng cấp](DEALER_SUPPORT_HISTORY.md). Đích đã có 0106–0113 chỉ cài thêm 0114.
 
 ## Quy tắc đã thực hiện
 
@@ -12,6 +14,7 @@ Ngày cập nhật: 27/10/2026. Tài liệu này mô tả bản triển khai 010
 - Giữ nguyên hồ sơ khách và các số cuối cùng: công nợ có dấu, tổng bán, tổng trả, doanh thu ròng lũy kế, ngày mua/thu gần nhất và các số nhập đầu kỳ. Không tính lại các số này chỉ từ đơn còn giữ.
 - Chuyển phần công nợ đã xóa thành số dư mở kỳ. Có số chuyển kỳ thu tiền, công nợ theo công ty và nhà cung cấp; tiền mặt/ngân hàng/ví và tồn kho hiện tại được đối soát riêng.
 - Công nợ theo công ty giữ cách phân bổ của báo cáo hiện có. Khoản đầu kỳ/thu tiền vốn chưa có công ty không tự được gán sang một công ty; tổng theo công ty có thể khác công nợ đầy đủ của khách như trước.
+- Giữ riêng lịch sử số lượng của SKU đã chọn, không giữ giá hoặc toàn bộ đơn trong bản lưu này; xem chi tiết trong `DEALER_SUPPORT_HISTORY.md`.
 - Giữ hàng hóa, bảng giá, tài khoản và danh mục hiện tại. Chức năng này không xóa toàn bộ lịch sử BOM/sản xuất hay dữ liệu tại hệ thống kho ngoài.
 - Xóa thật chi tiết cũ trong đơn, đơn nháp, thanh toán, quỹ, trả hàng, mua hàng, sổ công nợ và các bản sửa thuộc phạm vi tương ứng. Xử lý liên kết của chứng từ còn giữ trước khi xóa nguồn cũ.
 - Loại bản sao lịch sử công nợ trong nhật ký mới và nhật ký có tham chiếu lồng tới chứng từ bị xóa. Bảng archive được kiểm tra riêng và mặc định được chọn dọn.
@@ -34,9 +37,9 @@ Hủy phiếu mới sẽ đảo đúng công nợ và lượng nhập kho của 
 1. Chạy `npm run test:retention`. Có thể chạy toàn bộ test bằng danh sách file mở rộng trong PowerShell; Node 20 trên Windows không tự mở rộng `tests/*.test.mjs`.
 2. Chạy `node scripts/build-retention-upgrade.mjs` để tạo hai file trong `outputs/retention-review/`:
    - `production-compatibility-rollback.sql`: thử cài trong một giao dịch, luôn kết thúc bằng `ROLLBACK`.
-   - `install-retention-0106-0113.sql`: cài tám migration trong **một giao dịch**, không gọi hàm thực thi xóa. Chỉ dùng khi đích chưa có cả nhóm này.
-3. Đối chiếu database đích, rà soát SQL và xác nhận cảnh báo của SQL Editor trước khi cài. Không áp dụng lại nếu một phần 0106–0113 đã có; file cài sẽ từ chối trường hợp này để tránh ghi đè mù. Đích đã có 0106–0110 cần áp dụng riêng các migration 0111, 0112, 0113 theo thứ tự, không chạy lại installer đầy đủ.
-4. Phát hành frontend cùng phiên bản `20261027-retention-v2`, rồi kiểm tra bằng tài khoản Admin và kế toán. Chưa bấm xóa ở bước cài.
+   - `install-retention-0106-0114.sql`: cài chín migration trong **một giao dịch**, không gọi hàm thực thi xóa. Chỉ dùng khi đích chưa có cả nhóm này.
+3. Đối chiếu database đích, rà soát SQL và xác nhận cảnh báo của SQL Editor trước khi cài. Không áp dụng lại nếu một phần 0106–0114 đã có; file cài sẽ từ chối trường hợp này để tránh ghi đè mù. Đích đã có 0106–0110 cần áp dụng riêng các migration 0111, 0112, 0113, 0114 theo thứ tự, không chạy lại installer đầy đủ.
+4. Phát hành frontend cùng phiên bản `20261027-support-v3`, rồi kiểm tra bằng tài khoản Admin và kế toán. Chưa bấm xóa ở bước cài.
 
 Truy vấn chỉ đọc lúc **26/10/2026 10:02:24 UTC** trên SoViet cho thấy các dấu mốc hàm phản hồi trả hàng, xác thực, sổ quỹ, bảo vệ công nợ, dashboard, báo cáo trả/nhân viên và index đơn nháp đều khớp. Lúc kiểm tra có 1.749 khách và 3.227 đơn; 0106–0108 chưa cài. Đây là đối chiếu catalog, không phải xác nhận đã cài thành công.
 
@@ -48,7 +51,7 @@ Không áp dụng các file sửa sự cố riêng 0100/0104 lên database trố
 
 ## Thao tác dọn một kỳ
 
-1. Đối soát số cuối cùng với kế toán. Chuẩn bị nơi lưu file phục hồi và mật khẩu riêng. Đóng các phiên Admin khác; bật **Chế độ bảo trì**.
+1. Admin xác nhận danh sách SKU tại Cấu hình → Giữ lịch sử hàng cấp đại lý (xem `DEALER_SUPPORT_HISTORY.md`). Đối soát số cuối cùng với kế toán. Chuẩn bị nơi lưu file phục hồi và mật khẩu riêng. Đóng các phiên Admin khác; bật **Chế độ bảo trì**.
 2. Trong **Cấu hình → Dọn dữ liệu theo tháng**, bấm **Kiểm tra phạm vi**. Đọc mốc ngày, số chứng từ và các điều kiện đang chặn. Nếu bỏ chọn archive, bảng nhật ký lưu trữ đó sẽ vẫn còn.
 3. Nhập mật khẩu bản sao ít nhất 12 ký tự hai lần; tải file phục hồi mã hóa. Mật khẩu không được gửi lên Supabase hoặc lưu trong cache.
 4. Nhập mật khẩu kiểm tra và chọn lại **file vừa tải**. Giao diện phải giải mã được, khớp SHA-256 và đúng mã lần chuẩn bị.
@@ -111,6 +114,6 @@ SQL vẫn từ chối nếu có dữ liệu nghiệp vụ/danh mục ngoài các
 
 ## Kiểm thử
 
-Lệnh chuẩn: `npm run test:retention` (35 ca). Nhóm kiểm tra gồm phân quyền, sai file/hash/mật khẩu, request trùng, backup cũ, lỗi cuối giao dịch và rollback archive, sổ không liên tục do ngày lùi, phiếu trả qua kỳ, hoàn tiền lịch sử, công nợ âm/import không ledger, ba quỹ, số NCC sau thanh toán tiếp, kho thiếu khi hủy trả, dọn kỳ kế tiếp, doanh số/công nợ công ty trước–sau, sửa/hủy phiếu thu và hủy đơn còn giữ, nhật ký sao chép nội dung cũ, hoa hồng liên quan phiếu quỹ, schema/trigger mới, đổi tài khoản khi mất phản hồi, SQL CRLF, READ ONLY RPC và diễn tập phục hồi. Lần chạy toàn bộ sau cùng: **675 qua, 2 bỏ qua, 0 lỗi**; log tại `outputs/retention-review/review-20261027-full-tests-final.log`.
+Lệnh chuẩn: `npm run test:retention` (47 ca). Nhóm kiểm tra gồm phân quyền, sai file/hash/mật khẩu, request trùng, backup cũ, lỗi cuối giao dịch và rollback archive, sổ không liên tục do ngày lùi, phiếu trả qua kỳ, hoàn tiền lịch sử, công nợ âm/import không ledger, ba quỹ, số NCC sau thanh toán tiếp, kho thiếu khi hủy trả, dọn kỳ kế tiếp, doanh số/công nợ công ty trước–sau, sửa/hủy phiếu thu và hủy đơn còn giữ, nhật ký sao chép nội dung cũ, hoa hồng liên quan phiếu quỹ, schema/trigger mới, đổi tài khoản khi mất phản hồi, SQL CRLF, READ ONLY RPC và diễn tập phục hồi. Lần chạy toàn bộ sau cùng: **687 qua, 2 bỏ qua, 0 lỗi**; log tại `outputs/retention-review/support-full-tests-final.log`.
 
 Trang `node scripts/retention-ui-harness.mjs` tại localhost:5181 dùng toàn bộ dữ liệu giả và RPC mô phỏng để kiểm tra giao diện. Không nhập tài khoản thật ở đó. Ảnh và log nằm trong `outputs/retention-review/` (không đưa vào Git).

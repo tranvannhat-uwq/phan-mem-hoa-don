@@ -12824,3 +12824,9 @@ body.purchase-entry-modal-open { overflow: hidden; }
 @media (max-width: 900px) { .independent-return-item { grid-template-columns: repeat(2,minmax(0,1fr)); } .independent-return-item label:first-child { grid-column: 1/-1; } }
 @media (max-width: 600px) { .retention-grid, .retention-counts { grid-template-columns: 1fr; } }
 @media print { #independent-returns-section, .retention-period-notice { display: none !important; } }
+.dealer-support-history { border-top: 1px solid var(--border-color); padding-top: 1rem; margin: 1rem 0; }
+.dealer-support-note, #dealer-support-config-status, #dealer-support-history-status { color: var(--text-secondary); font-size: .85rem; line-height: 1.5; margin: .65rem 0; }
+#dealer-support-summary { padding-left: 1.2rem; font-size: .85rem; line-height: 1.6; margin: .75rem 0; }
+#dealer-support-settings .table-container { max-height: 360px; overflow: auto; }
+#dealer-support-search { flex: 1; min-width: 170px; }
+.dealer-support-history .table { min-width: 690px; }

@@ -1,6 +1,6 @@
 import { state } from '../state.js';
-import { isCloudActive, supabaseClient } from './supabase.js?v=20261027-retention-v2';
-import { createInventoryGateway } from '../domain/inventory.js?v=20261027-retention-v2';
+import { isCloudActive, supabaseClient } from './supabase.js?v=20261027-support-v3';
+import { createInventoryGateway } from '../domain/inventory.js?v=20261027-support-v3';
 
 export const inventoryGateway = createInventoryGateway({
   scope: () => state.currentUser && ['admin', 'accounting'].includes(state.currentUser.role)

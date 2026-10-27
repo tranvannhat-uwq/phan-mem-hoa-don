@@ -15,6 +15,7 @@ test('legacy CRLF employee report keeps company opening and cross-period return 
     await db.exec(legacy.replace(/\r?\n/g,'\r\n'));
     // The SQL editor can also convert the upgrade script itself to CRLF.
     await db.exec((await buildRetentionUpgrade({dryRun:false})).replace(/\r?\n/g,'\r\n'));
+    await db.exec('UPDATE dealer_support_control SET selection_confirmed=true WHERE id');
     await asActor(db);
     const cutoff=(await call('rpc_retention_status')).next_cutoff;
     const old=new Date(Date.parse(cutoff)-86400000).toISOString();

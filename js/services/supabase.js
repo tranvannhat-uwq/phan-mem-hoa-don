@@ -2,13 +2,13 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-v2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-v2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-support-v3';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-support-v3';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-v2';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-v2';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-v2';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-support-v3';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-support-v3';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-support-v3';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
 
 export let supabaseClient = null;
@@ -77,7 +77,7 @@ async function retentionRpc(name, args = {}) {
   const { data, error } = await client.rpc(name, args);
   if (client !== supabaseClient || user !== state.currentUser) throw new Error('Phiên đăng nhập đã thay đổi. Hãy kiểm tra kết quả trên tài khoản đã thực hiện.');
   if (error) {
-    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Máy chủ chưa cài đầy đủ chức năng. Cần cập nhật migration 0106–0113.');
+    if (['PGRST202', '42883'].includes(error.code)) throw new Error('Máy chủ chưa cài đầy đủ chức năng. Cần cập nhật migration 0106–0114.');
     throw error;
   }
   return data;
@@ -96,6 +96,9 @@ export async function dbExecuteMonthlyRetention(jobId, backupSha256, confirmatio
 }
 export const dbRecordIndependentReturn = input => retentionRpc('rpc_record_independent_return', { p_input: input });
 export const dbListIndependentReturns = input => retentionRpc('rpc_list_independent_returns', { p_input: input });
+export const dbDealerSupportProducts = (search = '', offset = 0) => retentionRpc('rpc_dealer_support_products', { p_search: search, p_offset: offset, p_limit: 25 });
+export const dbSetDealerSupportProducts = changes => retentionRpc('rpc_set_dealer_support_products', { p_changes: changes });
+export const dbDealerSupportHistory = (customerId, offset = 0) => retentionRpc('rpc_dealer_support_history', { p_customer_id: customerId, p_offset: offset, p_limit: 25 });
 export async function getSupabaseEgressSnapshot() {
   await supabaseEgressMeter.flush();
   return supabaseEgressMeter.snapshot();
@@ -129,6 +132,9 @@ export function resetAuthenticatedBusinessState() {
   state.pricingSnapshotCachedAt = '';
   state.pricingSnapshotRevision = '';
   state.selectedPriceListIds = [];
+  for (const id of ['dealer-support-history-body', 'dealer-support-summary', 'dealer-support-history-status', 'dealer-support-products', 'dealer-support-config-status']) {
+    globalThis.document?.getElementById(id)?.replaceChildren?.();
+  }
   try { localStorage.removeItem('billing_system_customers'); } catch (_error) { /* optional browser cache */ }
 }
 

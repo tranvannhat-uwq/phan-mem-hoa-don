@@ -1,11 +1,11 @@
 import { state } from '../state.js';
-import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob } from '../services/supabase.js?v=20261027-retention-v2';
+import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob } from '../services/supabase.js?v=20261027-support-v3';
 import { encryptRetentionBackup, decryptRetentionBackup } from '../services/retention-backup.js';
 import { retentionConfirmation } from '../domain/data-retention.js';
 
 const labels = { orders: 'Đơn hàng', drafts: 'Đơn nháp', returns: 'Phiếu trả', cashbook: 'Chứng từ quỹ',
   payments: 'Thanh toán', ledger: 'Bút toán công nợ', purchases: 'Phiếu mua', supplier_payments: 'Thanh toán NCC',
-  supplier_ledger: 'Công nợ NCC', legacy_archive: 'Nhật ký lưu trữ cũ' };
+  supplier_ledger: 'Công nợ NCC', legacy_archive: 'Nhật ký lưu trữ cũ', support_history: 'Dòng hàng cấp được giữ lịch sử' };
 let prepared = null;
 let verified = false;
 let busy = false;

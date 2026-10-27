@@ -5,8 +5,8 @@ import {
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20261027-retention-v2';
-import { renderAll } from '../main.js?v=20261027-retention-v2';
+} from '../services/supabase.js?v=20261027-support-v3';
+import { renderAll } from '../main.js?v=20261027-support-v3';
 import {
   buildProductFamilies,
   getProductBaseCode,
