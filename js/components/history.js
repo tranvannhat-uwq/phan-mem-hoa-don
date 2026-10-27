@@ -1,6 +1,6 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, formatNumber, safeCreateIcons, formatDateTime, isSameUser, getManagerDisplayName, getCustomerName, getUserById, getUserDisplayName, getCompanyName, normalizeCompanyId, getCompanyIdByBrand, getCanonicalBrandName } from '../utils.js';
-import { dbDeleteOrder, dbDeleteAllOrders, dbRecordSalesReturn, dbCancelSalesReturn, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261027-supplier-export-v1';
+import { dbDeleteOrder, dbDeleteAllOrders, dbCancelOrder, dbRefreshCustomerFinancialState, dbUpdateOrderNotes, dbLoadOrdersForHistoryRange, dbSearchOrdersForHistory, cacheOrdersLocally } from '../services/supabase.js?v=20261027-supplier-export-v1';
 import { ensurePanelCloudData, renderAll } from '../main.js?v=20261027-supplier-export-v1';
 import { openPrintTypeModal, resetInvoiceBuilder, syncInvoiceBusinessDateControl } from './invoice.js?v=20261027-supplier-export-v1';
 import { openHistoryOrderExportModal } from './customers.js?v=20261027-supplier-export-v1';
@@ -17,7 +17,6 @@ import { normalizeOrderItemsForEditing, resolveOrderCustomerForEditing } from '.
 import { getApplicablePriceList, normalizePriceListType, PRICE_LIST_TYPES } from '../domain/pricing.js?v=20261027-supplier-export-v1';
 
 const selectedHistoryOrderIdsForExport = new Set();
-let pendingSalesReturnKey = '';
 let historyFilterTimer = null;
 let historyRenderCache = null;
 let historyFinancialCache = null;
@@ -420,13 +419,10 @@ function getHistoryOrderActionContext(order, lookups) {
   const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
   const canEditDraft = canManageHistoryDraft(order);
   return {
-    financeRole,
-    activeOrderReturns,
     canEditNotes: financeRole,
     canEditDraft,
     showDeleteBtn: canEditDraft,
     showCancelBtn: order.status === 'settled' && financeRole,
-    showReturnBtn: ['settled', 'partially_returned'].includes(order.status) && financeRole,
     showAmendBtn: order.status === 'settled' && financeRole && activeOrderReturns.length === 0
   };
 }
@@ -717,11 +713,6 @@ export function setupHistoryPanel() {
       const orders = (state.savedOrders || []).filter(o => filteredIds.includes(String(o.id)));
       openHistoryOrderExportModal(orders, selectedIds);
     });
-  }
-
-  const returnForm = document.getElementById('sales-return-form');
-  if (returnForm) {
-    returnForm.addEventListener('submit', processSalesReturnSubmit);
   }
 
   const btnCard = document.getElementById('btn-history-view-card');
@@ -1074,8 +1065,8 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       }
 
       const {
-        financeRole, activeOrderReturns, canEditNotes, canEditDraft, showDeleteBtn,
-        showCancelBtn, showReturnBtn, showAmendBtn
+        canEditNotes, canEditDraft, showDeleteBtn,
+        showCancelBtn, showAmendBtn
       } = getHistoryOrderActionContext(order, lookups);
 
       const cust = getHistoryCustomer(order, lookups);
@@ -1166,24 +1157,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                         <i data-lucide="history"></i> Lịch sử hoạt động
                       </button>
                     ` : ''}
-                    ${showReturnBtn ? `
-                      <button class="history-detail-action history-action-return history-return-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
-                        <i data-lucide="rotate-ccw"></i> Trả hàng
-                      </button>
-                    ` : ''}
                     ${showCancelBtn ? `
                       <button class="history-detail-action history-action-delete history-cancel-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                         <i data-lucide="ban"></i> Hủy
                       </button>
                     ` : ''}
-                    ${financeRole ? activeOrderReturns.map(item => `
-                      <button class="history-detail-action history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" type="button" title="Xem/In phiếu trả ${escapeHistoryHtml(item.id)}">
-                        <i data-lucide="file-text"></i> Xem phiếu trả
-                      </button>
-                      <button class="history-detail-action history-action-delete history-return-cancel-btn" data-return-id="${escapeHistoryHtml(item.id)}" type="button" title="Hủy phiếu trả ${escapeHistoryHtml(item.id)}">
-                        <i data-lucide="ban"></i> Hủy phiếu trả
-                      </button>
-                    `).join('') : ''}
                     ${showDeleteBtn ? `
                       <button class="history-detail-action history-action-delete history-delete-btn" data-id="${escapeHistoryHtml(orderId)}" type="button">
                         <i data-lucide="trash-2"></i> Xóa
@@ -1248,8 +1226,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
       const canEditDraft = canManageHistoryDraft(order);
       const showDeleteBtn = canEditDraft;
       const showCancelBtn = order.status === 'settled' && ['admin', 'accounting'].includes(state.currentUser?.role);
-      const showReturnBtn = ['settled', 'partially_returned'].includes(order.status)
-        && ['admin', 'accounting'].includes(state.currentUser?.role);
       const activeOrderReturns = lookups.activeReturnsByOrderId.get(String(order.id)) || [];
       const showAmendBtn = order.status === 'settled'
         && ['admin', 'accounting'].includes(state.currentUser?.role)
@@ -1342,24 +1318,11 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
                     <i data-lucide="edit" style="width: 13px; height: 13px;"></i> Sửa
                   </button>
                 ` : ''}
-                ${showReturnBtn ? `
-                  <button class="btn btn-warning btn-sm flex items-center justify-center gap-1 history-return-btn" data-id="${order.id}" style="background: #f59e0b; border-color: #f59e0b; color: #fff;">
-                    <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Trả
-                  </button>
-                ` : ''}
                 ${showCancelBtn ? `
                   <button class="btn btn-danger btn-sm flex items-center justify-center gap-1 history-cancel-btn" data-id="${order.id}">
                     <i data-lucide="ban" style="width: 13px; height: 13px;"></i> Hủy
                   </button>
                 ` : ''}
-                ${['admin', 'accounting'].includes(state.currentUser?.role) ? activeOrderReturns.map(item => `
-                  <button class="btn btn-secondary btn-sm flex items-center justify-center gap-1 history-return-print-btn" data-return-id="${escapeHistoryHtml(item.id)}" title="Xem/In phiếu trả ${escapeHistoryHtml(item.id)}" aria-label="Xem/In phiếu trả ${escapeHistoryHtml(item.id)}">
-                    <i data-lucide="file-text" style="width: 13px; height: 13px;"></i> Xem phiếu
-                  </button>
-                  <button class="btn btn-danger btn-sm history-return-cancel-btn" data-return-id="${escapeHistoryHtml(item.id)}" title="Hủy phiếu trả ${escapeHistoryHtml(item.id)}" aria-label="Hủy phiếu trả ${escapeHistoryHtml(item.id)}">
-                    <i data-lucide="ban" style="width: 13px; height: 13px;"></i>
-                  </button>
-                `).join('') : ''}
               `}
             </div>
           </div>
@@ -1509,15 +1472,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     });
   });
 
-  document.querySelectorAll('.history-return-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const b = e.currentTarget;
-      const id = b.getAttribute('data-id');
-      openSalesReturnModal(id);
-    });
-  });
-
   document.querySelectorAll('.history-activity-btn').forEach(btn => {
     btn.addEventListener('click', () => globalThis.openOrderActivityModal?.(btn.dataset.id));
   });
@@ -1567,20 +1521,6 @@ export function renderHistoryOrders({ reuseFiltered = false } = {}) {
     btn.addEventListener('click', (e) => {
       const id = e.currentTarget.getAttribute('data-id');
       cancelOrderById(id);
-    });
-  });
-
-  document.querySelectorAll('.history-return-print-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const returnId = e.currentTarget.getAttribute('data-return-id');
-      const salesReturn = state.salesReturns.find(item => String(item.id) === String(returnId));
-      if (salesReturn) printReturnSlip(salesReturn);
-    });
-  });
-
-  document.querySelectorAll('.history-return-cancel-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      cancelSalesReturn(e.currentTarget.getAttribute('data-return-id'));
     });
   });
 
@@ -1807,336 +1747,6 @@ function loadDraftOrderIntoInvoice(order, isReadOnly = false, isCopy = false) {
   }
 }
 
-// --- PHÂN HỆ TRẢ HÀNG (SALES RETURN LOGIC) ---
-
-export function openSalesReturnModal(orderId) {
-  if (!['admin', 'accounting'].includes(state.currentUser?.role)) {
-    showToast('Chỉ Admin hoặc Kế toán được lập phiếu trả hàng.', 'danger');
-    return;
-  }
-  const order = state.savedOrders.find(o => String(o.id) === String(orderId));
-
-  if (!order) {
-    showToast('Không tìm thấy thông tin đơn hàng!', 'danger');
-    return;
-  }
-  
-  const modal = document.getElementById('sales-return-modal');
-  if (!modal) return;
-
-  document.getElementById('return-order-id').value = order.id;
-  document.getElementById('return-meta-order-id').innerText = order.id;
-  document.getElementById('return-meta-customer').innerText = order.customerName;
-  document.getElementById('return-meta-date').innerText = formatDateTime(order.date);
-  document.getElementById('return-meta-creator').innerText = state.currentUser ? state.currentUser.displayName : 'Administrator';
-  document.getElementById('return-reason-input').value = '';
-  pendingSalesReturnKey = globalThis.crypto.randomUUID();
-
-  const existingReturns = (state.salesReturns || []).filter(r => r.saleId === order.id && r.status !== 'cancelled');
-  
-  const returnedMap = {};
-  existingReturns.forEach(ret => {
-    (ret.items || []).forEach(item => {
-      const key = item.saleItemId || `${item.variantCode || item.productId || item.variantId}_${item.packagingName || item.packageType}`;
-      returnedMap[key] = (returnedMap[key] || 0) + (item.quantity || 0);
-    });
-  });
-
-  const tbody = document.getElementById('sales-return-items-body');
-  if (!tbody) return;
-
-  tbody.innerHTML = (order.items || []).map((item, idx) => {
-    const variantId = item.variantId || item.productId || '';
-    const variantCode = item.variantCode || item.variantCodeSnapshot || item.productCode || item.code || '';
-    const packagingName = item.packagingName || item.packagingNameSnapshot || item.package || '';
-    const specification = item.specificationSnapshot || item.weightOrVolumeSnapshot || [
-      packagingName,
-      item.weightOrVolume ?? item.packageWeight ?? '',
-      item.unitName || item.packageWeightUnit || ''
-    ].filter(Boolean).join(' ').trim();
-    const itemKey = item.id || `${variantCode || variantId}_${packagingName}`;
-    const soldQty = Number(item.quantity || 0);
-    const prevReturned = returnedMap[itemKey] || 0;
-    const maxReturnable = Math.max(0, soldQty - prevReturned);
-    const orderUnitPrice = Math.round(Math.max(0, Number(item.unitPrice ?? item.listPrice ?? item.price ?? 0)));
-    const refundableUnitPrice = orderUnitPrice;
-    const prodName = item.productName || (item.product && item.product.name) || item.name || 'Sản phẩm';
-
-    return `
-      <tr class="return-item-row" data-key="${itemKey}" data-sale-item-id="${item.id || ''}" data-product-id="${variantCode}" data-variant-id="${variantId}" data-variant-code="${variantCode}" data-product-name="${prodName}" data-package="${packagingName}" data-specification="${specification}" data-order-unit-price="${orderUnitPrice}" data-refund-unit-price="${refundableUnitPrice}" data-sold-qty="${soldQty}" data-prev-returned="${prevReturned}" data-max-returnable="${maxReturnable}" data-product-brand="${item.productBrand || item.brand || ''}" data-agency-brand="${item.agencyBrand || ''}" data-revenue-brand="${item.revenueBrand || ''}" data-revenue-company="${item.revenueCompany || order.companyId || ''}">
-        <td>${idx + 1}</td>
-        <td style="font-weight: 600; color: #fff;">${prodName}<br><small>${variantCode}</small></td>
-        <td>${specification || packagingName || 'Cái'}</td>
-        <td style="text-align: right;" title="Đơn giá đã lưu trên đơn hàng gốc">${formatCurrency(orderUnitPrice)}</td>
-        <td style="text-align: center; font-weight: 600;">${soldQty}</td>
-        <td style="text-align: center; color: var(--color-warning);">${prevReturned}</td>
-        <td style="text-align: center;">
-          <input type="number" class="form-control return-qty-input" min="0" max="${maxReturnable}" value="0" ${maxReturnable === 0 ? 'disabled' : ''} style="width: 70px; text-align: center; font-weight: 700; height: 32px; padding: 2px;">
-        </td>
-        <td style="text-align: center;">
-          <input type="number" class="form-control return-deduction-percent-input" min="0" max="100" step="0.01" value="0" ${maxReturnable === 0 ? 'disabled' : ''} aria-label="Phần trăm khấu trừ khi trả ${prodName}" style="width: 72px; text-align: center; font-weight: 700; height: 32px; padding: 2px;">
-        </td>
-        <td style="text-align: right; font-weight: 600; color: var(--color-primary);" class="return-refund-price-lbl">${formatCurrency(refundableUnitPrice)}</td>
-        <td style="text-align: right; font-weight: 700; color: #f59e0b;" class="return-subtotal-lbl">0 ₫</td>
-      </tr>
-    `;
-  }).join('');
-
-  const recalculateTotals = () => {
-    let grossReturnTotal = 0;
-    let totalDeduction = 0;
-    let totalRefund = 0;
-    document.querySelectorAll('.return-item-row').forEach(row => {
-      const refundableUnitPrice = parseFloat(row.getAttribute('data-refund-unit-price')) || 0;
-      const maxReturnable = parseFloat(row.getAttribute('data-max-returnable')) || 0;
-      
-      const qtyInput = row.querySelector('.return-qty-input');
-      const deductionInput = row.querySelector('.return-deduction-percent-input');
-      let qty = parseFloat(qtyInput.value) || 0;
-      let deductionPercent = parseFloat(deductionInput?.value) || 0;
-      if (qty < 0) { qty = 0; qtyInput.value = 0; }
-      if (qty > maxReturnable) {
-        showToast(`Số lượng trả không được vượt quá số lượng còn lại (${maxReturnable})!`, 'warning');
-        qty = maxReturnable;
-        qtyInput.value = maxReturnable;
-      }
-      if (deductionPercent < 0) { deductionPercent = 0; deductionInput.value = 0; }
-      if (deductionPercent > 100) {
-        showToast('Khấu trừ trả hàng phải nằm trong khoảng từ 0% đến 100%.', 'warning');
-        deductionPercent = 100;
-        deductionInput.value = 100;
-      }
-
-      const refundPrice = Math.round(refundableUnitPrice * (1 - deductionPercent / 100));
-      const grossSubtotal = Math.round(refundableUnitPrice * qty);
-      const subtotal = Math.round(refundableUnitPrice * qty * (1 - deductionPercent / 100));
-
-      row.querySelector('.return-refund-price-lbl').innerText = formatCurrency(refundPrice);
-      row.querySelector('.return-subtotal-lbl').innerText = formatCurrency(subtotal);
-
-      grossReturnTotal += grossSubtotal;
-      totalDeduction += grossSubtotal - subtotal;
-      totalRefund += subtotal;
-    });
-
-    const effectiveDeductionPercent = grossReturnTotal > 0
-      ? totalDeduction * 100 / grossReturnTotal
-      : 0;
-    const formattedDeductionPercent = effectiveDeductionPercent.toLocaleString('vi-VN', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    });
-    document.getElementById('return-gross-total-lbl').innerText = formatCurrency(grossReturnTotal);
-    document.getElementById('return-deduction-percent-lbl').innerText = `${formattedDeductionPercent}%`;
-    document.getElementById('return-deduction-amount-lbl').innerText = totalDeduction > 0
-      ? `-${formatCurrency(totalDeduction)}`
-      : formatCurrency(0);
-    document.getElementById('return-total-refund-lbl').innerText = formatCurrency(totalRefund);
-
-    const cust = order.customerId ? state.customers.find(c => c.id === order.customerId) : null;
-    const warningDiv = document.getElementById('return-excess-warning');
-    const excessAmtLbl = document.getElementById('return-excess-amount');
-    
-    if (cust && warningDiv && excessAmtLbl) {
-      const currentDebt = parseFloat(cust.debt || 0);
-      const debtAfter = currentDebt - totalRefund;
-      if (totalRefund > 0 && debtAfter < 0) {
-        warningDiv.style.display = 'block';
-        excessAmtLbl.innerText = formatCurrency(Math.abs(debtAfter));
-      } else {
-        warningDiv.style.display = 'none';
-      }
-    }
-  };
-
-  document.querySelectorAll('.return-qty-input, .return-deduction-percent-input').forEach(el => {
-    el.addEventListener('input', recalculateTotals);
-    el.addEventListener('change', recalculateTotals);
-  });
-
-  recalculateTotals();
-  modal.classList.add('active');
-}
-
-export async function processSalesReturnSubmit(e) {
-  e.preventDefault();
-  
-  const orderId = document.getElementById('return-order-id').value;
-  const reason = document.getElementById('return-reason-input').value.trim();
-  
-  const order = state.savedOrders.find(o => o.id === orderId);
-  if (!order) {
-    showToast('Không tìm thấy thông tin đơn hàng gốc!', 'danger');
-    return;
-  }
-
-  if (!reason) {
-    showToast('Vui lòng nhập lý do trả hàng!', 'warning');
-    return;
-  }
-
-  const returnItems = [];
-  let hasValidQty = false;
-  let validationError = false;
-
-  document.querySelectorAll('.return-item-row').forEach(row => {
-    const qty = parseFloat(row.querySelector('.return-qty-input').value) || 0;
-    const deductionPercent = parseFloat(row.querySelector('.return-deduction-percent-input')?.value) || 0;
-    const maxReturnable = parseFloat(row.getAttribute('data-max-returnable')) || 0;
-    const prodName = row.getAttribute('data-product-name');
-    
-    if (qty > maxReturnable) {
-      showToast(`Sản phẩm "${prodName}" có số lượng trả (${qty}) vượt quá giới hạn cho phép (${maxReturnable})!`, 'danger');
-      validationError = true;
-      return;
-    }
-    if (deductionPercent < 0 || deductionPercent > 100) {
-      showToast(`Khấu trừ của sản phẩm "${prodName}" phải nằm trong khoảng từ 0% đến 100%.`, 'danger');
-      validationError = true;
-      return;
-    }
-
-    if (qty > 0) {
-      hasValidQty = true;
-      returnItems.push({
-        saleItemId: row.getAttribute('data-sale-item-id'),
-        quantity: qty,
-        deductionPercent
-      });
-    }
-  });
-
-  if (validationError) return;
-
-  if (!hasValidQty) {
-    showToast('Vui lòng chọn ít nhất 1 sản phẩm có số lượng trả > 0!', 'warning');
-    return;
-  }
-
-  if (!pendingSalesReturnKey) pendingSalesReturnKey = globalThis.crypto.randomUUID();
-  const returnObj = {
-    saleId: order.id,
-    reason: reason,
-    paymentMethod: 'cash',
-    idempotencyKey: pendingSalesReturnKey
-  };
-  const returnResult = await dbRecordSalesReturn(returnObj, returnItems);
-  if (!returnResult?.return) return;
-  const persistedReturn = {
-    ...returnResult.return,
-    customerName: order.customerName,
-    creatorName: state.currentUser?.displayName || returnResult.return.createdBy
-  };
-  const existingIndex = state.salesReturns.findIndex(item => item.id === persistedReturn.id);
-  if (existingIndex === -1) state.salesReturns.unshift(persistedReturn);
-  else state.salesReturns[existingIndex] = persistedReturn;
-  order.status = returnResult.order_status;
-  order.returnedAmount = Number(returnResult.order_returned_amount || 0);
-  order.netRevenue = Number(returnResult.order_net_revenue || 0);
-  localStorage.setItem('billing_system_sales_returns', JSON.stringify(state.salesReturns));
-  cacheOrdersLocally(state.savedOrders);
-
-  // 4. Update Customer Debt, Total Return & Net Revenue
-  if (order.customerId) {
-    const cust = state.customers.find(c => c.id === order.customerId);
-    if (cust) {
-      const debtBefore = Number(cust.debt) || 0;
-      cust.debt = Number(returnResult.new_debt);
-      cust.totalReturn = Number(returnResult.new_total_return);
-      cust.netRevenue = Number(returnResult.new_net_revenue);
-
-      const localLedgerId = returnResult.debt_ledger_id || `return-${persistedReturn.id}`;
-      if (!cust.debtHistory) cust.debtHistory = [];
-      if (!returnResult.already_recorded && !cust.debtHistory.some(item => item.id === localLedgerId)) {
-        cust.debtHistory.push({
-          date: new Date().toISOString(),
-          type: 'return',
-          id: localLedgerId,
-          amount: Number(returnResult.debt_reduction || 0),
-          debtChange: -Number(returnResult.debt_reduction || 0),
-          returnTotalAmount: Number(returnResult.total_refund || 0),
-          returnDebtReductionAmount: Number(returnResult.debt_reduction || 0),
-          cashRefundAmount: Number(returnResult.cash_refund || 0),
-          debtBefore,
-          debtAfter: cust.debt,
-          salesReturnId: persistedReturn.id,
-          orderId: persistedReturn.saleId,
-          note: `Phiếu trả hàng ${persistedReturn.id} cho đơn ${order.id}: ${reason}`
-        });
-      }
-      cust.returnDocuments = [persistedReturn, ...(cust.returnDocuments || []).filter(item => item.id !== persistedReturn.id)];
-    }
-  }
-  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-
-  document.getElementById('sales-return-modal').classList.remove('active');
-  pendingSalesReturnKey = '';
-  renderAll();
-  showToast(`Đã tạo thành công phiếu trả hàng ${persistedReturn.id}!`, 'success');
-}
-
-export async function cancelSalesReturn(returnId) {
-  const ret = (state.salesReturns || []).find(r => r.id === returnId);
-  if (!ret || ret.status === 'cancelled') {
-    showToast('Phiếu trả hàng không tồn tại hoặc đã được hủy trước đó!', 'danger');
-    return;
-  }
-
-  const cancellationReason = prompt(`Nhập lý do hủy phiếu trả hàng [${returnId}]:`, 'Hủy theo yêu cầu nghiệp vụ');
-  if (cancellationReason === null) return;
-  if (cancellationReason.trim().length < 3) {
-    showToast('Lý do hủy phải có ít nhất 3 ký tự.', 'warning');
-    return;
-  }
-  if (!confirm(`Xác nhận hủy phiếu [${returnId}]? Database sẽ đảo công nợ, tiền hoàn, doanh số và hoa hồng.`)) return;
-
-  const order = state.savedOrders.find(o => o.id === ret.saleId);
-  const cancelResult = await dbCancelSalesReturn(ret.id, cancellationReason.trim());
-  if (!cancelResult) return;
-
-  ret.status = 'cancelled';
-  ret.cancelledAt = cancelResult.cancelled_at || new Date().toISOString();
-  ret.cancellationReason = cancelResult.cancellation_reason || cancellationReason.trim();
-
-  if (ret.customerId) {
-    const cust = state.customers.find(c => c.id === ret.customerId);
-    if (cust) {
-      const debtBefore = Number(cust.debt) || 0;
-      cust.debt = Number(cancelResult.new_debt);
-      cust.totalReturn = Number(cancelResult.new_total_return);
-      cust.netRevenue = Number(cancelResult.new_net_revenue);
-
-      if (!cancelResult.already_cancelled) {
-        if (!cust.debtHistory) cust.debtHistory = [];
-        cust.debtHistory.push({
-          id: `return-cancel-${ret.id}`,
-          date: new Date().toISOString(),
-          type: 'return_cancel',
-          transactionType: 'return_cancel',
-          amount: Number(ret.debtReductionAmount || 0),
-          debtBefore,
-          debtAfter: cust.debt,
-          salesReturnId: ret.id,
-          orderId: ret.saleId,
-          note: `Hủy phiếu trả hàng ${ret.id} của đơn ${ret.saleId}`
-        });
-      }
-      cust.returnDocuments = (cust.returnDocuments || []).map(item => item.id === ret.id ? { ...item, status: 'cancelled' } : item);
-    }
-  }
-
-  if (order) {
-    order.status = cancelResult.order_status;
-    order.returnedAmount = Number(cancelResult.order_returned_amount || 0);
-    order.netRevenue = Number(cancelResult.order_net_revenue || 0);
-  }
-  localStorage.setItem('billing_system_sales_returns', JSON.stringify(state.salesReturns));
-  cacheOrdersLocally(state.savedOrders);
-  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-  renderAll();
-  showToast(`Đã hủy phiếu trả hàng ${returnId} thành công!`, 'warning');
-}
-
 export function printReturnSlip(ret) {
   if (!ret) return;
 
@@ -2169,6 +1779,4 @@ export function printReturnSlip(ret) {
 }
 
 // Attach to window for inline HTML handlers
-window.openSalesReturnModal = openSalesReturnModal;
-window.cancelSalesReturn = cancelSalesReturn;
 window.printReturnSlip = printReturnSlip;

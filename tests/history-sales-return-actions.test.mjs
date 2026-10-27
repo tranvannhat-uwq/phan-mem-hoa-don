@@ -11,7 +11,7 @@ const lookupSource = history.slice(
   history.indexOf('function getHistoryCustomer')
 );
 
-test('return action buttons use every active return even when its date is outside the report window', () => {
+test('historical returns still protect order edits and contribute to the correct financial period', () => {
   assert.match(lookupSource, /const activeReturnsByOrderId = new Map\(\)/);
   assert.match(lookupSource, /const periodActiveReturnsByOrderId = new Map\(\)/);
 
@@ -25,7 +25,8 @@ test('return action buttons use every active return even when its date is outsid
   assert.match(history, /Array\.from\(lookups\.periodActiveReturnsByOrderId\.values\(\)\)\.flat\(\)/);
 });
 
-test('active return actions expose a clearly labelled view button', () => {
-  assert.match(history, /history-return-print-btn[^>]*title="Xem\/In phiếu trả/);
-  assert.match(history, /history-return-print-btn[^>]*aria-label="Xem\/In phiếu trả[^>]*>[\s\S]*Xem phiếu/);
+test('both history views omit return management actions and their handlers', () => {
+  assert.doesNotMatch(history, /history-return-(?:btn|print-btn|cancel-btn)|showReturnBtn/);
+  assert.doesNotMatch(history, /openSalesReturnModal|processSalesReturnSubmit|cancelSalesReturn/);
+  assert.match(history, /export function printReturnSlip/);
 });

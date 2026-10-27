@@ -12,6 +12,7 @@ const deductionMigration = read('migrations/0055_sales_return_deduction_percent.
 const unitPriceReturnMigration = read('migrations/0070_sales_return_order_unit_price.sql');
 const service = read('js/services/supabase.js');
 const history = read('js/components/history.js');
+const receiving = read('js/components/independent-returns.js');
 const markup = read('index.html');
 
 test('return RPC accepts business quantities and calculates canonical refund values', () => {
@@ -24,10 +25,7 @@ test('return RPC accepts business quantities and calculates canonical refund val
 });
 
 test('return deduction is per item, optional and calculated authoritatively', () => {
-  assert.match(markup, /Khấu trừ %/);
-  assert.match(history, /class="form-control return-deduction-percent-input"/);
-  assert.match(history, /deductionPercent = parseFloat/);
-  assert.match(history, /refundableUnitPrice \* qty \* \(1 - deductionPercent \/ 100\)/);
+  assert.match(receiving, /data-field="deductionPercent"/);
   assert.match(service, /deductionPercent: Number\(item\.deductionPercent \|\| 0\)/);
   assert.match(deductionMigration, /item_deduction_percent < 0 OR item_deduction_percent > 100/);
   assert.match(deductionMigration, /line_refund := round\(line_refund \* \(100 - item_deduction_percent\) \/ 100\)/);
@@ -38,11 +36,6 @@ test('return deduction is per item, optional and calculated authoritatively', ()
 });
 
 test('latest return rule starts from order unit price and applies no automatic order discount', () => {
-  assert.match(history, /refundableUnitPrice = orderUnitPrice/);
-  assert.doesNotMatch(
-    history.slice(history.indexOf('export function openSalesReturnModal'), history.indexOf('export async function processSalesReturnSubmit')),
-    /orderDiscountRatio|storedTotalPayable|calculatedSaleUnitPrice/
-  );
   assert.match(unitPriceReturnMigration, /item_cap := round\(GREATEST\(0, COALESCE\(order_item\.unit_price, 0\)\) \*/);
   assert.match(unitPriceReturnMigration, /IF new_order_returned > order_return_cap THEN/);
   assert.match(unitPriceReturnMigration, /COALESCE\(order_item\.unit_price, 0\),/);
@@ -84,24 +77,16 @@ test('cancel return appends debt, cashbook, revenue and commission reversals', (
 
 test('return flow has no inventory or production coupling', () => {
   const forbiddenSql = /public\.(?:finished_goods_stock|raw_materials|semi_finished|recipes|production_logs|inventory)/i;
-  const forbiddenFrontend = /(?:finishedGoodsStock|billing_system_finished_goods_stock|rawMaterials|productionLogs)/i;
   assert.doesNotMatch(migration, forbiddenSql);
-  const returnFlow = history.slice(history.indexOf('// --- PHÂN HỆ TRẢ HÀNG'), history.indexOf('// Attach to window for inline HTML handlers'));
-  assert.doesNotMatch(returnFlow, forbiddenFrontend);
 });
 
-test('frontend exposes return actions only to finance roles and uses canonical response', () => {
-  assert.match(history, /Chỉ Admin hoặc Kế toán được lập phiếu trả hàng/);
-  assert.match(history, /returnResult\?\.return/);
-  assert.match(history, /order\.status = returnResult\.order_status/);
-  assert.match(history, /cancelResult\.order_status/);
-  assert.match(history, /history-return-cancel-btn/);
-  assert.match(history, /history-return-print-btn/);
-  assert.match(history, /history-return-print-btn[^>]*aria-label="Xem\/In phiếu trả[^>]*>[\s\S]*Xem phiếu/);
-  assert.doesNotMatch(history, /history-return-print-btn[^>]*>[\s\S]{0,120}\$\{item\.id\}/);
-  assert.match(read('style.css'), /\.order-actions \.history-return-print-btn[\s\S]*overflow: hidden/);
-  assert.match(markup, /Giá hoàn mặc định bằng đơn giá gốc; chỉ giảm theo % khấu trừ do kế toán nhập/);
-  assert.doesNotMatch(markup, /class="form-control return-disc-type"/);
+test('return management is available on the separate receiving page', () => {
+  assert.doesNotMatch(history, /history-return-(?:btn|cancel-btn|print-btn)|dbRecordSalesReturn|dbCancelSalesReturn/);
+  assert.doesNotMatch(markup, /id="sales-return-(?:modal|form)"/);
+  assert.match(markup, /id="independent-return-form"/);
+  assert.match(receiving, /\['admin', 'accounting'\]\.includes\(state\.currentUser\?\.role\)/);
+  assert.match(receiving, /dbRecordIndependentReturn\(/);
+  assert.match(receiving, /dbCancelSalesReturn\(/);
 });
 
 test('direct writes and legacy return RPCs are closed', () => {
