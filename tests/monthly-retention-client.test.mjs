@@ -65,3 +65,41 @@ test('REST carries the verified epoch and ignores in-flight data after a new epo
   h.state.retentionEpoch=2;resolve(new Response('{}'));
   await assert.rejects(reading,/RETENTION_EPOCH_CHANGED/);
 });
+
+function committedDeleteHarness({jobState='completed',statusEpoch=1,writeError=null}={}) {
+  const calls=[],jobId='synthetic-job',hash='1'.repeat(64),cutoff='2026-09-01T00:00:00+07:00';
+  const result={verified:true,success:true,job_id:jobId,epoch:1,cutoff};
+  const h=harness({rpc:async name=>{
+    calls.push(name);
+    if(name==='rpc_execute_monthly_retention')return {data:writeError?null:result,error:writeError};
+    if(name==='rpc_retention_job')return {data:{job_id:jobId,state:jobState,backup_sha256:hash,cutoff,
+      completed_at:jobState==='completed'?'2026-10-27T14:00:00Z':null,result:jobState==='completed'?result:null},error:null};
+    if(name==='rpc_retention_status')return {data:{epoch:statusEpoch,cutoff:statusEpoch?cutoff:null},error:null};
+    throw new Error(`Unexpected ${name}`);
+  }});
+  return {h,calls,execute:()=>h.run(`dbExecuteMonthlyRetention('${jobId}','${hash}','XOA TRUOC 01/09/2026')`)};
+}
+
+test('a positive execute response cannot report success while the persisted job remains prepared',async()=>{
+  const {execute,calls}=committedDeleteHarness({jobState:'prepared'});
+  await assert.rejects(execute(),/Database chưa ghi nhận xóa hoàn tất/);
+  assert.deepEqual(calls,['rpc_execute_monthly_retention','rpc_retention_job']);
+});
+
+test('completed deletion also requires the persisted retention epoch and cutoff',async()=>{
+  const {execute}=committedDeleteHarness({statusEpoch:0});
+  await assert.rejects(execute(),/Chưa đối chiếu được mốc dữ liệu/);
+});
+
+test('a committed, verified job and matching control state allow success and clear old caches',async()=>{
+  const {execute,h,calls}=committedDeleteHarness();const result=await execute();
+  assert.equal(result.verified,true);assert.equal(h.state.retentionEpoch,1);
+  assert.deepEqual(calls,['rpc_execute_monthly_retention','rpc_retention_job','rpc_retention_status']);
+  assert.ok(!h.storage.has('billing_system_orders'));
+});
+
+test('a database delete error cannot fall through to a success readback',async()=>{
+  const {execute,calls}=committedDeleteHarness({writeError:{message:'DELETE requires a WHERE clause',code:'21000'}});
+  await assert.rejects(execute(),error=>error.message==='DELETE requires a WHERE clause');
+  assert.deepEqual(calls,['rpc_execute_monthly_retention']);
+});

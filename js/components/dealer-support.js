@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261027-retention-staged-v1';
+import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261027-retention-safe-delete-v1';
 
 const el = id => document.getElementById(`dealer-support-${id}`);
 const admin = () => state.currentUser?.role === 'admin';

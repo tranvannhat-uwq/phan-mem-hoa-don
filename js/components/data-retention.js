@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings, dbReleaseRetentionBackup, getRetentionSessionScope } from '../services/supabase.js?v=20261027-retention-staged-v1';
+import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings, dbReleaseRetentionBackup, getRetentionSessionScope } from '../services/supabase.js?v=20261027-retention-safe-delete-v1';
 import { encryptRetentionBackup, decryptRetentionBackup } from '../services/retention-backup.js';
 import { retentionConfirmation } from '../domain/data-retention.js';
 
@@ -135,7 +135,7 @@ export function setupRetentionSettings() {
     void dbReleaseRetentionBackup(prepared.job_id).catch(() => {});
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     el('password').value = ''; el('password-again').value = '';
-    message('Đã tạo file mã hóa. Chọn lại file vừa tải và nhập mật khẩu để kiểm tra. Lần chuẩn bị hết hạn sau 30 phút; có dữ liệu thay đổi phải làm lại.');
+    message('Đã tạo file mã hóa; chưa xóa dữ liệu. Chọn lại file vừa tải và nhập mật khẩu để kiểm tra. Lần chuẩn bị hết hạn sau 30 phút; có dữ liệu thay đổi phải làm lại.');
   }, 'prepare'));
   el('file').addEventListener('change', () => action(async () => {
     verified = false;
@@ -145,8 +145,8 @@ export function setupRetentionSettings() {
     const password = el('verify-password').value;
     try {
       await decryptRetentionBackup(await file.text(), password, { jobId: prepared.job_id, sha256: prepared.backup_sha256 });
-      verified = true; el('verification').textContent = 'Đã giải mã và đối chiếu SHA-256 thành công.';
-      message('File phục hồi khớp bản chuẩn bị. Kiểm tra phạm vi và nhập dòng xác nhận để mở nút xóa.');
+      verified = true; el('verification').textContent = 'File sao lưu đã giải mã và đối chiếu SHA-256 thành công. Chưa xóa dữ liệu.';
+      message('Đã xác minh file sao lưu; chưa xóa dữ liệu. Nhập dòng xác nhận và bấm Xóa chi tiết cũ và giữ số cuối kỳ để thực hiện xóa.');
     } finally { el('verify-password').value = ''; el('file').value = ''; }
   }));
   el('execute').addEventListener('click', () => action(async () => {
@@ -155,12 +155,13 @@ export function setupRetentionSettings() {
     uncertain = true; message('Đang dọn và đối soát trong một giao dịch. Giữ nguyên màn hình…'); controls();
     try {
       const result = await dbExecuteMonthlyRetention(prepared.job_id, prepared.backup_sha256, el('confirmation').value);
-      if (!result.verified) throw new Error('Chưa nhận được kết quả đối soát thành công.');
+      if (result.verified !== true) throw new Error('Chưa nhận được kết quả đối soát thành công.');
       uncertain = false; reset();
       message('Đã dọn và đối soát thành công. Đang tải lại ứng dụng…');
       window.location.reload();
     } catch (error) {
       // An HTTP error cannot prove that the transaction was rolled back.
+      el('verification').textContent = 'File sao lưu đã xác minh; thao tác xóa chưa được máy chủ xác nhận.';
       message(`${error.message || 'Mất phản hồi.'} Bấm “Kiểm tra kết quả” trước khi thao tác tiếp.`, true);
     }
   }));

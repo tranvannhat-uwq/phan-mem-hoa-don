@@ -155,3 +155,25 @@ test('0121 installation is additive, rolls back its rehearsal and rejects drifte
     assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM retention_backup_sessions')),0);
   }finally{await db.close();}
 });
+
+test('0122 removes the production safe-delete violation and still clears expired-epoch transport on purge',async()=>{
+  const {readFile}=await import('node:fs/promises');const db=await buildRetentionDatabase({maxVersion:121});
+  try {
+    const definition=()=>scalar(db,"SELECT prosrc AS value FROM pg_proc WHERE oid='rpc_execute_monthly_retention(uuid,text,text)'::regprocedure");
+    assert.match(await definition(),/DELETE FROM public\.retention_backup_sessions;/);
+    const source=await readFile(new URL('../migrations/0122_retention_scoped_transport_cleanup.sql',import.meta.url),'utf8');
+    await db.exec(source.replace(/COMMIT;\s*$/,'ROLLBACK;').replace(/\r?\n/g,'\r\n'));
+    assert.match(await definition(),/DELETE FROM public\.retention_backup_sessions;/);
+    await db.exec(source);
+    const updated=await definition();assert.match(updated,/DELETE FROM public\.retention_backup_sessions WHERE epoch<=job\.epoch_before;/);
+    for(const match of updated.matchAll(/DELETE\s+FROM\s+public\.[^;]+;/gi))assert.match(match[0],/\bWHERE\b/i,'Production rejects DELETE without a WHERE clause');
+    await maintenance(db);
+    const prepared=await scalar(db,'SELECT rpc_prepare_monthly_retention($1,false) AS value',[randomUUID()]);
+    await scalar(db,'SELECT rpc_start_retention_backup($1) AS value',[randomUUID()]);
+    const done=await scalar(db,'SELECT rpc_execute_monthly_retention($1,$2,$3) AS value',
+      [prepared.job_id,prepared.backup_sha256,retentionConfirmation(prepared.preview.cutoff)]);
+    assert.equal(done.verified,true);await db.exec('RESET ROLE');
+    assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM retention_backup_sessions')),0);
+    assert.equal(Number(await scalar(db,'SELECT epoch AS value FROM retention_control WHERE id')),1);
+  }finally{await db.close();}
+});

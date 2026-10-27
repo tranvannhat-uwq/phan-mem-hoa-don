@@ -2,15 +2,15 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-staged-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-staged-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261027-retention-safe-delete-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261027-retention-safe-delete-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-staged-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-staged-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-staged-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261027-retention-safe-delete-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261027-retention-safe-delete-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261027-retention-safe-delete-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261027-retention-staged-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261027-retention-safe-delete-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -109,9 +109,21 @@ export const dbRetentionJob = jobId => retentionRpc('rpc_retention_job', { p_job
 export const dbHoldRetentionWarnings = includeArchive => retentionRpc('rpc_hold_retention_warnings', { p_include_archive: includeArchive });
 export const dbRetentionReviewOrders = (offset = 0) => retentionRpc('rpc_retention_review_orders', { p_offset: offset, p_limit: 25 });
 export async function dbExecuteMonthlyRetention(jobId, backupSha256, confirmation) {
+  const scope = getRetentionSessionScope();
   const result = await retentionRpc('rpc_execute_monthly_retention', { p_job_id: jobId, p_backup_sha256: backupSha256, p_confirmation: confirmation });
-  await syncRetentionState();
-  return result;
+  if (result?.verified !== true || getRetentionSessionScope() !== scope) throw new Error('Chưa xác nhận được kết quả xóa. Hãy kiểm tra kết quả trên tài khoản đã thực hiện.');
+  const job = await dbRetentionJob(jobId);
+  if (getRetentionSessionScope() !== scope || job?.job_id !== jobId || job.state !== 'completed'
+    || !job.completed_at || job.backup_sha256 !== backupSha256 || job.result?.verified !== true
+    || !Number.isSafeInteger(job.result.epoch) || job.result.epoch < 1) {
+    throw new Error('Database chưa ghi nhận xóa hoàn tất. Chưa thể báo xóa thành công; hãy bấm Kiểm tra kết quả.');
+  }
+  const status = await syncRetentionState();
+  if (getRetentionSessionScope() !== scope || status.epoch < job.result.epoch
+    || !(Date.parse(status.cutoff) >= Date.parse(job.cutoff))) {
+    throw new Error('Chưa đối chiếu được mốc dữ liệu sau xóa. Hãy bấm Kiểm tra kết quả trước khi tiếp tục.');
+  }
+  return job.result;
 }
 export const dbRecordIndependentReturn = input => retentionRpc('rpc_record_independent_return', { p_input: input });
 export const dbListIndependentReturns = input => retentionRpc('rpc_list_independent_returns', { p_input: input });

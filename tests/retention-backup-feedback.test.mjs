@@ -24,6 +24,7 @@ function harness(prepare=async()=>{throw new Error('Synthetic server rejection')
     dbReleaseRetentionBackup:async()=>true,
     dbExecuteMonthlyRetention:async()=>{throw new Error('Deletion must never run in backup tests');},
     encryptRetentionBackup:async()=> 'synthetic encrypted payload',
+    decryptRetentionBackup:async()=>({payload:{}}),
     retentionConfirmation:()=> 'XOA TRUOC 01/09/2026',
     crypto:{randomUUID:()=> `synthetic-request-${++generated}`},Blob,URL:{createObjectURL:()=> 'blob:synthetic',revokeObjectURL(){}},
     setTimeout(){},console});
@@ -105,6 +106,19 @@ test('retry after a lost preparation response keeps its request key and leaves d
   assert.equal(h.node('execute').disabled,true);
   h.node('restart').handlers.click();await h.click();
   assert.notEqual(h.calls[2][0],h.calls[0][0]);
+});
+
+test('file verification and a subsequent rejected deletion cannot look like deletion success',async()=>{
+  const h=harness(async()=>({job_id:'synthetic-job',backup_text:'{}',backup_sha256:'synthetic-hash',
+    expires_at:'2099-01-01',preview:{cutoff:'2026-09-01T00:00:00+07:00',counts:{},blockers:[]}}));
+  h.node('password').value=h.node('password-again').value='Synthetic password';await h.click();
+  assert.match(h.node('prepare-status').textContent,/chưa xóa dữ liệu/);
+  h.node('file').files=[{size:10,text:async()=> 'synthetic encrypted file'}];
+  h.node('verify-password').value='Synthetic password';await h.node('file').handlers.change();
+  assert.match(h.node('verification').textContent,/Chưa xóa dữ liệu/);
+  h.node('confirmation').value='XOA TRUOC 01/09/2026';await h.node('execute').handlers.click();
+  assert.match(h.node('verification').textContent,/thao tác xóa chưa được máy chủ xác nhận/);
+  assert.equal(h.node('execute').disabled,true);assert.equal(h.node('recover').hidden,false);
 });
 
 test('skip keeps unrelated red blockers visible and cannot unlock deletion',async()=>{

@@ -1,4 +1,4 @@
--- Read-only production audit for migrations through 0121.
+-- Read-only production audit for migrations through 0122.
 -- Run the whole file in the intended Supabase project's SQL Editor as owner.
 -- No prepare/execute/maintenance/configuration mutation RPC is invoked.
 -- Results contain catalog metadata and aggregate counts only.
@@ -13,9 +13,9 @@ SELECT pg_advisory_xact_lock_shared(hashtextextended('billing-monthly-retention'
 SELECT jsonb_build_object(
   'checked_at', now(), 'read_only', current_setting('transaction_read_only'),
   'versions', (SELECT jsonb_agg(version ORDER BY version) FROM public.schema_migrations
-    WHERE version BETWEEN '0106' AND '0121'),
+    WHERE version BETWEEN '0106' AND '0122'),
   'missing_versions', (SELECT COALESCE(jsonb_agg(lpad(v::text,4,'0')), '[]'::jsonb)
-    FROM generate_series(106,121) AS v
+    FROM generate_series(106,122) AS v
     WHERE NOT EXISTS(SELECT 1 FROM public.schema_migrations m WHERE m.version=lpad(v::text,4,'0'))),
   'customers', (SELECT count(*) FROM public.customers),
   'orders', (SELECT count(*) FROM public.orders),
@@ -80,7 +80,7 @@ WITH expected(signature,body_md5,security_definer,volatility,settings,authentica
     ('rpc_cancel_sales_return(text,text)', '930b33263e25d944043eb6176e6f8b90', true, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_dealer_support_history(text,integer,integer)', 'cb2e1230b1458ef28aebb62328443ab0', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_dealer_support_products(text,integer,integer)', 'fb87721b43dbd81465b77af1e0e02053', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
-    ('rpc_execute_monthly_retention(uuid,text,text)', 'd367de815798b2270a9e67fe62306e1d', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
+    ('rpc_execute_monthly_retention(uuid,text,text)', '635c30733476fbc110e2786a506e10fb', true, 'v', ARRAY['search_path=pg_catalog, public','statement_timeout=60s']::text[], true, false),
     ('rpc_get_cashbook_window(timestamp with time zone,timestamp with time zone)', 'de71a4700276c24f80ab48eb09c8ee8c', false, 'v', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_get_employee_business_report(jsonb)', '93a9bff8d81f193da0b41dc8953f5384', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
     ('rpc_get_phase5_dashboard(jsonb)', 'c30e8597e3f8103bb618f6d94dad1be4', true, 's', ARRAY['search_path=pg_catalog, public']::text[], true, false),
