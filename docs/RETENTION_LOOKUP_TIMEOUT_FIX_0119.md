@@ -45,3 +45,11 @@ Chạy toàn bộ migration 0119 rồi audit READ ONLY
 Migration kiểm tra hash các hàm 0118 trước khi cập nhật; schema khác phải dừng.
 Chức năng giữ có thể mất vài giây; Admin bấm lại nút giữ trên web sau cập nhật.
 Việc tạo sao lưu và việc xác nhận xóa vẫn là những thao tác riêng của Admin.
+
+Đã cài production và kiểm tra lại lúc **19:08:39 ngày 27/10/2026 UTC+7**:
+đủ 0106–0119, **63/63** hợp đồng hàm khớp, quyền ứng dụng/trigger đúng,
+0 lệch công nợ khách/NCC và 0 bút toán sai. Lookup READ ONLY của 4 đơn/8 dòng
+hàng mất **5.073 ms**. Có 0 dòng giữ, 0 job xóa, epoch 0 và cutoff null sau
+diễn tập/triển khai; chưa thực hiện hold hoặc purge có commit trên dữ liệu thật.
+Chứng cứ: `outputs/retention-review/lookup-fix-production-verification.json`
+và ảnh cùng tên `.png`; không đưa dữ liệu chứng từ vào Git.
