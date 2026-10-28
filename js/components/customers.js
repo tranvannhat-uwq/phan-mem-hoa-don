@@ -1,24 +1,26 @@
 import { state } from '../state.js';
+import { createListPagination } from './list-pagination.js?v=20261028-project-list-pagination-v1';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
-import { renderAll } from '../main.js?v=20261028-customer-detail-loading-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261028-customer-detail-loading-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261028-customer-detail-loading-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261028-project-list-pagination-v1';
+import { renderAll } from '../main.js?v=20261028-project-list-pagination-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261028-project-list-pagination-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261028-project-list-pagination-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261028-customer-detail-loading-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261028-customer-detail-loading-v1';
+} from '../domain/order-financials.js?v=20261028-project-list-pagination-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261028-project-list-pagination-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261028-customer-detail-loading-v1';
-import { renderDealerSupportHistory } from './dealer-support.js?v=20261028-customer-detail-loading-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-project-list-pagination-v1';
+import { renderDealerSupportHistory } from './dealer-support.js?v=20261028-project-list-pagination-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
 let customerDetailRequest = 0;
+const customerDebtHistoryPager = createListPagination('customer-debt-history-pagination');
 
 const selectedCustomerIdsForExport = new Set();
 let activeExportOrders = null;
@@ -3822,6 +3824,8 @@ export async function openCustomerDetailModal(index) {
   modal.dataset.customerId = customerId;
   renderCustomerDetailSummary(cust, cloudActive ? 'Đang tải...' : '');
   const historyBody = document.getElementById('detail-debt-history-body');
+  customerDebtHistoryPager.read([customerId, customerDebtAdjustmentsHidden]);
+  customerDebtHistoryPager.render(0, () => {}, { busy: true });
   if (historyBody) {
     historyBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
   }
@@ -3840,6 +3844,7 @@ export async function openCustomerDetailModal(index) {
 
   const refreshedCustomer = financialResult.status === 'fulfilled' && financialResult.value;
   if (cloudActive && !refreshedCustomer) {
+    customerDebtHistoryPager.render(0, () => {}, { error: true });
     renderCustomerDetailSummary(cust, 'Chưa tải được');
     if (historyBody) {
       historyBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--color-danger);">Không thể tải công nợ. Vui lòng đóng và mở lại thông tin khách hàng để thử lại.</td></tr>';
@@ -3850,8 +3855,12 @@ export async function openCustomerDetailModal(index) {
   const revertibleOrderAmendmentIds = new Set(amendmentsResult.status === 'fulfilled'
     ? amendmentsResult.value : []);
   renderCustomerDetailSummary(cust);
+  renderCustomerDebtHistory(cust, canRevertOrderAmendments, revertibleOrderAmendmentIds);
+}
 
+function renderCustomerDebtHistory(cust, canRevertOrderAmendments, revertibleOrderAmendmentIds) {
   // Vẽ danh sách lịch sử biến động công nợ
+  const historyBody = document.getElementById('detail-debt-history-body');
   if (historyBody) {
     const returnHistory = withCustomerReturnDocuments(cust.debtHistory || [],
       cust.returnDocuments || state.salesReturns || [], cust.id);
@@ -3862,6 +3871,9 @@ export async function openCustomerDetailModal(index) {
     // Hiển thị mới → cũ theo thứ tự ghi sổ bất biến. Ngày/giờ trong
     // cột bên dưới vẫn là ngày chứng từ do người dùng chọn.
     const sortedHistory = history.reverse();
+    const visibleHistory = customerDebtHistoryPager.slice(sortedHistory,
+      [String(cust.id), customerDebtAdjustmentsHidden],
+      () => renderCustomerDebtHistory(cust, canRevertOrderAmendments, revertibleOrderAmendmentIds));
     
     if (sortedHistory.length === 0) {
       historyBody.innerHTML = `
@@ -3872,7 +3884,7 @@ export async function openCustomerDetailModal(index) {
         </tr>
       `;
     } else {
-      historyBody.innerHTML = sortedHistory.map(h => {
+      historyBody.innerHTML = visibleHistory.map(h => {
         let typeBadge = '';
         let amountText = '';
         let debtBefore = 0;

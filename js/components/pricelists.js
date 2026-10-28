@@ -7,9 +7,9 @@ import {
   dbDeletePriceListItem,
   invalidateAuthorizedPricingRevision,
   persistAuthorizedPricingCache
-} from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
-import { renderAll } from '../main.js?v=20261028-customer-detail-loading-v1';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20261028-customer-detail-loading-v1';
+} from '../services/supabase.js?v=20261028-project-list-pagination-v1';
+import { renderAll } from '../main.js?v=20261028-project-list-pagination-v1';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20261028-project-list-pagination-v1';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -20,9 +20,12 @@ import {
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
-} from '../domain/pricing.js?v=20261028-customer-detail-loading-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-customer-detail-loading-v1';
+} from '../domain/pricing.js?v=20261028-project-list-pagination-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-project-list-pagination-v1';
 
+import { createListPagination } from './list-pagination.js?v=20261028-project-list-pagination-v1';
+
+const priceMatrixPager = createListPagination('pricelists-pagination');
 const pendingChanges = new Map();
 const pendingDeletes = new Set();
 const PRICE_MATRIX_FIXED_HEADERS = ['Mã SKU', 'Tên sản phẩm', 'Hãng sơn', 'Quy cách'];
@@ -284,6 +287,10 @@ export function renderPricelistsTable() {
 
   const products = getFilteredMatrixProducts();
   const effectivePriceItems = buildEffectivePriceItems();
+  const query = ['price-matrix-product-search', 'price-matrix-brand-filter', 'price-matrix-package-filter', 'price-matrix-group-filter']
+    .map(id => document.getElementById(id)?.value || '');
+  query.push(...selectedLists.map(list => list.id));
+  const visibleProducts = priceMatrixPager.slice(selectedLists.length ? products : [], query, renderPricelistsTable);
 
   if (!selectedLists.length) {
     body.innerHTML = '<tr><td colspan="4" class="empty-table-cell">Chọn ít nhất một bảng giá để hiển thị.</td></tr>';
@@ -294,7 +301,7 @@ export function renderPricelistsTable() {
     return;
   }
 
-  body.innerHTML = products.map(product => `
+  body.innerHTML = visibleProducts.map(product => `
     <tr>
       <td class="sticky-col sticky-code sku-code">${product.code}</td>
       <td class="sticky-col sticky-name" title="${product.name}">${product.name}</td>

@@ -1,7 +1,8 @@
 import { state } from '../state.js';
+import { createListPagination } from './list-pagination.js?v=20261028-project-list-pagination-v1';
 import { formatCurrency, safeCreateIcons, formatDateTime, getUserDisplayName, getManagerDisplayName, getCustomerName, getProvinceNameByCode, showToast } from '../utils.js';
-import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
-import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261028-customer-detail-loading-v1';
+import { dbFetchPhase5Report, dbFetchEmployeeBusinessReport } from '../services/supabase.js?v=20261028-project-list-pagination-v1';
+import { buildCustomerDebtDisplayHistory, getCustomerDebtBusinessDate, getCustomerDebtPostingDate } from '../domain/customer-debt.js?v=20261028-project-list-pagination-v1';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 let employeeBusinessChart = null;
@@ -14,6 +15,13 @@ let employeeBusinessDetailRequestId = 0;
 const EMPLOYEE_BUSINESS_CACHE_TTL_MS = 30_000;
 const employeeBusinessReportCache = new Map();
 const employeeBusinessReportInFlight = new Map();
+const debtReportPager = createListPagination('report-debt-pagination');
+const returnsReportPager = createListPagination('report-return-pagination');
+const kpiReportPager = createListPagination('report-kpi-pagination');
+const debtHistoryPager = createListPagination('debt-history-pagination');
+let debtReportRequest = 0;
+let returnsReportRequest = 0;
+let kpiReportRequest = 0;
 
 export function invalidateEmployeeBusinessReportCache() {
   employeeBusinessRequestId += 1; employeeBusinessDetailRequestId += 1;
@@ -117,15 +125,30 @@ function renderActiveReportSubtab(subtab) {
 export async function renderDebtReport() {
   const tbody = document.getElementById('report-debt-table-body');
   if (!tbody) return;
+  const request = ++debtReportRequest;
+  const user = state.currentUser;
+  const role = user?.role;
+  const epoch = state.retentionEpoch;
+  const search = document.getElementById('report-debt-search')?.value || '';
+  const query = [search, user?.id, role, epoch];
+  const page = debtReportPager.read(query);
+  const current = () => request === debtReportRequest && user === state.currentUser
+    && role === state.currentUser?.role && epoch === state.retentionEpoch;
+  debtReportPager.render(0, renderDebtReport, { busy: true });
   tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem">Đang tải công nợ từ máy chủ...</td></tr>';
   try {
-    const report = await dbFetchPhase5Report({ type: 'debt', search: document.getElementById('report-debt-search')?.value || '', limit: 200, offset: 0 });
+    const report = await dbFetchPhase5Report({ type: 'debt', search, limit: page.limit, offset: page.offset });
+    if (!current()) return;
+    debtReportPager.render(report.total, renderDebtReport);
+    if (page.offset !== debtReportPager.read(query).offset) return renderDebtReport();
     document.getElementById('report-debt-total-stat').innerText = formatCurrency(report.summary?.total_debt);
     document.getElementById('report-debt-overdue-stat').innerText = formatCurrency(report.summary?.overdue_debt);
     tbody.innerHTML = report.rows?.length ? report.rows.map(row => `<tr><td style="font-weight:600">${escapeHtml(row.code)}</td><td style="font-weight:600">${escapeHtml(row.name)}</td><td>${escapeHtml(row.phone || '---')}</td><td>${escapeHtml(getManagerDisplayName(row.managed_by, 'Chưa bàn giao', state.users))}</td><td>${row.last_order_at ? formatDateTime(row.last_order_at) : 'Chưa có'}</td><td>${row.last_payment_at ? formatDateTime(row.last_payment_at) : 'Chưa có'}</td><td style="text-align:right;font-weight:700;color:${Number(row.debt) > 0 ? 'var(--color-danger)' : 'var(--color-success)'}">${formatCurrency(row.debt)}</td><td style="text-align:center"><span title="Số liệu từ ledger máy chủ">Đã đối soát</span></td></tr>`).join('')
       : '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu công nợ</td></tr>';
     safeCreateIcons();
   } catch (error) {
+    if (!current()) return;
+    debtReportPager.render(0, renderDebtReport, { error: true });
     console.error('Debt report RPC error:', error);
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được báo cáo công nợ. Kiểm tra migration 0012.</td></tr>';
   }
@@ -212,6 +235,7 @@ window.viewCustomerDebtHistory = function(customerId) {
 
   const history = buildCustomerDebtDisplayHistory(cust.debtHistory || [], cust.debt)
     .reverse();
+  const visibleHistory = debtHistoryPager.slice(history, customerId, () => window.viewCustomerDebtHistory(customerId));
   if (history.length === 0) {
     modalBody.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Khách hàng chưa phát sinh biến động công nợ</div>`;
   } else {
@@ -227,7 +251,7 @@ window.viewCustomerDebtHistory = function(customerId) {
           </tr>
         </thead>
         <tbody>
-          ${history.map(item => {
+          ${visibleHistory.map(item => {
             const isCharge = item.type === 'charge' || item.type === 'order';
             const isPay = item.type === 'payment';
             const isOrderAmendment = item.transactionType === 'order_amend';
@@ -279,6 +303,15 @@ export async function renderReturnsReport() {
   const thead = document.getElementById('report-return-table-head');
   if (!tbody || !thead) return;
   const mode = document.getElementById('report-return-filter')?.value || 'product';
+  const request = ++returnsReportRequest;
+  const user = state.currentUser;
+  const role = user?.role;
+  const epoch = state.retentionEpoch;
+  const query = [mode, user?.id, role, epoch];
+  const page = returnsReportPager.read(query);
+  const current = () => request === returnsReportRequest && user === state.currentUser
+    && role === state.currentUser?.role && epoch === state.retentionEpoch;
+  returnsReportPager.render(0, renderReturnsReport, { busy: true });
   thead.innerHTML = mode === 'product'
     ? '<tr><th>Mã SKU</th><th>Tên sản phẩm</th><th style="text-align:right">Số lượng trả</th><th style="text-align:right">Giá trị trả</th></tr>'
     : mode === 'customer'
@@ -286,7 +319,10 @@ export async function renderReturnsReport() {
       : '<tr><th>Nhân viên bán hàng</th><th style="text-align:right">Số lượt trả</th><th style="text-align:right">Giá trị trừ doanh số</th></tr>';
   tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem">Đang tải trả hàng từ máy chủ...</td></tr>';
   try {
-    const report = await dbFetchPhase5Report({ type: 'returns', mode, limit: 200, offset: 0 });
+    const report = await dbFetchPhase5Report({ type: 'returns', mode, limit: page.limit, offset: page.offset });
+    if (!current()) return;
+    returnsReportPager.render(report.total, renderReturnsReport);
+    if (page.offset !== returnsReportPager.read(query).offset) return renderReturnsReport();
     tbody.innerHTML = report.rows?.length ? report.rows.map(row => mode === 'product'
       ? `<tr><td style="font-weight:600">${escapeHtml(row.code)}</td><td>${escapeHtml(row.name)}</td><td style="text-align:right">${Number(row.quantity || 0)}</td><td style="text-align:right;font-weight:700;color:var(--color-danger)">${formatCurrency(row.amount)}</td></tr>`
       : mode === 'customer'
@@ -294,6 +330,8 @@ export async function renderReturnsReport() {
         : `<tr><td style="font-weight:600">${escapeHtml(getUserDisplayName(row.key, 'Chưa phân công', state.users))}</td><td style="text-align:right">${Number(row.count || 0)}</td><td style="text-align:right;font-weight:700;color:var(--color-danger)">${formatCurrency(row.amount)}</td></tr>`).join('')
       : '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu trả hàng</td></tr>';
   } catch (error) {
+    if (!current()) return;
+    returnsReportPager.render(0, renderReturnsReport, { error: true });
     console.error('Returns report RPC error:', error);
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được báo cáo trả hàng. Kiểm tra migration 0012.</td></tr>';
   }
@@ -431,7 +469,7 @@ function renderEmployeeBusinessRows(report) {
   const from = total ? employeeBusinessPage * 25 + 1 : 0;
   const to = Math.min((employeeBusinessPage + 1) * 25, total);
   const pager = document.getElementById('employee-business-page-label');
-  if (pager) pager.textContent = total ? `${from}–${to} / ${total} nhân viên` : '0 nhân viên';
+  if (pager) pager.textContent = `Trang ${employeeBusinessPage + 1}/${Math.max(1, Math.ceil(total / 25))} · ${total ? `${from}–${to} / ${total} nhân viên` : '0 nhân viên'}`;
   const previous = document.getElementById('employee-business-prev');
   const next = document.getElementById('employee-business-next');
   if (previous) previous.disabled = employeeBusinessPage === 0;
@@ -456,9 +494,16 @@ export async function renderEmployeeBusinessReport({ force = false } = {}) {
       include_series: needsOverview
     };
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem">Đang đối soát số liệu từ máy chủ...</td></tr>';
+    document.getElementById('employee-business-prev')?.setAttribute('disabled', '');
+    document.getElementById('employee-business-next')?.setAttribute('disabled', '');
     const response = await fetchEmployeeBusinessReport(filters, { force });
     if (requestId !== employeeBusinessRequestId) return;
     if (needsOverview) employeeBusinessOverview = { key: overviewKey, summary: response.summary, series: response.series, cachedAt: Date.now() };
+    const lastPage = Math.max(0, Math.ceil(Number(response.total || 0) / 25) - 1);
+    if (employeeBusinessPage > lastPage) {
+      employeeBusinessPage = lastPage;
+      return renderEmployeeBusinessReport();
+    }
     const report = needsOverview ? response : { ...response, summary: employeeBusinessOverview.summary, series: employeeBusinessOverview.series };
     employeeBusinessLastReport = report;
     setEmployeeBusinessSummary(report.summary);
@@ -466,6 +511,7 @@ export async function renderEmployeeBusinessReport({ force = false } = {}) {
     renderEmployeeBusinessRows(report);
     safeCreateIcons();
   } catch (error) {
+    if (requestId !== employeeBusinessRequestId) return;
     console.error('Employee business report RPC error:', error);
     tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--color-danger)">${escapeHtml(error.message || 'Không tải được báo cáo nghiệp vụ.')}</td></tr>`;
   }
@@ -531,10 +577,19 @@ function closeEmployeeBusinessDetail() {
 async function exportEmployeeBusinessReport() {
   if (!globalThis.XLSX) return;
   try {
-    const report = await fetchEmployeeBusinessReport(employeeBusinessFilters({
+    const filters = employeeBusinessFilters({
       limit: 100, offset: 0, includeSummary: false, includeSeries: false
-    }), { force: true });
-    const rows = (report.rows || []).map(row => ({
+    });
+    const allRows = [];
+    let total;
+    do {
+      const report = await fetchEmployeeBusinessReport({ ...filters, offset: allRows.length }, { force: true });
+      const pageRows = report.rows || [];
+      total = Number(report.total || 0);
+      if (!pageRows.length && allRows.length < total) throw new Error('Chưa tải đủ báo cáo để xuất Excel. Vui lòng thử lại.');
+      allRows.push(...pageRows);
+    } while (allRows.length < total);
+    const rows = allRows.map(row => ({
       'Nhân viên': row.employee_name, 'Mã tài khoản': row.employee_code, 'Số đơn': Number(row.order_count || 0),
       'Số lượng SP': Number(row.sold_quantity || 0), 'Doanh số gốc': Number(row.gross_sales || 0),
       'Chiết khấu': Number(row.discount_amount || 0), 'Doanh số ròng': Number(row.net_sales || 0),
@@ -676,21 +731,33 @@ function renderReturnsReportLegacy() {
 export async function renderKpiReport() {
   const tbody = document.getElementById('report-kpi-table-body');
   if (!tbody) return;
+  const request = ++kpiReportRequest;
+  const user = state.currentUser;
+  kpiReportPager.render(0, renderKpiReport, { busy: true });
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem">Đang tính KPI trên máy chủ...</td></tr>';
   try {
     const report = await dbFetchPhase5Report({ type: 'kpi' });
-    const summary = report.summary || {};
-    document.getElementById('kpi-gross-sales-stat').innerText = formatCurrency(summary.gross_sales);
-    document.getElementById('kpi-net-sales-stat').innerText = formatCurrency(summary.net_sales);
-    document.getElementById('kpi-cash-collected-stat').innerText = formatCurrency(summary.collected);
-    document.getElementById('kpi-new-debt-stat').innerText = formatCurrency(summary.debt_issued);
-    document.getElementById('kpi-debt-collected-stat').innerText = formatCurrency(summary.debt_collected);
-    tbody.innerHTML = report.kpi_by_employee?.length ? report.kpi_by_employee.map(row => `<tr><td style="font-weight:600">${escapeHtml(getUserDisplayName(row.key, 'Chưa phân công', state.users))}</td><td style="text-align:right">${formatCurrency(row.gross_sales)}</td><td style="text-align:right;color:var(--color-danger)">${formatCurrency(row.returns)}</td><td style="text-align:right;font-weight:700;color:var(--color-primary)">${formatCurrency(row.net_sales)}</td><td style="text-align:right;color:var(--color-success)">${formatCurrency(row.collected)}</td><td style="text-align:right">${formatCurrency(row.debt_issued)}</td></tr>`).join('')
-      : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu KPI</td></tr>';
+    if (request !== kpiReportRequest || user !== state.currentUser) return;
+    renderKpiReportPage(report);
   } catch (error) {
+    if (request !== kpiReportRequest || user !== state.currentUser) return;
+    kpiReportPager.render(0, renderKpiReport, { error: true });
     console.error('KPI report RPC error:', error);
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được KPI. Kiểm tra migration 0012.</td></tr>';
   }
+}
+
+function renderKpiReportPage(report) {
+  const tbody = document.getElementById('report-kpi-table-body');
+  const visibleRows = kpiReportPager.slice(report.kpi_by_employee || [], '', () => renderKpiReportPage(report));
+  const summary = report.summary || {};
+  document.getElementById('kpi-gross-sales-stat').innerText = formatCurrency(summary.gross_sales);
+  document.getElementById('kpi-net-sales-stat').innerText = formatCurrency(summary.net_sales);
+  document.getElementById('kpi-cash-collected-stat').innerText = formatCurrency(summary.collected);
+  document.getElementById('kpi-new-debt-stat').innerText = formatCurrency(summary.debt_issued);
+  document.getElementById('kpi-debt-collected-stat').innerText = formatCurrency(summary.debt_collected);
+  tbody.innerHTML = visibleRows.length ? visibleRows.map(row => `<tr><td style="font-weight:600">${escapeHtml(getUserDisplayName(row.key, 'Chưa phân công', state.users))}</td><td style="text-align:right">${formatCurrency(row.gross_sales)}</td><td style="text-align:right;color:var(--color-danger)">${formatCurrency(row.returns)}</td><td style="text-align:right;font-weight:700;color:var(--color-primary)">${formatCurrency(row.net_sales)}</td><td style="text-align:right;color:var(--color-success)">${formatCurrency(row.collected)}</td><td style="text-align:right">${formatCurrency(row.debt_issued)}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">Không có dữ liệu KPI</td></tr>';
 }
 
 function renderKpiReportLegacy() {

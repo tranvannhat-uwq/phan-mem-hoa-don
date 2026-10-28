@@ -12888,3 +12888,33 @@ body.return-modal-open { overflow: hidden; }
 #dealer-support-settings .table-container { max-height: 360px; overflow: auto; }
 #dealer-support-search { flex: 1; min-width: 170px; }
 .dealer-support-history .table { min-width: 690px; }
+/* List controls stay outside the horizontal table scroller on narrow screens. */
+.list-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .75rem;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--border-color);
+  font-size: .85rem;
+}
+.list-pagination-summary { color: var(--text-secondary); }
+.list-pagination-controls,
+.list-pagination-controls label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.list-pagination-controls .form-control {
+  width: 76px;
+  min-width: 0;
+  height: 34px;
+  padding: .3rem .45rem;
+}
+@media (max-width: 640px) {
+  .list-pagination-controls { width: 100%; gap: .4rem; }
+  .list-pagination-controls .btn { padding: .4rem .55rem; }
+}

@@ -1,18 +1,21 @@
 import { state } from '../state.js';
+import { createListPagination } from './list-pagination.js?v=20261028-project-list-pagination-v1';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261028-customer-detail-loading-v1';
-import { renderAll, switchTab } from '../main.js?v=20261028-customer-detail-loading-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261028-customer-detail-loading-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261028-project-list-pagination-v1';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261028-project-list-pagination-v1';
+import { renderAll, switchTab } from '../main.js?v=20261028-project-list-pagination-v1';
+import { populateManagedByDropdown } from './customers.js?v=20261028-project-list-pagination-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261028-customer-detail-loading-v1';
-import { resetInventoryPanel } from './inventory.js?v=20261028-customer-detail-loading-v1';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261028-customer-detail-loading-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-project-list-pagination-v1';
+import { resetInventoryPanel } from './inventory.js?v=20261028-project-list-pagination-v1';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261028-project-list-pagination-v1';
+
+const usersPager = createListPagination('users-pagination');
 
 function normalizeUserSearch(value) {
   return String(value || '')
@@ -38,6 +41,7 @@ export function renderUsersTable() {
     return uname.includes(searchVal) || dname.includes(searchVal);
   });
   
+  const visibleUsers = usersPager.slice(filtered, searchVal, renderUsersTable);
   if (filtered.length === 0) {
     tableBody.innerHTML = `
       <tr>
@@ -49,7 +53,7 @@ export function renderUsersTable() {
     return;
   }
   
-  tableBody.innerHTML = filtered.map((u, index) => {
+  tableBody.innerHTML = visibleUsers.map((u, index) => {
     const roleText = u.isExternal ? 'Kinh doanh ngoài' : 
                      (u.role === 'admin' ? 'Admin (Toàn quyền)' : 
                       u.role === 'accounting' ? 'Kế toán' : 'Sale (Kinh doanh)');
@@ -61,7 +65,7 @@ export function renderUsersTable() {
     const dName = u.displayName || u.display_name || u.name || u.username;
     return `
       <tr>
-        <td style="text-align: center; color: var(--text-muted);">${index + 1}</td>
+        <td style="text-align: center; color: var(--text-muted);">${usersPager.read(searchVal).offset + index + 1}</td>
         <td style="font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${u.username}">${u.username}</td>
         <td>${dName}</td>
         <td>

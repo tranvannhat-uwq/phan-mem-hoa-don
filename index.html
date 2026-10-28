@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261028-customer-detail-loading-v1">
+  <link rel="stylesheet" href="style.css?v=20261028-project-list-pagination-v1">
 </head>
 <body>
 
@@ -1995,6 +1995,7 @@
               </tbody>
             </table>
           </div>
+          <div id="pricelists-pagination"></div>
         </div>
       </section>
 
@@ -2033,6 +2034,7 @@
               </tbody>
             </table>
           </div>
+          <div id="brands-pagination"></div>
         </div>
       </section>
 
@@ -2080,6 +2082,7 @@
               </tbody>
             </table>
           </div>
+          <div id="users-pagination"></div>
         </div>
       </section>
 
@@ -2289,6 +2292,7 @@
                 </tbody>
               </table>
             </div>
+            <div id="report-debt-pagination"></div>
           </div>
 
           <!-- Subtab 2: Báo cáo Trả hàng -->
@@ -2317,6 +2321,7 @@
                 </tbody>
               </table>
             </div>
+            <div id="report-return-pagination"></div>
           </div>
 
           <!-- Subtab 3: Employee business report (server-authoritative) -->
@@ -2404,6 +2409,7 @@
                 </tbody>
               </table>
             </div>
+            <div id="report-kpi-pagination"></div>
           </div>
         </div>
       </section>
@@ -2472,6 +2478,7 @@
               </tbody>
             </table>
           </div>
+          <div id="payroll-pagination"></div>
         </div>
       </section>
     </main>
@@ -2493,6 +2500,7 @@
       <div class="modal-body" id="debt-history-modal-body" style="max-height: 70vh; overflow-y: auto;">
         <div style="text-align: center; padding: 2rem; color: var(--text-muted);">Đang tải dữ liệu lịch sử...</div>
       </div>
+      <div id="debt-history-pagination" style="margin:0 1.5rem 1rem;"></div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeDebtHistoryModal()">Đóng</button>
       </div>
@@ -2641,6 +2649,7 @@
             <tbody id="payroll-product-groups-table-body"></tbody>
           </table>
         </div>
+        <div id="payroll-product-groups-pagination"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="btn-done-payroll-product-groups">Đóng</button>
@@ -2957,6 +2966,7 @@
               </tbody>
             </table>
           </div>
+          <div id="customer-debt-history-pagination"></div>
 
         </div>
 
@@ -4585,7 +4595,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261028-customer-detail-loading-v1"></script>
-  <script type="module" src="js/main.js?v=20261028-customer-detail-loading-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261028-project-list-pagination-v1"></script>
+  <script type="module" src="js/main.js?v=20261028-project-list-pagination-v1"></script>
 </body>
 </html>

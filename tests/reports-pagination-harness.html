@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiểm thử phân trang báo cáo</title><link rel="stylesheet" href="../style.css">
+  <script type="importmap">{"imports":{"/js/services/supabase.js?v=20261028-project-list-pagination-v1":"/tests/fixtures/reports-pagination-service.js"}}</script>
+  <style>body{display:block;overflow:auto;padding:24px;background:#f3f5f9;}#reports-panel{display:block;max-width:1500px;margin:auto;}.report-subtab-content{min-width:0;} .test-note{margin:0 auto 16px;max-width:1500px;color:#475569;}</style>
+</head>
+<body>
+  <p class="test-note">Dữ liệu giả lập · 237 đại lý · kiểm tra chuyển trang, chọn số dòng và đổi bộ lọc.</p>
+  <script type="module">
+    import { state } from '../js/state.js';
+    import { setupReportsPanel, renderDebtReport } from '../js/components/reports.js';
+    const html = new DOMParser().parseFromString(await (await fetch('../index.html')).text(), 'text/html');
+    document.body.append(html.getElementById('reports-panel'), html.getElementById('employee-business-detail-modal'));
+    document.getElementById('reports-panel').classList.add('active');
+    state.currentUser = { id: 'test-admin', role: 'admin' };
+    state.users = [{ id: 'test-admin', username: 'test-admin', displayName: 'Quản lý kiểm thử', role: 'admin' }];
+    setupReportsPanel();
+    await renderDebtReport();
+    document.body.dataset.ready = 'true';
+  </script>
+</body>
+</html>

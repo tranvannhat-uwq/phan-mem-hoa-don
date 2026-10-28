@@ -1,8 +1,11 @@
 import { state } from '../state.js';
+import { createListPagination } from './list-pagination.js?v=20261028-project-list-pagination-v1';
 import { formatCurrency, safeCreateIcons, showToast } from '../utils.js';
-import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
+import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20261028-project-list-pagination-v1';
 
 let currentPayroll = null;
+let payrollRequest = 0;
+const payrollPager = createListPagination('payroll-pagination');
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 
 export function getSalaryPeriods() {
@@ -53,6 +56,7 @@ function renderRows(payload) {
   const tbody = document.getElementById('payroll-table-body');
   if (!tbody) return;
   const rows = payload.rows || [];
+  const visibleRows = payrollPager.slice(rows, payload.period, () => renderRows(payload));
   renderStatus(payload);
   const totalElement = document.getElementById('stat-total-payroll-period');
   if (totalElement) totalElement.innerText = formatCurrency(rows.reduce((sum, row) => sum + Number(row.netSalary || 0), 0));
@@ -61,7 +65,7 @@ function renderRows(payload) {
     safeCreateIcons();
     return;
   }
-  tbody.innerHTML = rows.map(row => `
+  tbody.innerHTML = visibleRows.map(row => `
     <tr>
       <td style="font-weight:600">${escapeHtml(row.userCode)}</td>
       <td style="font-weight:600;color:var(--text-primary)">${escapeHtml(row.userName)}</td>
@@ -86,12 +90,20 @@ function renderRows(payload) {
 export async function renderPayrollTable() {
   const tbody = document.getElementById('payroll-table-body');
   if (!tbody) return;
+  const request = ++payrollRequest;
+  const user = state.currentUser;
+  payrollPager.read(getSelectedSalaryPeriod());
+  payrollPager.render(0, () => {}, { busy: true });
   tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem">Đang tính lương trên máy chủ...</td></tr>';
   try {
-    currentPayroll = await dbFetchPayrollPeriod(getSelectedSalaryPeriod());
+    const payload = await dbFetchPayrollPeriod(getSelectedSalaryPeriod());
+    if (request !== payrollRequest || user !== state.currentUser) return;
+    currentPayroll = payload;
     renderRows(currentPayroll);
   } catch (error) {
+    if (request !== payrollRequest || user !== state.currentUser) return;
     currentPayroll = null;
+    payrollPager.render(0, renderPayrollTable, { error: true });
     console.error('Payroll RPC error:', error);
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--color-danger)">Không tải được bảng lương. Kiểm tra migration 0012 và kết nối Cloud.</td></tr>';
     showToast('Không tải được bảng lương chính xác từ cơ sở dữ liệu.', 'danger');

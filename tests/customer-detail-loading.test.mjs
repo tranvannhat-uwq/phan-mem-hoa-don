@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../js/components/customers.js', import.meta.url), 'utf8');
+const paginationSource = readFileSync(new URL('../js/components/list-pagination.js', import.meta.url), 'utf8');
 const summaryAndOpen = source.slice(source.indexOf('function renderCustomerDetailSummary('),
   source.indexOf('window.toggleCustomerDebtAdjustments'));
 const close = source.slice(source.indexOf('export function closeCustomerDetailModal()'),
@@ -25,6 +26,7 @@ function harness({ cloud = true, role = 'admin' } = {}) {
         classList: { add: name => classes.add(name), remove: name => classes.delete(name),
           contains: name => classes.has(name) },
         setAttribute(name, value) { this[name] = String(value); },
+        addEventListener() {},
         querySelector: () => node('modal-body'), querySelectorAll: () => [] });
     }
     return nodes.get(id);
@@ -45,6 +47,8 @@ function harness({ cloud = true, role = 'admin' } = {}) {
     getCustomerDebtBusinessDate: entry => entry.date, getCustomerDebtPostingDate: entry => entry.date,
     getCustomerDebtSource: () => null, escapeCustomerHtml: value => String(value), console });
   vm.runInContext(`let customerDetailRequest = 0; let customerDebtAdjustmentsHidden = false;
+    ${paginationSource.replace(/^export /gm, '')}
+    const customerDebtHistoryPager = createListPagination('customer-debt-history-pagination');
     ${summaryAndOpen}\n${close}`.replace(/^export /gm, ''), context);
   return { state, node, financial, amendments, support,
     open: index => vm.runInContext(`openCustomerDetailModal(${index})`, context),

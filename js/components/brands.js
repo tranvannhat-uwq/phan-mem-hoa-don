@@ -1,11 +1,15 @@
 import { state } from '../state.js';
+import { createListPagination } from './list-pagination.js?v=20261028-project-list-pagination-v1';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
-import { renderAll } from '../main.js?v=20261028-customer-detail-loading-v1';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20261028-project-list-pagination-v1';
+import { renderAll } from '../main.js?v=20261028-project-list-pagination-v1';
+
+const brandsPager = createListPagination('brands-pagination');
 
 export function renderBrandsTable() {
   const tableBody = document.getElementById('brands-table-body');
   if (!tableBody) return;
+  const visibleBrands = brandsPager.slice(state.brands || [], '', renderBrandsTable);
   
   if (!state.brands || state.brands.length === 0) {
     tableBody.innerHTML = `
@@ -18,7 +22,7 @@ export function renderBrandsTable() {
     return;
   }
   
-  tableBody.innerHTML = state.brands.map((b) => {
+  tableBody.innerHTML = visibleBrands.map((b) => {
     const brandId = b.id || ('brand_' + String(b.name).toLowerCase().replace(/[^a-z0-9]/g, ''));
     return `
       <tr>

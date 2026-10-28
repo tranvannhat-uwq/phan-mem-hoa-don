@@ -1,12 +1,13 @@
 import { state } from '../state.js';
+import { createListPagination } from './list-pagination.js?v=20261028-project-list-pagination-v1';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
 import {
   dbDeleteProduct,
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
-import { renderAll } from '../main.js?v=20261028-customer-detail-loading-v1';
+} from '../services/supabase.js?v=20261028-project-list-pagination-v1';
+import { renderAll } from '../main.js?v=20261028-project-list-pagination-v1';
 import {
   buildProductFamilies,
   getProductBaseCode,
@@ -15,6 +16,7 @@ import {
   variantSpecification
 } from '../domain/product-catalog.js';
 
+const payrollGroupsPager = createListPagination('payroll-product-groups-pagination');
 let excelImportData = [];
 let isSelectingFile = false;
 let editingProductFamilyKey = '';
@@ -679,7 +681,8 @@ function renderPayrollProductGroupsTable() {
   if (!body) return;
   const groups = [...(state.payrollProductGroups || [])]
     .sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''), 'vi'));
-  body.innerHTML = groups.length ? groups.map(group => `
+  const visibleGroups = payrollGroupsPager.slice(groups, '', renderPayrollProductGroupsTable);
+  body.innerHTML = groups.length ? visibleGroups.map(group => `
     <tr>
       <td><strong>${escapeHtml(group.code)}</strong></td>
       <td>${escapeHtml(group.name)}</td>

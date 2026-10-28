@@ -1,11 +1,11 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20261028-customer-detail-loading-v1';
-import { openProductModal } from './products.js?v=20261028-customer-detail-loading-v1';
-import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
+import { switchTab } from '../main.js?v=20261028-project-list-pagination-v1';
+import { openProductModal } from './products.js?v=20261028-project-list-pagination-v1';
+import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261028-project-list-pagination-v1';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261028-customer-detail-loading-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-project-list-pagination-v1';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
