@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { createListPagination } from '../js/components/list-pagination.js';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
@@ -96,7 +97,7 @@ function maintenanceHarness() {
   const results = [];
   let stopResult = null;
   const api = loadComponent('js/components/users.js', {
-    state, document, window, Date: ClockDate, ...timers,
+    state, document, window, createListPagination, Date: ClockDate, ...timers,
     resetSupabaseEgressMetrics() {},
     getMaintenanceStatus: () => { calls.status++; return results.shift() || Promise.resolve({ enabled: false }); },
     stopRealtimeSync: () => { calls.realtimeStop++; return stopResult || Promise.resolve(); },

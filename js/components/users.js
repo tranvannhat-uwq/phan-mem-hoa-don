@@ -1,19 +1,20 @@
 import { state } from '../state.js';
-import { createListPagination } from './list-pagination.js?v=20261028-purchase-creator-name-v1';
+import { withAuthTimeout } from '../domain/auth-timeout.js';
+import { createListPagination } from './list-pagination.js?v=20261028-login-resilience-v1';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261028-purchase-creator-name-v1';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261028-purchase-creator-name-v1';
-import { renderAll, switchTab } from '../main.js?v=20261028-purchase-creator-name-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261028-purchase-creator-name-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261028-login-resilience-v1';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261028-login-resilience-v1';
+import { renderAll, switchTab } from '../main.js?v=20261028-login-resilience-v1';
+import { populateManagedByDropdown } from './customers.js?v=20261028-login-resilience-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261028-purchase-creator-name-v1';
-import { resetInventoryPanel } from './inventory.js?v=20261028-purchase-creator-name-v1';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261028-purchase-creator-name-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-login-resilience-v1';
+import { resetInventoryPanel } from './inventory.js?v=20261028-login-resilience-v1';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261028-login-resilience-v1';
 
 const usersPager = createListPagination('users-pagination');
 
@@ -668,7 +669,7 @@ export async function handleLogin(e) {
     let authUser = null;
     let loginError = null;
     for (const email of candidates) {
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: passwordInput });
+      const { data, error } = await withAuthTimeout(supabaseClient.auth.signInWithPassword({ email, password: passwordInput }));
       if (!error && data?.session?.user) {
         authUser = data.session.user;
         authEstablished = true;
@@ -687,7 +688,7 @@ export async function handleLogin(e) {
       throw createLoginFlowError(authErrorCode);
     }
 
-    const profile = await loadAuthenticatedProfile(authUser.id);
+    const profile = await withAuthTimeout(loadAuthenticatedProfile(authUser.id));
 
     const user = {
       id: profile.id,
@@ -699,7 +700,7 @@ export async function handleLogin(e) {
       isExternal: profile.is_external === true,
       isActive: profile.is_active !== false
     };
-    const maintenance = await getMaintenanceStatus();
+    const maintenance = await withAuthTimeout(getMaintenanceStatus());
     noteMaintenanceStatusCheck(user.authUserId || user.id);
     if (maintenance.enabled && user.role !== 'admin') {
       const error = createLoginFlowError(LOGIN_ERROR.MAINTENANCE);
@@ -712,11 +713,11 @@ export async function handleLogin(e) {
     resetInvoiceBuilder();
     resetRealtimeEventMetrics();
     state.currentUser = user;
-    const cloudLoad = await fetchCloudData({
+    const cloudLoad = await withAuthTimeout(fetchCloudData({
       deferSecondary: true,
       hydrateCustomerHistory: false,
       leanBootstrap: true
-    });
+    }), 30000);
     state.currentUser = state.users.find(item => item.authUserId === authUser.id || item.id === profile.id) || user;
 
     document.getElementById('login-screen').style.display = 'none';
@@ -750,7 +751,7 @@ export async function handleLogin(e) {
     await stopRealtimeSync();
     if (authEstablished && isCloudActive && supabaseClient) {
       try {
-        await supabaseClient.auth.signOut();
+        await withAuthTimeout(supabaseClient.auth.signOut(), 5000);
       } catch (_) {
         // Local session storage is cleared below even if the network sign-out fails.
       }

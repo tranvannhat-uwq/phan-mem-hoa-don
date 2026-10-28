@@ -1,0 +1,34 @@
+[
+  {
+    "name": "supabase",
+    "version": "2.118.0",
+    "script": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js",
+    "license": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/LICENSE",
+    "bytes": 218252,
+    "sha256": "ee3be8de192b97cb1d73d1e95d6b82bb1f6b658c0f97c4ef757fc331996ed3d3"
+  },
+  {
+    "name": "xlsx",
+    "version": "1.2.0",
+    "script": "https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js",
+    "license": "https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/LICENSE",
+    "bytes": 425020,
+    "sha256": "1c7abf2993ff2cd61e508f9268e9acda0098c9796f3925d2ba0d2579072653e2"
+  },
+  {
+    "name": "chart",
+    "version": "4.6.1",
+    "script": "https://cdn.jsdelivr.net/npm/chart.js@4.6.1/dist/chart.umd.js",
+    "license": "https://cdn.jsdelivr.net/npm/chart.js@4.6.1/LICENSE.md",
+    "bytes": 210078,
+    "sha256": "338399fb5bafe598d21cfc471b0590b61ceb321a985fade4f68499b151f67fbf"
+  },
+  {
+    "name": "lucide",
+    "version": "1.62.0",
+    "script": "https://unpkg.com/lucide@1.62.0/dist/umd/lucide.min.js",
+    "license": "https://unpkg.com/lucide@1.62.0/LICENSE",
+    "bytes": 458377,
+    "sha256": "79a0231cea1457ab07e04636a265f12ee0f343c5f57935b21b1ca95c37520aef"
+  }
+]

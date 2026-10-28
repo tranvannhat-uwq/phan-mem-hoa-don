@@ -1,16 +1,17 @@
 import { state } from '../state.js';
+import { withAuthTimeout } from '../domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-purchase-creator-name-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-purchase-creator-name-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-login-resilience-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-login-resilience-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-purchase-creator-name-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-purchase-creator-name-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-purchase-creator-name-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-login-resilience-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-login-resilience-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-login-resilience-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-purchase-creator-name-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-login-resilience-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -26,7 +27,8 @@ function retentionAwareFetch(input, init = {}) {
   const epochAtStart = state.retentionEpoch;
   const headers = new Headers(init.headers || input?.headers || {});
   if (isRest && epochAtStart !== null) headers.set('x-retention-epoch', String(epochAtStart));
-  return supabaseEgressMeter.fetch(input, { ...init, headers, ...(isRest ? { cache: 'no-store' } : {}) })
+  const request = supabaseEgressMeter.fetch(input, { ...init, headers, ...(isRest ? { cache: 'no-store' } : {}) });
+  return (url.includes('/auth/v1/') ? withAuthTimeout(request) : request)
     .then(response => {
       if (isRest && !url.includes('/rpc/rpc_retention_status') && state.retentionEpoch !== epochAtStart) {
         throw new Error('RETENTION_EPOCH_CHANGED: Phiên dữ liệu đã đổi. Hãy tải lại màn hình.');
@@ -505,11 +507,11 @@ export async function connectSupabase(url, key, verbose = true) {
     state.retentionAvailable = false;
     state.retentionCutoff = null;
     const client = supabase.createClient(url, key, { global: { fetch: retentionAwareFetch } });
-    const { data: { session: connectionSession } } = await client.auth.getSession();
+    const { data: { session: connectionSession } } = await withAuthTimeout(client.auth.getSession());
     
     // Kiểm tra cấu trúc bảng để gán tiền tố wl_ nếu có (Kiểm tra bảng gốc trước để tránh ném lỗi 404 vào Console trình duyệt)
     if (connectionSession?.user) {
-    let { error: testNormalErr } = await client.from('products').select('code').limit(1);
+    let { error: testNormalErr } = await withAuthTimeout(client.from('products').select('code').limit(1));
     if (!testNormalErr) {
       tableProductsName = 'products';
       tableOrdersName = 'orders';
@@ -530,7 +532,7 @@ export async function connectSupabase(url, key, verbose = true) {
       tableSalesReturnItemsName = 'sales_return_items';
       tableOrderItemsName = 'order_items';
     } else {
-      let { error: testWlErr } = await client.from('wl_products').select('code').limit(1);
+      let { error: testWlErr } = await withAuthTimeout(client.from('wl_products').select('code').limit(1));
       if (!testWlErr) {
         tableProductsName = 'wl_products';
         tableOrdersName = 'wl_orders';

@@ -1,28 +1,29 @@
 import { state } from './state.js';
+import { withAuthTimeout } from './domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261028-purchase-creator-name-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261028-purchase-creator-name-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions, invalidateDashboardPayloadCache } from './components/dashboard.js?v=20261028-purchase-creator-name-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261028-purchase-creator-name-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261028-purchase-creator-name-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261028-purchase-creator-name-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261028-purchase-creator-name-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261028-purchase-creator-name-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261028-purchase-creator-name-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261028-purchase-creator-name-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261028-purchase-creator-name-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261028-purchase-creator-name-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261028-purchase-creator-name-v1';
-import { renderInventoryPanel } from './components/inventory.js?v=20261028-purchase-creator-name-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport, invalidateEmployeeBusinessReportCache } from './components/reports.js?v=20261028-purchase-creator-name-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261028-login-resilience-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261028-login-resilience-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions, invalidateDashboardPayloadCache } from './components/dashboard.js?v=20261028-login-resilience-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261028-login-resilience-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261028-login-resilience-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261028-login-resilience-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261028-login-resilience-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261028-login-resilience-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261028-login-resilience-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261028-login-resilience-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261028-login-resilience-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261028-login-resilience-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261028-login-resilience-v1';
+import { renderInventoryPanel } from './components/inventory.js?v=20261028-login-resilience-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport, invalidateEmployeeBusinessReportCache } from './components/reports.js?v=20261028-login-resilience-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261028-purchase-creator-name-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261028-purchase-creator-name-v1';
-import { setupRetentionSettings, renderRetentionSettings } from './components/data-retention.js?v=20261028-purchase-creator-name-v1';
-import { renderRetentionReview } from './components/retention-review.js?v=20261028-purchase-creator-name-v1';
-import { setupDealerSupport, renderDealerSupportSettings } from './components/dealer-support.js?v=20261028-purchase-creator-name-v1';
-import { setupIndependentReturns, renderIndependentReturns } from './components/independent-returns.js?v=20261028-purchase-creator-name-v1';
-import { syncRetentionState } from './services/supabase.js?v=20261028-purchase-creator-name-v1';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261028-login-resilience-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261028-login-resilience-v1';
+import { setupRetentionSettings, renderRetentionSettings } from './components/data-retention.js?v=20261028-login-resilience-v1';
+import { renderRetentionReview } from './components/retention-review.js?v=20261028-login-resilience-v1';
+import { setupDealerSupport, renderDealerSupportSettings } from './components/dealer-support.js?v=20261028-login-resilience-v1';
+import { setupIndependentReturns, renderIndependentReturns } from './components/independent-returns.js?v=20261028-login-resilience-v1';
+import { syncRetentionState } from './services/supabase.js?v=20261028-login-resilience-v1';
 
 if (typeof window !== 'undefined') {
   window.billingEgressMetrics = Object.freeze({
@@ -349,7 +350,7 @@ export function switchTab(panelId) {
   }
 
   state.currentTab = panelId;
-  
+
   document.querySelectorAll('.nav-link').forEach(l => {
     if (l.classList.contains('purchase-menu-trigger')) {
       l.classList.toggle('active', panelId === 'suppliers-panel' || panelId === 'goods-panel');
@@ -393,7 +394,7 @@ export function switchTab(panelId) {
   else if (panelId === 'inventory-panel') heading.innerText = 'Quản lý kho';
   else if (panelId === 'reports-panel') heading.innerText = 'Báo cáo nghiệp vụ';
   else if (panelId === 'activity-log-panel') heading.innerText = 'Lịch sử hoạt động';
-  
+
   // Tự động làm mới dữ liệu và thống kê trên tất cả các tab khi chuyển đổi
   const waitForCloud = panelNeedsCloudData(panelId);
   if (waitForCloud && !panelHasPricingSnapshot(panelId)) renderPanelCloudLoading(panelId);
@@ -571,7 +572,7 @@ function setupNavigation() {
 
   // Toggle global settings dropdown
   const settingsMenu = document.getElementById('global-settings-menu');
-  
+
   window.toggleSettingsDropdown = function(e) {
     if (e) e.stopPropagation();
     if (settingsMenu) {
@@ -679,7 +680,7 @@ function setupSupabaseSettings() {
     e.preventDefault();
     const url = document.getElementById('db-url').value.trim();
     const anonKey = document.getElementById('db-anon-key').value.trim();
-    
+
     updateDbStatusUI('connecting');
     const success = await connectSupabase(url, anonKey, true);
     if (success) {
@@ -702,6 +703,64 @@ function setupSupabaseSettings() {
 // loadLocalStorageBackup đã được chuyển sang services/supabase.js để tối ưu hóa
 
 // Khởi chạy ứng dụng
+function setupLoginEntry() {
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', handleLogin);
+    loginForm.addEventListener('submit', () => {
+      const rememberAccount = document.getElementById('login-remember-account');
+      const username = document.getElementById('login-username')?.value.trim() || '';
+      try {
+        if (rememberAccount?.checked && username) localStorage.setItem('sovie_remembered_login_account', username);
+        else localStorage.removeItem('sovie_remembered_login_account');
+      } catch (_) {
+        // Login remains available when browser storage is disabled.
+      }
+    });
+  }
+
+  const logoutBtn = document.getElementById('btn-logout');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+  }
+
+  const landingPage = document.getElementById('landing-page');
+  const loginScreen = document.getElementById('login-screen');
+  try {
+    const rememberedAccount = localStorage.getItem('sovie_remembered_login_account') || '';
+    const usernameField = document.getElementById('login-username');
+    const rememberCheckbox = document.getElementById('login-remember-account');
+    if (usernameField && rememberedAccount) usernameField.value = rememberedAccount;
+    if (rememberCheckbox) rememberCheckbox.checked = Boolean(rememberedAccount || rememberCheckbox.checked);
+  } catch (_) {
+    // Private browsing can disable storage without blocking authentication.
+  }
+  document.querySelectorAll('.js-open-login').forEach(button => {
+    button.addEventListener('click', () => {
+      if (loginScreen) loginScreen.style.display = 'flex';
+      document.getElementById('login-username')?.focus();
+    });
+  });
+  document.getElementById('btn-close-login')?.addEventListener('click', () => {
+    window.location.replace(`${window.location.pathname}${window.location.search}`);
+  });
+  loginScreen?.addEventListener('click', event => {
+    if (event.target === loginScreen) loginScreen.style.display = 'none';
+  });
+
+}
+
+function setLoginStartupState(status, message) {
+  const form = document.getElementById('login-form');
+  if (form) form.dataset.loginState = status;
+  const label = document.getElementById('login-startup-status');
+  if (label) label.textContent = message;
+  const submit = document.getElementById('btn-login-submit');
+  if (submit) submit.disabled = status !== 'ready';
+  const retry = document.getElementById('btn-retry-login-startup');
+  if (retry) retry.hidden = status !== 'error';
+}
+
 async function initApp() {
   if (window.__app_initialized) return;
   window.__app_initialized = true;
@@ -712,6 +771,14 @@ async function initApp() {
     safeCreateIcons();
     return;
   }
+
+  const landingPage = document.getElementById('landing-page');
+  const loginScreen = document.getElementById('login-screen');
+  setupLoginEntry();
+  showLoginGate();
+  if (loginScreen) loginScreen.style.display = 'flex';
+  setLoginStartupState('connecting', 'Đang kết nối đăng nhập...');
+  document.getElementById('login-username')?.focus();
 
   const today = new Date();
   const dateLbl = document.getElementById('current-date-lbl');
@@ -744,7 +811,7 @@ async function initApp() {
 
   let savedUrl = localStorage.getItem('billing_supabase_url');
   let savedKey = localStorage.getItem('billing_supabase_key');
-  
+
   // Nếu chưa có cấu hình trong LocalStorage, tự động dùng cấu hình đám mây mặc định của công ty
   if (!savedUrl || !savedKey) {
     savedUrl = COMPANY_SUPABASE_URL;
@@ -752,20 +819,20 @@ async function initApp() {
     localStorage.setItem('billing_supabase_url', savedUrl);
     localStorage.setItem('billing_supabase_key', savedKey);
   }
-  
+
   if (savedUrl && savedKey) {
     let connected = false;
     // Không chặn màn hình đăng nhập bởi các lần retry tải dữ liệu Cloud.
     // connectSupabase đã có fallback LocalStorage khi Cloud không phản hồi.
     const retries = 1;
-    
+
     for (let i = 1; i <= retries; i++) {
       updateDbStatusUI('connecting', `Kết nối Cloud (Lần ${i}/${retries})...`);
       connected = await connectSupabase(savedUrl, savedKey, false);
       if (connected) break;
-      
+
     }
-    
+
     if (!connected) {
       loadLocalStorageBackup();
       updateDbStatusUI('local_failed');
@@ -775,33 +842,13 @@ async function initApp() {
     loadLocalStorageBackup();
     updateDbStatusUI('local');
   }
-  
-  const loginForm = document.getElementById('login-form');
-  if (loginForm) {
-    loginForm.addEventListener('submit', handleLogin);
-    loginForm.addEventListener('submit', () => {
-      const rememberAccount = document.getElementById('login-remember-account');
-      const username = document.getElementById('login-username')?.value.trim() || '';
-      try {
-        if (rememberAccount?.checked && username) localStorage.setItem('sovie_remembered_login_account', username);
-        else localStorage.removeItem('sovie_remembered_login_account');
-      } catch (_) {
-        // Login remains available when browser storage is disabled.
-      }
-    });
-  }
-
-  const logoutBtn = document.getElementById('btn-logout');
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', handleLogout);
-  }
 
   let activeUser = null;
   if (isCloudActive && supabaseClient) {
     try {
-      const { data: { session } } = await supabaseClient.auth.getSession();
+      const { data: { session } } = await withAuthTimeout(supabaseClient.auth.getSession());
       if (session && session.user) {
-        const profile = await loadAuthenticatedProfile(session.user.id);
+        const profile = await withAuthTimeout(loadAuthenticatedProfile(session.user.id));
         activeUser = {
           id: profile.id,
           authUserId: profile.auth_user_id,
@@ -812,7 +859,7 @@ async function initApp() {
           isExternal: profile.is_external === true,
           isActive: profile.is_active === true
         };
-        const maintenance = await getMaintenanceStatus();
+        const maintenance = await withAuthTimeout(getMaintenanceStatus());
         noteMaintenanceStatusCheck(activeUser.authUserId || activeUser.id);
         if (maintenance.enabled && activeUser.role !== 'admin') {
           throw new Error(maintenance.message || 'Hệ thống đang bảo trì. Chỉ admin có thể truy cập.');
@@ -820,46 +867,25 @@ async function initApp() {
       }
     } catch (err) {
       console.warn('Session recovery rejected');
-      try { await supabaseClient.auth.signOut(); } catch (_) { /* clear local state below */ }
+      activeUser = null;
+      if (err?.loginCode !== 'NETWORK') {
+        try { await withAuthTimeout(supabaseClient.auth.signOut(), 5000); } catch (_) { /* clear local state below */ }
+        clearSupabaseAuthStorage();
+      }
       clearAuthenticatedSessionState();
-      clearSupabaseAuthStorage();
       if (err?.message) showToast(err.message, 'danger');
     }
   }
 
-  const landingPage = document.getElementById('landing-page');
-  const loginScreen = document.getElementById('login-screen');
-  try {
-    const rememberedAccount = localStorage.getItem('sovie_remembered_login_account') || '';
-    const usernameField = document.getElementById('login-username');
-    const rememberCheckbox = document.getElementById('login-remember-account');
-    if (usernameField && rememberedAccount) usernameField.value = rememberedAccount;
-    if (rememberCheckbox) rememberCheckbox.checked = Boolean(rememberedAccount || rememberCheckbox.checked);
-  } catch (_) {
-    // Private browsing can disable storage without blocking authentication.
-  }
-  document.querySelectorAll('.js-open-login').forEach(button => {
-    button.addEventListener('click', () => {
-      if (loginScreen) loginScreen.style.display = 'flex';
-      document.getElementById('login-username')?.focus();
-    });
-  });
-  document.getElementById('btn-close-login')?.addEventListener('click', () => {
-    window.location.replace(`${window.location.pathname}${window.location.search}`);
-  });
-  loginScreen?.addEventListener('click', event => {
-    if (event.target === loginScreen) loginScreen.style.display = 'none';
-  });
-  
   let recoveredCloudLoad = null;
   if (activeUser) {
     resetAuthenticatedBusinessState();
     state.currentUser = activeUser;
-    recoveredCloudLoad = await fetchCloudData({
+    recoveredCloudLoad = await withAuthTimeout(fetchCloudData({
       deferSecondary: true,
       hydrateCustomerHistory: false,
       leanBootstrap: true
-    });
+    }), 30000);
     state.currentUser = state.users.find(item =>
       item.authUserId === activeUser.authUserId || item.id === activeUser.id
     ) || activeUser;
@@ -884,6 +910,7 @@ async function initApp() {
     }
   }
 
+  setLoginStartupState(isCloudActive ? 'ready' : 'error', isCloudActive ? 'Sẵn sàng đăng nhập.' : 'Chưa kết nối được. Bấm Thử tải lại để kết nối lại.');
   populatePricelistsDropdowns();
 
 
@@ -924,4 +951,17 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-window.addEventListener('DOMContentLoaded', initApp);
+async function startApp() {
+  try { await initApp(); }
+  catch (error) {
+    console.error('Application startup failed:', error);
+    clearAuthenticatedSessionState();
+    if (isSalesWorkspaceRoute()) {
+      const screen = document.getElementById('login-screen');
+      if (screen) screen.style.display = 'flex';
+      setLoginStartupState('error', 'Trang chưa khởi động được. Bấm Thử tải lại để kết nối lại.');
+    }
+  }
+}
+if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', startApp, { once: true });
+else void startApp();

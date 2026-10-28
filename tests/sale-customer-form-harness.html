@@ -9,7 +9,7 @@
 <body>
   <script type="module">
     import { state } from '../js/state.js';
-    import { openCustomerModal, saveCustomer, closeCustomerModal, setupCustomerManagement } from '../js/components/customers.js?v=20261028-purchase-creator-name-v1';
+    import { openCustomerModal, saveCustomer, closeCustomerModal, setupCustomerManagement } from '../js/components/customers.js?v=20261028-login-resilience-v1';
     const html = new DOMParser().parseFromString(await (await fetch('../index.html')).text(), 'text/html');
     html.querySelectorAll('script').forEach(script => script.remove());
     document.body.append(...html.body.children);

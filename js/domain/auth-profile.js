@@ -38,6 +38,9 @@ export function classifySupabaseError(error) {
 
   if (
     error?.name === 'TypeError'
+    || error?.name === 'AbortError'
+    || error?.name === 'TimeoutError'
+    || code === 'AUTH_TIMEOUT'
     || (Object.hasOwn(error, 'status') && status === 0)
     || message.includes('failed to fetch')
     || message.includes('network')

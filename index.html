@@ -31,17 +31,17 @@
   <!-- Google Font: Inter is the system-wide product typeface -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- Lucide Icons via CDN -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- SheetJS CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-  <!-- Supabase CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <!-- Pinned local browser libraries; no external CDN required for login -->
+  <script defer src="js/vendor/lucide.js?v=20261028-login-resilience-v1"></script>
+  
+  <script defer src="js/vendor/xlsx.js?v=20261028-login-resilience-v1"></script>
+  
+  <script defer src="js/vendor/supabase.js?v=20261028-login-resilience-v1"></script>
+  
+  <script defer src="js/vendor/chart.js?v=20261028-login-resilience-v1"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261028-purchase-creator-name-v1">
+  <link rel="stylesheet" href="style.css?v=20261028-login-resilience-v1">
 </head>
 <body>
 
@@ -4008,6 +4008,8 @@
             <button type="submit" id="btn-login-submit" class="btn btn-primary login-submit-button">
               <i data-lucide="lock-keyhole"></i><span>Đăng nhập</span><i data-lucide="arrow-right"></i>
             </button>
+            <p id="login-startup-status" class="login-startup-status" role="status" aria-live="polite"></p>
+            <button type="button" id="btn-retry-login-startup" class="btn btn-secondary" hidden>Thử tải lại</button>
           </form>
 
           <p class="login-security-note"><i data-lucide="shield-check"></i> Phiên đăng nhập được xác thực trực tiếp với Supabase.</p>
@@ -4599,8 +4601,10 @@
 
 
 
+  <!-- Login can open before the full application and Auth session are ready. -->
+  <script src="js/login-entry.js?v=20261028-login-resilience-v1"></script>
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261028-purchase-creator-name-v1"></script>
-  <script type="module" src="js/main.js?v=20261028-purchase-creator-name-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261028-login-resilience-v1"></script>
+  <script type="module" src="js/main.js?v=20261028-login-resilience-v1"></script>
 </body>
 </html>

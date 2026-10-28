@@ -12943,3 +12943,6 @@ body.return-modal-open { overflow: hidden; }
   .customer-profile-title { align-items: flex-start; gap: .6rem; }
   .customer-profile-icon { flex-basis: 36px; height: 36px; }
 }
+.login-startup-status { min-height: 1.25rem; margin: .7rem 0 0; color: var(--text-secondary); font-size: .85rem; line-height: 1.5; }
+#btn-retry-login-startup[hidden] { display: none !important; }
+#btn-retry-login-startup { margin-top: .6rem; }
