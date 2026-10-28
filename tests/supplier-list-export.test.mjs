@@ -41,10 +41,11 @@ test('supplier Excel exports every matching page without changing state, using s
   const { book, name } = h.output[0];
   const sheet = book.Sheets.DanhSachNhaCungCap;
   assert.match(name, /^DanhSachNhaCungCap_\d{4}-\d{2}-\d{2}\.xlsx$/);
-  assert.equal(sheet.C2.v, 'Vendor 00');
-  assert.equal(sheet.C46.v, 'Vendor 44');
+  assert.equal(sheet.C2.v, 'Vendor 01');
+  assert.equal(sheet.C46.v, 'Vendor 00');
   assert.equal(sheet.C47.v, 'TỔNG CỘNG');
-  assert.equal(sheet.F2.v, -10);
+  assert.equal(sheet.F2.v, 10);
+  assert.equal(sheet.F46.v, -10);
   assert.equal(sheet.F47.v, 430);
   assert.equal(sheet.G47.v, 4500);
   assert.equal(sheet.F47.t, 'n');
@@ -52,7 +53,7 @@ test('supplier Excel exports every matching page without changing state, using s
   assert.equal(sheet.J2.v, '28/10/2026');
   assert.equal(sheet.L2.v, '01/10/2026');
   assert.equal(sheet.D2.v, '0900123456');
-  assert.equal(sheet.B2.v, '000');
+  assert.equal(sheet.B2.v, '001');
   assert.equal(sheet.D2.t, 's');
   assert.equal(sheet.H2.v, '=SUM(A1:A2)');
   assert.equal(sheet.H2.t, 's');

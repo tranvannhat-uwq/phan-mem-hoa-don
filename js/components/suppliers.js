@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-report-import-v1';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-debt-sort-v1';
 import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
-import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-report-import-v1';
-import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261028-supplier-report-import-v1';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-debt-sort-v1';
+import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261028-supplier-debt-sort-v1';
 
 const toNumber = supplierNumber;
 const escapeSupplierHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -16,7 +16,7 @@ function supplierFilters() {
   return { query: value('supplier-search-input'), debt: value('supplier-debt-filter', 'all'),
     min: value('supplier-debt-min'), max: value('supplier-debt-max'),
     dateField: value('supplier-date-field', 'createdAt'), from: value('supplier-date-from'), to: value('supplier-date-to'),
-    sort: value('supplier-sort', 'name') };
+    sort: value('supplier-sort', 'debt-desc') };
 }
 function calculateSupplierMetrics(supplier) {
   return { totalPurchase: toNumber(supplier.totalPurchase), payableDebt: toNumber(supplier.debt) };
@@ -82,7 +82,7 @@ export function renderSuppliersTable() {
   const filters = supplierFilters();
   const error = supplierFilterError(filters);
   const activeCount = Number(filters.debt !== 'all') + Number(filters.min !== '') + Number(filters.max !== '')
-    + Number(Boolean(filters.from || filters.to)) + Number(filters.sort !== 'name');
+    + Number(Boolean(filters.from || filters.to)) + Number(filters.sort !== 'debt-desc');
   const badge = document.getElementById('supplier-filter-count');
   if (badge) { badge.textContent = String(activeCount); badge.hidden = activeCount === 0; }
   document.getElementById('btn-open-supplier-filters')?.classList.toggle('is-active', activeCount > 0);
@@ -285,7 +285,7 @@ export function setupSupplierManagement() {
     document.getElementById('supplier-debt-filter').value = 'all';
     document.getElementById('supplier-date-field').value = 'createdAt';
     document.getElementById('supplier-date-preset').value = 'all';
-    document.getElementById('supplier-sort').value = 'name';
+    document.getElementById('supplier-sort').value = 'debt-desc';
     state.suppliersPage = 1; renderSuppliersTable();
   });
   document.getElementById('supplier-date-preset')?.addEventListener('change', event => {

@@ -5,8 +5,8 @@
 <script>window.__app_initialized = true;</script>
 <script type="module">
   import { state } from '../js/state.js';
-  import { renderPurchasesPanel } from '../js/components/purchases.js?v=20261028-supplier-report-import-v1';
-  import { bomGateway } from '../js/services/bom.js?v=20261028-supplier-report-import-v1';
+  import { renderPurchasesPanel } from '../js/components/purchases.js?v=20261028-supplier-debt-sort-v1';
+  import { bomGateway } from '../js/services/bom.js?v=20261028-supplier-debt-sort-v1';
   import { normalizeCatalogText } from '../js/domain/product-catalog.js';
   const role = new URLSearchParams(location.search).get('role') || 'admin';
   state.currentUser = { id: 'finance-test', username: 'finance-test', role };

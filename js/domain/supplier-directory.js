@@ -62,7 +62,7 @@ export function filterSupplierDirectory(suppliers, filters = {}) {
     'newest': (a, b) => time(b.createdAt) - time(a.createdAt),
     'last-purchase': (a, b) => time(b.lastPurchaseAt) - time(a.lastPurchaseAt)
   };
-  return rows.sort((a, b) => (sorts[filters.sort]?.(a, b) || 0) || nameOrder(a, b));
+  return rows.sort((a, b) => (sorts[filters.sort || 'debt-desc']?.(a, b) || 0) || nameOrder(a, b));
 }
 export function supplierDirectoryTotals(rows) {
   return rows.reduce((total, row) => {
