@@ -4,12 +4,15 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../js/components/purchases.js', import.meta.url), 'utf8');
-function harness(purchases, dataset = {}, role = 'accounting') {
+const utils = readFileSync(new URL('../js/utils.js', import.meta.url), 'utf8');
+const identityUtils = (utils.slice(utils.indexOf('export function getUserById('), utils.indexOf('export function getPricelistById('))
+  + utils.slice(utils.indexOf('export function isSameUser('), utils.indexOf('// Lấy tên hiển thị của người quản lý linh hoạt'))).replace(/^export /gm, '');
+function harness(purchases, dataset = {}, role = 'accounting', users = [], currentUser = {}) {
   const body = { classList: { remove() {} } };
   const modal = { parentElement: body, remove() {} };
   const panel = { dataset, innerHTML: '', querySelector: () => null };
   const context = vm.createContext({
-    state: { purchases, currentUser: { role } },
+    state: { purchases, users, currentUser: { role, ...currentUser } },
     document: { body, getElementById: () => modal },
     financeRole: () => ['admin', 'accounting'].includes(role),
     escapeHtml: value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])),
@@ -20,6 +23,7 @@ function harness(purchases, dataset = {}, role = 'accounting') {
     purchaseDetail: () => '<tr class="purchase-detail-row"></tr>',
     syncPurchaseSupplierOptions() {}, attachEvents() {}, safeCreateIcons() {}
   });
+  vm.runInContext(identityUtils, context);
   vm.runInContext(source.slice(source.indexOf('function filterPurchaseList(')).replace('export function ', 'function '), context);
   return { panel, context, render() { context.renderPurchasesPanel(panel); return panel.innerHTML; } };
 }
@@ -75,4 +79,36 @@ test('sale role cannot see purchase records or creation controls', () => {
   const html = harness(rows, {}, 'sale').render();
   assert.match(html, /không có quyền/);
   assert.doesNotMatch(html, /PM-0001|btn-open-purchase-modal/);
+});
+
+test('creator UUID resolves to the actual profile name and can be searched without changing audit identity', () => {
+  const creatorId = '91000000-0000-4000-8000-000000000001';
+  const users = [{ id: 'creator-profile', authUserId: creatorId, username: 'creator@test.invalid', displayName: 'Trần Thị Hương', isActive: false }];
+  const purchase = { ...rows[0], createdBy: creatorId };
+  const h = harness([purchase], {}, 'accounting', users, { id: 'viewer', authUserId: 'different-user', displayName: 'Người đang xem' });
+  assert.match(h.render(), /data-label="Người tạo">Trần Thị Hương<\/td>/);
+  assert.doesNotMatch(h.render(), /91000000|Người đang xem/);
+  assert.equal(h.context.filterPurchaseList([purchase], 'tran thi huong', '').length, 1);
+  vm.runInContext(source.slice(source.indexOf('function purchaseDetail('), source.indexOf('function updateTotals(')), h.context);
+  assert.match(h.context.purchaseDetail(purchase), /Người tạo:<\/span><strong>Trần Thị Hương/);
+  assert.equal(purchase.createdBy, creatorId);
+});
+
+test('creator resolver supports profile ID, auth_user_id, username and a matching current profile', () => {
+  for (const creator of ['profile-1', '91000000-0000-4000-8000-000000000001', 'owner@test.invalid']) {
+    const h = harness([{ ...rows[0], createdBy: creator }], {}, 'admin', [{ id:'profile-1', auth_user_id:'91000000-0000-4000-8000-000000000001', username:'owner@test.invalid', displayName:'Người lập phiếu' }]);
+    assert.match(h.render(), /data-label="Người tạo">Người lập phiếu<\/td>/);
+  }
+  const h = harness([{ ...rows[0], createdBy: '91000000-0000-4000-8000-000000000001' }], {}, 'admin', [],
+    { authUserId:'91000000-0000-4000-8000-000000000001', displayName:'Người lập hiện tại' });
+  assert.match(h.render(), /data-label="Người tạo">Người lập hiện tại<\/td>/);
+});
+
+test('missing creator mappings never substitute the viewer and creator names remain escaped', () => {
+  const unknown = harness([{ ...rows[0], createdBy:'91000000-0000-4000-8000-000000000001' }], {}, 'admin', [], { displayName:'Viewer' }).render();
+  assert.match(unknown, /data-label="Người tạo">Chưa xác định<\/td>/);
+  assert.doesNotMatch(unknown, /91000000|Viewer/);
+  const named = harness([{ ...rows[0], createdBy:'owner' }], {}, 'admin', [{ username:'owner', displayName:'<img src=x onerror=alert(1)>' }]).render();
+  assert.match(named, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(named, /<img src=x/);
 });

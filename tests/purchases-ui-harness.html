@@ -5,11 +5,12 @@
 <script>window.__app_initialized = true;</script>
 <script type="module">
   import { state } from '../js/state.js';
-  import { renderPurchasesPanel } from '../js/components/purchases.js?v=20261026-customer-payment-total-v1';
-  import { bomGateway } from '../js/services/bom.js?v=20261026-customer-payment-total-v1';
+  import { renderPurchasesPanel } from '../js/components/purchases.js?v=20261028-purchase-creator-name-v1';
+  import { bomGateway } from '../js/services/bom.js?v=20261028-purchase-creator-name-v1';
   import { normalizeCatalogText } from '../js/domain/product-catalog.js';
   const role = new URLSearchParams(location.search).get('role') || 'admin';
   state.currentUser = { id: 'finance-test', username: 'finance-test', role };
+  state.users = [{id:'creator-profile',authUserId:'91000000-0000-4000-8000-000000000001',username:'accountant@test.invalid',displayName:'Kế toán kiểm thử',isActive:false}];
   const materials = [
     { id:'product:shell-899',source:'product',code:'VỎ THÙNG NT-899',name:'Sơn men sứ nội thất cao cấp 9in1',purchase_unit:'Bộ',unit_price:48296.87,brand:'NANO10 MB',is_active:true },
     { id:'product:shell-b1',source:'product',code:'VỎ THÙNG NT-B1',name:'Sơn siêu bóng nội thất cao cấp',purchase_unit:'Bộ',unit_price:51250,brand:'NANO10 MB',is_active:true },
@@ -23,7 +24,7 @@
     invoiceNumber: 'INV-001', supplierId: 'sup-1', supplierCode: 'NCC-01',
     supplierName: 'Nhà cung cấp A', subtotalAmount: 250000, vatRate: 8, vatAmount: 20000,
     totalAmount: 270000, paidAmount: 100000,
-    balanceDue: 170000, status: 'completed', createdBy: 'Kế toán', items: [{code:'VỎ THÙNG NT-B1',name:'Sơn siêu bóng nội thất cao cấp · NANO10 MB',unit:'Bộ',quantity:5,unitPrice:50000,lineTotal:250000}]
+    balanceDue: 170000, status: 'completed', createdBy: '91000000-0000-4000-8000-000000000001', items: [{code:'VỎ THÙNG NT-B1',name:'Sơn siêu bóng nội thất cao cấp · NANO10 MB',unit:'Bộ',quantity:5,unitPrice:50000,lineTotal:250000}]
   }];
   const scenario = new URLSearchParams(location.search).get('scenario');
   if (scenario === 'pages') state.purchases = Array.from({length:45}, (_, index) => ({...state.purchases[0], id:`pur-${index+1}`,code:`PM-${String(index+1).padStart(4,'0')}`,status:index%3===0?'cancelled':'completed'}));

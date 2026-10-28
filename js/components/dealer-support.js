@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261028-sale-customer-create-v1';
+import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261028-purchase-creator-name-v1';
 
 const el = id => document.getElementById(`dealer-support-${id}`);
 const admin = () => state.currentUser?.role === 'admin';

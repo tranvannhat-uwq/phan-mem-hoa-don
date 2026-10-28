@@ -1,12 +1,12 @@
 import { state } from '../state.js';
-import { formatCurrency, formatDateTime, safeCreateIcons, showToast } from '../utils.js';
+import { formatCurrency, formatDateTime, safeCreateIcons, showToast, getUserDisplayName } from '../utils.js';
 import {
   dbCancelPurchase,
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261028-sale-customer-create-v1';
-import { bomGateway } from '../services/bom.js?v=20261028-sale-customer-create-v1';
+} from '../services/supabase.js?v=20261028-purchase-creator-name-v1';
+import { bomGateway } from '../services/bom.js?v=20261028-purchase-creator-name-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -165,7 +165,7 @@ function purchaseDetail(purchase) {
         <div class="purchase-detail-meta">
           <div><span>Hóa đơn đầu vào:</span><strong>${escapeHtml(purchase.invoiceNumber || '-')}</strong></div>
           <div><span>Ngày mua:</span><strong>${escapeHtml(purchaseDate(purchase))}</strong></div>
-          <div><span>Người thực hiện:</span><strong>${escapeHtml(purchase.createdBy || '-')}</strong></div>
+          <div><span>Người tạo:</span><strong>${escapeHtml(purchaseCreatorName(purchase))}</strong></div>
         </div>
         <div class="purchase-detail-items-wrap"><table class="purchase-items-table"><thead><tr><th>Mã</th><th>Tên</th><th>ĐVT</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>
           ${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.unit)}</td><td>${Number(item.quantity).toLocaleString('vi-VN')}</td><td>${formatCurrency(item.unitPrice)}</td><td>${formatCurrency(item.lineTotal)}</td></tr>`).join('')}
@@ -603,9 +603,19 @@ function filterPurchaseList(purchases, query, status) {
   const terms = normalize(query).trim().split(/\s+/).filter(Boolean);
   return purchases.filter(purchase => {
     if (status && purchase.status !== status) return false;
-    const text = normalize([purchase.code, purchase.invoiceNumber, purchase.supplierName, purchase.supplierCode, purchase.createdBy].join(' '));
+    const text = normalize([purchase.code, purchase.invoiceNumber, purchase.supplierName, purchase.supplierCode, purchase.createdBy, purchaseCreatorName(purchase)].join(' '));
     return terms.every(term => text.includes(term));
   });
+}
+
+function purchaseCreatorName(purchase) {
+  const identity = String(purchase.createdBy || purchase.created_by || '').trim();
+  if (!identity) return 'Chưa xác định';
+  // Purchases store the authenticated creator's UUID. Match that identity to
+  // the profile, including inactive users whose historical records remain.
+  const users = [...(state.users || []), ...(state.currentUser ? [state.currentUser] : [])];
+  const isUuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(identity);
+  return getUserDisplayName(identity, isUuid ? 'Chưa xác định' : '', users) || 'Chưa xác định';
 }
 
 export function renderPurchasesPanel(panel) {
@@ -637,7 +647,7 @@ export function renderPurchasesPanel(panel) {
         <div class="purchase-status-filter"><label for="purchase-list-status">Trạng thái</label><select class="form-control" id="purchase-list-status"><option value="" ${!status ? 'selected' : ''}>Tất cả trạng thái</option>${['completed', 'draft', 'cancelled'].map(value => `<option value="${value}" ${status === value ? 'selected' : ''}>${statusLabel(value)}</option>`).join('')}</select></div>
       </div>
       <div class="table-responsive purchase-table-wrap"><table class="table purchase-table" aria-label="Danh sách phiếu mua hàng"><thead><tr><th>Mã phiếu</th><th>Ngày mua</th><th>Số hóa đơn</th><th>Nhà cung cấp</th><th class="purchase-money">Tổng gồm VAT</th><th class="purchase-money">Đã thanh toán</th><th class="purchase-money">Còn phải trả</th><th>Trạng thái</th><th>Người tạo</th><th>Thao tác</th></tr></thead><tbody>
-        ${visible.length ? visible.map(purchase => `<tr class="purchase-row ${String(activeId) === String(purchase.id) ? 'active' : ''}" data-id="${escapeHtml(purchase.id)}"><td data-label="Mã phiếu"><strong class="purchase-code">${escapeHtml(purchase.code)}</strong></td><td data-label="Ngày mua">${escapeHtml(purchaseDate(purchase))}</td><td data-label="Số hóa đơn">${escapeHtml(purchase.invoiceNumber || '-')}</td><td class="purchase-supplier-cell" data-label="Nhà cung cấp"><strong>${escapeHtml(purchase.supplierName || purchase.supplierCode)}</strong>${purchase.supplierName && purchase.supplierCode ? `<small>${escapeHtml(purchase.supplierCode)}</small>` : ''}</td><td class="purchase-money" data-label="Tổng gồm VAT">${formatCurrency(purchaseTotal(purchase))}</td><td class="purchase-money" data-label="Đã thanh toán">${formatCurrency(purchase.paidAmount)}</td><td class="purchase-money ${purchase.status === 'completed' && Number(purchase.balanceDue) > 0 ? 'purchase-outstanding' : ''}" data-label="Còn phải trả">${formatCurrency(purchase.balanceDue)}</td><td data-label="Trạng thái"><span class="purchase-status ${escapeHtml(purchase.status)}">${statusLabel(purchase.status)}</span></td><td data-label="Người tạo">${escapeHtml(purchase.createdBy || '-')}</td><td data-label="Thao tác"><button type="button" class="btn btn-secondary btn-sm purchase-row-toggle" aria-label="${String(activeId) === String(purchase.id) ? 'Thu gọn' : 'Xem'} phiếu ${escapeHtml(purchase.code)}" aria-expanded="${String(activeId) === String(purchase.id)}"><i data-lucide="${String(activeId) === String(purchase.id) ? 'chevron-up' : 'eye'}"></i> ${String(activeId) === String(purchase.id) ? 'Thu gọn' : 'Xem'}</button></td></tr>${String(activeId) === String(purchase.id) ? purchaseDetail(purchase) : ''}`).join('') : `<tr><td colspan="10" class="purchase-empty"><i data-lucide="${purchases.length ? 'search-x' : 'clipboard-list'}" aria-hidden="true"></i><strong>${purchases.length ? 'Không tìm thấy phiếu phù hợp' : 'Chưa có phiếu mua hàng'}</strong><p>${purchases.length ? 'Thử đổi từ khóa hoặc trạng thái để tìm lại.' : 'Tạo phiếu mua đầu tiên để theo dõi mua hàng và công nợ nhà cung cấp.'}</p>${purchases.length ? '<button type="button" class="btn btn-secondary btn-sm" id="btn-clear-purchase-filters">Xóa bộ lọc</button>' : ''}</td></tr>`}
+        ${visible.length ? visible.map(purchase => `<tr class="purchase-row ${String(activeId) === String(purchase.id) ? 'active' : ''}" data-id="${escapeHtml(purchase.id)}"><td data-label="Mã phiếu"><strong class="purchase-code">${escapeHtml(purchase.code)}</strong></td><td data-label="Ngày mua">${escapeHtml(purchaseDate(purchase))}</td><td data-label="Số hóa đơn">${escapeHtml(purchase.invoiceNumber || '-')}</td><td class="purchase-supplier-cell" data-label="Nhà cung cấp"><strong>${escapeHtml(purchase.supplierName || purchase.supplierCode)}</strong>${purchase.supplierName && purchase.supplierCode ? `<small>${escapeHtml(purchase.supplierCode)}</small>` : ''}</td><td class="purchase-money" data-label="Tổng gồm VAT">${formatCurrency(purchaseTotal(purchase))}</td><td class="purchase-money" data-label="Đã thanh toán">${formatCurrency(purchase.paidAmount)}</td><td class="purchase-money ${purchase.status === 'completed' && Number(purchase.balanceDue) > 0 ? 'purchase-outstanding' : ''}" data-label="Còn phải trả">${formatCurrency(purchase.balanceDue)}</td><td data-label="Trạng thái"><span class="purchase-status ${escapeHtml(purchase.status)}">${statusLabel(purchase.status)}</span></td><td data-label="Người tạo">${escapeHtml(purchaseCreatorName(purchase))}</td><td data-label="Thao tác"><button type="button" class="btn btn-secondary btn-sm purchase-row-toggle" aria-label="${String(activeId) === String(purchase.id) ? 'Thu gọn' : 'Xem'} phiếu ${escapeHtml(purchase.code)}" aria-expanded="${String(activeId) === String(purchase.id)}"><i data-lucide="${String(activeId) === String(purchase.id) ? 'chevron-up' : 'eye'}"></i> ${String(activeId) === String(purchase.id) ? 'Thu gọn' : 'Xem'}</button></td></tr>${String(activeId) === String(purchase.id) ? purchaseDetail(purchase) : ''}`).join('') : `<tr><td colspan="10" class="purchase-empty"><i data-lucide="${purchases.length ? 'search-x' : 'clipboard-list'}" aria-hidden="true"></i><strong>${purchases.length ? 'Không tìm thấy phiếu phù hợp' : 'Chưa có phiếu mua hàng'}</strong><p>${purchases.length ? 'Thử đổi từ khóa hoặc trạng thái để tìm lại.' : 'Tạo phiếu mua đầu tiên để theo dõi mua hàng và công nợ nhà cung cấp.'}</p>${purchases.length ? '<button type="button" class="btn btn-secondary btn-sm" id="btn-clear-purchase-filters">Xóa bộ lọc</button>' : ''}</td></tr>`}
       </tbody></table></div>
       <div class="purchase-pagination"><span role="status">${filtered.length ? `${start + 1}–${Math.min(start + pageSize, filtered.length)} / ${filtered.length}` : '0'} phiếu mua${query || status ? ` (lọc từ ${purchases.length} phiếu)` : ''}</span><div class="purchase-pagination-buttons"><button type="button" class="btn btn-secondary btn-sm" data-purchase-page="${page - 1}" ${page === 1 ? 'disabled' : ''}><i data-lucide="chevron-left"></i> Trước</button><span>Trang <strong>${page}</strong> / ${pages}</span><button type="button" class="btn btn-secondary btn-sm" data-purchase-page="${page + 1}" ${page === pages ? 'disabled' : ''}>Sau <i data-lucide="chevron-right"></i></button></div></div>
     </div></div>`;
