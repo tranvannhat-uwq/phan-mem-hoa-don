@@ -1,25 +1,28 @@
 import { state } from '../state.js';
-import { createListPagination } from './list-pagination.js?v=20261028-dealer-support-notes-v1';
+import { dbCreateQuickCustomer } from '../services/supabase.js?v=20261028-sale-customer-create-v1';
+import { createListPagination } from './list-pagination.js?v=20261028-sale-customer-create-v1';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261028-dealer-support-notes-v1';
-import { renderAll } from '../main.js?v=20261028-dealer-support-notes-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261028-dealer-support-notes-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261028-dealer-support-notes-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261028-sale-customer-create-v1';
+import { renderAll } from '../main.js?v=20261028-sale-customer-create-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261028-sale-customer-create-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261028-sale-customer-create-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261028-dealer-support-notes-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261028-dealer-support-notes-v1';
+} from '../domain/order-financials.js?v=20261028-sale-customer-create-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261028-sale-customer-create-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261028-dealer-support-notes-v1';
-import { renderDealerSupportHistory } from './dealer-support.js?v=20261028-dealer-support-notes-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-sale-customer-create-v1';
+import { renderDealerSupportHistory } from './dealer-support.js?v=20261028-sale-customer-create-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
 let customerDetailRequest = 0;
+let customerFormSession = 0;
+let customerSaveInFlight = false;
 const customerDebtHistoryPager = createListPagination('customer-debt-history-pagination');
 
 const selectedCustomerIdsForExport = new Set();
@@ -1299,6 +1302,21 @@ export function openCustomerModal(index = -1) {
   const form = document.getElementById('customer-form');
   
   if (!modal) return;
+  const isSale = state.currentUser?.role === 'sale';
+  modal.dataset.formSession = String(++customerFormSession);
+  modal.classList.toggle('sale-customer-create', isSale);
+  const description = document.getElementById('customer-modal-description');
+  if (description) description.textContent = isSale
+    ? 'Nhập thông tin liên hệ. Khách hàng sẽ được gán cho bạn quản lý.'
+    : 'Thông tin liên hệ và thiết lập quản lý khách hàng.';
+  const context = document.getElementById('customer-create-context');
+  if (context) context.hidden = !isSale;
+  const submit = document.getElementById('btn-save-customer-submit');
+  if (submit) {
+    submit.dataset.idleLabel = isSale ? 'Tạo khách hàng' : 'Lưu thông tin';
+    submit.disabled = customerSaveInFlight;
+    submit.textContent = customerSaveInFlight ? 'Đang lưu...' : submit.dataset.idleLabel;
+  }
 
   // Dynamic population of cust-assigned-brand
   const assignedBrandSelect = document.getElementById('cust-assigned-brand');
@@ -1323,13 +1341,11 @@ export function openCustomerModal(index = -1) {
   const canAdjustDebt = ['admin', 'accounting'].includes(state.currentUser?.role) && index !== -1;
   if (adjustDebtBtn) adjustDebtBtn.style.display = canAdjustDebt ? 'inline-flex' : 'none';
   
-  const isSale = state.currentUser && state.currentUser.role === 'sale';
   const plSelect = document.getElementById('cust-pricelist');
   if (plSelect) {
-    plSelect.innerHTML = `
-      <option value="custom" ${isSale ? 'disabled' : ''}>Chiết khấu riêng</option>
-      ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}
-    `;
+    plSelect.innerHTML = isSale ? '<option value="">Chọn bảng giá khi lên đơn</option>' : `
+      <option value="custom">Chiết khấu riêng</option>
+      ${state.pricelists.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('')}`;
   }
   
   const provinceSelect = document.getElementById('cust-province');
@@ -1346,11 +1362,7 @@ export function openCustomerModal(index = -1) {
     document.getElementById('cust-code').value = generateUniqueCustomerCode('');
     
     if (plSelect) {
-      if (isSale && state.pricelists.length > 0) {
-        plSelect.value = state.pricelists[0].id;
-      } else {
-        plSelect.value = 'custom';
-      }
+      plSelect.value = isSale ? '' : 'custom';
     }
     const mBySelect = document.getElementById('cust-managed-by');
     if (mBySelect) {
@@ -1388,6 +1400,23 @@ export function openCustomerModal(index = -1) {
       mBySelect.value = matchingUser ? matchingUser.username : mByVal;
     }
   }
+  document.getElementById('cust-code').readOnly = isSale;
+  updateCustomerCreateContext();
+  makeSelectSearchable('cust-province', '-- Chọn Tỉnh/Thành --');
+  ['cust-code', 'cust-name', 'cust-phone', 'cust-province', 'cust-pricelist'].forEach(id => {
+    clearCustomerFieldError(document.getElementById(id));
+  });
+  const modalBody = modal.querySelector('.modal-body');
+  if (modalBody) modalBody.scrollTop = 0;
+  document.getElementById('cust-name')?.focus();
+  safeCreateIcons();
+}
+
+function updateCustomerCreateContext() {
+  const context = document.getElementById('customer-create-context');
+  if (!context || context.hidden) return;
+  const user = state.currentUser;
+  context.textContent = `Mã tự động: ${document.getElementById('cust-code')?.value || ''} · Kinh doanh: ${user?.displayName || user?.username || ''}`;
 }
 
 export function closeCustomerModal() {
@@ -1408,9 +1437,9 @@ function validateCustomerForm() {
     ['cust-code', 'Vui lòng nhập mã khách hàng.'],
     ['cust-name', 'Vui lòng nhập tên khách hàng.'],
     ['cust-phone', 'Vui lòng nhập số điện thoại.'],
-    ['cust-province', 'Vui lòng chọn Tỉnh/Thành phố.'],
-    ['cust-pricelist', 'Vui lòng chọn bảng giá mặc định áp dụng.']
+    ['cust-province', 'Vui lòng chọn Tỉnh/Thành phố.']
   ];
+  if (state.currentUser?.role !== 'sale') requiredFields.push(['cust-pricelist', 'Vui lòng chọn bảng giá mặc định áp dụng.']);
   requiredFields.forEach(([id]) => clearCustomerFieldError(document.getElementById(id)));
   const invalidEntry = requiredFields.find(([id]) => {
     const field = document.getElementById(id);
@@ -1431,6 +1460,10 @@ function validateCustomerForm() {
 }
 
 export async function saveCustomer() {
+  if (customerSaveInFlight) return;
+  const user = state.currentUser;
+  const isSale = user?.role === 'sale';
+  const formSession = document.getElementById('customer-modal')?.dataset.formSession;
   const index = parseInt(document.getElementById('customer-edit-index').value);
   const editId = document.getElementById('customer-edit-id').value;
   const isEditing = index !== -1 && Boolean(editId);
@@ -1463,7 +1496,7 @@ export async function saveCustomer() {
     showToast('Vui lòng chọn nhãn đại lý độc quyền!', 'warning');
     return;
   }
-  if (!pricelistId) {
+  if (!pricelistId && !isSale) {
     showToast('Vui lòng chọn bảng giá mặc định áp dụng!', 'warning');
     return;
   }
@@ -1553,49 +1586,68 @@ export async function saveCustomer() {
     debtHistory
   };
   
-  const saved = await dbSaveCustomer(customerData);
-  if (saved) {
-    const refreshedCustomer = await dbFetchCustomerById(customerId);
-    if (refreshedCustomer) {
-      debt = Number(refreshedCustomer.debt || 0);
-      Object.assign(customerData, refreshedCustomer);
-    }
-    if (!isEditing) showToast('Thêm khách hàng thành công!');
-    else showToast('Cập nhật khách hàng thành công!');
-    
-    // Nếu cập nhật đúng khách hàng đang chọn lên đơn, cập nhật lại giao diện lên đơn
-    if (state.activeCustomerId === customerId) {
-      state.activeCustomerBrand = assignedBrand;
-      document.getElementById('selected-customer-name-lbl').innerText = name;
-      document.getElementById('selected-customer-phone-lbl').innerText = phone || 'N/A';
-      document.getElementById('selected-customer-address-lbl').innerText = address || 'N/A';
-      document.getElementById('selected-customer-brand-lbl').innerText = assignedBrand;
-      
-      const pl = state.pricelists.find(p => p.id === pricelistId);
-      const plName = pl ? pl.name : (pricelistId === 'custom' ? 'Chiết khấu riêng' : (pricelistId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
-      const plLbl = document.getElementById('selected-customer-pricelist-lbl');
-      if (plLbl) plLbl.innerText = plName;
-      
-      document.getElementById('selected-customer-debt-lbl').innerText = formatCurrency(debt);
-      
-
-      
-      const invoicePlSelect = document.getElementById('invoice-pricelist-select');
-      if (invoicePlSelect) {
-        invoicePlSelect.value = pricelistId;
-        invoicePlSelect.dataset.explicitOverride = 'false';
+  customerSaveInFlight = true;
+  const submit = document.getElementById('btn-save-customer-submit');
+  if (submit) { submit.disabled = true; submit.textContent = 'Đang lưu...'; }
+  try {
+    // Sale creation uses the existing, server-scoped command. Direct table
+    // upserts remain restricted to Admin/Accounting; edits still use that path.
+    const saved = isSale
+      ? await dbCreateQuickCustomer({ ...customerData, notes: notes || 'Thêm từ danh sách khách hàng' })
+      : await dbSaveCustomer(customerData);
+    if (user !== state.currentUser) return;
+    if (saved) {
+      if (typeof saved === 'object') Object.assign(customerData, saved);
+      const refreshedCustomer = await dbFetchCustomerById(customerId);
+      if (refreshedCustomer) {
+        debt = Number(refreshedCustomer.debt || 0);
+        Object.assign(customerData, refreshedCustomer);
       }
-      
-      applyActivePriceListToInvoice();
+      if (user !== state.currentUser) return;
+      if (!isEditing) showToast('Thêm khách hàng thành công!');
+      else showToast('Cập nhật khách hàng thành công!');
+
+      // Nếu cập nhật đúng khách hàng đang chọn lên đơn, cập nhật lại giao diện lên đơn
+      if (state.activeCustomerId === customerId) {
+        state.activeCustomerBrand = assignedBrand;
+        document.getElementById('selected-customer-name-lbl').innerText = name;
+        document.getElementById('selected-customer-phone-lbl').innerText = phone || 'N/A';
+        document.getElementById('selected-customer-address-lbl').innerText = address || 'N/A';
+        document.getElementById('selected-customer-brand-lbl').innerText = assignedBrand;
+
+        const pl = state.pricelists.find(p => p.id === pricelistId);
+        const plName = pl ? pl.name : (pricelistId === 'custom' ? 'Chiết khấu riêng' : (pricelistId === 'retail' ? 'Nhập tay' : 'Chiết khấu riêng'));
+        const plLbl = document.getElementById('selected-customer-pricelist-lbl');
+        if (plLbl) plLbl.innerText = plName;
+
+        document.getElementById('selected-customer-debt-lbl').innerText = formatCurrency(debt);
+
+
+
+        const invoicePlSelect = document.getElementById('invoice-pricelist-select');
+        if (invoicePlSelect) {
+          invoicePlSelect.value = pricelistId;
+          invoicePlSelect.dataset.explicitOverride = 'false';
+        }
+
+        applyActivePriceListToInvoice();
+      }
+
+      // Cập nhật State local
+      const idx = state.customers.findIndex(c => c.id === customerId);
+      if (idx === -1) state.customers.push(customerData);
+      else Object.assign(state.customers[idx], customerData);
+      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+
+      if (document.getElementById('customer-modal')?.dataset.formSession === formSession) closeCustomerModal();
+      renderAll();
     }
-    
-    // Cập nhật State local
-    const idx = state.customers.findIndex(c => c.id === customerId);
-    if (idx === -1) state.customers.push(customerData);
-    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
-    
-    closeCustomerModal();
-    renderAll();
+  } catch (error) {
+    console.error('Không thể lưu khách hàng:', error);
+    if (user === state.currentUser) showToast(error.message || 'Không thể lưu khách hàng. Vui lòng thử lại.', 'danger');
+  } finally {
+    customerSaveInFlight = false;
+    if (submit) { submit.disabled = false; submit.textContent = submit.dataset.idleLabel || 'Lưu thông tin'; }
   }
 }
 
@@ -2075,6 +2127,7 @@ export function setupCustomerManagement() {
         const codeInput = document.getElementById('cust-code');
         if (codeInput) {
           codeInput.value = generateUniqueCustomerCode(pCode);
+          updateCustomerCreateContext();
         }
       }
     });

@@ -41,7 +41,7 @@
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261028-dealer-support-notes-v1">
+  <link rel="stylesheet" href="style.css?v=20261028-sale-customer-create-v1">
 </head>
 <body>
 
@@ -2658,24 +2658,29 @@
   </div>
 
   <!-- Add/Edit Customer Modal -->
-  <div class="modal-overlay" id="customer-modal">
-    <div class="modal-content" style="max-width: 600px;">
+  <div class="modal-overlay" id="customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title" aria-describedby="customer-modal-description">
+    <div class="modal-content customer-profile-card">
       <div class="modal-header">
-        <h3 class="modal-title" id="customer-modal-title">Thêm khách hàng mới</h3>
-        <button class="modal-close" id="btn-close-customer-modal">
-          <i data-lucide="x"></i>
+        <div class="customer-profile-title">
+          <span class="customer-profile-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6m3-3h-6"/></svg></span>
+          <div><h3 class="modal-title" id="customer-modal-title">Thêm khách hàng mới</h3>
+            <p id="customer-modal-description">Thông tin liên hệ và thiết lập quản lý khách hàng.</p></div>
+        </div>
+        <button type="button" class="modal-close" id="btn-close-customer-modal" aria-label="Đóng form khách hàng">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg>
         </button>
       </div>
       <form id="customer-form" novalidate>
         <input type="hidden" id="customer-edit-index" value="-1">
         <input type="hidden" id="customer-edit-id" value="">
-        <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
+        <div class="modal-body customer-profile-fields">
+          <div id="customer-create-context" class="customer-create-context" hidden></div>
           <div class="form-row-2">
-            <div class="form-group" style="margin-bottom: 0;">
+            <div class="form-group customer-admin-field" style="margin-bottom: 0;">
               <label class="form-label" for="cust-code">Mã khách hàng *</label>
               <input type="text" class="form-control" id="cust-code" required placeholder="Ví dụ: KH001" style="width: 100%;">
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
+            <div class="form-group customer-name-field" style="margin-bottom: 0;">
               <label class="form-label" for="cust-name">Tên khách hàng *</label>
               <input type="text" class="form-control" id="cust-name" required placeholder="Ví dụ: Nguyễn Văn A" style="width: 100%;">
             </div>
@@ -2683,7 +2688,7 @@
           <div class="form-row-2">
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-phone">Số điện thoại *</label>
-              <input type="text" class="form-control" id="cust-phone" required placeholder="Ví dụ: 0909123456" style="width: 100%;">
+              <input type="tel" inputmode="tel" autocomplete="tel" class="form-control" id="cust-phone" required placeholder="Ví dụ: 0909123456" style="width: 100%;">
             </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="cust-assigned-brand">Nhãn đại lý độc quyền</label>
@@ -2699,7 +2704,7 @@
             </div>
           </div>
           <div class="form-row-2">
-            <div class="form-group" style="margin-bottom: 0;">
+            <div class="form-group customer-admin-field" style="margin-bottom: 0;">
               <label class="form-label" for="cust-debt">Công nợ hiện tại (đ)</label>
               <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <input type="number" class="form-control" id="cust-debt" value="0" readonly aria-readonly="true" title="Công nợ chỉ thay đổi qua nghiệp vụ thu nợ hoặc điều chỉnh có kiểm soát" style="width: 100%; background: var(--bg-secondary);">
@@ -2732,22 +2737,22 @@
               </select>
             </div>
           </div>
-          <div class="form-group" style="margin-bottom: 0;">
+          <div class="form-group customer-address-field" style="margin-bottom: 0;">
             <label class="form-label" for="cust-address">Địa chỉ chi tiết</label>
             <input type="text" class="form-control" id="cust-address" placeholder="Ví dụ: 397 Trần Hưng Đạo, Kè Sặt, Bình Giang" style="width: 100%;">
           </div>
-          <div class="form-group" style="margin-bottom: 0;">
+          <div class="form-group customer-notes-field" style="margin-bottom: 0;">
             <label class="form-label" for="cust-notes">Ghi chú</label>
             <input type="text" class="form-control" id="cust-notes" placeholder="Ví dụ: Đại lý cấp 1, giao hàng buổi sáng..." style="width: 100%;">
           </div>
-          <div class="form-group" style="margin-bottom: 0;">
+          <div class="form-group customer-admin-field" style="margin-bottom: 0;">
             <label class="form-label" for="cust-pricelist">Bảng giá mặc định áp dụng *</label>
             <select class="form-control" id="cust-pricelist" style="width: 100%;">
               <option value="custom">Chiết khấu riêng</option>
               <!-- Dynamic price list options -->
             </select>
           </div>
-          <div class="form-group" id="cust-managed-by-section" style="margin-bottom: 0;">
+          <div class="form-group customer-admin-field" id="cust-managed-by-section" style="margin-bottom: 0;">
             <label class="form-label" for="cust-managed-by">Nhân viên quản lý (Kinh doanh)</label>
             <select class="form-control" id="cust-managed-by" style="width: 100%;">
               <!-- Dynamic user options filled by JS -->
@@ -4595,7 +4600,7 @@
 
 
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261028-dealer-support-notes-v1"></script>
-  <script type="module" src="js/main.js?v=20261028-dealer-support-notes-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261028-sale-customer-create-v1"></script>
+  <script type="module" src="js/main.js?v=20261028-sale-customer-create-v1"></script>
 </body>
 </html>

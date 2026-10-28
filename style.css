@@ -12922,3 +12922,24 @@ body.return-modal-open { overflow: hidden; }
 .dealer-support-history-table th:nth-child(3) { width: 125px; }
 .dealer-support-history-table th:nth-child(4) { width: 35%; }
 .dealer-support-order-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.customer-profile-card { max-width: 760px; width: min(760px, 96vw); }
+.customer-profile-title { display: flex; align-items: center; gap: .8rem; padding-right: 1rem; }
+.customer-profile-title .modal-title { margin: 0; }
+.customer-profile-title p { margin: .35rem 0 0; color: var(--text-secondary); font-size: .85rem; line-height: 1.45; }
+.customer-profile-icon { display: grid; place-items: center; flex: 0 0 44px; height: 44px; border-radius: 12px; background: #e8efff; color: #2563eb; }
+.customer-profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; max-height: 65vh; overflow-y: auto; }
+.customer-profile-fields > .form-row-2 { display: contents; }
+.customer-profile-fields .form-group { min-width: 0; }
+.customer-profile-fields .form-control { width: 100%; }
+.customer-profile-fields [hidden] { display: none !important; }
+.customer-create-context, .customer-address-field, .customer-notes-field { grid-column: 1 / -1; }
+.customer-create-context { padding: .75rem .9rem; border: 1px solid #dbe7ff; border-radius: 10px; background: #f1f6ff; color: #38537a; font-size: .85rem; line-height: 1.5; overflow-wrap: anywhere; }
+.sale-customer-create .customer-admin-field { display: none !important; }
+.sale-customer-create .customer-name-field { grid-column: 1 / -1; }
+.sale-customer-create .customer-address-field { grid-column: auto; }
+.customer-profile-card .modal-footer { gap: .75rem; }
+@media (max-width: 600px) {
+  .customer-profile-fields { grid-template-columns: minmax(0, 1fr); }
+  .customer-profile-title { align-items: flex-start; gap: .6rem; }
+  .customer-profile-icon { flex-basis: 36px; height: 36px; }
+}

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiểm thử thêm khách hàng bằng tài khoản kinh doanh</title>
+  <link rel="stylesheet" href="../style.css">
+  <script>window.__app_initialized = true;</script>
+</head>
+<body>
+  <script type="module">
+    import { state } from '../js/state.js';
+    import { openCustomerModal, saveCustomer, closeCustomerModal, setupCustomerManagement } from '../js/components/customers.js?v=20261028-sale-customer-create-v1';
+    const html = new DOMParser().parseFromString(await (await fetch('../index.html')).text(), 'text/html');
+    html.querySelectorAll('script').forEach(script => script.remove());
+    document.body.append(...html.body.children);
+    document.getElementById('landing-page').style.display = 'none';
+    document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+    document.getElementById('customers-panel').classList.add('active');
+    state.currentUser = { id: 'test-sales', username: 'sales@test.invalid', displayName: 'Kinh doanh kiểm thử', role: 'sale' };
+    state.currentTab = 'customers-panel';
+    state.brands = [{ id: 'test-brand', name: 'Nhãn sơn kiểm thử' }];
+    state.customers = []; state.pricelists = [];
+    state.users = [state.currentUser];
+    setupCustomerManagement();
+    document.getElementById('btn-close-customer-modal').onclick = closeCustomerModal;
+    openCustomerModal();
+    document.body.dataset.ready = 'true';
+  </script>
+</body>
+</html>

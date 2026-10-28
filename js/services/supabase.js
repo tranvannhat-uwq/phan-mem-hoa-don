@@ -2,15 +2,15 @@ import { state } from '../state.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-dealer-support-notes-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-dealer-support-notes-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-sale-customer-create-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-sale-customer-create-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-dealer-support-notes-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-dealer-support-notes-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-dealer-support-notes-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-sale-customer-create-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-sale-customer-create-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-sale-customer-create-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-dealer-support-notes-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-sale-customer-create-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -3311,7 +3311,7 @@ export async function dbSaveCustomer(customer) {
   return true;
 }
 
-// Quick customer creation is available from the order screen to every role,
+// Customer creation from orders and the customer directory is available to every role,
 // but it goes through a narrow server RPC instead of widening direct customer
 // table writes. The database forces Sale users to own the new customer and
 // ignores every financial field from the browser.

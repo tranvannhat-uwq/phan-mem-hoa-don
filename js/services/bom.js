@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { isCloudActive, supabaseClient } from './supabase.js?v=20261028-dealer-support-notes-v1';
+import { isCloudActive, supabaseClient } from './supabase.js?v=20261028-sale-customer-create-v1';
 
 let generation = 0;
 let session = '';
