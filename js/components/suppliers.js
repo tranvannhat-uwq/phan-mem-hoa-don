@@ -1,8 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-filter-popup-v1';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-report-import-v1';
 import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
-import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-filter-popup-v1';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-report-import-v1';
+import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261028-supplier-report-import-v1';
 
 const toNumber = supplierNumber;
 const escapeSupplierHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -123,6 +124,7 @@ export function renderSuppliersTable() {
       '<td class="supplier-money"><strong class="supplier-debt-' + tone + '">' + formatCurrency(debt) + '</strong><span class="supplier-status ' + tone + '">' + status + '</span></td>' +
       '<td><span>' + supplierDateLabel(s.lastPurchaseAt) + '</span><small class="supplier-address">Chi: ' + supplierDateLabel(s.lastPaymentAt) + '</small></td>' +
       '<td><div class="supplier-actions"><button type="button" class="btn btn-secondary btn-sm supplier-detail-btn" data-index="' + index + '" aria-label="Chi tiết ' + escapeSupplierHtml(s.name) + '" aria-expanded="false">Chi tiết</button>' +
+      '<button type="button" class="btn btn-secondary btn-sm supplier-history-btn" data-index="' + index + '">Công nợ</button>' +
       '<button type="button" class="btn btn-secondary btn-sm edit-supplier-btn" data-index="' + index + '" aria-label="Sửa ' + escapeSupplierHtml(s.name) + '"><i data-lucide="edit-2"></i></button>' +
       '<button type="button" class="btn btn-secondary btn-sm delete-supplier-btn" data-index="' + index + '" aria-label="Ngừng sử dụng ' + escapeSupplierHtml(s.name) + '"><i data-lucide="archive"></i></button></div></td></tr>' +
       '<tr id="supplier-details-' + index + '" class="supplier-detail-row" hidden><td colspan="7"><div class="supplier-detail-grid"><div><small>NỢ ĐẦU KỲ</small><strong>' + formatCurrency(toNumber(s.openingDebt)) + '</strong></div><div><small>NGÀY TẠO HỒ SƠ</small><strong>' + supplierDateLabel(s.createdAt) + '</strong></div><div><small>CẬP NHẬT GẦN NHẤT</small><strong>' + supplierDateLabel(s.updatedAt) + '</strong></div><div class="supplier-detail-notes"><small>GHI CHÚ</small><span>' + escapeSupplierHtml(s.notes || 'Chưa có ghi chú') + '</span></div></div></td></tr>';
@@ -133,6 +135,7 @@ export function renderSuppliersTable() {
     row.hidden = !row.hidden; btn.setAttribute('aria-expanded', String(!row.hidden));
   }));
   document.querySelectorAll('.edit-supplier-btn').forEach(btn => btn.addEventListener('click', () => openEditSupplierModal(Number(btn.dataset.index))));
+  document.querySelectorAll('.supplier-history-btn').forEach(btn => btn.addEventListener('click', () => openSupplierDebtHistory(state.suppliers[Number(btn.dataset.index)])));
   document.querySelectorAll('.delete-supplier-btn').forEach(btn => btn.addEventListener('click', () => handleDeleteSupplier(Number(btn.dataset.index))));
   safeCreateIcons();
 }
@@ -430,6 +433,7 @@ async function handleDeleteSupplier(idx) {
 // --- Excel Import & Template Helpers for Suppliers ---
 let supplierExcelImportData = [];
 let isSelectingFile = false;
+let supplierExcelFileRequest = 0;
 
 export function downloadSupplierExcelTemplate() {
   const headers = [[
@@ -460,6 +464,8 @@ export function openSupplierExcelModal() {
     modal.classList.add('active');
     
     // Reset UI
+    supplierExcelFileRequest++;
+    resetSupplierReportPreview();
     supplierExcelImportData = [];
     document.getElementById('supplier-excel-file-input').value = '';
     document.getElementById('supplier-excel-preview-container').style.display = 'none';
@@ -480,15 +486,22 @@ export function closeSupplierExcelModal() {
 
 function handleSupplierExcelFile(file) {
   if (!file) return;
+  const request=++supplierExcelFileRequest;
+  resetSupplierReportPreview();
+  supplierExcelImportData=[];
+  document.getElementById('btn-save-supplier-excel-submit').disabled=true;
+  document.getElementById('supplier-excel-preview-container').style.display='none';
   
   const reader = new FileReader();
   reader.onload = function(e) {
+    if(request!==supplierExcelFileRequest)return;
     try {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      if (previewSupplierReport(rows,file.name)) return;
       
       if (rows.length === 0) {
         showToast("Tập tin Excel trống!", "danger");
@@ -614,6 +627,10 @@ function handleSupplierExcelFile(file) {
 }
 
 async function processSupplierExcelImport() {
+  if (await processSupplierReportImport(async () => {
+    await ensurePanelCloudData('goods-panel',{force:true,domains:['suppliers','purchases']});
+    closeSupplierExcelModal(); renderSuppliersTable(); populateSupplierDatalist();
+  })) return;
   if (supplierExcelImportData.length === 0) return;
   
   const modeVal = document.querySelector('input[name="supplier-import-mode"]:checked');

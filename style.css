@@ -12993,3 +12993,17 @@ body.return-modal-open { overflow: hidden; }
 .supplier-filter-dialog-body { padding:22px 24px; overflow-y:auto; min-height:0; }.supplier-filter-dialog .supplier-filter-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }.supplier-filter-dialog .supplier-filter-grid>div:last-child { grid-column:auto; }
 .supplier-filter-dialog-footer { display:flex; justify-content:space-between; gap:12px; padding:16px 24px; border-top:1px solid var(--border-color); }
 @media(max-width:480px) { .supplier-quick-search { flex-basis:100%; }.supplier-page-size-control { margin-left:auto; }.supplier-filter-dialog { width:calc(100vw - 20px); max-height:calc(100dvh - 24px); }.supplier-filter-dialog-header,.supplier-filter-dialog-body { padding:18px; }.supplier-filter-dialog .supplier-filter-grid { gap:14px; }.supplier-filter-dialog-footer { padding:14px 18px; } }
+/* Supplier debt source reports and paginated history. */
+#supplier-excel-modal [hidden]{display:none!important}
+.supplier-report-period{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}
+.supplier-report-period label{display:grid;gap:6px;font-weight:600;min-width:180px}
+.supplier-report-hint{color:var(--text-secondary);font-size:.88rem;line-height:1.6;margin:12px 0}
+#supplier-report-error{color:#dc2626;white-space:pre-wrap}
+#supplier-report-summary{font-weight:600;line-height:1.6;margin-top:14px}
+.supplier-history-dialog{width:min(1160px,96vw);max-height:90dvh;margin:auto;padding:0;border:1px solid var(--border-color,#d7e2f0);border-radius:18px;background:var(--bg-primary,#fff);color:var(--text-primary,#172b4d);box-shadow:0 24px 80px #142c4d44}
+.supplier-history-dialog::backdrop{background:#10294780;backdrop-filter:blur(4px)}
+.supplier-history-header{display:flex;gap:16px;justify-content:space-between;align-items:start;padding:22px 24px;border-bottom:1px solid var(--border-color,#d7e2f0)}
+.supplier-history-header h3{font-size:1.15rem;margin:0 0 8px}.supplier-history-header p{margin:0;color:var(--text-secondary)}
+.supplier-history-content{padding:16px 24px;overflow:auto}.supplier-history-dialog details{padding:8px 0}.supplier-history-dialog summary{cursor:pointer;color:var(--color-primary);font-weight:600}
+.supplier-source-table{white-space:nowrap;font-size:.8rem}.supplier-source-table th{min-width:110px}
+@media(max-width:600px){.supplier-history-header{padding:16px}.supplier-history-content{padding:12px}.supplier-history-header h3{font-size:1rem}.supplier-history-header p{font-size:.85rem}}

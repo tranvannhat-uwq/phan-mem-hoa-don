@@ -33,6 +33,14 @@ const rows = [
   { id:'3', code:'PM-0003', supplierName:'Bình An',status:'completed',totalAmount:300000 }
 ];
 
+test('historical supplier imports do not present unallocated payments as unpaid invoices or invent original creators',()=>{
+  const imported={...rows[0],sourceReport:{file:'synthetic.xlsx'}};
+  const html=harness([imported]).render();
+  assert.match(html,/Theo NCC/);assert.match(html,/Chưa phân bổ/);
+  assert.match(html,/Excel · không có người tạo gốc/);
+  assert.doesNotMatch(html,/purchase-outstanding/);
+});
+
 test('purchase list combines accent-insensitive search and status without changing source rows', () => {
   const h = harness(rows);
   assert.deepEqual(Array.from(h.context.filterPurchaseList(rows, 'dang minh', 'completed'), row => row.id), ['1']);
