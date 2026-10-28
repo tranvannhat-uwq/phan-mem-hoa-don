@@ -130,3 +130,28 @@ test('invalid source quantity blocks a purge before creating its recovery job',a
   await owner();assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM dealer_support_history')),0);
   assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM retention_jobs')),0);
 });
+
+test('each support line gets its exact order note and keeps it after source deletion',async()=>{
+  const date=await dates();await select();await price(0);
+  const first=(await order(date.old,2)).order.id;
+  const second=(await order(date.old,3)).order.id;
+  const current=(await order(new Date().toISOString(),4)).order.id;
+  const expected=new Map([[2,"Giao cửa sau\nGọi trước 15 phút"],[3,"Đơn khác — không trộn ghi chú"],[4,"Đơn hiện tại"]]);
+  await owner();
+  for(const [id,quantity] of [[first,2],[second,3],[current,4]]) {
+    await db.query('UPDATE public.orders SET notes=$1 WHERE id=$2',[expected.get(quantity),id]);
+  }
+  await asActor(db);
+  const before=await history();
+  for(const row of before.rows)assert.equal(row.order_notes,expected.get(Number(row.quantity)));
+  const empty=await call('rpc_dealer_support_history',['retention-customer',50,25]);
+  assert.equal(empty.total,3);assert.deepEqual(empty.rows,[]);
+  const prepared=await prepare();await purge(prepared);await asActor(db,adminId,1);
+  const after=await history();
+  assert.equal(after.total,3);
+  assert.equal(after.rows.filter(row=>row.archived).length,2);
+  for(const row of after.rows)assert.equal(row.order_notes,expected.get(Number(row.quantity)));
+  await owner();
+  assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM public.orders WHERE id IN ($1,$2)',[first,second])),0);
+  assert.equal(Number(await scalar(db,"SELECT count(*) AS value FROM public.dealer_support_history WHERE order_notes<>''")),2);
+});

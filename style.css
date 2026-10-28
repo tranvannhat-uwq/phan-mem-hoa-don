@@ -12918,3 +12918,7 @@ body.return-modal-open { overflow: hidden; }
   .list-pagination-controls { width: 100%; gap: .4rem; }
   .list-pagination-controls .btn { padding: .4rem .55rem; }
 }
+.dealer-support-history-table th:nth-child(1) { width: 120px; }
+.dealer-support-history-table th:nth-child(3) { width: 125px; }
+.dealer-support-history-table th:nth-child(4) { width: 35%; }
+.dealer-support-order-notes { white-space: pre-wrap; overflow-wrap: anywhere; }

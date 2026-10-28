@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261028-project-list-pagination-v1';
+import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261028-dealer-support-notes-v1';
 
 const el = id => document.getElementById(`dealer-support-${id}`);
 const admin = () => state.currentUser?.role === 'admin';
@@ -93,15 +93,14 @@ export async function renderDealerSupportHistory(customerId, offset = 0) {
       const row = document.createElement('tr');
       textCell(row, new Date(item.business_date).toLocaleDateString('vi-VN', { timeZone: 'Asia/Bangkok' }));
       textCell(row, `${item.product_code} — ${item.product_name}`);
-      textCell(row, `${item.brand_name} / ${item.company_name}`);
-      textCell(row, `${number(item.quantity)} ${item.unit_name}`); textCell(row, number(item.returned_quantity));
-      textCell(row, item.order_cancelled ? 'Đã hủy' : Number(item.returned_quantity) >= Number(item.quantity) ? 'Đã trả hết'
-        : Number(item.returned_quantity) > 0 ? 'Đã trả một phần' : 'Đã ghi nhận');
+      textCell(row, `${number(item.quantity)} cái`);
+      const note = textCell(row, item.order_notes || '—');
+      note.className = 'dealer-support-order-notes';
       el('history-body').append(row);
     }
     for (const item of result.summary || []) {
       const line = document.createElement('li');
-      line.textContent = `${item.product_code} · ${item.brand_name} · ${item.company_name}: ghi nhận ${number(item.issued)}, đã trả ${number(item.returned)}, sau trả/hủy ${number(item.remaining)} ${item.unit_name}.`;
+      line.textContent = `${item.product_code} · ${item.brand_name} · ${item.company_name}: ghi nhận ${number(item.issued)}, đã trả ${number(item.returned)}, sau trả/hủy ${number(item.remaining)} cái.`;
       el('summary').append(line);
     }
     el('history-status').textContent = result.total ? `Dòng ${offset + 1}–${Math.min(offset + 25, result.total)} / ${result.total}.`

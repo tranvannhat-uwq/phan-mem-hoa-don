@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lịch sử hàng cấp — kiểm thử ghi chú</title><link rel="stylesheet" href="../style.css">
+  <script type="importmap">{"imports":{"/js/services/supabase.js?v=20261028-dealer-support-notes-v1":"/tests/fixtures/dealer-support-notes-service.js"}}</script>
+  <style>body{display:block;overflow:auto;padding:24px;background:#f3f5f9;}#customer-detail-modal{max-width:1180px;margin:auto;padding:24px;}h2{font-size:22px}.fixture-note{color:#64748b;margin-top:10px;}</style>
+</head>
+<body>
+  <div id="customer-detail-modal" class="glass-panel" data-customer-id="synthetic-customer">
+    <h2>Thông tin &amp; Lịch sử công nợ của đại lý kiểm thử</h2>
+    <p class="fixture-note">Dữ liệu giả lập để kiểm tra bố cục.</p>
+  </div>
+  <script type="module">
+    import { state } from '../js/state.js';
+    import { renderDealerSupportHistory } from '../js/components/dealer-support.js';
+    const html = new DOMParser().parseFromString(await (await fetch('../index.html')).text(), 'text/html');
+    document.getElementById('customer-detail-modal').append(html.getElementById('dealer-support-history'));
+    state.currentUser = { id: 'test-admin', role: 'admin' };
+    await renderDealerSupportHistory('synthetic-customer');
+    document.body.dataset.ready = 'true';
+  </script>
+</body>
+</html>
