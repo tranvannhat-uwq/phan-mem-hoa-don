@@ -1,23 +1,24 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261027-retention-safe-delete-v1';
-import { renderAll } from '../main.js?v=20261027-retention-safe-delete-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261027-retention-safe-delete-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261027-retention-safe-delete-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261028-customer-detail-loading-v1';
+import { renderAll } from '../main.js?v=20261028-customer-detail-loading-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261028-customer-detail-loading-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261028-customer-detail-loading-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261027-retention-safe-delete-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261027-retention-safe-delete-v1';
+} from '../domain/order-financials.js?v=20261028-customer-detail-loading-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261028-customer-detail-loading-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261027-retention-safe-delete-v1';
-import { renderDealerSupportHistory } from './dealer-support.js?v=20261027-retention-safe-delete-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-customer-detail-loading-v1';
+import { renderDealerSupportHistory } from './dealer-support.js?v=20261028-customer-detail-loading-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
+let customerDetailRequest = 0;
 
 const selectedCustomerIdsForExport = new Set();
 let activeExportOrders = null;
@@ -3718,26 +3719,7 @@ async function openCustomerDebtSourceDetail(source, historyEntry, customer) {
   }
 }
 
-export async function openCustomerDetailModal(index) {
-  const modal = document.getElementById('customer-detail-modal');
-  let cust = state.customers[index];
-  if (!modal || !cust) return;
-
-  modal.classList.add('active');
-
-  const loadingHistoryBody = document.getElementById('detail-debt-history-body');
-  if (loadingHistoryBody) {
-    loadingHistoryBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
-  }
-  const refreshedCustomer = await dbRefreshCustomerFinancialState(cust.id);
-  if (refreshedCustomer) cust = refreshedCustomer;
-  modal.dataset.customerId = cust.id;
-  void renderDealerSupportHistory(cust.id);
-  const canRevertOrderAmendments = ['admin', 'accounting'].includes(state.currentUser?.role);
-  const revertibleOrderAmendmentIds = new Set(canRevertOrderAmendments
-    ? await dbFetchRevertibleOrderAmendments(cust.id)
-    : []);
-
+function renderCustomerDetailSummary(cust, financialStatus = '') {
   // Điền thông tin cơ bản
   const modalTitle = document.getElementById('customer-detail-modal-title');
   if (modalTitle) {
@@ -3787,6 +3769,16 @@ export async function openCustomerDetailModal(index) {
   }
   document.getElementById('detail-cust-pricelist').innerText = plName;
   document.getElementById('detail-cust-notes').innerText = cust.notes || 'N/A';
+
+  if (financialStatus) {
+    for (const id of ['sales-gross', 'returns-total', 'sales-net', 'return-rate', 'total-payments', 'debt']) {
+      const element = document.getElementById(`detail-cust-${id}`);
+      if (element) element.innerText = financialStatus;
+    }
+    const debtElement = document.getElementById('detail-cust-debt');
+    if (debtElement) debtElement.style.color = 'var(--text-muted)';
+    return;
+  }
   
   const metrics = getCustomerMetrics(cust);
   const grossEl = document.getElementById('detail-cust-sales-gross');
@@ -3809,10 +3801,57 @@ export async function openCustomerDetailModal(index) {
     detailDebtEl.innerText = formatCurrency(cust.debt || 0);
     detailDebtEl.style.color = (cust.debt > 0) ? 'var(--color-danger)' : ((cust.debt < 0) ? 'var(--color-success)' : 'var(--text-muted)');
   }
+}
 
+export async function openCustomerDetailModal(index) {
+  const modal = document.getElementById('customer-detail-modal');
+  let cust = state.customers[index];
+  if (!modal || !cust) return;
+
+  const request = ++customerDetailRequest;
+  const customerId = String(cust.id);
+  const user = state.currentUser;
+  const role = user?.role;
+  const epoch = state.retentionEpoch;
+  const cloudActive = isCloudActive;
+  const current = () => request === customerDetailRequest && modal.classList.contains('active')
+    && modal.dataset.customerId === customerId && user === state.currentUser
+    && role === state.currentUser?.role && epoch === state.retentionEpoch;
+
+  // Replace the previous customer's data before exposing the shared popup.
+  modal.dataset.customerId = customerId;
+  renderCustomerDetailSummary(cust, cloudActive ? 'Đang tải...' : '');
+  const historyBody = document.getElementById('detail-debt-history-body');
+  if (historyBody) {
+    historyBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--text-muted);">Đang tải lịch sử công nợ...</td></tr>';
+  }
+  const modalBody = modal.querySelector('.modal-body');
+  if (modalBody) modalBody.scrollTop = 0;
+  modal.classList.add('active');
+  void renderDealerSupportHistory(customerId);
+
+  const canRevertOrderAmendments = ['admin', 'accounting'].includes(role);
+  const [financialResult, amendmentsResult] = await Promise.allSettled([
+    dbRefreshCustomerFinancialState(cust.id),
+    canRevertOrderAmendments ? dbFetchRevertibleOrderAmendments(cust.id) : Promise.resolve([])
+  ]);
+  // A closed or superseded popup must never receive a late response.
+  if (!current()) return;
+
+  const refreshedCustomer = financialResult.status === 'fulfilled' && financialResult.value;
+  if (cloudActive && !refreshedCustomer) {
+    renderCustomerDetailSummary(cust, 'Chưa tải được');
+    if (historyBody) {
+      historyBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--color-danger);">Không thể tải công nợ. Vui lòng đóng và mở lại thông tin khách hàng để thử lại.</td></tr>';
+    }
+    return;
+  }
+  if (refreshedCustomer) cust = refreshedCustomer;
+  const revertibleOrderAmendmentIds = new Set(amendmentsResult.status === 'fulfilled'
+    ? amendmentsResult.value : []);
+  renderCustomerDetailSummary(cust);
 
   // Vẽ danh sách lịch sử biến động công nợ
-  const historyBody = document.getElementById('detail-debt-history-body');
   if (historyBody) {
     const returnHistory = withCustomerReturnDocuments(cust.debtHistory || [],
       cust.returnDocuments || state.salesReturns || [], cust.id);
@@ -4006,8 +4045,12 @@ window.toggleCustomerDebtAdjustments = async function() {
 };
 
 export function closeCustomerDetailModal() {
+  customerDetailRequest += 1;
   const modal = document.getElementById('customer-detail-modal');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.classList.remove('active');
+    delete modal.dataset.customerId;
+  }
 }
 
 // Bổ sung danh sách nhân viên vào Dropdown trong Customer Modal

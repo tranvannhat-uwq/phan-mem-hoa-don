@@ -40,7 +40,9 @@ test('customer debt history is loaded on demand and successful login email is re
   const users = read('js/components/users.js');
 
   assert.match(customers, /export async function openCustomerDetailModal/);
-  assert.match(customers, /await dbRefreshCustomerFinancialState\(cust\.id\)/);
+  const detail = customers.slice(customers.indexOf('export async function openCustomerDetailModal'),
+    customers.indexOf('window.toggleCustomerDebtAdjustments'));
+  assert.match(detail, /await Promise\.allSettled\(\[\s*dbRefreshCustomerFinancialState\(cust\.id\)/);
   assert.match(users, /billing_system_login_email:/);
   assert.match(users, /new Set\(\[rememberedEmail/);
   assert.match(users, /`\$\{usernameInput\}@lendon\.com`/);
