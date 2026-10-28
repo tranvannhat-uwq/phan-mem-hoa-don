@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { safeCreateIcons, showToast, formatDateTime } from '../utils.js';
-import { inventoryGateway } from '../services/inventory.js?v=20261028-dashboard-access-v1';
-import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261028-dashboard-access-v1';
-import { openBomPanel, resetBomPanel } from './bom.js?v=20261028-dashboard-access-v1';
+import { inventoryGateway } from '../services/inventory.js?v=20261028-inventory-product-sync-v1';
+import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261028-inventory-product-sync-v1';
+import { openBomPanel, resetBomPanel } from './bom.js?v=20261028-inventory-product-sync-v1';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const quantity = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 });
@@ -88,12 +88,12 @@ function draw() {
   panel.dataset.inventoryMode = filters.mode;
   panel.querySelector('#inventory-head').innerHTML = history
     ? '<tr><th>Thời gian</th><th>SKU / Sản phẩm</th><th>Nghiệp vụ</th><th>Thay đổi</th><th>Tồn sau</th><th>Tham chiếu / Ghi chú</th></tr>'
-    : '<tr><th>SKU / Sản phẩm</th><th>Hãng</th><th>Đơn vị</th><th>Tồn hiện tại</th><th>Tối thiểu</th><th></th></tr>';
+    : '<tr><th>SKU / Sản phẩm</th><th>Hãng</th><th>Đơn vị</th><th>Tồn hiện tại</th><th>Tối thiểu</th><th>Đồng bộ / Thao tác</th></tr>';
   panel.querySelector('#inventory-body').innerHTML = loading ? '<tr><td colspan="6" class="inventory-empty">Đang tải dữ liệu kho…</td></tr>' : !loaded?.rows.length
     ? '<tr><td colspan="6" class="inventory-empty">Chưa có dữ liệu trong phạm vi đang xem.</td></tr>'
     : loaded.rows.map(row => history
       ? `<tr><td data-label="Thời gian">${escape(formatDateTime(row.created_at))}</td><td data-label="SKU / Sản phẩm"><strong>${escape(row.sku)}</strong><small>${escape(row.name)}</small></td><td data-label="Nghiệp vụ">${escape(kinds[row.kind])}</td><td data-label="Thay đổi" class="${Number(row.delta) < 0 ? 'inventory-negative' : 'inventory-positive'}">${Number(row.delta) > 0 ? '+' : ''}${quantity(row.delta)}</td><td data-label="Tồn sau">${quantity(row.balance_after)}</td><td data-label="Tham chiếu / Ghi chú">${escape(row.order_id || row.document_id || '')}<small>${escape(row.note)}</small></td></tr>`
-      : `<tr><td data-label="SKU / Sản phẩm"><strong>${escape(row.sku)}</strong><small>${escape(row.name)}${row.is_active ? '' : ' · Ngừng sử dụng'}</small></td><td data-label="Hãng">${escape(row.brand)}</td><td data-label="Đơn vị">${escape(row.unit)}</td><td data-label="Tồn hiện tại" class="${Number(row.quantity) <= Number(row.minimum_quantity) ? 'inventory-negative' : ''}"><strong>${quantity(row.quantity)}</strong></td><td data-label="Mức tối thiểu">${quantity(row.minimum_quantity)}</td><td data-label="Thao tác"><button class="btn btn-secondary" data-inventory-count="${escape(row.product_id)}">Kiểm kê</button></td></tr>`).join('');
+      : `<tr><td data-label="SKU / Sản phẩm"><strong>${escape(row.sku)}</strong><small>${escape(row.name)}${row.is_active ? '' : ' · Ngừng sử dụng'}</small></td><td data-label="Hãng">${escape(row.brand)}</td><td data-label="Đơn vị">${escape(row.unit)}</td><td data-label="Tồn hiện tại" class="${Number(row.quantity) <= Number(row.minimum_quantity) ? 'inventory-negative' : ''}"><strong>${quantity(row.quantity)}</strong></td><td data-label="Mức tối thiểu">${quantity(row.minimum_quantity)}</td><td data-label="Đồng bộ / Thao tác"><small class="${row.sync_active ? 'inventory-positive' : ''}">${row.sync_active ? (loaded.control.syncEnabled ? 'Đang đồng bộ' : 'Tạm dừng') : 'Chưa đồng bộ'}</small><button class="btn ${row.sync_active ? 'btn-secondary' : 'btn-primary'}" data-inventory-count="${escape(row.product_id)}">${row.sync_active ? 'Kiểm kê' : 'Kiểm kê & đồng bộ'}</button></td></tr>`).join('');
   panel.querySelector('#inventory-error').hidden = !errorText;
   panel.querySelector('#inventory-error').textContent = errorText;
   panel.querySelector('#inventory-low-control').hidden = history;
@@ -115,8 +115,8 @@ function draw() {
     : !control.activatedAt ? 'Chưa bật đồng bộ'
       : syncEnabled ? 'Đồng bộ kho đang bật' : `Đang tạm dừng${pendingOrders ? ` · ${pendingOrders} đơn chờ` : ''}`;
   const detail = !control ? 'Thông tin đồng bộ sẽ xuất hiện sau khi tải xong dữ liệu.'
-    : !control.activatedAt ? 'Đối chiếu tồn đầu kỳ trước lần bật đầu tiên. Đơn cũ không tự động trừ lại tồn.'
-    : syncEnabled ? 'Tồn kho được cập nhật tự động theo đơn hàng, hoàn và hủy.'
+    : !control.activatedAt ? 'Đếm xong SKU nào, bấm Kiểm kê & đồng bộ ngay dòng đó. Các SKU chưa đếm chưa tự động trừ tồn.'
+    : syncEnabled ? control.syncMode === 'selected' ? 'Chỉ SKU đã kiểm kê và bật đồng bộ mới tự động cập nhật theo đơn bán, hoàn và hủy.' : 'Tồn kho được cập nhật tự động theo đơn hàng, hoàn và hủy.'
       : pendingOrders ? 'Các đơn mới đang chờ xử lý đồng bộ.' : 'Đơn phát sinh được lưu vào hàng đợi để xử lý khi bật lại.';
   const statusCard = panel.querySelector('#inventory-status');
   statusCard.dataset.syncState = !control ? 'unknown' : !control.activatedAt ? 'setup' : syncEnabled ? 'enabled' : 'paused';
@@ -135,17 +135,18 @@ function draw() {
     panel.querySelector('#inventory-budget-bar').style.width = `${percent}%`;
     panel.querySelector('#inventory-budget-cycle').textContent = `Chu kỳ từ ${usage.cycleStart}`;
   }
-  panel.querySelector('#inventory-sync-control').hidden = !control || state.currentUser?.role !== 'admin';
+  panel.querySelector('#inventory-sync-control').hidden = !control || (Boolean(control.activatedAt) && state.currentUser?.role !== 'admin');
+  panel.querySelector('#inventory-opening-control').hidden = Boolean(control?.productSyncAvailable) || Boolean(control?.activatedAt);
   const toggle = panel.querySelector('[data-inventory-action="toggle-sync"]');
   toggle.setAttribute('aria-checked', String(syncEnabled));
   toggle.textContent = switchingSync ? 'Đang xử lý…' : syncEnabled ? 'Tắt đồng bộ kho'
     : pendingOrders ? `Bật và xử lý ${pendingOrders} đơn chờ` : 'Bật đồng bộ kho';
   toggle.className = `btn ${syncEnabled ? 'btn-secondary' : 'btn-primary'}`;
   toggle.disabled = loading || saving || Boolean(draft) || switchingSync || !control?.syncAvailable;
-  panel.querySelector('#inventory-opening-control').hidden = Boolean(control?.activatedAt);
+  toggle.hidden = Boolean(control?.productSyncAvailable) && !control?.activatedAt;
   panel.querySelector('#inventory-sync-description').textContent = !control?.syncAvailable
     ? 'Cần cập nhật Cloud phiên bản 0089 để sử dụng nút bật/tắt đồng bộ.'
-    : !control.activatedAt ? 'Nhập và đối chiếu tồn thực tế trước lần bật đầu tiên. Đơn cũ không tự động trừ lại tồn.'
+    : !control.activatedAt ? 'Kiểm kê từng sản phẩm rồi lưu và bật đồng bộ ngay trong phiếu. Không cần chờ kiểm kê hết kho. Đơn cũ được giữ làm mốc, không trừ lại số hàng đã xuất.'
       : syncEnabled ? 'Đơn bán, sửa, hoàn và hủy đang tự động cập nhật tồn. Bạn có thể tạm dừng khi cần.'
         : pendingOrders ? `Khi bật lại, mỗi lượt xử lý tối đa 50 đơn chờ. Chỉ bật tự động sau khi xử lý hết. Không xuất tay để bù các đơn này; xử lý hàng đợi trước khi kiểm kê.`
           : 'Đang tạm dừng cập nhật tồn từ đơn hàng. Đơn phát sinh sẽ vào hàng đợi và được xử lý khi bật lại.';
@@ -214,8 +215,8 @@ function openDocument(kind, row = null) {
   document.body.append(host);
   const products = availableProducts();
   host.innerHTML = `<div class="modal-overlay active"><div class="modal-content inventory-document" role="dialog" aria-modal="true" aria-label="${kinds[kind]}"><div class="modal-header"><h3>${kinds[kind]}</h3><button type="button" class="modal-close" aria-label="Đóng phiếu kho">&times;</button></div>
-    <form id="inventory-document-form"><div class="modal-body"><p>${kind === 'count' ? 'Nhập số tồn thực tế. Hệ thống sẽ ghi phần chênh lệch so với tồn đang xem.' : 'Phiếu kho ghi số lượng hàng. Các khoản thanh toán được ghi riêng tại Phiếu mua hàng hoặc Sổ quỹ.'}</p>
-    ${kind === 'count' ? `<strong>${escape(row.sku)} · ${escape(row.name)}</strong><p>Tồn đang xem: ${quantity(row.quantity)}</p><label>Tồn thực tế<input class="form-control" name="countQuantity" type="number" min="0" max="100000000" step="0.0001" value="${Number(row.quantity)}" required></label><label>Mức tồn tối thiểu<input class="form-control" name="minimumQuantity" type="number" min="0" max="100000000" step="0.0001" value="${Number(row.minimum_quantity)}" required></label>`
+    <form id="inventory-document-form"><div class="modal-body"><p>${kind === 'count' ? 'Mở phiếu trước khi bắt đầu đếm SKU này. Nếu có biến động trong lúc đếm, hệ thống sẽ yêu cầu kiểm tra lại riêng SKU này trước khi lưu.' : 'Phiếu kho ghi số lượng hàng. Các khoản thanh toán được ghi riêng tại Phiếu mua hàng hoặc Sổ quỹ.'}</p>
+    ${kind === 'count' ? `<strong>${escape(row.sku)} · ${escape(row.name)}</strong><p id="inventory-count-baseline" role="status">Đang lấy mốc kiểm kê…</p><p id="inventory-product-sync-note"></p><label>Tồn thực tế<input class="form-control" name="countQuantity" type="number" min="0" max="100000000" step="0.0001" value="${Number(row.quantity)}" required></label><label>Mức tồn tối thiểu<input class="form-control" name="minimumQuantity" type="number" min="0" max="100000000" step="0.0001" value="${Number(row.minimum_quantity)}" required></label>`
       : `<div id="inventory-document-lines"></div><button type="button" class="btn btn-secondary" id="inventory-add-line">Thêm SKU</button><datalist id="inventory-product-options">${products.map(product => `<option value="${escape(product.code)} · ${escape(product.brand)}" label="${escape(product.name)}"></option>`).join('')}</datalist>`}
     <label>Ghi chú<textarea class="form-control" name="note" maxlength="240" rows="2" placeholder="Lý do nhập, xuất hoặc kiểm kê"></textarea></label><p id="inventory-document-error" class="inventory-error" role="alert" hidden></p></div>
     <div class="modal-footer"><button type="submit" class="btn btn-primary" id="inventory-save-document">Lưu phiếu</button></div></form></div></div>`;
@@ -226,8 +227,33 @@ function openDocument(kind, row = null) {
   host.querySelector('#inventory-document-form').addEventListener('submit', saveDocument);
   const add = host.querySelector('#inventory-add-line');
   if (add) { add.addEventListener('click', addLine); addLine(); }
+  if (kind === 'count') void prepareCount(draft, host);
   draw();
   host.querySelector(kind === 'count' ? '[name="countQuantity"]' : '[data-inventory-product]')?.focus();
+}
+async function prepareCount(currentDraft, host) {
+  const actor = sessionScope(); const button = host.querySelector('#inventory-save-document');
+  button.disabled = true;
+  host.querySelector('[name="countQuantity"]').disabled = true;
+  try {
+    const context = await inventoryGateway.countContext(currentDraft.row.product_id);
+    if (draft !== currentDraft || actor !== sessionScope()) return;
+    currentDraft.context = context;
+    currentDraft.row = { ...currentDraft.row, quantity: context.quantity, minimum_quantity: context.minimumQuantity };
+    host.querySelector('#inventory-count-baseline').textContent = 'Tồn hệ thống tại lúc bắt đầu: ' + quantity(context.quantity);
+    host.querySelector('[name="countQuantity"]').value = '';
+    host.querySelector('[name="countQuantity"]').disabled = false;
+    host.querySelector('[name="minimumQuantity"]').value = context.minimumQuantity;
+    host.querySelector('#inventory-product-sync-note').textContent = context.syncActive
+      ? 'SKU này đã được bật đồng bộ. Lưu để điều chỉnh theo số đếm mới.'
+      : 'Lưu phiếu sẽ bật đồng bộ riêng SKU này ngay. Các SKU khác giữ nguyên.';
+    button.textContent = context.syncActive ? 'Lưu kiểm kê' : 'Lưu & bật đồng bộ SKU';
+    button.disabled = false;
+    host.querySelector('[name="countQuantity"]').focus();
+  } catch (error) {
+    if (draft !== currentDraft || actor !== sessionScope()) return;
+    const box = host.querySelector('#inventory-document-error'); box.textContent = error.message; box.hidden = false;
+  }
 }
 function addLine() {
   const lines = document.getElementById('inventory-document-lines');
@@ -252,17 +278,20 @@ async function saveDocument(event) {
         if (!product) throw new Error('Chọn SKU hợp lệ từ danh mục.');
         return { productId: product.id, quantity: Number(line.querySelector('[data-inventory-quantity]').value) };
       });
+    if (draft.kind === 'count' && !draft.context) throw new Error('Chờ tải mốc kiểm kê trước khi lưu.');
     const input = { requestKey: draft.requestKey, kind: draft.kind, note: String(data.get('note') || '').trim(), items };
+    if (draft.kind === 'count') Object.assign(input, { countToken: draft.context.token, activateProduct: true });
     validateInventoryDocument(input);
     // An uncertain response must retry the same payload/key. A changed form
     // cannot accidentally create a second voucher after a network timeout.
     if (attemptedRequest && attemptedRequest !== JSON.stringify(input)) throw new Error('Phiếu đã được gửi. Giữ nguyên nội dung để thử lại; kiểm tra lịch sử trước khi tạo phiếu khác.');
     attemptedRequest = JSON.stringify(input);
     saving = true; form.querySelector('#inventory-save-document').disabled = true;
-    await inventoryGateway.post(input);
+    if (draft.kind === 'count') await inventoryGateway.countProduct(input);
+    else await inventoryGateway.post(input);
     if (actor !== sessionScope()) return;
     closeDocument();
-    showToast('Đã ghi nhận phiếu kho.'); loaded = null; await load(true);
+    showToast(input.kind === 'count' ? 'Đã lưu kiểm kê và đồng bộ SKU.' : 'Đã ghi nhận phiếu kho.'); loaded = null; await load(true);
   } catch (error) {
     if (actor === sessionScope()) {
       if (error.definitive) attemptedRequest = null;

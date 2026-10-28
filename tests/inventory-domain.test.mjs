@@ -81,3 +81,21 @@ test('a toggle response from a previous login cannot update the current session'
   const pending=gateway.setSync(false); actor='second'; finish();
   await assert.rejects(pending,/Phiên/);
 });
+
+test('per-SKU count uses fresh context, invalidates pages, and preserves retry payload', async()=>{
+ const calls=[];const gateway=createInventoryGateway({scope:()=> 'accounting',rpc:async(name,args)=>{
+   calls.push({name,args});return name.endsWith('window')?{rows:[]}:name.endsWith('context')?{token:'snapshot'}:{id:'count'};
+ }});
+ await gateway.read();const context=await gateway.countContext('sku-a');
+ const payload={kind:'count',requestKey:'same-key',countToken:context.token,activateProduct:true,items:[{productId:'sku-a',quantity:10,expectedQuantity:0}]};
+ await gateway.countProduct(payload);await gateway.read();
+ assert.deepEqual(calls.map(c=>c.name),['rpc_inventory_window','rpc_inventory_count_context','rpc_inventory_count_product','rpc_inventory_window']);
+ assert.deepEqual(calls[2].args.p_input,payload);
+ await assert.rejects(gateway.countProduct({...payload,countToken:null}),/mở lại/);
+});
+
+test('late count contexts cannot cross login sessions',async()=>{
+ let actor='first',finish;const gateway=createInventoryGateway({scope:()=>actor,rpc:async()=>new Promise(resolve=>{finish=resolve;})});
+ const pending=gateway.countContext('sku-a');actor='second';finish({token:'private'});
+ await assert.rejects(pending,/Phiên/);
+});

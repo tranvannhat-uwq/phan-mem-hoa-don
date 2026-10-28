@@ -12033,6 +12033,7 @@ body.mobile-nav-open {
 .inventory-sync-control .inventory-header { align-items: center; }
 .inventory-sync-control .inventory-header p { margin-bottom: .5rem; max-width: 760px; }
 .inventory-sync-control [hidden] { display: none; }
+.inventory-sync-control #inventory-opening-control[hidden] { display: none; }
 .inventory-document { width: min(680px, 95vw); max-width: 680px; }
 .inventory-document .modal-body { display: flex; flex-direction: column; gap: 1rem; max-height: 65vh; overflow: auto; }
 .inventory-document label { display: flex; flex-direction: column; gap: .4rem; }

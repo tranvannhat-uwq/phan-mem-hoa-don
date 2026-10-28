@@ -89,6 +89,23 @@ export function createInventoryGateway({ rpc, scope, now = Date.now }) {
       reset();
       return result;
     },
+    async countContext(productId) {
+      const actor = sync(); const version = generation;
+      if (!productId || typeof productId !== 'string') throw new Error('SKU không hợp lệ.');
+      const result = await rpc('rpc_inventory_count_context', { p_product_id: productId });
+      if (version !== generation || actor !== scope()) throw new Error('Phiên làm việc đã thay đổi.');
+      return result;
+    },
+    async countProduct(input) {
+      const actor = sync(); const version = generation;
+      validateInventoryDocument(input);
+      if (input.kind !== 'count' || input.items.length !== 1 || !input.countToken || typeof input.activateProduct !== 'boolean') {
+        throw new Error('Cần mở lại phiếu kiểm kê của một SKU.');
+      }
+      const result = await rpc('rpc_inventory_count_product', { p_input: input });
+      if (version !== generation || actor !== scope()) throw new Error('Phiên làm việc đã thay đổi.');
+      reset(); return result;
+    },
     async activate() {
       const actor = sync();
       const version = generation;

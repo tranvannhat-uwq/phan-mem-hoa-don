@@ -1,6 +1,6 @@
 <!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quyền Tổng quan · Dữ liệu kiểm thử</title><link rel="stylesheet" href="../style.css"><script defer src="../js/vendor/lucide.js"></script><script>window.__app_initialized=true;</script><style>body{display:block;padding:24px;background:#eef3fa}.modal-overlay{background:#172b4d65}#users-panel{display:block}#user-password{display:block}</style></head><body><script type="module">
 import {state} from '../js/state.js';
-import {setupUserManagement,openUserModal,renderUsersTable} from '../js/components/users.js?v=20261028-dashboard-access-v1';
+import {setupUserManagement,openUserModal,renderUsersTable} from '../js/components/users.js?v=20261028-inventory-product-sync-v1';
 const html=new DOMParser().parseFromString(await(await fetch('../index.html')).text(),'text/html');
 document.body.append(html.getElementById('users-panel'),html.getElementById('user-modal'));
 state.currentUser={id:'test-admin',role:'admin',isActive:true};

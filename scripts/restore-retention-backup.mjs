@@ -9,7 +9,7 @@ const allowedTables=new Set(['companies','brands','product_groups','payroll_prod
   'cashbook_transactions','payments','customer_debt_transactions','order_amendments','customer_debt_amendment_voids',
   'customer_debt_history_suppressions','purchases','purchase_items','purchase_payments','supplier_debt_transactions',
   'commission_transactions','payroll_periods','payroll_entries','payroll_adjustments','starting_balances','inventory_control',
-  'inventory_balances','inventory_documents','inventory_movements','inventory_order_positions','inventory_pending_orders',
+  'inventory_balances','inventory_documents','inventory_product_sync','inventory_movements','inventory_order_positions','inventory_pending_orders',
   'inventory_sync_outbox','bom_items','bom_item_balances','bom_item_documents','bom_versions','bom_lines','bom_runs','bom_item_movements',
   'audit_logs','activity_logs','retention_control','retention_customer_balances','retention_customer_company_balances','retention_supplier_balances',
   'retention_inventory_balances','retention_retired_requests','retention_review_orders','dealer_support_control','dealer_support_history','activity_logs_archive_pre_20260804']);
