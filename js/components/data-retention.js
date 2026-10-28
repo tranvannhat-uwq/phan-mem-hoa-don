@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings, dbReleaseRetentionBackup, getRetentionSessionScope } from '../services/supabase.js?v=20261028-supplier-delete-v1';
+import { dbPreviewMonthlyRetention, dbPrepareMonthlyRetention, dbExecuteMonthlyRetention, dbRetentionJob, dbHoldRetentionWarnings, dbReleaseRetentionBackup, getRetentionSessionScope } from '../services/supabase.js?v=20261028-dashboard-access-v1';
 import { encryptRetentionBackup, decryptRetentionBackup } from '../services/retention-backup.js';
 import { retentionConfirmation } from '../domain/data-retention.js';
 

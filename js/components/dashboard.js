@@ -1,11 +1,12 @@
 import { state } from '../state.js';
 import { formatCurrency, safeCreateIcons, isSameUser, getUserCompanyId, getCompanyNameById, getCompanyIdByBrand, getCanonicalBrandName, getBrandById, normalizeCompanyId, isFestivalBrand, isSharedBrand, getNormalizedBrandName, removeVietnameseTones, showToast, getUserDisplayName } from '../utils.js';
-import { switchTab } from '../main.js?v=20261028-supplier-delete-v1';
-import { openProductModal } from './products.js?v=20261028-supplier-delete-v1';
-import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261028-supplier-delete-v1';
+import { switchTab } from '../main.js?v=20261028-dashboard-access-v1';
+import { openProductModal } from './products.js?v=20261028-dashboard-access-v1';
+import { dbFetchPhase5Dashboard, dbSearchInvoiceCustomers, dbFetchInvoiceCustomerDetail, isCloudActive } from '../services/supabase.js?v=20261028-dashboard-access-v1';
 import { buildDashboardChartSeries } from '../domain/dashboard-series.js';
 import { filterLoginEmployeeRevenueRows } from '../domain/dashboard-employees.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261028-supplier-delete-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-dashboard-access-v1';
+import {canViewDashboard} from '../domain/dashboard-access.js';
 
 let revenueChartInstance = null;
 let dashboardChartRequestId = 0;
@@ -752,12 +753,25 @@ export function invalidateDashboardPayloadCache() {
   dashboardChartRequestId += 1;
 }
 
+export function clearDashboardView() {
+  invalidateDashboardPayloadCache();
+  revenueChartInstance?.destroy();revenueChartInstance=null;
+  dashboardBreakdownCharts.forEach(chart=>chart.destroy());dashboardBreakdownCharts.clear();
+  const panel=document.getElementById('dashboard-panel');
+  if(panel) {
+    panel.hidden=true;
+    panel.querySelectorAll('.widget-value,.stat-value').forEach(node=>{node.textContent='—';});
+  }
+  ['dashboard-recent-orders-body','top-products-list'].forEach(id=>{const node=document.getElementById(id);if(node)node.innerHTML='';});
+}
+
 function synchronizeDashboardRequestScope() {
   const user = state.currentUser;
   const key = user ? JSON.stringify({
     actor: dashboardCompanyScopeActor(user),
     username: String(user.username || ''),
     role: String(user.role || '').toLowerCase(),
+    dashboardAccess: canViewDashboard(user),
     company: getUserCompanyId(user),
     allCompanies: canViewAllDashboardCompanies(user),
     external: user.isExternal === true || user.is_external === true,
@@ -784,6 +798,7 @@ function isCurrentDashboardPayloadKey(key, scope, timeRange) {
 }
 
 function fetchDashboardPayload(filters, { force = false, scope } = {}) {
+  if(!canViewDashboard(state.currentUser))return Promise.reject(new Error('Tài khoản không được xem trang Tổng quan.'));
   const key = dashboardPayloadKey(filters, scope);
   const generation = dashboardPayloadGeneration;
   // A refresh can share a pending request, including one started by the other view.
@@ -816,6 +831,7 @@ function fetchDashboardPayload(filters, { force = false, scope } = {}) {
 }
 
 async function updateRevenueChartForView(view, prefetchedPayload = null, { force = false, scope = synchronizeDashboardRequestScope() } = {}) {
+  if(!canViewDashboard(state.currentUser))return null;
   const requestId = ++dashboardChartRequestId;
   if (!scope.key) return null;
   const filters = dashboardRequestFiltersForRange(view);
@@ -878,6 +894,7 @@ function renderServerDashboard(payload) {
 }
 
 export async function updateDashboardStats({ force = false } = {}) {
+  if(!canViewDashboard(state.currentUser)){clearDashboardView();return null;}
   populateDashboardFilters();
   const scope = synchronizeDashboardRequestScope();
   const requestId = ++dashboardStatsRequestId;

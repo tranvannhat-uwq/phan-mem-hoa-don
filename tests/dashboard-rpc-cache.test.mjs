@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import {canViewDashboard} from '../js/domain/dashboard-access.js';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +40,7 @@ function dashboardHarness({ chartView = 'month', rpc } = {}) {
     };
   }
   const sandbox = {
+    canViewDashboard,
     state,
     Date: class extends Date {
       constructor(...args) { super(...(args.length ? args : [now])); }
@@ -82,6 +84,19 @@ function deferred() {
   const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
   return { promise, resolve, reject };
 }
+
+test('revoking dashboard access invalidates cached and pending results without querying again',async()=>{
+  const pending=deferred(),dashboard=dashboardHarness({rpc:()=>pending.promise});
+  dashboard.state.currentUser.role='accounting';
+  const loading=dashboard.updateDashboardStats();
+  dashboard.state.currentUser.canViewDashboard=false;
+  await dashboard.updateDashboardStats();
+  pending.resolve(dashboard.payload(999));await loading;
+  assert.equal(dashboard.calls.length,1);
+  assert.notEqual(dashboard.elements.get('stat-total-revenue').innerText,'999');
+  dashboard.state.currentUser.canViewDashboard=true;
+  await dashboard.updateDashboardStats();assert.equal(dashboard.calls.length,2);
+});
 
 test('four renders with the same summary and chart filters share one RPC', async () => {
   const dashboard = dashboardHarness();

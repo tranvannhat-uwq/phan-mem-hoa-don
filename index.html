@@ -33,15 +33,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <!-- Pinned local browser libraries; no external CDN required for login -->
-  <script defer src="js/vendor/lucide.js?v=20261028-supplier-delete-v1"></script>
+  <script defer src="js/vendor/lucide.js?v=20261028-dashboard-access-v1"></script>
   
-  <script defer src="js/vendor/xlsx.js?v=20261028-supplier-delete-v1"></script>
+  <script defer src="js/vendor/xlsx.js?v=20261028-dashboard-access-v1"></script>
   
-  <script defer src="js/vendor/supabase.js?v=20261028-supplier-delete-v1"></script>
+  <script defer src="js/vendor/supabase.js?v=20261028-dashboard-access-v1"></script>
   
-  <script defer src="js/vendor/chart.js?v=20261028-supplier-delete-v1"></script>
+  <script defer src="js/vendor/chart.js?v=20261028-dashboard-access-v1"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261028-supplier-delete-v1">
+  <link rel="stylesheet" href="style.css?v=20261028-dashboard-access-v1">
 </head>
 <body>
 
@@ -3417,6 +3417,10 @@
               <option value="admin">Admin (Toàn quyền hệ thống)</option>
             </select>
           </div>
+          <div class="form-group user-dashboard-access-group" id="user-dashboard-access-group" hidden>
+            <label class="user-dashboard-access-check"><input type="checkbox" id="user-can-view-dashboard" checked> Được xem trang Tổng quan</label>
+            <small>Bỏ tích để tài khoản kế toán vào Lên đơn khi đăng nhập. Các quyền nghiệp vụ khác giữ nguyên.</small>
+          </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label" for="user-company">Công ty trực thuộc *</label>
             <select class="form-control" id="user-company" required style="width: 100%;">
@@ -4606,9 +4610,9 @@
 
 
   <!-- Login can open before the full application and Auth session are ready. -->
-  <script src="js/login-entry.js?v=20261028-supplier-delete-v1"></script>
+  <script src="js/login-entry.js?v=20261028-dashboard-access-v1"></script>
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261028-supplier-delete-v1"></script>
-  <script type="module" src="js/main.js?v=20261028-supplier-delete-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261028-dashboard-access-v1"></script>
+  <script type="module" src="js/main.js?v=20261028-dashboard-access-v1"></script>
 </body>
 </html>

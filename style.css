@@ -1,4 +1,14 @@
 /* Reset and Base Styles */
+#dashboard-panel[hidden],#user-dashboard-access-group[hidden]{display:none!important}
+.user-dashboard-access-group{grid-column:1/-1;padding:14px 16px;border:1px solid #cbdcf6;border-radius:10px;background:#f2f7ff}
+.user-dashboard-access-check{display:flex;gap:10px;align-items:center;font-weight:600;cursor:pointer;color:var(--text-primary)}
+.user-dashboard-access-check input{width:18px;height:18px;accent-color:#2563eb;flex-shrink:0}
+.user-dashboard-access-group small{display:block;color:var(--text-secondary);line-height:1.6;margin-top:7px;font-size:.8rem}
+.user-dashboard-permission-status{display:block;margin-top:5px;font-size:.73rem;color:var(--text-secondary)}
+#user-modal .modal-content{display:flex;flex-direction:column;max-height:calc(100dvh - 40px)}
+#user-form{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#user-form .modal-body{overflow-y:auto;min-height:0}
+#user-modal .modal-header,#user-form .modal-footer{flex-shrink:0}
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;

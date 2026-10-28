@@ -18,7 +18,8 @@ test('frontend checks maintenance before loading data and exposes the control on
   const main = read('js/main.js');
   const service = read('js/services/supabase.js');
   const html = read('index.html');
-  assert.ok(users.indexOf('await getMaintenanceStatus()') < users.indexOf('await fetchCloudData({'));
+  const login=users.slice(users.indexOf('export async function handleLogin('));
+  assert.ok(login.indexOf('getMaintenanceStatus()') < login.indexOf('fetchCloudData({'));
   assert.match(users, /state\.currentUser\.role === 'admin'/);
   assert.match(main, /state\.currentUser\?\.role !== 'admin'/);
   assert.match(service, /migrationMissing[\s\S]*available: false/);

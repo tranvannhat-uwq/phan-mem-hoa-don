@@ -1,20 +1,22 @@
 import { state } from '../state.js';
 import { withAuthTimeout } from '../domain/auth-timeout.js';
-import { createListPagination } from './list-pagination.js?v=20261028-supplier-delete-v1';
+import { createListPagination } from './list-pagination.js?v=20261028-dashboard-access-v1';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261028-supplier-delete-v1';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261028-supplier-delete-v1';
-import { renderAll, switchTab } from '../main.js?v=20261028-supplier-delete-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261028-supplier-delete-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261028-dashboard-access-v1';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261028-dashboard-access-v1';
+import { renderAll, switchTab } from '../main.js?v=20261028-dashboard-access-v1';
+import { populateManagedByDropdown } from './customers.js?v=20261028-dashboard-access-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261028-supplier-delete-v1';
-import { resetInventoryPanel } from './inventory.js?v=20261028-supplier-delete-v1';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261028-supplier-delete-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261028-dashboard-access-v1';
+import { resetInventoryPanel } from './inventory.js?v=20261028-dashboard-access-v1';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261028-dashboard-access-v1';
+import {canViewDashboard} from '../domain/dashboard-access.js';
+import {clearDashboardView} from './dashboard.js?v=20261028-dashboard-access-v1';
 
 const usersPager = createListPagination('users-pagination');
 
@@ -71,6 +73,7 @@ export function renderUsersTable() {
         <td>${dName}</td>
         <td>
           <span style="color: ${roleColor}; font-weight: 500;">${roleText}</span>
+          ${u.role==='accounting'?`<small class="user-dashboard-permission-status">Tổng quan: ${canViewDashboard(u)?'Được xem':'Không được xem'}</small>`:''}
         </td>
         <td style="font-size: 0.8rem; color: var(--text-secondary); overflow-wrap: anywhere;">${compName}</td>
         <td style="text-align: center;">
@@ -118,6 +121,8 @@ export function openUserModal(userId = '') {
   if (!modal) return;
   modal.classList.add('active');
   form.reset();
+  const dashboardAccess=document.getElementById('user-can-view-dashboard');
+  if(dashboardAccess)dashboardAccess.checked=true;
   
   const compSelect = document.getElementById('user-company');
   if (compSelect && state.companies && state.companies.length > 0) {
@@ -148,6 +153,7 @@ export function openUserModal(userId = '') {
       usernameInput.removeAttribute('disabled');
       document.getElementById('user-displayname').value = user.displayName;
       if (roleSelect) roleSelect.value = user.role;
+      if(dashboardAccess)dashboardAccess.checked=user.canViewDashboard!==false;
       if (compSelect) compSelect.value = user.companyId || user.company_id || 'ABS_NORTH';
       
       const isExt = user.isExternal || false;
@@ -170,6 +176,12 @@ export function openUserModal(userId = '') {
       }
     }
   }
+  syncUserDashboardAccessField();
+}
+
+function syncUserDashboardAccessField() {
+  const group=document.getElementById('user-dashboard-access-group');
+  if(group)group.hidden=document.getElementById('user-role')?.value!=='accounting';
 }
 
 export function closeUserModal() {
@@ -297,6 +309,7 @@ export async function saveUser() {
     };
   }
   
+  user.canViewDashboard=document.getElementById('user-can-view-dashboard')?.checked!==false;
   const saved = await dbSaveUser(user, { initialPassword });
   if (saved) {
     user.isActive = true;
@@ -448,6 +461,7 @@ function broadcastMaintenanceStatus(userId, status) {
     maintenanceChannel.postMessage({
       project: maintenanceProjectKey(), userId,
       enabled: status.enabled === true,
+      ...(typeof status.dashboardAccess==='boolean'?{dashboardAccess:status.dashboardAccess}:{}),
       message: String(status.message || ''),
       updatedAt: status.updatedAt || null
     });
@@ -502,6 +516,7 @@ async function enforceMaintenanceForActiveEmployee({ force = false } = {}) {
       if (!isCurrentMaintenanceSession(userId, generation)) return;
       const status = await getMaintenanceStatus();
       if (!isCurrentMaintenanceSession(userId, generation)) return;
+      applyDashboardAccessStatus(status);
       broadcastMaintenanceStatus(userId, status);
       await applyMaintenanceStatus(status, userId, generation);
     };
@@ -547,6 +562,7 @@ export function startMaintenanceMonitor() {
       if (data.project !== expectedProject || data.userId !== expectedUserId
           || !state.currentUser || currentMaintenanceUserId() !== expectedUserId
           || state.currentUser.role === 'admin') return;
+      applyDashboardAccessStatus(data);
       if (data.enabled === true) {
         void applyMaintenanceStatus({ enabled: true, message: data.message, updatedAt: data.updatedAt },
           expectedUserId, maintenanceMonitorGeneration);
@@ -572,6 +588,7 @@ function createLoginFlowError(code) {
 }
 
 export function clearAuthenticatedSessionState() {
+  clearDashboardView();
   resetSupabaseEgressMetrics();
   resetRealtimeEventMetrics();
   state.currentUser = null;
@@ -595,10 +612,18 @@ export function clearAuthenticatedSessionState() {
   state.selectedPriceListIds = [];
 }
 
+function applyDashboardAccessStatus(status) {
+  const user=state.currentUser;
+  if(user?.role!=='accounting'||typeof status.dashboardAccess!=='boolean'||user.canViewDashboard===status.dashboardAccess)return;
+  user.canViewDashboard=status.dashboardAccess;
+  const listed=state.users.find(item=>item.id===user.id);if(listed)listed.canViewDashboard=status.dashboardAccess;
+  applyUserPermissions(user);
+}
+
 export async function loadAuthenticatedProfile(authUserId) {
   const { data: profileRows, error: profileError } = await supabaseClient
     .from('profiles')
-    .select('id,auth_user_id,username,display_name,role,company_id,is_external,is_active')
+    .select('id,auth_user_id,username,display_name,role,company_id,is_external,is_active,can_view_dashboard')
     .eq('auth_user_id', authUserId)
     .limit(2);
 
@@ -698,6 +723,7 @@ export async function handleLogin(e) {
       role: profile.role,
       companyId: profile.company_id || 'ABS_NORTH',
       isExternal: profile.is_external === true,
+      canViewDashboard: profile.can_view_dashboard !== false,
       isActive: profile.is_active !== false
     };
     const maintenance = await withAuthTimeout(getMaintenanceStatus());
@@ -735,7 +761,7 @@ export async function handleLogin(e) {
     }
     applyUserPermissions(state.currentUser);
     setMaintenanceNotice('', false);
-    switchTab(state.currentUser.role === 'sale' ? 'invoice-panel' : 'dashboard-panel');
+    switchTab(canViewDashboard(state.currentUser) ? 'dashboard-panel' : 'invoice-panel');
     void startRealtimeSync(renderAll);
     startMaintenanceMonitor();
     showToast(`Đăng nhập thành công! Chào mừng ${state.currentUser.displayName}!`, 'success');
@@ -802,6 +828,8 @@ export function showLoginGate() {
 
 export function applyUserPermissions(user) {
   if (!user) return;
+  const dashboardPanel=document.getElementById('dashboard-panel');
+  if(dashboardPanel)dashboardPanel.hidden=!canViewDashboard(user);
   const role = user.role;
   const activityButton = document.getElementById('btn-activity-log');
   if (activityButton) activityButton.closest('.activity-header-wrap').style.display = role === 'admin' ? 'block' : 'none';
@@ -824,6 +852,7 @@ export function applyUserPermissions(user) {
       allowed = target !== 'settings-panel' && target !== 'users-panel';
     }
     if (target === 'independent-returns-panel') allowed = role === 'admin' || role === 'accounting';
+    if (target === 'dashboard-panel') allowed = canViewDashboard(user);
     navItem.style.removeProperty('display');
     navItem.hidden = !allowed || navItem.dataset.featureStatus === 'deferred';
   });
@@ -847,6 +876,7 @@ export function applyUserPermissions(user) {
   const dropdownNavLinks = document.querySelectorAll('.dropdown-nav-link');
   dropdownNavLinks.forEach(link => {
     const target = link.getAttribute('data-target');
+      if(target==='dashboard-panel') {link.style.display=canViewDashboard(user)?'flex':'none';return;}
     if (role === 'sale' || role === 'accounting') {
       if (target === 'users-panel' || target === 'settings-panel') {
         link.style.display = 'none';
@@ -860,6 +890,10 @@ export function applyUserPermissions(user) {
 
   if (role === 'sale') {
     switchTab('invoice-panel');
+  }
+  if(!canViewDashboard(user)) {
+    clearDashboardView();
+    if(state.currentTab==='dashboard-panel')switchTab('invoice-panel');
   }
 
   // Handle Dashboard Sale Filter dropdown visibility and population
@@ -935,6 +969,9 @@ export function applyUserPermissions(user) {
 }
 
 export function setupUserManagement() {
+  document.getElementById('user-role')?.addEventListener('change',syncUserDashboardAccessField);
+  document.getElementById('user-is-external')?.addEventListener('change',()=>queueMicrotask(syncUserDashboardAccessField));
+  window.addEventListener('dashboard-access-denied',()=>{if(state.currentUser)applyUserPermissions(state.currentUser);});
   const addBtn = document.getElementById('btn-open-add-user-modal');
   const closeBtn = document.getElementById('btn-close-user-modal');
   const cancelBtn = document.getElementById('btn-cancel-user');

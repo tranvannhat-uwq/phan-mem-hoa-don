@@ -3,15 +3,15 @@ import { withAuthTimeout } from '../domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-supplier-delete-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-delete-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-dashboard-access-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-dashboard-access-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-supplier-delete-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-supplier-delete-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-supplier-delete-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-dashboard-access-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-dashboard-access-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-dashboard-access-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-supplier-delete-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-dashboard-access-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -343,6 +343,7 @@ export async function getMaintenanceStatus() {
     message: String(data?.message || 'Hệ thống đang bảo trì. Vui lòng quay lại sau.'),
     updatedAt: data?.updated_at || null,
     updatedBy: data?.updated_by || null,
+    ...(typeof data?.can_view_dashboard==='boolean'?{dashboardAccess:data.can_view_dashboard}:{}),
     available: true
   };
 }
@@ -2102,6 +2103,7 @@ export async function fetchCloudData(options = {}) {
             position: u.position || '',
             companyId: u.company_id || u.companyId || 'ABS_NORTH',
             isExternal: u.is_external || false,
+            canViewDashboard: u.can_view_dashboard !== false,
             isActive: u.is_active !== false
           };
         });
@@ -4301,6 +4303,7 @@ export async function dbSaveUser(user, { initialPassword = '' } = {}) {
         company_id: user.companyId || 'ABS_NORTH',
         is_external: user.isExternal || false,
         is_active: user.isActive !== false,
+        can_view_dashboard: user.canViewDashboard !== false,
         updated_at: new Date().toISOString()
       };
       
@@ -5713,7 +5716,13 @@ export async function dbFetchOrderDebtSnapshot(orderId, customerId) {
 export async function dbFetchPhase5Dashboard(filters = {}) {
   if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để tải báo cáo chính xác.');
   const { data, error } = await supabaseClient.rpc('rpc_get_phase5_dashboard', { p_filters: filters });
-  if (error) throw error;
+  if (error) {
+    if(state.currentUser?.role==='accounting' && String(error.message||'').includes('DASHBOARD_ACCESS_DENIED')) {
+      state.currentUser.canViewDashboard=false;
+      window.dispatchEvent(new Event('dashboard-access-denied'));
+    }
+    throw error;
+  }
   return data;
 }
 
