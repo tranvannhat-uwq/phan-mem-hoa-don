@@ -1,9 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-debt-sort-v1';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-period-report-v1';
 import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
-import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-debt-sort-v1';
-import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261028-supplier-debt-sort-v1';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-period-report-v1';
+import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261028-supplier-period-report-v1';
+import { openSupplierPeriodReport } from './supplier-debt-report.js?v=20261028-supplier-period-report-v1';
 
 const toNumber = supplierNumber;
 const escapeSupplierHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -150,6 +151,8 @@ export function populateSupplierDatalist() {
 }
 
 export function setupSupplierManagement() {
+  const reportBtn=document.getElementById('btn-open-supplier-debt-report');
+  if(reportBtn)reportBtn.onclick=openSupplierPeriodReport;
   const exportBtn = document.getElementById('btn-export-suppliers-excel');
   if (exportBtn) exportBtn.onclick = exportSuppliersExcel;
   const btnOpenAdd = document.getElementById('btn-open-add-supplier-modal');

@@ -3,15 +3,15 @@ import { withAuthTimeout } from '../domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-supplier-debt-sort-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-debt-sort-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-supplier-period-report-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-period-report-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-supplier-debt-sort-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-supplier-debt-sort-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-supplier-debt-sort-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-supplier-period-report-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-supplier-period-report-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-supplier-period-report-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-supplier-debt-sort-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-supplier-period-report-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -4554,6 +4554,15 @@ export async function dbSupplierDebtHistory(supplierId, offset=0) {
   const {data,error}=await supabaseClient.rpc('rpc_supplier_debt_history',{p_supplier_id:supplierId,p_offset:offset,p_limit:20});
   if(error)throw error;
   if(!Array.isArray(data?.rows)||!Number.isFinite(data?.total))throw new Error('Lịch sử trả về không hợp lệ.');
+  return data;
+}
+
+export async function dbSupplierDebtReport(filters, offset=0, limit=20) {
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để lập báo cáo công nợ.');
+  const {data,error}=await supabaseClient.rpc('rpc_supplier_debt_report',{p_input:{...filters,offset,limit}});
+  if(error)throw error;
+  if(!Array.isArray(data?.rows)||!Number.isFinite(data?.total)||!data?.totals||!data?.fingerprint)
+    throw new Error('Dữ liệu báo cáo trả về không hợp lệ.');
   return data;
 }
 

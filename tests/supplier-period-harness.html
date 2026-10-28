@@ -1,0 +1,6 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Báo cáo công nợ NCC · Dữ liệu kiểm thử</title><link rel="stylesheet" href="../style.css"><script src="../js/vendor/xlsx.js"></script><script type="importmap">{"imports":{"../js/services/supabase.js?v=20261028-supplier-period-report-v1":"./supplier-period-service-fixture.js"}}</script><style>body{display:block;background:#edf2f7;padding:20px}</style></head><body><p>Dữ liệu kiểm thử · 45 nhà cung cấp giả lập, không kết nối dữ liệu thật.</p><button type="button" id="open">Mở báo cáo công nợ</button><script type="module">
+import {state} from '../js/state.js';
+import {openSupplierPeriodReport} from '../js/components/supplier-debt-report.js?v=20261028-supplier-period-report-v1';
+state.currentUser={id:'synthetic-finance',role:'accounting'};state.retentionCutoff='2026-08-31T17:00:00Z';
+document.getElementById('open').onclick=openSupplierPeriodReport;openSupplierPeriodReport();document.body.dataset.ready='true';
+</script></body></html>
