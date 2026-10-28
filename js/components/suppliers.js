@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-directory-v1';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-filter-popup-v1';
 import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
-import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-directory-v1';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-filter-popup-v1';
 
 const toNumber = supplierNumber;
 const escapeSupplierHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -80,6 +80,11 @@ export function renderSuppliersTable() {
   if (!body) return;
   const filters = supplierFilters();
   const error = supplierFilterError(filters);
+  const activeCount = Number(filters.debt !== 'all') + Number(filters.min !== '') + Number(filters.max !== '')
+    + Number(Boolean(filters.from || filters.to)) + Number(filters.sort !== 'name');
+  const badge = document.getElementById('supplier-filter-count');
+  if (badge) { badge.textContent = String(activeCount); badge.hidden = activeCount === 0; }
+  document.getElementById('btn-open-supplier-filters')?.classList.toggle('is-active', activeCount > 0);
   const filtered = getFilteredSuppliers();
   const totals = supplierDirectoryTotals(filtered);
   const setText = (id, value) => { const node = document.getElementById(id); if (node) node.textContent = value; };
@@ -150,6 +155,30 @@ export function setupSupplierManagement() {
   const btnClose = document.getElementById('btn-close-supplier-modal');
   const btnCancel = document.getElementById('btn-cancel-supplier-modal');
   const searchInput = document.getElementById('supplier-search-input');
+  const filterDialog = document.getElementById('supplier-filter-dialog');
+  const filterTrigger = document.getElementById('btn-open-supplier-filters');
+  filterTrigger?.addEventListener('click', () => { if (!filterDialog.open) filterDialog.showModal(); });
+  const closeFilters = () => filterDialog?.close();
+  document.getElementById('btn-close-supplier-filters')?.addEventListener('click', closeFilters);
+  const applyFilters = () => {
+    const error = supplierFilterError(supplierFilters());
+    if (error) {
+      renderSuppliersTable();
+      document.getElementById(error.toLowerCase().includes('ngày') ? 'supplier-date-from' : 'supplier-debt-min')?.focus();
+      return;
+    }
+    closeFilters();
+  };
+  document.getElementById('btn-apply-supplier-filters')?.addEventListener('click', applyFilters);
+  filterDialog?.addEventListener('click', event => {
+    if (event.target !== filterDialog) return;
+    const rect = filterDialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeFilters();
+  });
+  filterDialog?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); applyFilters(); }
+  });
+
 
   if (btnOpenAdd && modal) {
     btnOpenAdd.addEventListener('click', () => {

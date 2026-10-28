@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { isCloudActive, supabaseClient } from './supabase.js?v=20261028-supplier-directory-v1';
+import { isCloudActive, supabaseClient } from './supabase.js?v=20261028-supplier-filter-popup-v1';
 
 let generation = 0;
 let session = '';

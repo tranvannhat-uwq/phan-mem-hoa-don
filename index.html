@@ -33,15 +33,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <!-- Pinned local browser libraries; no external CDN required for login -->
-  <script defer src="js/vendor/lucide.js?v=20261028-supplier-directory-v1"></script>
+  <script defer src="js/vendor/lucide.js?v=20261028-supplier-filter-popup-v1"></script>
   
-  <script defer src="js/vendor/xlsx.js?v=20261028-supplier-directory-v1"></script>
+  <script defer src="js/vendor/xlsx.js?v=20261028-supplier-filter-popup-v1"></script>
   
-  <script defer src="js/vendor/supabase.js?v=20261028-supplier-directory-v1"></script>
+  <script defer src="js/vendor/supabase.js?v=20261028-supplier-filter-popup-v1"></script>
   
-  <script defer src="js/vendor/chart.js?v=20261028-supplier-directory-v1"></script>
+  <script defer src="js/vendor/chart.js?v=20261028-supplier-filter-popup-v1"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261028-supplier-directory-v1">
+  <link rel="stylesheet" href="style.css?v=20261028-supplier-filter-popup-v1">
 </head>
 <body>
 
@@ -1909,10 +1909,15 @@
             <div class="supplier-summary-card supplier-summary-teal"><span>ĐÃ TRẢ TRƯỚC</span><strong id="supplier-summary-advance">0 ₫</strong><small>Số tiền đã trả vượt công nợ</small></div>
             <div class="supplier-summary-card"><span>TỔNG GIÁ TRỊ MUA</span><strong id="supplier-summary-purchase">0 ₫</strong><small id="supplier-summary-paid">Đã thanh toán: 0 ₫</small></div>
           </div>
-          <div class="supplier-filter-card">
-            <div class="supplier-filter-heading"><strong><i data-lucide="sliders-horizontal"></i> Bộ lọc nhà cung cấp</strong><button type="button" class="btn btn-secondary btn-sm" id="btn-clear-supplier-filters"><i data-lucide="filter-x"></i> Xóa bộ lọc</button></div>
+          <div class="supplier-toolbar">
+            <div class="search-wrapper supplier-quick-search"><i data-lucide="search" class="search-icon"></i><input type="search" class="form-control-search" id="supplier-search-input" aria-label="Tìm kiếm nhà cung cấp" placeholder="Tìm mã, tên, số điện thoại..."></div>
+            <button type="button" class="btn btn-secondary btn-sm supplier-filter-toggle" id="btn-open-supplier-filters" aria-haspopup="dialog" aria-controls="supplier-filter-dialog"><i data-lucide="sliders-horizontal"></i> Bộ lọc <span id="supplier-filter-count" class="supplier-filter-badge" hidden>0</span></button>
+            <div class="supplier-page-size-control"><label for="supplier-page-size">Hiển thị</label><select class="form-control" id="supplier-page-size" aria-label="Số dòng / trang"><option value="20">20 dòng</option><option value="50">50 dòng</option><option value="100">100 dòng</option></select></div>
+          </div>
+          <dialog id="supplier-filter-dialog" class="supplier-filter-dialog" aria-labelledby="supplier-filter-title">
+            <div class="supplier-filter-dialog-header"><div><h3 id="supplier-filter-title">Bộ lọc nhà cung cấp</h3><p>Chọn điều kiện để cập nhật danh sách.</p></div><button type="button" class="supplier-filter-close" id="btn-close-supplier-filters" aria-label="Đóng bộ lọc"><i data-lucide="x"></i></button></div>
+            <div class="supplier-filter-dialog-body">
             <div class="supplier-filter-grid">
-              <div class="supplier-filter-search"><label for="supplier-search-input">Tìm kiếm</label><input type="search" class="form-control" id="supplier-search-input" placeholder="Mã, tên, SĐT, địa chỉ, ghi chú..."></div>
               <div><label for="supplier-debt-filter">Trạng thái công nợ</label><select class="form-control" id="supplier-debt-filter"><option value="all">Tất cả công nợ</option><option value="payable">Còn phải trả</option><option value="settled">Đã tất toán</option><option value="advance">Đã trả trước</option></select></div>
               <div><label for="supplier-debt-min">Công nợ từ (đ)</label><input type="number" class="form-control" id="supplier-debt-min" step="any" placeholder="Không giới hạn"></div>
               <div><label for="supplier-debt-max">Công nợ đến (đ)</label><input type="number" class="form-control" id="supplier-debt-max" step="any" placeholder="Không giới hạn"></div>
@@ -1921,11 +1926,12 @@
               <div><label for="supplier-date-preset">Khoảng thời gian</label><select class="form-control" id="supplier-date-preset"><option value="all">Toàn bộ thời gian</option><option value="month">Tháng này</option><option value="previous-month">Tháng trước</option><option value="7">7 ngày gần đây</option><option value="30">30 ngày gần đây</option><option value="custom">Tùy chọn ngày</option></select></div>
               <div><label for="supplier-date-from">Từ ngày</label><input type="date" class="form-control" id="supplier-date-from"></div>
               <div><label for="supplier-date-to">Đến ngày</label><input type="date" class="form-control" id="supplier-date-to"></div>
-              <div><label for="supplier-page-size">Số dòng / trang</label><select class="form-control" id="supplier-page-size"><option value="20">20 dòng</option><option value="50">50 dòng</option><option value="100">100 dòng</option></select></div>
             </div>
             <p id="supplier-filter-error" class="supplier-filter-error" role="alert"></p>
             <p class="supplier-filter-note">Các số tiền là tổng hiện tại; bộ lọc ngày chọn nhà cung cấp theo mốc ngày đã chọn. Ngày mua/chi gần nhất lấy từ các phiếu hoàn thành trong lịch sử còn lưu.</p>
-          </div>
+            </div>
+            <div class="supplier-filter-dialog-footer"><button type="button" class="btn btn-secondary btn-sm" id="btn-clear-supplier-filters">Xóa bộ lọc</button><button type="button" class="btn btn-primary btn-sm" id="btn-apply-supplier-filters">Xem kết quả</button></div>
+          </dialog>
           <div class="supplier-results-heading"><strong>Danh sách đối tác</strong><span id="supplier-result-count" role="status" aria-live="polite"></span></div>
           <div class="table-responsive">
             <table class="table supplier-directory-table">
@@ -4599,9 +4605,9 @@
 
 
   <!-- Login can open before the full application and Auth session are ready. -->
-  <script src="js/login-entry.js?v=20261028-supplier-directory-v1"></script>
+  <script src="js/login-entry.js?v=20261028-supplier-filter-popup-v1"></script>
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261028-supplier-directory-v1"></script>
-  <script type="module" src="js/main.js?v=20261028-supplier-directory-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261028-supplier-filter-popup-v1"></script>
+  <script type="module" src="js/main.js?v=20261028-supplier-filter-popup-v1"></script>
 </body>
 </html>
