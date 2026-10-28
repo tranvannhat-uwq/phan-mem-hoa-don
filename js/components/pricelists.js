@@ -7,9 +7,9 @@ import {
   dbDeletePriceListItem,
   invalidateAuthorizedPricingRevision,
   persistAuthorizedPricingCache
-} from '../services/supabase.js?v=20261028-supplier-period-report-v1';
-import { renderAll } from '../main.js?v=20261028-supplier-period-report-v1';
-import { applyActivePriceListToInvoice } from './invoice.js?v=20261028-supplier-period-report-v1';
+} from '../services/supabase.js?v=20261028-supplier-delete-v1';
+import { renderAll } from '../main.js?v=20261028-supplier-delete-v1';
+import { applyActivePriceListToInvoice } from './invoice.js?v=20261028-supplier-delete-v1';
 import {
   PRICE_LIST_TYPES,
   normalizePriceListType,
@@ -20,10 +20,10 @@ import {
   resolvePriceForList,
   sortPriceLists,
   parseVndInteger
-} from '../domain/pricing.js?v=20261028-supplier-period-report-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-period-report-v1';
+} from '../domain/pricing.js?v=20261028-supplier-delete-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-delete-v1';
 
-import { createListPagination } from './list-pagination.js?v=20261028-supplier-period-report-v1';
+import { createListPagination } from './list-pagination.js?v=20261028-supplier-delete-v1';
 
 const priceMatrixPager = createListPagination('pricelists-pagination');
 const pendingChanges = new Map();

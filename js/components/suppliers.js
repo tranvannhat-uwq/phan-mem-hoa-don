@@ -1,12 +1,13 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-period-report-v1';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-delete-v1';
 import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
-import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-period-report-v1';
-import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261028-supplier-period-report-v1';
-import { openSupplierPeriodReport } from './supplier-debt-report.js?v=20261028-supplier-period-report-v1';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-delete-v1';
+import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261028-supplier-delete-v1';
+import { openSupplierPeriodReport } from './supplier-debt-report.js?v=20261028-supplier-delete-v1';
 
 const toNumber = supplierNumber;
+const deletingSuppliers = new Set();
 const escapeSupplierHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 function supplierDateLabel(value) {
   const day = supplierDay(value);
@@ -127,7 +128,7 @@ export function renderSuppliersTable() {
       '<td><div class="supplier-actions"><button type="button" class="btn btn-secondary btn-sm supplier-detail-btn" data-index="' + index + '" aria-label="Chi tiết ' + escapeSupplierHtml(s.name) + '" aria-expanded="false">Chi tiết</button>' +
       '<button type="button" class="btn btn-secondary btn-sm supplier-history-btn" data-index="' + index + '">Công nợ</button>' +
       '<button type="button" class="btn btn-secondary btn-sm edit-supplier-btn" data-index="' + index + '" aria-label="Sửa ' + escapeSupplierHtml(s.name) + '"><i data-lucide="edit-2"></i></button>' +
-      '<button type="button" class="btn btn-secondary btn-sm delete-supplier-btn" data-index="' + index + '" aria-label="Ngừng sử dụng ' + escapeSupplierHtml(s.name) + '"><i data-lucide="archive"></i></button></div></td></tr>' +
+      '<button type="button" class="btn btn-secondary btn-sm delete-supplier-btn" data-supplier-id="' + escapeSupplierHtml(s.id) + '" aria-label="Xóa nhà cung cấp ' + escapeSupplierHtml(s.name) + '" title="Xóa nhà cung cấp" ' + (deletingSuppliers.has(s.id) ? 'disabled' : '') + '><i data-lucide="x" aria-hidden="true"></i></button></div></td></tr>' +
       '<tr id="supplier-details-' + index + '" class="supplier-detail-row" hidden><td colspan="7"><div class="supplier-detail-grid"><div><small>NỢ ĐẦU KỲ</small><strong>' + formatCurrency(toNumber(s.openingDebt)) + '</strong></div><div><small>NGÀY TẠO HỒ SƠ</small><strong>' + supplierDateLabel(s.createdAt) + '</strong></div><div><small>CẬP NHẬT GẦN NHẤT</small><strong>' + supplierDateLabel(s.updatedAt) + '</strong></div><div class="supplier-detail-notes"><small>GHI CHÚ</small><span>' + escapeSupplierHtml(s.notes || 'Chưa có ghi chú') + '</span></div></div></td></tr>';
   }).join('');
   document.querySelectorAll('.supplier-detail-btn').forEach(btn => btn.addEventListener('click', () => {
@@ -137,7 +138,7 @@ export function renderSuppliersTable() {
   }));
   document.querySelectorAll('.edit-supplier-btn').forEach(btn => btn.addEventListener('click', () => openEditSupplierModal(Number(btn.dataset.index))));
   document.querySelectorAll('.supplier-history-btn').forEach(btn => btn.addEventListener('click', () => openSupplierDebtHistory(state.suppliers[Number(btn.dataset.index)])));
-  document.querySelectorAll('.delete-supplier-btn').forEach(btn => btn.addEventListener('click', () => handleDeleteSupplier(Number(btn.dataset.index))));
+  document.querySelectorAll('.delete-supplier-btn').forEach(btn => btn.addEventListener('click', () => handleDeleteSupplier(btn.dataset.supplierId, btn)));
   safeCreateIcons();
 }
 
@@ -410,26 +411,25 @@ function openEditSupplierModal(idx) {
   modal.classList.add('active');
 }
 
-async function handleDeleteSupplier(idx) {
-  const s = state.suppliers[idx];
-  if (!s) return;
-
-  if (!confirm(`Ngừng sử dụng nhà cung cấp "${s.name}"? Dữ liệu cũ sẽ được giữ nguyên.`)) return;
-  const deactivated = await dbDeleteSupplier(s.id, 'Ngừng sử dụng từ danh sách nhà cung cấp');
-  if (!deactivated) return;
-  showToast('Đã ngừng sử dụng nhà cung cấp.', 'warning');
-  renderSuppliersTable();
-  populateSupplierDatalist();
-  return;
-
-  if (confirm(`Bạn có chắc chắn muốn xóa nhà cung cấp "${s.name}"?`)) {
-    state.suppliers.splice(idx, 1);
-    localStorage.setItem('billing_system_suppliers', JSON.stringify(state.suppliers));
-    dbDeleteSupplier(s.id);
-    showToast('Đã xóa nhà cung cấp thành công!', 'warning');
-    
+async function handleDeleteSupplier(supplierId, button) {
+  const s = state.suppliers.find(supplier => supplier.id === supplierId);
+  if (!s || deletingSuppliers.has(supplierId)) return;
+  if (toNumber(s.debt) !== 0) {
+    showToast('Nhà cung cấp còn số dư công nợ. Hãy đối chiếu và tất toán trước khi xóa.', 'warning');
+    return;
+  }
+  if (!confirm(`Xóa nhà cung cấp "${s.name}" khỏi danh sách? Lịch sử mua hàng và công nợ đã lưu vẫn được giữ.`)) return;
+  deletingSuppliers.add(supplierId);
+  button.disabled = true;
+  try {
+    const deactivated = await dbDeleteSupplier(supplierId, 'Xóa khỏi danh sách nhà cung cấp');
+    if (!deactivated) return;
+    showToast('Đã xóa nhà cung cấp khỏi danh sách.', 'success');
     renderSuppliersTable();
     populateSupplierDatalist();
+  } finally {
+    deletingSuppliers.delete(supplierId);
+    button.disabled = false;
   }
 }
 

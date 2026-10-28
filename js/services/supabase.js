@@ -3,15 +3,15 @@ import { withAuthTimeout } from '../domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-supplier-period-report-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-period-report-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-supplier-delete-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-delete-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-supplier-period-report-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-supplier-period-report-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-supplier-period-report-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-supplier-delete-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-supplier-delete-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-supplier-delete-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-supplier-period-report-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-supplier-delete-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -2251,7 +2251,7 @@ export async function fetchCloudData(options = {}) {
     const fetchPurchases = async () => {
       try {
         const [purchaseResult, itemResult, paymentResult] = await Promise.all([
-          supabaseClient.from('purchases').select('*').order('purchase_date', { ascending: false }),
+          supabaseClient.from('purchases').select('*,supplier:suppliers(code,name)').order('purchase_date', { ascending: false }),
           supabaseClient.from('purchase_items').select('*').order('line_number', { ascending: true }),
           supabaseClient.from('purchase_payments').select('*').order('created_at', { ascending: true })
         ]);
@@ -2292,7 +2292,7 @@ export async function fetchCloudData(options = {}) {
           paymentsByPurchase.set(payment.purchase_id, list);
         });
         state.purchases = (purchaseResult.data || []).map(purchase => {
-          const supplier = state.suppliers.find(s => String(s.id) === String(purchase.supplier_id));
+          const supplier = purchase.supplier || state.suppliers.find(s => String(s.id) === String(purchase.supplier_id));
           return {
             id: purchase.id,
             code: purchase.code,
@@ -4567,7 +4567,10 @@ export async function dbSupplierDebtReport(filters, offset=0, limit=20) {
 }
 
 export async function dbDeleteSupplier(supplierId, reason = 'Ngừng sử dụng nhà cung cấp') {
-  if (!isCloudActive || !supabaseClient) return false;
+  if (!isCloudActive || !supabaseClient) {
+    showToast('Cần kết nối Cloud để xóa nhà cung cấp khỏi danh sách.', 'danger');
+    return false;
+  }
   try {
     const { data, error } = await supabaseClient.rpc('rpc_deactivate_supplier', {
       p_supplier_id: supplierId,
@@ -4578,7 +4581,8 @@ export async function dbDeleteSupplier(supplierId, reason = 'Ngừng sử dụng
     return data || { success: true };
   } catch (err) {
     console.warn('Cloud supplier deactivation failed:', err.message || err);
-    showToast(err.message || 'Không thể ngừng sử dụng nhà cung cấp.', 'danger');
+    const message=String(err.message||'');
+    showToast(message.includes('outstanding debt') ? 'Nhà cung cấp còn số dư công nợ. Hãy tải lại và đối chiếu trước khi xóa.' : message || 'Không thể xóa nhà cung cấp khỏi danh sách.', 'danger');
     return false;
   }
 }
