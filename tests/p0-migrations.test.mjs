@@ -128,7 +128,10 @@ const migrationNames = [
   '0119_retention_lookup_key_performance.sql',
   '0120_retention_backup_assembly_performance.sql',
   '0121_retention_staged_recovery_download.sql',
-  '0122_retention_scoped_transport_cleanup.sql'
+  '0122_retention_scoped_transport_cleanup.sql',
+  '0123_dealer_support_order_notes.sql',
+  '0124_statement_scoped_rls_checks.sql',
+  '0125_non_retryable_retention_conflicts.sql'
 ];
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const standaloneWarehouseMigrations = new Set(['0085', '0086', '0087']);

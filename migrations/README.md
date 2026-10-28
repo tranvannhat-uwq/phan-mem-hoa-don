@@ -617,3 +617,23 @@ thêm mục tự sinh. Chạy sau 0092 và 0097; không bắt buộc đã chạy
 `20261024-existing-product-shells-v1`. Phân trang cursor tối đa 30 dòng, tìm
 không dấu và nhiều từ, cùng ngân sách/guard vai trò của BOM. Không sửa sản phẩm,
 giá, tồn hoặc giao dịch mua đã ghi. Kiểm thử: `tests/purchase-catalog-database.test.mjs`.
+
+
+0124 và 0125 đã áp dụng cho SoViet ngày 28/10/2026 để khôi phục hiệu năng.
+0124 giữ nguyên quyền và tính chất restrictive của chính sách, đưa các hàm
+kiểm tra hồ sơ không phụ thuộc dòng vào InitPlan; phạm vi khách được giao
+được tính theo tập hợp, tương đương can_access_customer cho từng khách.
+Kiểm thử so sánh dữ liệu trước/sau cho admin, kế toán, Sale, tài khoản bị
+khóa, hồ sơ không tồn tại, bí danh và chế độ bảo trì.
+
+Nguyên nhân chính của sự cố CPU/login là các xung đột nghiệp vụ chuyển kỳ
+và fingerprint sao lưu dùng SQLSTATE 40001. PostgREST có thể lặp vô hạn
+với mã serialization_failure này, gây cạn kết nối và trả 503 cho profiles.
+0125 chỉ đổi bốn hàm sang PT409 (HTTP 409); giữ nguyên toàn bộ điều kiện,
+khóa, quyền, kiểm tra fingerprint và cơ chế chặn phiên cũ. Không chạy dọn
+dữ liệu hoặc thay đổi số dư. Bản định nghĩa trước sửa và SQL phục hồi chính
+sách được lưu cục bộ trong backups/20261028-rls-cpu/ (không đưa vào Git).
+Tham khảo: https://supabase.com/kb/troubleshooting/high-cpu-and-infinite-transaction-retries-when-using-custom-error-codes-in-rpc-functions
+Kiểm thử: tests/rls-statement-performance.test.mjs,
+tests/retention-conflict-code.test.mjs và các kiểm thử bounded lookup,
+retention READ ONLY, staged backup.

@@ -43,7 +43,8 @@ before(async () => {
     '0090_bounded_customer_product_lookup.sql',
     '0095_product_name_token_search.sql',
     '0096_invoice_product_packaging_fallback.sql',
-    '0097_invoice_product_brand_search.sql'
+    '0097_invoice_product_brand_search.sql',
+    '0124_statement_scoped_rls_checks.sql'
   ]) {
     try { await db.exec(await readFile(new URL(file, fixture), 'utf8')); }
     catch (error) { throw new Error(`${file}: ${error.message}\n${error.where || ''}`); }
