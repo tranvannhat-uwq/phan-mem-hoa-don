@@ -33,15 +33,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <!-- Pinned local browser libraries; no external CDN required for login -->
-  <script defer src="js/vendor/lucide.js?v=20261028-login-resilience-v1"></script>
+  <script defer src="js/vendor/lucide.js?v=20261028-supplier-directory-v1"></script>
   
-  <script defer src="js/vendor/xlsx.js?v=20261028-login-resilience-v1"></script>
+  <script defer src="js/vendor/xlsx.js?v=20261028-supplier-directory-v1"></script>
   
-  <script defer src="js/vendor/supabase.js?v=20261028-login-resilience-v1"></script>
+  <script defer src="js/vendor/supabase.js?v=20261028-supplier-directory-v1"></script>
   
-  <script defer src="js/vendor/chart.js?v=20261028-login-resilience-v1"></script>
+  <script defer src="js/vendor/chart.js?v=20261028-supplier-directory-v1"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261028-login-resilience-v1">
+  <link rel="stylesheet" href="style.css?v=20261028-supplier-directory-v1">
 </head>
 <body>
 
@@ -1892,48 +1892,45 @@
 
       <!-- Suppliers Panel -->
       <section id="suppliers-panel" class="panel">
-        <div class="glass-panel">
-          <div class="panel-header">
-            <h2 class="panel-title"><i data-lucide="truck"></i> Danh sách nhà cung cấp</h2>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button class="btn btn-secondary btn-sm" id="btn-download-supplier-excel-template">
-                <i data-lucide="download"></i> Tải file mẫu
-              </button>
-              <button class="btn btn-indigo btn-sm" id="btn-open-supplier-excel-modal">
-                <i data-lucide="file-up"></i> Nhập Excel
-              </button>
-              <button class="btn btn-success btn-sm" id="btn-export-suppliers-excel" type="button" title="Xuất toàn bộ nhà cung cấp theo tìm kiếm hiện tại, gồm tất cả các trang">
-                <i data-lucide="file-spreadsheet"></i> Xuất Excel
-              </button>
-              <button class="btn btn-primary btn-sm" id="btn-open-add-supplier-modal">
-                <i data-lucide="user-plus"></i> Thêm nhà cung cấp
-              </button>
+        <div class="glass-panel supplier-directory">
+          <div class="panel-header supplier-directory-header">
+            <div><h2 class="panel-title"><i data-lucide="truck"></i> Nhà cung cấp</h2><p class="supplier-subtitle">Theo dõi mua hàng, thanh toán và công nợ đối tác.</p></div>
+            <div class="supplier-header-actions">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-suppliers"><i data-lucide="refresh-cw"></i> Cập nhật</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-download-supplier-excel-template"><i data-lucide="download"></i> File mẫu</button>
+              <button type="button" class="btn btn-indigo btn-sm" id="btn-open-supplier-excel-modal"><i data-lucide="file-up"></i> Nhập Excel</button>
+              <button type="button" class="btn btn-success btn-sm" id="btn-export-suppliers-excel" title="Xuất toàn bộ nhà cung cấp phù hợp bộ lọc, gồm tất cả các trang"><i data-lucide="file-spreadsheet"></i> Xuất Excel</button>
+              <button type="button" class="btn btn-primary btn-sm" id="btn-open-add-supplier-modal"><i data-lucide="plus"></i> Thêm nhà cung cấp</button>
             </div>
           </div>
-
-          <div class="controls-row" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
-            <div class="search-wrapper" style="flex: 1; min-width: 250px;">
-              <i data-lucide="search" class="search-icon"></i>
-              <input type="text" class="form-control-search" id="supplier-search-input" placeholder="Tìm kiếm theo mã, tên hoặc số điện thoại...">
-            </div>
+          <div class="supplier-summary-grid" aria-label="Tổng hợp nhà cung cấp theo bộ lọc">
+            <div class="supplier-summary-card"><span>NHÀ CUNG CẤP</span><strong id="supplier-summary-count">0</strong><small>Phù hợp bộ lọc · tất cả các trang</small></div>
+            <div class="supplier-summary-card supplier-summary-danger"><span>CÒN PHẢI TRẢ</span><strong id="supplier-summary-payable">0 ₫</strong><small id="supplier-summary-payable-count">0 nhà cung cấp còn nợ</small></div>
+            <div class="supplier-summary-card supplier-summary-teal"><span>ĐÃ TRẢ TRƯỚC</span><strong id="supplier-summary-advance">0 ₫</strong><small>Số tiền đã trả vượt công nợ</small></div>
+            <div class="supplier-summary-card"><span>TỔNG GIÁ TRỊ MUA</span><strong id="supplier-summary-purchase">0 ₫</strong><small id="supplier-summary-paid">Đã thanh toán: 0 ₫</small></div>
           </div>
-
-          <!-- Suppliers Table -->
+          <div class="supplier-filter-card">
+            <div class="supplier-filter-heading"><strong><i data-lucide="sliders-horizontal"></i> Bộ lọc nhà cung cấp</strong><button type="button" class="btn btn-secondary btn-sm" id="btn-clear-supplier-filters"><i data-lucide="filter-x"></i> Xóa bộ lọc</button></div>
+            <div class="supplier-filter-grid">
+              <div class="supplier-filter-search"><label for="supplier-search-input">Tìm kiếm</label><input type="search" class="form-control" id="supplier-search-input" placeholder="Mã, tên, SĐT, địa chỉ, ghi chú..."></div>
+              <div><label for="supplier-debt-filter">Trạng thái công nợ</label><select class="form-control" id="supplier-debt-filter"><option value="all">Tất cả công nợ</option><option value="payable">Còn phải trả</option><option value="settled">Đã tất toán</option><option value="advance">Đã trả trước</option></select></div>
+              <div><label for="supplier-debt-min">Công nợ từ (đ)</label><input type="number" class="form-control" id="supplier-debt-min" step="any" placeholder="Không giới hạn"></div>
+              <div><label for="supplier-debt-max">Công nợ đến (đ)</label><input type="number" class="form-control" id="supplier-debt-max" step="any" placeholder="Không giới hạn"></div>
+              <div><label for="supplier-sort">Sắp xếp</label><select class="form-control" id="supplier-sort"><option value="name">Tên A → Z</option><option value="debt-desc">Công nợ cao → thấp</option><option value="debt-asc">Công nợ thấp → cao</option><option value="purchase-desc">Tổng mua cao → thấp</option><option value="paid-desc">Đã trả cao → thấp</option><option value="newest">Hồ sơ mới nhất</option><option value="last-purchase">Mua gần nhất</option></select></div>
+              <div><label for="supplier-date-field">Lọc ngày theo</label><select class="form-control" id="supplier-date-field"><option value="createdAt">Ngày tạo hồ sơ</option><option value="lastPurchaseAt">Ngày mua gần nhất</option><option value="lastPaymentAt">Ngày thanh toán gần nhất</option><option value="updatedAt">Ngày cập nhật hồ sơ</option></select></div>
+              <div><label for="supplier-date-preset">Khoảng thời gian</label><select class="form-control" id="supplier-date-preset"><option value="all">Toàn bộ thời gian</option><option value="month">Tháng này</option><option value="previous-month">Tháng trước</option><option value="7">7 ngày gần đây</option><option value="30">30 ngày gần đây</option><option value="custom">Tùy chọn ngày</option></select></div>
+              <div><label for="supplier-date-from">Từ ngày</label><input type="date" class="form-control" id="supplier-date-from"></div>
+              <div><label for="supplier-date-to">Đến ngày</label><input type="date" class="form-control" id="supplier-date-to"></div>
+              <div><label for="supplier-page-size">Số dòng / trang</label><select class="form-control" id="supplier-page-size"><option value="20">20 dòng</option><option value="50">50 dòng</option><option value="100">100 dòng</option></select></div>
+            </div>
+            <p id="supplier-filter-error" class="supplier-filter-error" role="alert"></p>
+            <p class="supplier-filter-note">Các số tiền là tổng hiện tại; bộ lọc ngày chọn nhà cung cấp theo mốc ngày đã chọn. Ngày mua/chi gần nhất lấy từ các phiếu hoàn thành trong lịch sử còn lưu.</p>
+          </div>
+          <div class="supplier-results-heading"><strong>Danh sách đối tác</strong><span id="supplier-result-count" role="status" aria-live="polite"></span></div>
           <div class="table-responsive">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th style="width: 14%;">Mã nhà cung cấp</th>
-                  <th style="width: 28%;">Tên nhà cung cấp</th>
-                  <th style="width: 16%;">Số điện thoại</th>
-                  <th style="width: 16%; text-align: right;">Nợ cần trả</th>
-                  <th style="width: 16%; text-align: right;">Tổng mua</th>
-                  <th style="width: 10%; text-align: center;">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody id="suppliers-table-body">
-                <!-- Dynamic load -->
-              </tbody>
+            <table class="table supplier-directory-table">
+              <thead><tr><th>Nhà cung cấp</th><th>Liên hệ</th><th class="supplier-money">Tổng mua</th><th class="supplier-money">Đã thanh toán</th><th class="supplier-money">Công nợ hiện tại</th><th>Mua / chi gần nhất</th><th>Thao tác</th></tr></thead>
+              <tbody id="suppliers-table-body"></tbody><tfoot id="suppliers-table-totals"></tfoot>
             </table>
           </div>
           <div id="suppliers-pagination"></div>
@@ -4602,9 +4599,9 @@
 
 
   <!-- Login can open before the full application and Auth session are ready. -->
-  <script src="js/login-entry.js?v=20261028-login-resilience-v1"></script>
+  <script src="js/login-entry.js?v=20261028-supplier-directory-v1"></script>
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261028-login-resilience-v1"></script>
-  <script type="module" src="js/main.js?v=20261028-login-resilience-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261028-supplier-directory-v1"></script>
+  <script type="module" src="js/main.js?v=20261028-supplier-directory-v1"></script>
 </body>
 </html>

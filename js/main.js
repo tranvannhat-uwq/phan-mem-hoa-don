@@ -1,29 +1,29 @@
 import { state } from './state.js';
 import { withAuthTimeout } from './domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261028-login-resilience-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261028-login-resilience-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions, invalidateDashboardPayloadCache } from './components/dashboard.js?v=20261028-login-resilience-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261028-login-resilience-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261028-login-resilience-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261028-login-resilience-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261028-login-resilience-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261028-login-resilience-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261028-login-resilience-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261028-login-resilience-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261028-login-resilience-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261028-login-resilience-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261028-login-resilience-v1';
-import { renderInventoryPanel } from './components/inventory.js?v=20261028-login-resilience-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport, invalidateEmployeeBusinessReportCache } from './components/reports.js?v=20261028-login-resilience-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261028-supplier-directory-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261028-supplier-directory-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions, invalidateDashboardPayloadCache } from './components/dashboard.js?v=20261028-supplier-directory-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261028-supplier-directory-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261028-supplier-directory-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261028-supplier-directory-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261028-supplier-directory-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261028-supplier-directory-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261028-supplier-directory-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261028-supplier-directory-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261028-supplier-directory-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261028-supplier-directory-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261028-supplier-directory-v1';
+import { renderInventoryPanel } from './components/inventory.js?v=20261028-supplier-directory-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport, invalidateEmployeeBusinessReportCache } from './components/reports.js?v=20261028-supplier-directory-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261028-login-resilience-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261028-login-resilience-v1';
-import { setupRetentionSettings, renderRetentionSettings } from './components/data-retention.js?v=20261028-login-resilience-v1';
-import { renderRetentionReview } from './components/retention-review.js?v=20261028-login-resilience-v1';
-import { setupDealerSupport, renderDealerSupportSettings } from './components/dealer-support.js?v=20261028-login-resilience-v1';
-import { setupIndependentReturns, renderIndependentReturns } from './components/independent-returns.js?v=20261028-login-resilience-v1';
-import { syncRetentionState } from './services/supabase.js?v=20261028-login-resilience-v1';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261028-supplier-directory-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261028-supplier-directory-v1';
+import { setupRetentionSettings, renderRetentionSettings } from './components/data-retention.js?v=20261028-supplier-directory-v1';
+import { renderRetentionReview } from './components/retention-review.js?v=20261028-supplier-directory-v1';
+import { setupDealerSupport, renderDealerSupportSettings } from './components/dealer-support.js?v=20261028-supplier-directory-v1';
+import { setupIndependentReturns, renderIndependentReturns } from './components/independent-returns.js?v=20261028-supplier-directory-v1';
+import { syncRetentionState } from './services/supabase.js?v=20261028-supplier-directory-v1';
 
 if (typeof window !== 'undefined') {
   window.billingEgressMetrics = Object.freeze({
@@ -141,7 +141,7 @@ function renderPanelCloudLoading(panelId) {
     'pricelists-panel': ['pricelists-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải chi tiết bảng giá…</td></tr>'],
     'history-panel': ['history-orders-container', '<div class="empty-state"><div class="empty-state-title">Đang tải lịch sử giao dịch…</div></div>'],
     'so-quy-panel': ['so-quy-table-body', '<tr><td colspan="8" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải dữ liệu Sổ quỹ…</td></tr>'],
-    'suppliers-panel': ['suppliers-table-body', '<tr><td colspan="10" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải nhà cung cấp…</td></tr>']
+    'suppliers-panel': ['suppliers-table-body', '<tr><td colspan="7" style="text-align:center;padding:3rem;color:var(--text-muted);">Đang tải nhà cung cấp…</td></tr>']
   };
   const target = targets[panelId];
   if (!target) return;

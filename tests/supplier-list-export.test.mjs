@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import * as supplierDirectory from '../js/domain/supplier-directory.js';
 import test from 'node:test';
 import { collectAllPages } from '../js/domain/pagination.js';
 
@@ -24,7 +25,7 @@ function harness(suppliers, query = '', library = null) {
     },
     writeFile: (book, name) => output.push({ book, name })
   };
-  const context = vm.createContext({ state: { suppliers, suppliersPage: 2 }, XLSX,
+  const context = vm.createContext({ ...supplierDirectory, state: { suppliers, suppliersPage: 2 }, XLSX,
     document: { getElementById: id => id === 'supplier-search-input' ? { value: query, addEventListener() {} } : id === 'btn-export-suppliers-excel' ? button : null },
     showToast: (...args) => toasts.push(args), console: { error() {} } });
   vm.runInContext(source, context);
@@ -33,7 +34,7 @@ function harness(suppliers, query = '', library = null) {
 
 test('supplier Excel exports every matching page without changing state, using stored financial totals', () => {
   const suppliers = Array.from({ length: 45 }, (_, i) => ({ id: `s${i}`, code: `00${i}`, name: `Vendor ${String(i).padStart(2, '0')}`,
-    debt: i === 0 ? -10 : 10, totalPurchase: 100, phone: '0900123456', address: 'Hà Nội', notes: '=SUM(A1:A2)' })).reverse();
+    debt: i === 0 ? -10 : 10, totalPurchase: 100, totalPaid: 50, createdAt:'2026-10-01T00:00:00Z', lastPurchaseAt:'2026-10-28T00:00:00Z', phone: '0900123456', address: 'Hà Nội', notes: '=SUM(A1:A2)' })).reverse();
   const before = JSON.stringify(suppliers);
   const h = harness(suppliers, '  VENDOR ');
   h.run();
@@ -47,13 +48,16 @@ test('supplier Excel exports every matching page without changing state, using s
   assert.equal(sheet.F47.v, 430);
   assert.equal(sheet.G47.v, 4500);
   assert.equal(sheet.F47.t, 'n');
+  assert.equal(sheet.I47.v, 2250);
+  assert.equal(sheet.J2.v, '28/10/2026');
+  assert.equal(sheet.L2.v, '01/10/2026');
   assert.equal(sheet.D2.v, '0900123456');
   assert.equal(sheet.B2.v, '000');
   assert.equal(sheet.D2.t, 's');
   assert.equal(sheet.H2.v, '=SUM(A1:A2)');
   assert.equal(sheet.H2.t, 's');
   assert.equal(sheet.H2.f, undefined);
-  assert.equal(sheet['!autofilter'].ref, 'A1:H46');
+  assert.equal(sheet['!autofilter'].ref, 'A1:M46');
   assert.equal(JSON.stringify(suppliers), before);
   assert.equal(h.context.state.suppliersPage, 2);
 });
@@ -92,17 +96,31 @@ test('supplier Cloud loading reaches rows beyond the API limit before replacing 
   const rows = Array.from({ length: 1205 }, (_, i) => ({ id: String(i), name: `Vendor ${i}`, is_active: i !== 0, debt: '-20', total_purchase: '150' }));
   const ranges = [];
   let failed = null;
-  const query = { select: () => query, order: () => query, range: (offset, end) => {
-    ranges.push([offset, end]); return Promise.resolve({ data: rows.slice(offset, end + 1), count: rows.length, error: null });
-  } };
+
   const context = vm.createContext({ state: { suppliers: [] }, tableProductsName: 'products',
-    supabaseClient: { from: name => { assert.equal(name, 'suppliers'); return query; } }, collectAllPages,
+    supabaseClient: { rpc: async (name,args) => {
+      assert.equal(name, 'rpc_supplier_directory'); const offset=args.p_offset; const end=offset+args.p_limit-1;
+      ranges.push([offset,end]); return {data:{rows:rows.slice(offset,end+1),total:rows.length},error:null};
+    } }, collectAllPages,
     markDomainFailed: (_, error) => { failed = error; }, console: { log() {}, warn() {} } });
   vm.runInContext(loader, context);
   await context.fetchSuppliers();
   assert.equal(failed, null);
-  assert.equal(ranges.length, 2);
+  assert.equal(ranges.length, 7);
   assert.equal(context.state.suppliers.length, 1204);
   assert.equal(context.state.suppliers.at(-1).id, '1204');
   assert.equal(context.state.suppliers.at(-1).debt, -20);
+});
+
+test('canonical supplier responses clear last transaction dates when the final purchase or payment is cancelled', () => {
+  const service = read('js/services/supabase.js');
+  const start = service.indexOf('function applyCanonicalSupplier(');
+  const source = service.slice(start, service.indexOf('function applyCanonicalPurchase(', start));
+  const context = vm.createContext({ state: { suppliers: [{id:'supplier-1',createdAt:'2026-01-01',lastPurchaseAt:'2026-10-28',lastPaymentAt:'2026-10-28'}] } });
+  vm.runInContext(source, context);
+  vm.runInContext("applyCanonicalSupplier({id:'supplier-1',name:'Vendor',lastPurchaseAt:null,lastPaymentAt:null,updatedAt:'2026-10-29'})", context);
+  assert.equal(context.state.suppliers[0].lastPurchaseAt, null);
+  assert.equal(context.state.suppliers[0].lastPaymentAt, null);
+  assert.equal(context.state.suppliers[0].createdAt, '2026-01-01');
+  assert.equal(context.state.suppliers[0].updatedAt, '2026-10-29');
 });

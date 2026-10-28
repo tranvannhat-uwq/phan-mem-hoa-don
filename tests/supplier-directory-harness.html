@@ -1,0 +1,12 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nhà cung cấp · Dữ liệu kiểm thử</title><link rel="stylesheet" href="../style.css"><script defer src="../js/vendor/lucide.js"></script><script>window.__app_initialized=true;</script><style>body{display:block;padding:24px;overflow:auto;background:#f1f5f9;}#suppliers-panel{display:block;max-width:1450px;margin:auto;}@media(max-width:640px){body{padding:8px;}}</style></head><body>
+<script type="module">
+import {state} from '../js/state.js';
+import {setupSupplierManagement,renderSuppliersTable} from '../js/components/suppliers.js?v=20261028-supplier-directory-v1';
+const html=new DOMParser().parseFromString(await(await fetch('../index.html')).text(),'text/html');
+document.body.append(html.getElementById('suppliers-panel'));
+state.currentUser={id:'synthetic-admin',role:'admin'};
+state.suppliersPage=1;
+const names=['Công ty Bao Bì Nam Hải','Công ty Sơn Ánh Dương','Vật tư Đại Việt','Công ty Nhựa Phú Thành','Đối tác Bình Minh'];
+state.suppliers=Array.from({length:45},(_,i)=>({id:'supplier-'+i,code:'NCC'+String(i+1).padStart(3,'0'),name:names[i%5]+' '+(i+1),phone:'090'+String(i).padStart(7,'0'),address:i%2?'Hà Nội':'Thái Nguyên',debt:i%4===0?0:i%4===1?-500000:1250000+i*10000,totalPurchase:15000000+i*100000,totalPaid:12000000+i*50000,openingDebt:1000000,notes:'Giao hàng theo lịch đã thống nhất.\nĐối chiếu công nợ vào cuối tháng.',createdAt:'2026-10-'+String(i%27+1).padStart(2,'0')+'T01:00:00Z',updatedAt:'2026-10-28T01:00:00Z',lastPurchaseAt:i%3?'2026-10-22T09:00:00Z':null,lastPaymentAt:i%2?'2026-10-25T10:00:00Z':null}));
+setupSupplierManagement();renderSuppliersTable();document.body.dataset.ready='true';
+</script></body></html>

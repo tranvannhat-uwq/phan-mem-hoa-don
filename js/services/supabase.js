@@ -3,15 +3,15 @@ import { withAuthTimeout } from '../domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-login-resilience-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-login-resilience-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-supplier-directory-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-supplier-directory-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-login-resilience-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-login-resilience-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-login-resilience-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-supplier-directory-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-supplier-directory-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-supplier-directory-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-login-resilience-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-supplier-directory-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -2215,12 +2215,13 @@ export async function fetchCloudData(options = {}) {
     };
     const fetchSuppliers = async () => {
       try {
-        const tableName = tableProductsName.startsWith('wl_') ? 'wl_suppliers' : 'suppliers';
-        const data = await collectAllPages((offset, end) => supabaseClient
-          .from(tableName)
-          .select('*', { count: 'exact' })
-          .order('id', { ascending: true })
-          .range(offset, end), 1000);
+        const data = await collectAllPages(async (offset, end) => {
+          const result = await supabaseClient.rpc('rpc_supplier_directory', { p_offset: offset, p_limit: end - offset + 1 });
+          if (!result.error && (!Array.isArray(result.data?.rows) || !Number.isFinite(result.data?.total))) {
+            throw new Error('Dữ liệu danh sách nhà cung cấp không hợp lệ. Hãy cập nhật lại.');
+          }
+          return { data: result.data?.rows, count: result.data?.total, error: result.error };
+        }, 200);
         console.log("[SUPPLIERS] API:", data?.length || 0);
         if (data) {
           state.suppliers = data.map(s => ({
@@ -2234,6 +2235,10 @@ export async function fetchCloudData(options = {}) {
             totalPurchase: parseFloat(s.total_purchase || 0),
             totalPaid: parseFloat(s.total_paid || 0),
             notes: s.notes || '',
+            createdAt: s.created_at || null,
+            updatedAt: s.updated_at || null,
+            lastPurchaseAt: s.last_purchase_at || null,
+            lastPaymentAt: s.last_payment_at || null,
             isActive: s.is_active !== false
           })).filter(s => s.isActive);
         }
@@ -4555,7 +4560,12 @@ export async function dbDeleteSupplier(supplierId, reason = 'Ngừng sử dụng
 
 function applyCanonicalSupplier(supplier) {
   if (!supplier) return;
+  const previous = state.suppliers.find(item => String(item.id) === String(supplier.id));
   const normalized = {
+    createdAt: Object.hasOwn(supplier, 'createdAt') ? supplier.createdAt : previous?.createdAt ?? null,
+    updatedAt: Object.hasOwn(supplier, 'updatedAt') ? supplier.updatedAt : previous?.updatedAt ?? null,
+    lastPurchaseAt: Object.hasOwn(supplier, 'lastPurchaseAt') ? supplier.lastPurchaseAt : previous?.lastPurchaseAt ?? null,
+    lastPaymentAt: Object.hasOwn(supplier, 'lastPaymentAt') ? supplier.lastPaymentAt : previous?.lastPaymentAt ?? null,
     id: supplier.id,
     code: supplier.code,
     name: supplier.name,

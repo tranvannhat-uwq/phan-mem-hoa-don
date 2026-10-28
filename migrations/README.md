@@ -637,3 +637,15 @@ Tham khảo: https://supabase.com/kb/troubleshooting/high-cpu-and-infinite-trans
 Kiểm thử: tests/rls-statement-performance.test.mjs,
 tests/retention-conflict-code.test.mjs và các kiểm thử bounded lookup,
 retention READ ONLY, staged backup.
+
+
+0126 bổ sung rpc_supplier_directory(offset,limit), chỉ dành cho admin/kế toán.
+Mỗi trang tối đa 200 nhà cung cấp đang hoạt động, lấy nguyên tổng mua/đã
+trả/công nợ chuẩn, ngày tạo/cập nhật và ngày mua/chi hoàn thành gần nhất
+trong lịch sử còn lưu. Frontend tải hết các trang rồi lọc/sắp xếp/phân trang
+và xuất Excel trên cùng tập dữ liệu. Ngày lọc chọn nhà cung cấp, các tổng
+tiền vẫn là tổng hiện tại. p4_supplier_response bổ sung cùng các mốc ngày
+để thao tác lưu, mua, thanh toán, hủy cập nhật ngay cả khi mốc mới là NULL.
+Giữ quyền của helper cũ; không sửa số tiền, dữ liệu giao dịch hoặc chặn
+chuyển kỳ. Kiểm thử: supplier-directory, supplier-directory-database,
+supplier-list-export và supplier-directory-harness.html.

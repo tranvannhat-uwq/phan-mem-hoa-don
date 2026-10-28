@@ -1,134 +1,34 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-login-resilience-v1';
-import { renderAll } from '../main.js?v=20261028-login-resilience-v1';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261028-supplier-directory-v1';
+import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261028-supplier-directory-v1';
 
-function toNumber(value) {
-  if (value === null || value === undefined || value === '') return 0;
-  const normalized = typeof value === 'string' ? value.replace(/[^\d.-]/g, '') : value;
-  const num = Number(normalized);
-  return Number.isFinite(num) ? num : 0;
+const toNumber = supplierNumber;
+const escapeSupplierHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+function supplierDateLabel(value) {
+  const day = supplierDay(value);
+  return day ? day.split('-').reverse().join('/') : '—';
 }
-
-function getStoredArray(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
+function supplierFilters() {
+  const value = (id, fallback = '') => document.getElementById(id)?.value ?? fallback;
+  return { query: value('supplier-search-input'), debt: value('supplier-debt-filter', 'all'),
+    min: value('supplier-debt-min'), max: value('supplier-debt-max'),
+    dateField: value('supplier-date-field', 'createdAt'), from: value('supplier-date-from'), to: value('supplier-date-to'),
+    sort: value('supplier-sort', 'name') };
 }
-
-function isValidDoc(doc) {
-  const status = String(doc?.status || doc?.state || 'completed').toLowerCase();
-  return !['draft', 'nhap', 'cancelled', 'canceled', 'void', 'deleted', 'đã hủy', 'da huy'].includes(status) &&
-    !doc.deletedAt && !doc.deleted_at && !doc.isDeleted;
-}
-
-function isPaidCashbookTx(tx) {
-  const status = String(tx.status || 'Đã thanh toán').toLowerCase();
-  return (status === 'completed' || status === 'paid' || status.includes('thanh')) &&
-    !status.includes('hủy') &&
-    !status.includes('huy') &&
-    !status.includes('cancel');
-}
-
-function getDocSupplierId(doc) {
-  return doc?.supplierId || doc?.supplier_id || doc?.vendorId || doc?.vendor_id || null;
-}
-
-function getDocId(doc) {
-  return doc?.id || doc?.code || doc?.receiptId || doc?.purchaseId || '';
-}
-
-function getDocTotal(doc) {
-  const explicit = doc?.totalPayable ?? doc?.total_payable ?? doc?.grandTotal ?? doc?.grand_total ?? doc?.totalAmount ?? doc?.total_amount ?? doc?.total;
-  if (explicit !== undefined && explicit !== null && explicit !== '') return toNumber(explicit);
-  const items = Array.isArray(doc?.items) ? doc.items : [];
-  const subtotal = items.reduce((sum, item) => {
-    const qty = toNumber(item.quantity ?? item.qty);
-    const price = toNumber(item.price ?? item.unitPrice ?? item.importPrice ?? item.import_price);
-    const discountPercent = toNumber(item.discountPercent ?? item.discount_percent);
-    return sum + Math.max(0, qty * price * (1 - discountPercent / 100));
-  }, 0);
-  const discount = toNumber(doc?.discountAmount ?? doc?.discount_amount);
-  return Math.max(0, subtotal - discount);
-}
-
-function getSupplierPurchaseDocs() {
-  return [
-    ...getStoredArray('billing_system_purchase_orders'),
-    ...getStoredArray('billing_system_purchases'),
-    ...getStoredArray('billing_system_purchase_receipts'),
-    ...getStoredArray('billing_system_goods_receipts'),
-    ...getStoredArray('billing_system_supplier_imports')
-  ].filter(isValidDoc);
-}
-
-function getSupplierReturnDocs() {
-  return [
-    ...getStoredArray('billing_system_supplier_returns'),
-    ...getStoredArray('billing_system_purchase_returns'),
-    ...getStoredArray('billing_system_goods_return_to_suppliers')
-  ].filter(isValidDoc);
-}
-
-function getCashbookDocs() {
-  return getStoredArray('billing_system_cashbook_transactions');
-}
-
-function cashbookTxMatchesSupplier(tx, supplier, purchaseIds) {
-  const supplierId = String(supplier.id);
-  if (String(tx.supplierId || tx.supplier_id || '') === supplierId) return true;
-  if (tx.purchaseId && purchaseIds.has(String(tx.purchaseId))) return true;
-  if (tx.orderId && purchaseIds.has(String(tx.orderId))) return true;
-  return false;
-}
-
 function calculateSupplierMetrics(supplier) {
-  return {
-    totalPurchase: toNumber(supplier.totalPurchase),
-    payableDebt: toNumber(supplier.debt)
-  };
-  /* Legacy local calculations are intentionally unreachable. Supplier totals
-     now come only from the database transaction aggregates. */
-  const supplierId = String(supplier.id);
-  const purchases = getSupplierPurchaseDocs().filter(doc => String(getDocSupplierId(doc)) === supplierId);
-  const purchaseIds = new Set(purchases.map(getDocId).filter(Boolean).map(String));
-  const totalPurchaseGross = purchases.reduce((sum, doc) => sum + getDocTotal(doc), 0);
-  const totalReturns = getSupplierReturnDocs()
-    .filter(doc => String(getDocSupplierId(doc)) === supplierId || (doc.purchaseId && purchaseIds.has(String(doc.purchaseId))))
-    .reduce((sum, doc) => sum + getDocTotal(doc), 0);
-  const totalPurchase = Math.max(0, totalPurchaseGross - totalReturns);
-
-  const paid = getCashbookDocs()
-    .filter(tx => {
-      if (tx.type !== 'chi' || !isPaidCashbookTx(tx)) return false;
-      return cashbookTxMatchesSupplier(tx, supplier, purchaseIds);
-    })
-    .reduce((sum, tx) => sum + toNumber(tx.value), 0);
-
-  return {
-    totalPurchase,
-    payableDebt: Math.max(0, toNumber(supplier.debt) + totalPurchase - paid)
-  };
+  return { totalPurchase: toNumber(supplier.totalPurchase), payableDebt: toNumber(supplier.debt) };
 }
-
-function getFilteredSuppliers() {
-  const searchVal = (document.getElementById('supplier-search-input')?.value || '').toLowerCase().trim();
-  return (state.suppliers || []).filter(s => s && (
-    String(s.code || s.id || '').toLowerCase().includes(searchVal) ||
-    String(s.name || '').toLowerCase().includes(searchVal) ||
-    String(s.phone || '').includes(searchVal)
-  )).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-}
+function getFilteredSuppliers() { return filterSupplierDirectory(state.suppliers, supplierFilters()); }
 
 export function exportSuppliersExcel() {
   if (!globalThis.XLSX) {
     showToast('Chưa tải được thư viện Excel. Hãy tải lại trang rồi thử lại.', 'warning');
     return;
   }
+  const filterError = supplierFilterError(supplierFilters());
+  if (filterError) { showToast(filterError, 'warning'); return; }
   const suppliers = getFilteredSuppliers();
   if (!suppliers.length) {
     showToast('Không có nhà cung cấp phù hợp để xuất Excel.', 'warning');
@@ -136,20 +36,23 @@ export function exportSuppliersExcel() {
   }
   try {
     const headers = ['STT', 'Mã nhà cung cấp', 'Tên nhà cung cấp', 'Số điện thoại',
-      'Địa chỉ', 'Nợ cần trả', 'Tổng mua', 'Ghi chú'];
+      'Địa chỉ', 'Công nợ hiện tại', 'Tổng mua', 'Ghi chú', 'Đã thanh toán', 'Mua gần nhất (còn lưu)', 'Chi gần nhất (còn lưu)', 'Ngày tạo hồ sơ', 'Ngày cập nhật'];
     let totalDebt = 0;
     let totalPurchase = 0;
+    let totalPaid = 0;
     const rows = suppliers.map((supplier, index) => {
       const metrics = calculateSupplierMetrics(supplier);
       totalDebt += metrics.payableDebt;
       totalPurchase += metrics.totalPurchase;
+      totalPaid += toNumber(supplier.totalPaid);
       return [index + 1, String(supplier.code || supplier.id || ''), String(supplier.name || ''),
         String(supplier.phone || ''), String(supplier.address || ''),
-        metrics.payableDebt, metrics.totalPurchase, String(supplier.notes || '')];
+        metrics.payableDebt, metrics.totalPurchase, String(supplier.notes || ''), toNumber(supplier.totalPaid),
+        supplierDateLabel(supplier.lastPurchaseAt), supplierDateLabel(supplier.lastPaymentAt), supplierDateLabel(supplier.createdAt), supplierDateLabel(supplier.updatedAt)];
     });
     const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows,
-      ['', '', 'TỔNG CỘNG', '', '', totalDebt, totalPurchase, '']]);
-    sheet['!cols'] = [7, 22, 40, 20, 50, 22, 22, 50].map(wch => ({ wch }));
+      ['', '', 'TỔNG CỘNG', '', '', totalDebt, totalPurchase, '', totalPaid, '', '', '', '']]);
+    sheet['!cols'] = [7, 22, 40, 20, 50, 22, 22, 50, 22, 25, 25, 22, 22].map(wch => ({ wch }));
     sheet['!autofilter'] = { ref: XLSX.utils.encode_range({
       s: { r: 0, c: 0 }, e: { r: rows.length, c: headers.length - 1 }
     }) };
@@ -157,7 +60,7 @@ export function exportSuppliersExcel() {
       for (let c = 0; c < headers.length; c++) {
         const cell = sheet[XLSX.utils.encode_cell({ r, c })];
         if (!cell) continue;
-        if (c === 5 || c === 6) cell.z = '#,##0;[Red]-#,##0';
+        if (c === 5 || c === 6 || c === 8) cell.z = '#,##0;[Red]-#,##0';
         else if (c !== 0) { cell.t = 's'; cell.z = '@'; }
       }
     }
@@ -173,110 +76,59 @@ export function exportSuppliersExcel() {
 }
 
 export function renderSuppliersTable() {
-  const tableBody = document.getElementById('suppliers-table-body');
-  if (!tableBody) return;
-  
-  console.log("[SUPPLIERS] RENDER INPUT:", state.suppliers?.length || 0);
-
+  const body = document.getElementById('suppliers-table-body');
+  if (!body) return;
+  const filters = supplierFilters();
+  const error = supplierFilterError(filters);
   const filtered = getFilteredSuppliers();
-  
-  const ITEMS_PER_PAGE = 20;
-  const totalItems = filtered.length;
-  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
-  
-  if (state.suppliersPage > totalPages) state.suppliersPage = totalPages;
-  if (state.suppliersPage < 1) state.suppliersPage = 1;
-  
-  const startIndex = (state.suppliersPage - 1) * ITEMS_PER_PAGE;
-  const paginatedSuppliers = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  
-  // Vẽ các nút phân trang
-  const paginationContainer = document.getElementById('suppliers-pagination');
-  if (paginationContainer) {
-    paginationContainer.innerHTML = `
-      <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); width: 100%;">
-        <button class="btn btn-secondary btn-sm" id="suppliers-prev-page" ${state.suppliersPage === 1 ? 'disabled' : ''}>
-          <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i> Trước
-        </button>
-        <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">
-          Trang <strong>${state.suppliersPage}</strong> / ${totalPages} (${totalItems} nhà cung cấp)
-        </span>
-        <button class="btn btn-secondary btn-sm" id="suppliers-next-page" ${state.suppliersPage === totalPages ? 'disabled' : ''}>
-          Sau <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
-        </button>
-      </div>
-    `;
-
-    const prevPageBtn = document.getElementById('suppliers-prev-page');
-    if (prevPageBtn) {
-      prevPageBtn.addEventListener('click', () => {
-        state.suppliersPage--;
-        renderSuppliersTable();
-        document.getElementById('suppliers-panel').scrollIntoView({ behavior: 'smooth' });
-      });
-    }
-
-    const nextPageBtn = document.getElementById('suppliers-next-page');
-    if (nextPageBtn) {
-      nextPageBtn.addEventListener('click', () => {
-        state.suppliersPage++;
-        renderSuppliersTable();
-        document.getElementById('suppliers-panel').scrollIntoView({ behavior: 'smooth' });
-      });
-    }
+  const totals = supplierDirectoryTotals(filtered);
+  const setText = (id, value) => { const node = document.getElementById(id); if (node) node.textContent = value; };
+  setText('supplier-summary-count', totals.count);
+  setText('supplier-summary-payable', formatCurrency(totals.payable));
+  setText('supplier-summary-payable-count', totals.payableCount + ' nhà cung cấp còn nợ');
+  setText('supplier-summary-advance', formatCurrency(totals.advance));
+  setText('supplier-summary-purchase', formatCurrency(totals.purchase));
+  setText('supplier-summary-paid', 'Đã thanh toán: ' + formatCurrency(totals.paid));
+  setText('supplier-filter-error', error);
+  const pageSize = Number(document.getElementById('supplier-page-size')?.value || 20);
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  state.suppliersPage = Math.min(pages, Math.max(1, Number(state.suppliersPage) || 1));
+  const offset = (state.suppliersPage - 1) * pageSize;
+  setText('supplier-result-count', 'Hiển thị ' + (filtered.length ? offset + 1 : 0) + '–' + Math.min(offset + pageSize, filtered.length) + ' / ' + filtered.length + ' nhà cung cấp');
+  const footer = document.getElementById('suppliers-table-totals');
+  if (footer) footer.innerHTML = '<tr><td colspan="2">Tổng theo bộ lọc · ' + totals.count + ' nhà cung cấp</td><td class="supplier-money">' + formatCurrency(totals.purchase) + '</td><td class="supplier-money">' + formatCurrency(totals.paid) + '</td><td class="supplier-money">' + formatCurrency(totals.debt) + '</td><td colspan="2">Công nợ ròng</td></tr>';
+  const pager = document.getElementById('suppliers-pagination');
+  if (pager) {
+    pager.innerHTML = '<div class="supplier-pagination"><button type="button" class="btn btn-secondary btn-sm" id="suppliers-prev-page" ' + (state.suppliersPage === 1 ? 'disabled' : '') + '>Trước</button><span>Trang <strong>' + state.suppliersPage + '</strong> / ' + pages + '</span><button type="button" class="btn btn-secondary btn-sm" id="suppliers-next-page" ' + (state.suppliersPage === pages ? 'disabled' : '') + '>Sau</button></div>';
+    document.getElementById('suppliers-prev-page')?.addEventListener('click', () => { state.suppliersPage--; renderSuppliersTable(); });
+    document.getElementById('suppliers-next-page')?.addEventListener('click', () => { state.suppliersPage++; renderSuppliersTable(); });
   }
-
-  if (filtered.length === 0) {
-    tableBody.innerHTML = `
-      <tr>
-        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 3rem;">
-          Không tìm thấy nhà cung cấp nào.
-        </td>
-      </tr>
-    `;
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="7" class="supplier-empty">' + (error || 'Không có nhà cung cấp phù hợp. Hãy thử đổi hoặc xóa bộ lọc.') + '</td></tr>';
     return;
   }
-  
-  tableBody.innerHTML = paginatedSuppliers.map((s) => {
-    const actualIndex = state.suppliers.findIndex(supp => supp.id === s.id);
-    const metrics = calculateSupplierMetrics(s);
-    
-    return `
-      <tr>
-        <td style="font-weight: 600; color: #fff;">${s.code}</td>
-        <td style="font-weight: bold; color: #22c55e;">${s.name}</td>
-        <td>${s.phone || '<span style="color: var(--text-muted);">N/A</span>'}</td>
-        <td style="text-align: right; font-weight: 700; color: ${metrics.payableDebt > 0 ? 'var(--color-danger)' : 'var(--color-success)'};">${formatCurrency(metrics.payableDebt)}</td>
-        <td style="text-align: right; font-weight: 700; color: var(--color-primary);">${formatCurrency(metrics.totalPurchase)}</td>
-        <td style="text-align: center;">
-          <div class="actions-cell" style="justify-content: center; gap: 0.35rem;">
-            <button class="btn btn-secondary btn-sm btn-circle edit-supplier-btn" data-index="${actualIndex}" title="Sửa">
-              <i data-lucide="edit-2" style="width: 13px; height: 13px;"></i>
-            </button>
-            <button class="btn btn-danger btn-sm btn-circle delete-supplier-btn" data-index="${actualIndex}" title="Xóa">
-              <i data-lucide="trash-2" style="width: 13px; height: 13px;"></i>
-            </button>
-          </div>
-        </td>
-      </tr>
-    `;
+  body.innerHTML = filtered.slice(offset, offset + pageSize).map(s => {
+    const index = state.suppliers.findIndex(item => item.id === s.id);
+    const debt = toNumber(s.debt);
+    const status = debt > 0 ? 'Còn phải trả' : debt < 0 ? 'Đã trả trước' : 'Đã tất toán';
+    const tone = debt > 0 ? 'payable' : debt < 0 ? 'advance' : 'settled';
+    return '<tr><td><strong class="supplier-name">' + escapeSupplierHtml(s.name) + '</strong><span class="supplier-code">' + escapeSupplierHtml(s.code || s.id) + '</span></td>' +
+      '<td><span>' + escapeSupplierHtml(s.phone || 'Chưa có SĐT') + '</span><small class="supplier-address">' + escapeSupplierHtml(s.address || 'Chưa có địa chỉ') + '</small></td>' +
+      '<td class="supplier-money">' + formatCurrency(toNumber(s.totalPurchase)) + '</td><td class="supplier-money">' + formatCurrency(toNumber(s.totalPaid)) + '</td>' +
+      '<td class="supplier-money"><strong class="supplier-debt-' + tone + '">' + formatCurrency(debt) + '</strong><span class="supplier-status ' + tone + '">' + status + '</span></td>' +
+      '<td><span>' + supplierDateLabel(s.lastPurchaseAt) + '</span><small class="supplier-address">Chi: ' + supplierDateLabel(s.lastPaymentAt) + '</small></td>' +
+      '<td><div class="supplier-actions"><button type="button" class="btn btn-secondary btn-sm supplier-detail-btn" data-index="' + index + '" aria-label="Chi tiết ' + escapeSupplierHtml(s.name) + '" aria-expanded="false">Chi tiết</button>' +
+      '<button type="button" class="btn btn-secondary btn-sm edit-supplier-btn" data-index="' + index + '" aria-label="Sửa ' + escapeSupplierHtml(s.name) + '"><i data-lucide="edit-2"></i></button>' +
+      '<button type="button" class="btn btn-secondary btn-sm delete-supplier-btn" data-index="' + index + '" aria-label="Ngừng sử dụng ' + escapeSupplierHtml(s.name) + '"><i data-lucide="archive"></i></button></div></td></tr>' +
+      '<tr id="supplier-details-' + index + '" class="supplier-detail-row" hidden><td colspan="7"><div class="supplier-detail-grid"><div><small>NỢ ĐẦU KỲ</small><strong>' + formatCurrency(toNumber(s.openingDebt)) + '</strong></div><div><small>NGÀY TẠO HỒ SƠ</small><strong>' + supplierDateLabel(s.createdAt) + '</strong></div><div><small>CẬP NHẬT GẦN NHẤT</small><strong>' + supplierDateLabel(s.updatedAt) + '</strong></div><div class="supplier-detail-notes"><small>GHI CHÚ</small><span>' + escapeSupplierHtml(s.notes || 'Chưa có ghi chú') + '</span></div></div></td></tr>';
   }).join('');
-  
-  // Gán sự kiện click cho các nút hành động
-  document.querySelectorAll('.edit-supplier-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.getAttribute('data-index'));
-      openEditSupplierModal(idx);
-    });
-  });
-
-  document.querySelectorAll('.delete-supplier-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.getAttribute('data-index'));
-      handleDeleteSupplier(idx);
-    });
-  });
-
+  document.querySelectorAll('.supplier-detail-btn').forEach(btn => btn.addEventListener('click', () => {
+    const row = document.getElementById('supplier-details-' + btn.dataset.index);
+    if (!row) return;
+    row.hidden = !row.hidden; btn.setAttribute('aria-expanded', String(!row.hidden));
+  }));
+  document.querySelectorAll('.edit-supplier-btn').forEach(btn => btn.addEventListener('click', () => openEditSupplierModal(Number(btn.dataset.index))));
+  document.querySelectorAll('.delete-supplier-btn').forEach(btn => btn.addEventListener('click', () => handleDeleteSupplier(Number(btn.dataset.index))));
   safeCreateIcons();
 }
 
@@ -285,7 +137,7 @@ export function populateSupplierDatalist() {
   if (!datalist) return;
 
   datalist.innerHTML = state.suppliers.map(s => {
-    return `<option value="${s.name} — ${s.code}" data-supplier-id="${s.id}">${s.phone || 'N/A'}</option>`;
+    return `<option value="${escapeSupplierHtml(s.name)} — ${escapeSupplierHtml(s.code)}" data-supplier-id="${s.id}">${s.phone || 'N/A'}</option>`;
   }).join('');
 }
 
@@ -391,6 +243,34 @@ export function setupSupplierManagement() {
       renderSuppliersTable();
     });
   }
+
+  ['supplier-debt-filter','supplier-date-field','supplier-date-from','supplier-date-to','supplier-sort','supplier-page-size'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => { state.suppliersPage = 1; renderSuppliersTable(); });
+  });
+  ['supplier-debt-min','supplier-debt-max'].forEach(id => document.getElementById(id)?.addEventListener('input', () => { state.suppliersPage = 1; renderSuppliersTable(); }));
+  document.getElementById('btn-clear-supplier-filters')?.addEventListener('click', () => {
+    for (const id of ['supplier-search-input','supplier-debt-min','supplier-debt-max','supplier-date-from','supplier-date-to']) document.getElementById(id).value = '';
+    document.getElementById('supplier-debt-filter').value = 'all';
+    document.getElementById('supplier-date-field').value = 'createdAt';
+    document.getElementById('supplier-date-preset').value = 'all';
+    document.getElementById('supplier-sort').value = 'name';
+    state.suppliersPage = 1; renderSuppliersTable();
+  });
+  document.getElementById('supplier-date-preset')?.addEventListener('change', event => {
+    if (event.target.value === 'custom') return;
+    const range = supplierDateRange(event.target.value);
+    document.getElementById('supplier-date-from').value = range.from;
+    document.getElementById('supplier-date-to').value = range.to;
+    state.suppliersPage = 1; renderSuppliersTable();
+  });
+  ['supplier-date-from','supplier-date-to'].forEach(id => document.getElementById(id)?.addEventListener('input', () => {
+    document.getElementById('supplier-date-preset').value = 'custom'; state.suppliersPage = 1; renderSuppliersTable();
+  }));
+  document.getElementById('btn-refresh-suppliers')?.addEventListener('click', async event => {
+    const button = event.currentTarget; button.disabled = true;
+    try { await ensurePanelCloudData('suppliers-panel', { force: true }); }
+    finally { button.disabled = false; }
+  });
 
   // Khởi tạo datalist cho phiếu chi ban đầu
   populateSupplierDatalist();
