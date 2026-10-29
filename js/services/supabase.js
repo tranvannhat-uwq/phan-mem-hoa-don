@@ -2,18 +2,19 @@ import { state } from '../state.js';
 import { withAuthTimeout } from '../domain/auth-timeout.js';
 import { normalizeNewCustomerPriceListId } from '../domain/customer-creation.js';
 import { fetchCustomerOrderWindow } from '../domain/customer-order-window.js';
+import { createApplicationEgressReporter } from '../domain/application-egress.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-customer-log-fixes-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-customer-log-fixes-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-system-status-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-system-status-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-customer-log-fixes-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-customer-log-fixes-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-customer-log-fixes-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-system-status-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-system-status-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-system-status-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-customer-log-fixes-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-system-status-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -21,6 +22,11 @@ export let isCloudActive = false;
 // Counts only this Supabase client's HTTP responses. Realtime WebSocket and
 // static assets remain visible in the Supabase Usage dashboard, not here.
 const supabaseEgressMeter = createEgressMeter();
+const applicationEgressReporter = createApplicationEgressReporter({
+  snapshot: getSupabaseEgressSnapshot,
+  rpc: (name,args) => supabaseClient.rpc(name,args),
+  actor: () => isCloudActive && state.currentUser?.authUserId ? String(state.currentUser.authUserId) : ''
+});
 let retentionProjectUrl = '';
 
 function retentionAwareFetch(input, init = {}) {
@@ -140,9 +146,20 @@ export async function getSupabaseEgressSnapshot() {
 }
 export function resetSupabaseEgressMetrics() {
   supabaseEgressMeter.reset();
+  applicationEgressReporter.reset();
+}
+
+export const reportApplicationEgress = () => applicationEgressReporter.flush();
+export async function dbAdminSystemStatus(refresh = false) {
+  if (state.currentUser?.role !== 'admin') throw new Error('Chỉ Admin được xem tình trạng hệ thống.');
+  if (!isCloudActive || !supabaseClient) throw new Error('Cần kết nối Cloud để xem tình trạng hệ thống.');
+  const {data,error}=await supabaseClient.rpc('rpc_admin_system_status',{p_refresh:refresh===true});
+  if(error)throw new Error(['PGRST202','42883'].includes(error.code)?'Cloud chưa có bản cập nhật tình trạng hệ thống 0132.':error.message);
+  return data;
 }
 
 export function resetAuthenticatedBusinessState() {
+  applicationEgressReporter.reset();
   for (const domain of [
     'products', 'payrollProductGroups', 'brands', 'savedOrders', 'customers',
     'cashbookTransactions', 'suppliers', 'purchases', 'rawMaterials',
@@ -505,6 +522,7 @@ export async function connectSupabase(url, key, verbose = true) {
       throw new Error('Thư viện Supabase chưa được tải (vui lòng kiểm tra kết nối mạng).');
     }
     supabaseEgressMeter.reset();
+    applicationEgressReporter.reset();
     retentionProjectUrl = url;
     state.retentionEpoch = null;
     state.retentionAvailable = false;
@@ -580,6 +598,7 @@ export async function connectSupabase(url, key, verbose = true) {
     }
     supabaseClient = client;
     isCloudActive = true;
+    applicationEgressReporter.start();
     
     localStorage.setItem('billing_supabase_url', url);
     localStorage.setItem('billing_supabase_key', key);
@@ -629,6 +648,7 @@ export async function connectSupabase(url, key, verbose = true) {
 
 // Ngắt kết nối đám mây
 export function disconnectSupabase() {
+  applicationEgressReporter.stop();
   const connectedClient = supabaseClient;
   localStorage.removeItem('billing_supabase_url');
   localStorage.removeItem('billing_supabase_key');

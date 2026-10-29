@@ -6,9 +6,9 @@
 <section id="inventory-panel" class="panel active"></section><output id="inventory-harness-calls" style="display:block;margin-top:20px"></output></main><div id="toast-container"></div>
 <script type="module">
 import { state } from '../js/state.js';
-import { inventoryGateway } from '../js/services/inventory.js?v=20261029-customer-log-fixes-v1';
-import { bomGateway } from '../js/services/bom.js?v=20261029-customer-log-fixes-v1';
-import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261029-customer-log-fixes-v1';
+import { inventoryGateway } from '../js/services/inventory.js?v=20261029-system-status-v1';
+import { bomGateway } from '../js/services/bom.js?v=20261029-system-status-v1';
+import { renderInventoryPanel, resetInventoryPanel } from '../js/components/inventory.js?v=20261029-system-status-v1';
 state.currentUser = {id:'test-admin', authUserId:'test-admin',role:new URLSearchParams(location.search).get('accounting')?'accounting':'admin'};
 state.currentTab = 'inventory-panel';
 const rows = Array.from({length:65},(_,i)=>({product_id:`sku-${String(i).padStart(3,'0')}`,sku:`SON-${String(i+1).padStart(3,'0')}-LON`,name:`Sơn kiểm thử ${i+1}`,brand:'Hãng kiểm thử',unit:'Lon',quantity:i===0?10:20,minimum_quantity:5,is_active:true}));

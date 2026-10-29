@@ -1,0 +1,17 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiểm thử Tình trạng hệ thống</title><link rel="stylesheet" href="../style.css"><script>window.__app_initialized=true;</script>
+<style>body{display:block;overflow:auto;padding:32px;background:#f4f7fb}main{max-width:1120px;margin:auto}#system-status-panel{display:block;padding:24px;border-radius:16px;background:#fff}.qa-note{margin-bottom:16px;color:#475569}</style></head>
+<body><main><p class="qa-note">KIỂM THỬ · Dữ liệu giả lập · Không kết nối Supabase</p><section id="system-status-panel" class="panel active"></section><output id="qa-calls"></output></main><div id="toast-container"></div>
+<script type="module">
+import {state} from '../js/state.js';
+import {connectSupabase} from '../js/services/supabase.js?v=20261029-system-status-v1';
+import {renderSystemStatus} from '../js/components/system-status.js?v=20261029-system-status-v1';
+let calls=0;
+window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})},rpc:async(name,args)=>{
+ if(name==='rpc_report_application_egress')return{data:{accepted:true},error:null};
+ calls++;document.getElementById('qa-calls').textContent=`Số lượt đọc trạng thái: ${calls}`;
+ return{data:{databaseBytes:214700000,connections:19,maxConnections:60,waitingLocks:0,egressBytes:241800000,egressSince:'2026-10-29T01:00:00Z',egressReportedAt:new Date().toISOString(),sampledAt:new Date().toISOString()},error:null};}})};
+await connectSupabase('https://qa.invalid','qa-only',false);
+state.currentUser={id:'qa-admin',authUserId:'13200000-0000-4000-8000-000000000001',role:new URLSearchParams(location.search).get('role')||'admin'};
+renderSystemStatus();
+</script></body></html>

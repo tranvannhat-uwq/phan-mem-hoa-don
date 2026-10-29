@@ -1,30 +1,31 @@
 import { state } from './state.js';
 import {canViewDashboard} from './domain/dashboard-access.js';
+import {renderSystemStatus} from './components/system-status.js?v=20261029-system-status-v1';
 import { withAuthTimeout } from './domain/auth-timeout.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from './config.js';
-import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261029-customer-log-fixes-v1';
-import { setupBackupRestoreListeners } from './services/backup.js?v=20261029-customer-log-fixes-v1';
-import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions, invalidateDashboardPayloadCache } from './components/dashboard.js?v=20261029-customer-log-fixes-v1';
-import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261029-customer-log-fixes-v1';
-import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261029-customer-log-fixes-v1';
-import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261029-customer-log-fixes-v1';
-import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261029-customer-log-fixes-v1';
-import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261029-customer-log-fixes-v1';
-import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261029-customer-log-fixes-v1';
-import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261029-customer-log-fixes-v1';
-import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261029-customer-log-fixes-v1';
-import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261029-customer-log-fixes-v1';
-import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261029-customer-log-fixes-v1';
-import { renderInventoryPanel } from './components/inventory.js?v=20261029-customer-log-fixes-v1';
-import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport, invalidateEmployeeBusinessReportCache } from './components/reports.js?v=20261029-customer-log-fixes-v1';
+import { connectSupabase, disconnectSupabase, retrySupabaseConnection, syncLocalToCloud, isCloudActive, supabaseClient, loadLocalStorageBackup, backfillMultiCompanyAndRevenueData, clearSupabaseAuthStorage, fetchCloudData, getMaintenanceStatus, setMaintenanceMode, resetAuthenticatedBusinessState, getSupabaseEgressSnapshot, resetSupabaseEgressMetrics } from './services/supabase.js?v=20261029-system-status-v1';
+import { setupBackupRestoreListeners } from './services/backup.js?v=20261029-system-status-v1';
+import { updateDashboardStats, setupDashboardFilters, setupDashboardQuickActions, invalidateDashboardPayloadCache } from './components/dashboard.js?v=20261029-system-status-v1';
+import { renderProductsTable, setupExcelImportAndTemplate, setupProductManagement } from './components/products.js?v=20261029-system-status-v1';
+import { renderCustomersTable, setupCustomerManagement, populateManagedByDropdown } from './components/customers.js?v=20261029-system-status-v1';
+import { renderInvoiceTable, setupInvoiceCreator, resetInvoiceBuilder, resetInvoiceCustomer } from './components/invoice.js?v=20261029-system-status-v1';
+import { renderPricelistsTable, setupPricelistManagement, populatePricelistsDropdowns } from './components/pricelists.js?v=20261029-system-status-v1';
+import { renderUsersTable, setupUserManagement, handleLogin, handleLogout, showLoginGate, applyUserPermissions, populateCustomerEmployeeFilter, loadAuthenticatedProfile, clearAuthenticatedSessionState, startMaintenanceMonitor, noteMaintenanceStatusCheck } from './components/users.js?v=20261029-system-status-v1';
+import { setupHistoryPanel, renderHistoryOrders } from './components/history.js?v=20261029-system-status-v1';
+import { renderBrandsTable, setupBrandsPanel } from './components/brands.js?v=20261029-system-status-v1';
+import { setupSoQuyPanel, renderSoQuyTable } from './components/so_quy.js?v=20261029-system-status-v1';
+import { renderSuppliersTable, setupSupplierManagement, populateSupplierDatalist } from './components/suppliers.js?v=20261029-system-status-v1';
+import { renderGoodsPanel, setupGoodsPanel } from './components/goods.js?v=20261029-system-status-v1';
+import { renderInventoryPanel } from './components/inventory.js?v=20261029-system-status-v1';
+import { setupReportsPanel, renderDebtReport, renderReturnsReport, renderEmployeeBusinessReport, invalidateEmployeeBusinessReportCache } from './components/reports.js?v=20261029-system-status-v1';
 import { showToast, safeCreateIcons, updateDbStatusUI } from './utils.js';
-import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261029-customer-log-fixes-v1';
-import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261029-customer-log-fixes-v1';
-import { setupRetentionSettings, renderRetentionSettings } from './components/data-retention.js?v=20261029-customer-log-fixes-v1';
-import { renderRetentionReview } from './components/retention-review.js?v=20261029-customer-log-fixes-v1';
-import { setupDealerSupport, renderDealerSupportSettings } from './components/dealer-support.js?v=20261029-customer-log-fixes-v1';
-import { setupIndependentReturns, renderIndependentReturns } from './components/independent-returns.js?v=20261029-customer-log-fixes-v1';
-import { syncRetentionState } from './services/supabase.js?v=20261029-customer-log-fixes-v1';
+import { startRealtimeSync, stopRealtimeSync, getRealtimeEventMetricsSnapshot, resetRealtimeEventMetrics } from './services/realtime.js?v=20261029-system-status-v1';
+import { setupActivityLog, renderActivityLog } from './components/activity-log.js?v=20261029-system-status-v1';
+import { setupRetentionSettings, renderRetentionSettings } from './components/data-retention.js?v=20261029-system-status-v1';
+import { renderRetentionReview } from './components/retention-review.js?v=20261029-system-status-v1';
+import { setupDealerSupport, renderDealerSupportSettings } from './components/dealer-support.js?v=20261029-system-status-v1';
+import { setupIndependentReturns, renderIndependentReturns } from './components/independent-returns.js?v=20261029-system-status-v1';
+import { syncRetentionState } from './services/supabase.js?v=20261029-system-status-v1';
 
 if (typeof window !== 'undefined') {
   window.billingEgressMetrics = Object.freeze({
@@ -262,6 +263,7 @@ export function renderAll() {
     return;
   }
   if(state.currentTab==='dashboard-panel'&&!canViewDashboard(state.currentUser)) {switchTab('invoice-panel');return;}
+  if(state.currentTab==='system-status-panel'&&state.currentUser.role!=='admin') {switchTab('invoice-panel');return;}
 
   renderCloudLoadWarning();
   renderRetentionSettings();
@@ -275,6 +277,9 @@ export function renderAll() {
   backfillMultiCompanyAndRevenueData();
 
   switch (state.currentTab) {
+    case 'system-status-panel':
+      renderSystemStatus();
+      break;
     case 'products-panel':
       renderProductsTable();
       break;
@@ -337,6 +342,7 @@ export function renderAll() {
 
 // Chuyển đổi giữa các phân hệ (Tab)
 export function switchTab(panelId) {
+  if(panelId==='system-status-panel'&&state.currentUser?.role!=='admin')panelId='invoice-panel';
   if (panelId === 'payroll-panel') panelId = 'dashboard-panel';
   if (state.currentUser?.role === 'sale' && ['products-panel', 'pricelists-panel'].includes(panelId)) {
     panelId = 'invoice-panel';
@@ -392,6 +398,7 @@ export function switchTab(panelId) {
   else if (panelId === 'pricelists-panel') heading.innerText = 'Quản lý Bảng giá & Chiết khấu';
   else if (panelId === 'users-panel') heading.innerText = 'Quản lý tài khoản người dùng';
   else if (panelId === 'settings-panel') heading.innerText = 'Cấu hình đám mây';
+  else if (panelId === 'system-status-panel') heading.innerText = 'Tình trạng hệ thống';
   else if (panelId === 'goods-panel') heading.innerText = 'Phiếu mua hàng';
   else if (panelId === 'inventory-panel') heading.innerText = 'Quản lý kho';
   else if (panelId === 'reports-panel') heading.innerText = 'Báo cáo nghiệp vụ';

@@ -33,15 +33,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <!-- Pinned local browser libraries; no external CDN required for login -->
-  <script defer src="js/vendor/lucide.js?v=20261029-customer-log-fixes-v1"></script>
+  <script defer src="js/vendor/lucide.js?v=20261029-system-status-v1"></script>
   
-  <script defer src="js/vendor/xlsx.js?v=20261029-customer-log-fixes-v1"></script>
+  <script defer src="js/vendor/xlsx.js?v=20261029-system-status-v1"></script>
   
-  <script defer src="js/vendor/supabase.js?v=20261029-customer-log-fixes-v1"></script>
+  <script defer src="js/vendor/supabase.js?v=20261029-system-status-v1"></script>
   
-  <script defer src="js/vendor/chart.js?v=20261029-customer-log-fixes-v1"></script>
+  <script defer src="js/vendor/chart.js?v=20261029-system-status-v1"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261029-customer-log-fixes-v1">
+  <link rel="stylesheet" href="style.css?v=20261029-system-status-v1">
 </head>
 <body>
 
@@ -305,6 +305,7 @@
               <i data-lucide="settings" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
               Cấu hình Cloud
             </button>
+            <button class="dropdown-item dropdown-nav-link" data-target="system-status-panel" style="display:none;width:100%;text-align:left;padding:.65rem 1rem;border:0;background:transparent;font:inherit;color:var(--text-secondary);align-items:center;gap:.5rem;cursor:pointer"><i data-lucide="activity" style="width:16px;height:16px"></i>Tình trạng hệ thống</button>
             <button class="dropdown-item" id="btn-change-own-password" style="width: 100%; text-align: left; padding: 0.65rem 1rem; border: none; background: transparent; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
               <i data-lucide="key-round" style="width: 16px; height: 16px; color: var(--color-primary);"></i>
               Đổi mật khẩu cá nhân
@@ -2105,6 +2106,7 @@
         </div>
       </section>
 
+      <section id="system-status-panel" class="panel"></section>
       <!-- Settings Panel -->
       <section id="settings-panel" class="panel">
         <div class="glass-panel" style="max-width: 650px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
@@ -4610,9 +4612,9 @@
 
 
   <!-- Login can open before the full application and Auth session are ready. -->
-  <script src="js/login-entry.js?v=20261029-customer-log-fixes-v1"></script>
+  <script src="js/login-entry.js?v=20261029-system-status-v1"></script>
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261029-customer-log-fixes-v1"></script>
-  <script type="module" src="js/main.js?v=20261029-customer-log-fixes-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261029-system-status-v1"></script>
+  <script type="module" src="js/main.js?v=20261029-system-status-v1"></script>
 </body>
 </html>

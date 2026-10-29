@@ -1,22 +1,23 @@
 import { state } from '../state.js';
 import { withAuthTimeout } from '../domain/auth-timeout.js';
-import { createListPagination } from './list-pagination.js?v=20261029-customer-log-fixes-v1';
+import { createListPagination } from './list-pagination.js?v=20261029-system-status-v1';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261029-customer-log-fixes-v1';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261029-customer-log-fixes-v1';
-import { renderAll, switchTab } from '../main.js?v=20261029-customer-log-fixes-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261029-customer-log-fixes-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261029-system-status-v1';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261029-system-status-v1';
+import { renderAll, switchTab } from '../main.js?v=20261029-system-status-v1';
+import { populateManagedByDropdown } from './customers.js?v=20261029-system-status-v1';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261029-customer-log-fixes-v1';
-import { resetInventoryPanel } from './inventory.js?v=20261029-customer-log-fixes-v1';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261029-customer-log-fixes-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261029-system-status-v1';
+import { resetInventoryPanel } from './inventory.js?v=20261029-system-status-v1';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261029-system-status-v1';
 import {canViewDashboard} from '../domain/dashboard-access.js';
-import {clearDashboardView} from './dashboard.js?v=20261029-customer-log-fixes-v1';
+import {clearDashboardView} from './dashboard.js?v=20261029-system-status-v1';
+import {resetSystemStatus} from './system-status.js?v=20261029-system-status-v1';
 
 const usersPager = createListPagination('users-pagination');
 
@@ -588,6 +589,7 @@ function createLoginFlowError(code) {
 }
 
 export function clearAuthenticatedSessionState() {
+  resetSystemStatus();
   clearDashboardView();
   resetSupabaseEgressMetrics();
   resetRealtimeEventMetrics();
@@ -831,6 +833,8 @@ export function applyUserPermissions(user) {
   const dashboardPanel=document.getElementById('dashboard-panel');
   if(dashboardPanel)dashboardPanel.hidden=!canViewDashboard(user);
   const role = user.role;
+  const systemStatusPanel=document.getElementById('system-status-panel');
+  if(systemStatusPanel)systemStatusPanel.hidden=role!=='admin';
   const activityButton = document.getElementById('btn-activity-log');
   if (activityButton) activityButton.closest('.activity-header-wrap').style.display = role === 'admin' ? 'block' : 'none';
 
@@ -851,6 +855,7 @@ export function applyUserPermissions(user) {
     } else if (role === 'accounting') {
       allowed = target !== 'settings-panel' && target !== 'users-panel';
     }
+    if (target === 'system-status-panel') allowed = role === 'admin';
     if (target === 'independent-returns-panel') allowed = role === 'admin' || role === 'accounting';
     if (target === 'dashboard-panel') allowed = canViewDashboard(user);
     navItem.style.removeProperty('display');
@@ -877,6 +882,7 @@ export function applyUserPermissions(user) {
   dropdownNavLinks.forEach(link => {
     const target = link.getAttribute('data-target');
       if(target==='dashboard-panel') {link.style.display=canViewDashboard(user)?'flex':'none';return;}
+      if(target==='system-status-panel') {link.style.display=role==='admin'?'flex':'none';return;}
     if (role === 'sale' || role === 'accounting') {
       if (target === 'users-panel' || target === 'settings-panel') {
         link.style.display = 'none';
