@@ -6493,6 +6493,7 @@ select#invoice-pricelist-select:disabled {
 }
 
 .cashbook-recipient-picker { position: relative; min-width: 0; }
+.so-quy-tx-code { display: inline-block; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cashbook-recipient-control { position: relative; }
 .cashbook-create-grid #payment-recipient { padding-right: 46px; }
 .cashbook-recipient-toggle { position: absolute; right: 1px; top: 1px; bottom: 1px; display: flex; align-items: center; justify-content: center; width: 42px; padding: 0; border: 0; border-left: 1px solid #e2e8f0; border-radius: 0 7px 7px 0; background: #f8fafc; color: #475569; cursor: pointer; }

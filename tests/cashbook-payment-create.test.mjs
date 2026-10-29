@@ -21,7 +21,7 @@ function harness(save) {
     setCashbookDateTimeValue: (id, value) => { node(id).value = value; }, activeFilters: { accountType: 'cash' },
     state: { currentUser: { displayName: 'Kế toán' }, suppliers: [] }, findSupplierByInput: () => null,
     parseCashbookCurrencyInput: field => Number(field.value), getCashbookTransactions: () => transactions,
-    saveCashbookTransactions: rows => { transactions = rows; }, renderAll() {}, showToast: message => toasts.push(message),
+    saveCashbookTransactions: rows => { transactions = rows; }, renderAll() {}, showToast: message => toasts.push(message), getCashbookDisplayCode: tx => tx.id,
     dbSaveCashbookTransaction: async (tx, options) => { calls.push({ ...tx }); return save ? save(tx, options) : (tx.id = `PC-${calls.length}`, { success: true }); }
   });
   vm.runInContext(paymentCode, context);

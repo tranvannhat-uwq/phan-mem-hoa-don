@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261029-purchase-advance-v1';
-import { bomGateway } from '../services/bom.js?v=20261029-purchase-advance-v1';
+} from '../services/supabase.js?v=20261029-cashbook-codes-v1';
+import { bomGateway } from '../services/bom.js?v=20261029-cashbook-codes-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -131,6 +131,11 @@ function purchaseModal() {
                 </table>
               </div>
               <div class="purchase-entry-tax-settings">
+                <span>Đơn giá chưa gồm VAT. Thuế tính trên tiền hàng sau giảm giá.</span>
+                <label for="purchase-vat-rate">VAT (%)</label>
+                <input type="number" class="form-control" id="purchase-vat-rate" min="0" max="100" step="0.01" value="0" required inputmode="decimal">
+              </div>
+              <div class="purchase-entry-tax-settings">
                 <span>Chiết khấu được trừ khỏi tiền hàng trước khi tính VAT.</span>
                 <label for="purchase-discount-value">Giảm giá</label>
                 <select class="form-control" id="purchase-discount-type" aria-label="Loại giảm giá">
@@ -139,15 +144,10 @@ function purchaseModal() {
                 <input type="number" class="form-control" id="purchase-discount-value" min="0" max="100" step="0.01" value="0" required inputmode="decimal" aria-label="Mức giảm giá">
                 <span class="purchase-entry-discount-preview" id="purchase-entry-discount-preview">−0 ₫</span>
               </div>
-              <div class="purchase-entry-tax-settings">
-                <span>Đơn giá chưa gồm VAT. Thuế tính trên tiền hàng sau giảm giá.</span>
-                <label for="purchase-vat-rate">VAT (%)</label>
-                <input type="number" class="form-control" id="purchase-vat-rate" min="0" max="100" step="0.01" value="0" required inputmode="decimal">
-              </div>
               <div class="purchase-entry-summary">
                 <div class="purchase-entry-summary-card"><span>Tiền hàng</span><strong id="purchase-entry-subtotal">0 ₫</strong></div>
-                <div class="purchase-entry-summary-card"><span>Giảm giá</span><strong id="purchase-entry-discount-total">−0 ₫</strong></div>
                 <div class="purchase-entry-summary-card"><span>Tiền VAT</span><strong id="purchase-entry-vat-total">0 ₫</strong></div>
+                <div class="purchase-entry-summary-card"><span>Giảm giá</span><strong id="purchase-entry-discount-total">−0 ₫</strong></div>
                 <div class="purchase-entry-summary-card"><span>Tổng gồm VAT</span><strong id="purchase-entry-total">0 ₫</strong></div>
                 <div class="purchase-entry-summary-card is-due"><span>Còn phải trả</span><strong id="purchase-entry-debt-total">0 ₫</strong></div>
               </div>

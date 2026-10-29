@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20261029-purchase-advance-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261029-purchase-advance-v1';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-purchase-advance-v1';
-import { setupInputPicker } from './input-picker.js?v=20261029-purchase-advance-v1';
+import { renderAll } from '../main.js?v=20261029-cashbook-codes-v1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261029-cashbook-codes-v1';
+import { getCanonicalCashbookId, getCashbookDisplayCode, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-cashbook-codes-v1';
+import { setupInputPicker } from './input-picker.js?v=20261029-cashbook-codes-v1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -953,6 +953,7 @@ export function setupSoQuyPanel() {
             newTx.id = paymentResult.cashbook_id;
             newTx.cloudId = paymentResult.cashbook_id;
           }
+          if (paymentResult.transaction?.displayNumber != null) newTx.displayNumber = String(paymentResult.transaction.displayNumber);
 
           if (!refreshedCustomer) {
             currentCustomer.debt = newDebt;
@@ -999,7 +1000,7 @@ export function setupSoQuyPanel() {
         
         // Update customer debt (subtract debt balance)
         
-        showToast(`Đã tạo phiếu thu ${newTx.id} thành công!`, 'success');
+        showToast(`Đã tạo phiếu thu ${getCashbookDisplayCode(newTx)} thành công!`, 'success');
         hideReceiptModal();
         renderAll();
       } finally {
@@ -1125,7 +1126,7 @@ export function setupSoQuyPanel() {
         txs.unshift(newTx);
         saveCashbookTransactions(txs);
       
-        showToast(`Đã tạo phiếu chi ${finalCode} thành công!`, 'success');
+        showToast(`Đã tạo phiếu chi ${getCashbookDisplayCode(newTx)} thành công!`, 'success');
         hidePaymentModal();
         renderAll();
       } finally {
@@ -1202,7 +1203,7 @@ export function setupSoQuyPanel() {
         method: document.getElementById('cashbook-edit-method')?.value || 'cash',
         accounting: document.getElementById('cashbook-edit-accounting')?.checked === true,
         note: document.getElementById('cashbook-edit-note')?.value.trim() || '',
-        reason: `Sửa ${transaction.type === 'thu' ? 'phiếu thu' : 'phiếu chi'} ${transaction.id}`
+        reason: `Sửa ${transaction.type === 'thu' ? 'phiếu thu' : 'phiếu chi'} ${getCashbookDisplayCode(transaction)}`
       });
       if (!updated) return;
 
@@ -1218,7 +1219,7 @@ export function setupSoQuyPanel() {
       if (!refreshed) {
         showToast('Phiếu đã sửa trên Cloud nhưng giao diện chưa tải lại được. Vui lòng tải lại trang.', 'warning');
       } else {
-        showToast(`Đã cập nhật phiếu ${transaction.id}.`, 'success');
+        showToast(`Đã cập nhật phiếu ${getCashbookDisplayCode(transaction)}.`, 'success');
       }
       hideEditModal();
       expandedCashbookTransactionId = '';
@@ -1453,7 +1454,7 @@ function getProcessedData() {
     
     // Search input (Mã phiếu, người nộp/nhận, ghi chú)
     if (activeFilters.searchQuery) {
-      const idMatch = t.id.toLowerCase().includes(activeFilters.searchQuery);
+      const idMatch = [t.id, getCashbookDisplayCode(t), t.externalReference].some(value => String(value || '').toLowerCase().includes(activeFilters.searchQuery));
       const partnerMatch = t.partner.toLowerCase().includes(activeFilters.searchQuery);
       const noteMatch = (t.note || '').toLowerCase().includes(activeFilters.searchQuery);
       if (!idMatch && !partnerMatch && !noteMatch) return false;
@@ -1591,11 +1592,11 @@ function renderCashbookInlineDetail(t) {
   return `
     <tr class="so-quy-inline-detail-row" data-id="${escapeCashbookHtml(t.id)}">
       <td colspan="9">
-        <section class="so-quy-inline-detail" aria-label="Chi tiết ${isReceipt ? 'phiếu thu' : 'phiếu chi'} ${escapeCashbookHtml(t.id)}">
+        <section class="so-quy-inline-detail" aria-label="Chi tiết ${isReceipt ? 'phiếu thu' : 'phiếu chi'} ${escapeCashbookHtml(getCashbookDisplayCode(t))}">
           <div class="so-quy-inline-tab">Thông tin</div>
           <div class="so-quy-inline-heading">
             <div class="so-quy-inline-title">
-              <strong>${isReceipt ? 'Phiếu thu' : 'Phiếu chi'} <span>${escapeCashbookHtml(t.id)}</span></strong>
+              <strong>${isReceipt ? 'Phiếu thu' : 'Phiếu chi'} <span>${escapeCashbookHtml(getCashbookDisplayCode(t))}</span></strong>
               <span class="badge-status ${isPaidStatus(t.status) ? 'badge-status-paid' : 'badge-status-cancelled'}">${escapeCashbookHtml(t.status)}</span>
               <span class="so-quy-accounting-badge ${t.accounting ? 'is-accounting' : ''}">${accountingLabel}</span>
             </div>
@@ -1749,7 +1750,7 @@ export function renderSoQuyTable() {
         </td>
         <td style="text-align: center;">
           <span style="font-weight: 700; color: #0070d2; cursor: pointer; text-decoration: underline;" class="so-quy-tx-code">
-            ${escapeCashbookHtml(t.id)}
+            ${escapeCashbookHtml(getCashbookDisplayCode(t))}
           </span>
         </td>
         <td style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">
@@ -1849,7 +1850,7 @@ function openCashbookEditModal(transaction) {
   if (partnerLabel) partnerLabel.textContent = isReceipt ? 'Tên người nộp' : 'Tên người nhận';
 
   document.getElementById('cashbook-edit-id').value = transaction.id;
-  document.getElementById('cashbook-edit-code').value = transaction.id;
+  document.getElementById('cashbook-edit-code').value = getCashbookDisplayCode(transaction);
   document.getElementById('cashbook-edit-type').value = transaction.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi';
   setCashbookDateTimeValue('cashbook-edit-time', toLocalDateTimeInput(transaction.date));
   document.getElementById('cashbook-edit-category').value = transaction.category || '';
@@ -1933,7 +1934,7 @@ function wireCashbookInlineDetailActions(t, tableBody) {
         showToast('Không xác định được mã phiếu Cloud. Dữ liệu chưa thay đổi.', 'danger');
         return;
       }
-      if (!confirm(`Ghi phiếu ${t.id} vào công nợ của ${legacyCustomer.name}? Công nợ sẽ giảm ${formatCurrency(t.value)}.`)) return;
+      if (!confirm(`Ghi phiếu ${getCashbookDisplayCode(t)} vào công nợ của ${legacyCustomer.name}? Công nợ sẽ giảm ${formatCurrency(t.value)}.`)) return;
 
       reconcileBtn.disabled = true;
       try {
@@ -1949,7 +1950,7 @@ function wireCashbookInlineDetailActions(t, tableBody) {
         renderAll();
         showToast(result.already_reconciled
           ? 'Phiếu thu này đã có trong lịch sử công nợ.'
-          : `Đã ghi phiếu ${t.id} vào lịch sử và cập nhật công nợ ${legacyCustomer.name}.`, 'success');
+          : `Đã ghi phiếu ${getCashbookDisplayCode(t)} vào lịch sử và cập nhật công nợ ${legacyCustomer.name}.`, 'success');
       } finally {
         reconcileBtn.disabled = false;
       }
@@ -1958,7 +1959,7 @@ function wireCashbookInlineDetailActions(t, tableBody) {
 
   detailRow.querySelector('.js-cashbook-inline-cancel')?.addEventListener('click', async event => {
     const cancelBtn = event.currentTarget;
-    if (!confirm(`Bạn có chắc chắn muốn hủy phiếu [${t.id}]? Số tiền giao dịch sẽ không còn được hạch toán vào Sổ quỹ và sẽ khôi phục lại công nợ đối tác nếu có.`)) return;
+    if (!confirm(`Bạn có chắc chắn muốn hủy phiếu [${getCashbookDisplayCode(t)}]? Số tiền giao dịch sẽ không còn được hạch toán vào Sổ quỹ và sẽ khôi phục lại công nợ đối tác nếu có.`)) return;
 
     const cashbookId = getCanonicalCashbookId(t);
     if (!cashbookId) {
@@ -1968,7 +1969,7 @@ function wireCashbookInlineDetailActions(t, tableBody) {
 
     cancelBtn.disabled = true;
     try {
-      const savedToCloud = await dbCancelCashbookEntry(cashbookId, `Hủy phiếu ${t.id}`);
+      const savedToCloud = await dbCancelCashbookEntry(cashbookId, `Hủy phiếu ${getCashbookDisplayCode(t)}`);
       if (!savedToCloud) return;
 
       const customerRefreshed = savedToCloud.customer_id
@@ -1991,7 +1992,7 @@ function wireCashbookInlineDetailActions(t, tableBody) {
       if (!customerRefreshed || !cashbookRefreshed) {
         showToast('Phiếu đã hủy trên Cloud nhưng giao diện chưa tải lại đầy đủ. Vui lòng tải lại trang.', 'warning');
       } else {
-        showToast(`Đã hủy thành công phiếu ${t.id}`, 'warning');
+        showToast(`Đã hủy thành công phiếu ${getCashbookDisplayCode(t)}`, 'warning');
       }
       expandedCashbookTransactionId = '';
       await reloadCashbookDateWindow();
@@ -2009,7 +2010,7 @@ function exportSoQuyToExcel(filteredTxs) {
   
   filteredTxs.forEach(t => {
     sheetData.push([
-      t.id,
+      getCashbookDisplayCode(t),
       formatDateTime(t.date),
       t.type === 'thu' ? 'Phiếu thu' : 'Phiếu chi',
       t.category,

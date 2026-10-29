@@ -30,6 +30,16 @@ export function getCanonicalCashbookId(transaction = {}) {
   return transaction.cloudId || transaction.cloud_id || transaction.id || '';
 }
 
+/** Stable voucher label. Financial mutations must continue to use the ID. */
+export function getCashbookDisplayCode(transaction = {}) {
+  const number = String(transaction.displayNumber ?? transaction.display_number ?? '');
+  if (/^[1-9]\d*$/.test(number)) {
+    const payment = transaction.type === 'chi' || (transaction.type !== 'thu' && transaction.direction === 'out');
+    return `${payment ? 'PC' : 'PT'}-${number.padStart(6, '0')}`;
+  }
+  return String(transaction.displayCode || transaction.display_code || transaction.id || getCanonicalCashbookId(transaction) || 'Chưa có mã');
+}
+
 /**
  * The operational cashbook shows only vouchers that still have financial
  * effect. Cancelled sources and their append-only reversal rows remain in the

@@ -1,8 +1,8 @@
 import { state } from '../state.js';
-import { createListPagination } from './list-pagination.js?v=20261029-purchase-advance-v1';
+import { createListPagination } from './list-pagination.js?v=20261029-cashbook-codes-v1';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20261029-purchase-advance-v1';
-import { renderAll } from '../main.js?v=20261029-purchase-advance-v1';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20261029-cashbook-codes-v1';
+import { renderAll } from '../main.js?v=20261029-cashbook-codes-v1';
 
 const brandsPager = createListPagination('brands-pagination');
 
