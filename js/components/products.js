@@ -1,13 +1,13 @@
 import { state } from '../state.js';
-import { createListPagination } from './list-pagination.js?v=20261029-purchase-vat-timing-v1';
+import { createListPagination } from './list-pagination.js?v=20261029-purchase-manual-v1';
 import { showToast, safeCreateIcons, getBrandName } from '../utils.js';
 import {
   dbDeleteProduct,
   dbSavePayrollProductGroup,
   dbSaveProductsBulk,
   dbSetPayrollProductGroupActive
-} from '../services/supabase.js?v=20261029-purchase-vat-timing-v1';
-import { renderAll } from '../main.js?v=20261029-purchase-vat-timing-v1';
+} from '../services/supabase.js?v=20261029-purchase-manual-v1';
+import { renderAll } from '../main.js?v=20261029-purchase-manual-v1';
 import {
   buildProductFamilies,
   getProductBaseCode,

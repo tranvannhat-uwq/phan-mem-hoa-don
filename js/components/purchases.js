@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261029-purchase-vat-timing-v1';
-import { bomGateway } from '../services/bom.js?v=20261029-purchase-vat-timing-v1';
+} from '../services/supabase.js?v=20261029-purchase-manual-v1';
+import { bomGateway } from '../services/bom.js?v=20261029-purchase-manual-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -306,6 +306,10 @@ function searchPurchaseMaterials(row, immediate = false) {
       if (!row.isConnected || row.materialSearchSequence !== sequence || row.dataset.mode !== 'material') return;
       const materials = (data.rows || []).filter(item => item.is_active !== false);
       row.purchaseMaterialMatches = materials;
+      if (query && !row.dataset.catalogId && !materials.length && !data.hasMore) {
+        switchPurchaseItemMode(row, { mode: 'manual', automatic: true, focus: false });
+        return;
+      }
       results.innerHTML = materials.length
         ? `${materials.map((item, index) => `<button type="button" class="purchase-entry-material-option" role="option" id="${results.id}-option-${index}" data-item-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code)}${item.brand ? ` · ${escapeHtml(item.brand)}` : ''} · ĐVT mua: ${escapeHtml(item.purchase_unit || item.base_unit || '')}${Number(item.unit_price) > 0 ? ` · Giá nhập: ${formatCurrency(item.unit_price)}` : ''}</small></button>`).join('')}${data.hasMore ? '<p class="purchase-entry-material-message">Nhập thêm mã hoặc tên để thu hẹp kết quả.</p>' : ''}`
         : '<p class="purchase-entry-material-message">Không thấy vật tư phù hợp. Có thể chọn Nhập tay.</p>';
@@ -336,17 +340,45 @@ function choosePurchaseMaterial(row, id) {
   closePurchaseMaterialResults(row);
 }
 
-function switchPurchaseItemMode(row) {
+function switchPurchaseItemMode(row, { mode = row.dataset.mode === 'material' ? 'manual' : 'material', automatic = false, focus = true } = {}) {
+  const name = row.querySelector('.purchase-entry-name');
+  const wasFocused = document.activeElement === name;
+  const start = name.selectionStart, end = name.selectionEnd, direction = name.selectionDirection;
+  // Change the existing controls in place so typed text, caret and money never
+  // disappear while a search response switches the row to manual entry.
+  closePurchaseMaterialResults(row);
   clearTimeout(row.materialSearchTimer);
   row.materialSearchSequence = (row.materialSearchSequence || 0) + 1;
-  const mode = row.dataset.mode === 'material' ? 'manual' : 'material';
-  const quantity = Number(row.querySelector('.purchase-entry-qty').value || 1);
-  const unitPrice = Number(row.querySelector('.purchase-entry-price').value || 0);
-  row.insertAdjacentHTML('afterend', itemRow({ mode, quantity, unitPrice }));
-  const nextRow = row.nextElementSibling;
-  row.remove();
-  nextRow.querySelector('.purchase-entry-name').focus();
-  updateTotals(nextRow.closest('#purchase-entry-modal'));
+  row.dataset.mode = mode;
+  row.dataset.catalogId = '';
+  row.purchaseMaterialMatches = [];
+  const manual = mode === 'manual';
+  row.querySelector('.purchase-entry-code').readOnly = !manual;
+  row.querySelector('.purchase-entry-unit').readOnly = !manual;
+  name.type = manual ? 'text' : 'search';
+  name.classList.toggle('purchase-entry-material-search', !manual);
+  name.placeholder = manual ? 'Tên hàng hóa/dịch vụ' : 'Tìm mã hoặc tên vật tư...';
+  name.setCustomValidity(manual || !name.value.trim() ? '' : 'Chọn vật tư trong danh sách gợi ý hoặc chuyển sang Nhập tay.');
+  const results = row.querySelector('.purchase-entry-material-results');
+  results.innerHTML = '';
+  results.hidden = true;
+  if (manual) {
+    for (const attribute of ['role', 'aria-autocomplete', 'aria-controls', 'aria-expanded', 'aria-activedescendant']) name.removeAttribute(attribute);
+  } else {
+    name.setAttribute('role', 'combobox');
+    name.setAttribute('aria-autocomplete', 'list');
+    name.setAttribute('aria-controls', results.id);
+    name.setAttribute('aria-expanded', 'false');
+  }
+  const source = row.querySelector('.purchase-entry-item-source span');
+  source.textContent = manual ? 'Nhập tay' : 'Từ danh mục';
+  source.title = automatic ? 'Tự chuyển sang nhập tay vì không tìm thấy vật tư phù hợp.' : '';
+  row.querySelector('.purchase-entry-switch-source').textContent = manual ? 'Chọn danh mục' : 'Nhập tay';
+  if (focus || wasFocused) {
+    name.focus();
+    if (start != null) name.setSelectionRange(start, end ?? start, direction || 'none');
+  }
+  updateTotals(row.closest('#purchase-entry-modal'));
 }
 
 function normalizeSupplierSearch(value) {
@@ -540,7 +572,14 @@ function attachEvents(panel, modal) {
     itemBody?.addEventListener('focusin', event => {
       if (event.target.matches('.purchase-entry-material-search')) searchPurchaseMaterials(event.target.closest('.purchase-entry-item-row'), true);
     });
+    itemBody?.addEventListener('compositionstart', event => {
+      if (event.target.matches('.purchase-entry-material-search')) closePurchaseMaterialResults(event.target.closest('.purchase-entry-item-row'));
+    });
+    itemBody?.addEventListener('compositionend', event => {
+      if (event.target.matches('.purchase-entry-material-search')) event.target.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     itemBody?.addEventListener('input', event => {
+      if (event.isComposing) return;
       const search = event.target.closest('.purchase-entry-material-search');
       if (search) {
         const row = search.closest('.purchase-entry-item-row');
