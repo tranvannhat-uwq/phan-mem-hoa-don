@@ -12785,6 +12785,7 @@ body.purchase-entry-modal-open { overflow: hidden; }
 .purchase-entry-tax-settings label { color: #233a58; font-size: .8rem; font-weight: 700; }
 #purchase-entry-modal #purchase-vat-rate { width: 100px; height: 38px; }
 #purchase-entry-modal #purchase-discount-type { width: 86px; height: 38px; }
+#purchase-entry-modal #purchase-discount-timing { width: 130px; height: 38px; }
 #purchase-entry-modal #purchase-discount-value { width: 112px; height: 38px; }
 .purchase-entry-discount-preview { flex: 0 0 auto; min-width: 90px; color: #b45309; font-size: .78rem; font-weight: 750; text-align: right; white-space: nowrap; }
 .purchase-payment-hint { flex: 1 0 100%; margin: 2px 0 0; color: #64748b; font-size: .75rem; line-height: 1.5; }

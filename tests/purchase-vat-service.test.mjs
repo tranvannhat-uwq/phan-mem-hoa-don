@@ -24,7 +24,7 @@ test('purchase service sends the entered VAT rate and keeps server amounts in st
   const h = harness({ data: result, error: null });
   await h.context.dbCreatePurchase({ supplierId: 's1', vatRate: 8.5, vatAmount: 1, totalAmount: 1,
     items: [{ code: 'VO', name: 'Vỏ', quantity: 2, unitPrice: 125000 }] });
-  assert.equal(h.calls[0][0], 'rpc_create_purchase_discount');
+  assert.equal(h.calls[0][0], 'rpc_create_purchase_tax_discount');
   assert.equal(h.calls[0][1].p_input.vatRate, 8.5);
   assert.equal('vatAmount' in h.calls[0][1].p_input, false);
   assert.equal('totalAmount' in h.calls[0][1].p_input, false);
@@ -40,7 +40,7 @@ test('an older server produces a migration message without retrying through a VA
   const h = harness({ data: null, error: { code: 'PGRST202', message: 'Function missing' } });
   assert.equal(await h.context.dbCreatePurchase({ vatRate: 8 }), false);
   assert.equal(h.calls.length, 1);
-  assert.match(h.toasts[0], /0133/);
+  assert.match(h.toasts[0], /0136/);
   assert.equal(h.context.state.purchases.length, 0);
 });
 
@@ -51,4 +51,14 @@ test('nonfinite or invalid VAT cannot be serialized into a zero-VAT purchase', a
   }
   assert.equal(h.calls.length, 0);
   assert.ok(h.toasts.every(message => /VAT/.test(message)));
+});
+
+test('purchase service passes VAT timing and retains authoritative supplier invoice amounts', async () => {
+  const h = harness({ data: { purchase: { id: 'quote891', subtotalAmount: 194624616, discountTiming: 'after_vat', discountAmount: 2208860, vatAmount: 15569969, totalAmount: 207985725, balanceDue: 207985725 } } });
+  await h.context.dbCreatePurchase({ discountType: 'amount', discountValue: 2208860, discountTiming: 'after_vat', vatRate: 8 });
+  assert.equal(h.calls[0][1].p_input.discountTiming, 'after_vat');
+  assert.equal(h.context.state.purchases[0].discountTiming, 'after_vat');
+  assert.equal(h.context.state.purchases[0].totalAmount, 207985725);
+  assert.equal(await h.context.dbCreatePurchase({ discountTiming: 'unknown' }), false);
+  assert.equal(h.calls.length, 1);
 });

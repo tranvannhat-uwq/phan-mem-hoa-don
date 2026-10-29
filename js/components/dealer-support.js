@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261029-cashbook-codes-v1';
+import { dbDealerSupportProducts, dbSetDealerSupportProducts, dbDealerSupportHistory, getRetentionSessionScope } from '../services/supabase.js?v=20261029-purchase-vat-timing-v1';
 
 const el = id => document.getElementById(`dealer-support-${id}`);
 const admin = () => state.currentUser?.role === 'admin';

@@ -17,7 +17,7 @@ const pay = (supplierId, purchaseId, amount, extra = {}) => rpc('rpc_record_purc
 
 before(async () => {
   db = await buildRetentionDatabase({ maxVersion: 116 });
-  for (const name of ['0133_purchase_discount.sql', '0134_purchase_payment_advances.sql']) {
+  for (const name of ['0133_purchase_discount.sql', '0134_purchase_payment_advances.sql', '0135_cashbook_display_numbers.sql', '0136_purchase_discount_vat_timing.sql']) {
     await db.exec(await readFile(new URL('../migrations/' + name, import.meta.url), 'utf8'));
   }
   await asActor(db, accountingId);
@@ -107,4 +107,18 @@ test('supplier advances include retained purchase and payment balances', async (
   assert.equal(result.supplier.totalPurchase, 1100);
   assert.equal(result.supplier.totalPaid, 1300);
   assert.equal(result.supplier.debt, -200);
+});
+
+test('after-VAT invoice totals work with overpayments and short cashbook numbers on the latest schema', async () => {
+  const sid = await supplier();
+  const p = (await rpc('rpc_create_purchase_tax_discount', { supplierId: sid, idempotencyKey: randomUUID(),
+    items: [{ code: 'QUOTE', name: 'Quote subtotal', quantity: 1, unitPrice: 194624616 }], vatRate: 8,
+    discountType: 'amount', discountValue: 2208860, discountTiming: 'after_vat' })).purchase;
+  assert.equal(p.totalAmount, 207985725);
+  const result = await pay(sid, p.id, 210000000);
+  assert.equal(result.purchase.discountTiming, 'after_vat');
+  assert.equal(result.purchase.paidAmount, 210000000);
+  assert.equal(result.purchase.balanceDue, 0);
+  assert.equal(result.supplier.debt, -2014275);
+  assert.ok(Number(await scalar(db, 'SELECT display_number AS value FROM public.cashbook_transactions WHERE id=$1', [result.cashbook_transaction_id])) > 0);
 });

@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261029-cashbook-codes-v1';
-import { bomGateway } from '../services/bom.js?v=20261029-cashbook-codes-v1';
+} from '../services/supabase.js?v=20261029-purchase-vat-timing-v1';
+import { bomGateway } from '../services/bom.js?v=20261029-purchase-vat-timing-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -131,13 +131,16 @@ function purchaseModal() {
                 </table>
               </div>
               <div class="purchase-entry-tax-settings">
-                <span>Đơn giá chưa gồm VAT. Thuế tính trên tiền hàng sau giảm giá.</span>
+                <span id="purchase-vat-description">Đơn giá chưa gồm VAT. Thuế tính trên tiền hàng trước giảm giá.</span>
                 <label for="purchase-vat-rate">VAT (%)</label>
                 <input type="number" class="form-control" id="purchase-vat-rate" min="0" max="100" step="0.01" value="0" required inputmode="decimal">
               </div>
               <div class="purchase-entry-tax-settings">
-                <span>Chiết khấu được trừ khỏi tiền hàng trước khi tính VAT.</span>
-                <label for="purchase-discount-value">Giảm giá</label>
+                <span id="purchase-discount-description">Khoản giảm/hỗ trợ được trừ sau VAT. Giảm % tính trên tổng gồm VAT.</span>
+                <label for="purchase-discount-value">Giảm giá / hỗ trợ</label>
+                <select class="form-control" id="purchase-discount-timing" aria-label="Thời điểm giảm giá">
+                  <option value="after_vat">Sau VAT</option><option value="before_vat">Trước VAT</option>
+                </select>
                 <select class="form-control" id="purchase-discount-type" aria-label="Loại giảm giá">
                   <option value="percent">%</option><option value="amount">VNĐ</option>
                 </select>
@@ -187,8 +190,8 @@ function purchaseDetail(purchase) {
         ${purchase.sourceReport ? `<p class="supplier-report-hint">Lịch sử từ ${escapeHtml(purchase.sourceReport.file)}. Tổng theo báo cáo đã gồm các điều chỉnh, thuế và chiết khấu trong file. Thanh toán ghi theo NCC, chưa phân bổ từng phiếu. Xem đầy đủ dữ liệu tại Nhà cung cấp → Công nợ.</p>` : ''}
         <div class="purchase-summary">
           <div><span>${purchase.sourceReport ? 'Tiền hàng sau điều chỉnh theo báo cáo' : 'Tiền hàng'}</span><strong>${formatCurrency(purchase.subtotalAmount ?? purchaseTotal(purchase))}</strong></div>
-          ${!purchase.sourceReport && Number(purchase.discountAmount || 0) > 0 ? `<div><span>Giảm giá${purchase.discountType === 'percent' ? ` (${Number(purchase.discountValue || 0).toLocaleString('vi-VN')}%)` : ''}</span><strong>−${formatCurrency(purchase.discountAmount)}</strong></div>` : ''}
           ${!purchase.sourceReport ? `<div><span>VAT (${Number(purchase.vatRate || 0).toLocaleString('vi-VN')}%)</span><strong>${formatCurrency(purchase.vatAmount || 0)}</strong></div>` : ''}
+          ${!purchase.sourceReport && Number(purchase.discountAmount || 0) > 0 ? `<div><span>Giảm giá${purchase.discountType === 'percent' ? ` (${Number(purchase.discountValue || 0).toLocaleString('vi-VN')}%)` : ''} · ${purchase.discountTiming === 'after_vat' ? 'Sau VAT' : 'Trước VAT'}</span><strong>−${formatCurrency(purchase.discountAmount)}</strong></div>` : ''}
           <div><span>Tổng mua</span><strong>${formatCurrency(purchaseTotal(purchase))}</strong></div>
           <div><span>Đã thanh toán</span><strong>${purchase.sourceReport ? 'Theo công nợ NCC' : formatCurrency(purchase.paidAmount)}</strong></div>
           <div><span>Còn phải trả</span><strong>${purchase.sourceReport ? 'Chưa phân bổ' : formatCurrency(purchase.balanceDue)}</strong></div>
@@ -218,22 +221,33 @@ function updateTotals(modal) {
   const discountType = modal.querySelector('#purchase-discount-type')?.value || 'percent';
   const discountInput = modal.querySelector('#purchase-discount-value');
   const discountValue = Math.max(0, Number(discountInput?.value || 0));
+  const discountTiming = modal.querySelector('#purchase-discount-timing')?.value || 'before_vat';
+  const afterVat = discountTiming === 'after_vat';
+  const vatRate = Math.min(100, Math.max(0, Number(modal.querySelector('#purchase-vat-rate').value || 0)));
+  const vatRateBasisPoints = Math.round(vatRate * 100);
+  let vatAmount = Math.round(subtotal * vatRateBasisPoints / 10000);
+  const discountBase = afterVat ? subtotal + vatAmount : subtotal;
   let discountAmount = 0;
   if (discountType === 'percent') {
     discountInput.max = '100';
     discountInput.step = '0.01';
     discountInput.setCustomValidity(discountValue > 100 ? 'Giảm giá theo % không được vượt quá 100%.' : '');
-    discountAmount = Math.round(subtotal * Math.min(discountValue, 100) / 100);
+    discountAmount = Math.round(discountBase * Math.min(discountValue, 100) / 100);
   } else {
-    discountInput.max = String(subtotal);
+    discountInput.max = String(discountBase);
     discountInput.step = '1';
-    discountInput.setCustomValidity(discountValue > subtotal ? 'Giảm giá VNĐ không được vượt quá tiền hàng.' : '');
-    discountAmount = Math.min(subtotal, Math.round(discountValue));
+    discountInput.setCustomValidity(discountValue > discountBase ? `Giảm giá VNĐ không được vượt quá ${afterVat ? 'tổng gồm VAT' : 'tiền hàng'}.` : '');
+    discountAmount = Math.min(discountBase, Math.round(discountValue));
   }
   modal.querySelector('#purchase-entry-discount-total').textContent = `−${formatCurrency(discountAmount)}`;
   modal.querySelector('#purchase-entry-discount-preview').textContent = `−${formatCurrency(discountAmount)}`;
-  const vatRate = Math.min(100, Math.max(0, Number(modal.querySelector('#purchase-vat-rate').value || 0)));
-  const vatAmount = Math.round((subtotal - discountAmount) * Math.round(vatRate * 100) / 10000);
+  if (!afterVat) vatAmount = Math.round((subtotal - discountAmount) * vatRateBasisPoints / 10000);
+  const vatDescription = modal.querySelector('#purchase-vat-description');
+  if (vatDescription) vatDescription.textContent = `Đơn giá chưa gồm VAT. Thuế tính trên tiền hàng ${afterVat ? 'trước' : 'sau'} giảm giá.`;
+  const discountDescription = modal.querySelector('#purchase-discount-description');
+  if (discountDescription) discountDescription.textContent = afterVat
+    ? (discountType === 'percent' ? 'Giảm % tính trên tổng gồm VAT và được trừ sau VAT.' : 'Khoản giảm/hỗ trợ được trừ sau khi cộng VAT.')
+    : 'Giảm giá tính trên tiền hàng và được trừ trước khi tính VAT.';
   const total = subtotal - discountAmount + vatAmount;
   modal.querySelector('#purchase-entry-subtotal').textContent = formatCurrency(subtotal);
   modal.querySelector('#purchase-entry-vat-total').textContent = formatCurrency(vatAmount);
@@ -405,7 +419,15 @@ function syncPurchaseSupplierOptions(modal) {
 function printPurchase(purchase) {
   const popup = window.open('', '_blank', 'width=900,height=700');
   if (!popup) return showToast('Trình duyệt đang chặn cửa sổ in.', 'warning');
-  popup.document.write(`<!doctype html><html><head><title>${escapeHtml(purchase.code)}</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #222;padding:7px;text-align:left}.right{text-align:right}</style></head><body><h2>PHIẾU MUA HÀNG</h2><p>Mã: <b>${escapeHtml(purchase.code)}</b></p><p>Nhà cung cấp: <b>${escapeHtml(purchase.supplierName)}</b></p><p>Ngày mua: ${escapeHtml(purchaseDate(purchase))}</p><table><thead><tr><th>Mã</th><th>Tên</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="right">${Number(item.quantity).toLocaleString('vi-VN')}</td><td class="right">${formatCurrency(item.unitPrice)}</td><td class="right">${formatCurrency(item.lineTotal)}</td></tr>`).join('')}</tbody></table><p class="right">Tiền hàng: ${formatCurrency(purchase.subtotalAmount ?? purchaseTotal(purchase))}</p>${!purchase.sourceReport && Number(purchase.discountAmount || 0) > 0 ? '<p class="right">Giảm giá'+(purchase.discountType === 'percent' ? ' ('+Number(purchase.discountValue || 0).toLocaleString('vi-VN')+'%)' : '')+': −'+formatCurrency(purchase.discountAmount)+'</p>' : ''}${!purchase.sourceReport ? '<p class="right">VAT ('+Number(purchase.vatRate || 0).toLocaleString('vi-VN')+'%): '+formatCurrency(purchase.vatAmount || 0)+'</p>' : ''}<h3 class="right">Tổng gồm VAT: ${formatCurrency(purchaseTotal(purchase))}</h3><p class="right">${purchase.sourceReport ? 'Lịch sử Excel · thanh toán theo NCC, chưa phân bổ từng phiếu.' : 'Đã trả: '+formatCurrency(purchase.paidAmount)+' · Còn phải trả: '+formatCurrency(purchase.balanceDue)}</p></body></html>`);
+  const discountLabel = `Giảm giá${purchase.discountType === 'percent' ? ` (${Number(purchase.discountValue || 0).toLocaleString('vi-VN')}%)` : ''} · ${purchase.discountTiming === 'after_vat' ? 'Sau VAT' : 'Trước VAT'}`;
+  popup.document.write(`<!doctype html><html><head><title>${escapeHtml(purchase.code)}</title>
+    <style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #222;padding:7px;text-align:left}.right{text-align:right}</style></head><body>
+    <h2>PHIẾU MUA HÀNG</h2><p>Mã: <b>${escapeHtml(purchase.code)}</b></p><p>Nhà cung cấp: <b>${escapeHtml(purchase.supplierName)}</b></p><p>Ngày mua: ${escapeHtml(purchaseDate(purchase))}</p>
+    <table><thead><tr><th>Mã</th><th>Tên</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="right">${Number(item.quantity).toLocaleString('vi-VN')}</td><td class="right">${formatCurrency(item.unitPrice)}</td><td class="right">${formatCurrency(item.lineTotal)}</td></tr>`).join('')}</tbody></table>
+    <p class="right">Tiền hàng: ${formatCurrency(purchase.subtotalAmount ?? purchaseTotal(purchase))}</p>
+    ${!purchase.sourceReport ? `<p class="right">VAT (${Number(purchase.vatRate || 0).toLocaleString('vi-VN')}%): ${formatCurrency(purchase.vatAmount || 0)}</p>` : ''}
+    ${!purchase.sourceReport && Number(purchase.discountAmount || 0) > 0 ? `<p class="right">${discountLabel}: −${formatCurrency(purchase.discountAmount)}</p>` : ''}
+    <h3 class="right">Tổng gồm VAT: ${formatCurrency(purchaseTotal(purchase))}</h3><p class="right">${purchase.sourceReport ? 'Lịch sử Excel · thanh toán theo NCC, chưa phân bổ từng phiếu.' : 'Đã trả: '+formatCurrency(purchase.paidAmount)+' · Còn phải trả: '+formatCurrency(purchase.balanceDue)}</p></body></html>`);
   popup.document.close();
   if (!purchase.sourceReport && purchaseOverpayment(purchase) > 0) {
     const advance = popup.document.createElement('p');
@@ -554,6 +576,7 @@ function attachEvents(panel, modal) {
     });
     modal.querySelector('#purchase-paid-input')?.addEventListener('input', () => updateTotals(modal));
     modal.querySelector('#purchase-discount-type')?.addEventListener('change', () => updateTotals(modal));
+    modal.querySelector('#purchase-discount-timing')?.addEventListener('change', () => updateTotals(modal));
     modal.querySelector('#purchase-discount-value')?.addEventListener('input', () => updateTotals(modal));
     modal.querySelector('#purchase-vat-rate')?.addEventListener('input', () => updateTotals(modal));
     itemBody?.addEventListener('click', event => {
@@ -600,6 +623,7 @@ function attachEvents(panel, modal) {
         paidAmount: Number(modal.querySelector('#purchase-paid-input').value || 0),
         discountType: modal.querySelector('#purchase-discount-type').value,
         discountValue: Number(modal.querySelector('#purchase-discount-value').value || 0),
+        discountTiming: modal.querySelector('#purchase-discount-timing').value,
         vatRate: Number(modal.querySelector('#purchase-vat-rate').value || 0),
         paymentMethod: modal.querySelector('#purchase-payment-method').value,
         notes: modal.querySelector('#purchase-note-input').value.trim(),

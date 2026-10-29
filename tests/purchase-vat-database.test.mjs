@@ -4,7 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
-let db, supplierId, legacyInput, legacyId;
+let db, supplierId, legacyInput, legacyId, priorDiscountInput, priorDiscount;
 const accountant = 'a1020000-0000-4000-8000-000000000001';
 const sale = 'a1020000-0000-4000-8000-000000000002';
 const read = name => readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
@@ -46,8 +46,86 @@ before(async () => {
   await db.exec('RESET ROLE');
   await db.exec(await read('0102_purchase_vat.sql'));
   await db.exec(await read('0133_purchase_discount.sql'));
+  await role();
+  const priorSupplierId = (await rpc('rpc_save_supplier', { code: 'PRIOR-DISCOUNT', name: 'Prior discount supplier', openingDebt: 0 })).supplier.id;
+  priorDiscountInput = input({ supplierId: priorSupplierId, vatRate: 8, discountType: 'amount', discountValue: 30000 });
+  priorDiscount = (await rpc('rpc_create_purchase_discount', priorDiscountInput)).purchase;
+  await db.exec('RESET ROLE');
+  await db.exec(await read('0136_purchase_discount_vat_timing.sql'));
 });
 after(async () => { await db?.close(); });
+
+const quoteItems = [
+  { code: '602', name: 'Alcosper 602 N', unit: 'kg', quantity: 1200, unitPrice: 39000 },
+  { code: '2330', name: 'SAP-2330', unit: 'kg', quantity: 3000, unitPrice: 40000 },
+  { code: '405', name: 'Triton X-405', unit: 'kg', quantity: 217.72, unitPrice: 127800 }
+];
+async function newSupplier() { return (await rpc('rpc_save_supplier', { code: randomUUID(), name: 'Invoice timing test', openingDebt: 0 })).supplier.id; }
+
+test('existing discounted invoices retain their totals and pending-request fingerprints', async () => {
+  await role();
+  const replay = await rpc('rpc_create_purchase_discount', priorDiscountInput);
+  assert.equal(replay.already_recorded, true);
+  assert.equal(replay.purchase.id, priorDiscount.id);
+  assert.equal(replay.purchase.discountTiming, 'before_vat');
+  assert.equal(replay.purchase.totalAmount, priorDiscount.totalAmount);
+  assert.equal(replay.purchase.vatAmount, priorDiscount.vatAmount);
+});
+
+test('Viet Com quote 891 matches exactly with shipping support deducted after VAT', async () => {
+  await role();
+  const sid = await newSupplier();
+  const request = input({ supplierId: sid, items: quoteItems, vatRate: 8, discountType: 'amount', discountValue: 2208860, discountTiming: 'after_vat', paidAmount: 100000000,
+    totalAmount: 1, vatAmount: 1, discountAmount: 1 });
+  const result = await rpc('rpc_create_purchase_tax_discount', request);
+  const p = result.purchase;
+  assert.equal(p.subtotalAmount, 194624616);
+  assert.equal(p.discountAmount, 2208860);
+  assert.equal(p.vatAmount, 15569969);
+  assert.equal(p.totalAmount, 207985725);
+  assert.equal(p.balanceDue, 107985725);
+  assert.equal(result.supplier.debt, 107985725);
+  const stored = (await db.query('SELECT discount_timing,vat_amount,total_amount FROM public.purchases WHERE id=$1', [p.id])).rows[0];
+  assert.equal(stored.discount_timing, 'after_vat');
+  assert.equal(Number(stored.total_amount), 207985725);
+  assert.equal((await rpc('rpc_create_purchase_tax_discount', request)).already_recorded, true);
+  await assert.rejects(rpc('rpc_create_purchase_tax_discount', { ...request, discountTiming: 'before_vat' }), /different purchase payload/);
+  const payment = await rpc('rpc_record_supplier_payment', { supplierId: sid, purchaseId: p.id, amount: 107985725, idempotencyKey: randomUUID() });
+  assert.equal(payment.purchase.paidAmount, 207985725);
+  assert.equal(payment.supplier.debt, 0);
+  const cancelled = await value('SELECT public.rpc_cancel_purchase($1,$2) AS value', [p.id, 'Cancel quote test']);
+  assert.equal(cancelled.purchase.discountTiming, 'after_vat');
+  assert.equal(cancelled.supplier.debt, 0);
+  assert.equal(Number(await value('SELECT sum(amount_change) AS value FROM public.supplier_debt_transactions WHERE purchase_id=$1', [p.id])), 0);
+});
+
+test('before-VAT mode still calculates VAT on the discounted goods subtotal', async () => {
+  await role();
+  const result = await rpc('rpc_create_purchase_tax_discount', input({ supplierId: await newSupplier(), items: quoteItems, vatRate: 8, discountType: 'amount', discountValue: 2208860, discountTiming: 'before_vat' }));
+  assert.equal(result.purchase.vatAmount, 15393260);
+  assert.equal(result.purchase.totalAmount, 207809016);
+});
+
+test('percentage discounts use the selected base and allow a fully discounted total', async () => {
+  await role();
+  for (const [discountTiming, discountAmount, vatAmount] of [['before_vat', 25000, 18000], ['after_vat', 27000, 20000]]) {
+    const result = await rpc('rpc_create_purchase_tax_discount', input({ supplierId: await newSupplier(), vatRate: 8, discountType: 'percent', discountValue: 10, discountTiming }));
+    assert.equal(result.purchase.discountAmount, discountAmount);
+    assert.equal(result.purchase.vatAmount, vatAmount);
+    assert.equal(result.purchase.totalAmount, 243000);
+  }
+  const free = await rpc('rpc_create_purchase_tax_discount', input({ supplierId: await newSupplier(), vatRate: 8, discountType: 'percent', discountValue: 100, discountTiming: 'after_vat' }));
+  assert.equal(free.purchase.discountAmount, 270000);
+  assert.equal(free.purchase.totalAmount, 0);
+});
+
+test('invalid VAT timing and excessive discounts cannot write an invoice', async () => {
+  await role();
+  const count = await value('SELECT count(*) AS value FROM public.purchases');
+  await assert.rejects(rpc('rpc_create_purchase_tax_discount', input({ discountTiming: 'unknown' })), /trước VAT hoặc sau VAT/);
+  await assert.rejects(rpc('rpc_create_purchase_tax_discount', input({ vatRate: 8, discountType: 'amount', discountValue: 270001, discountTiming: 'after_vat' })), /không được vượt quá/);
+  assert.equal(await value('SELECT count(*) AS value FROM public.purchases'), count);
+});
 
 test('discount migration supports percentage and VND before VAT, persistence and retries', async () => {
   await role();
@@ -157,9 +235,11 @@ test('invalid VAT and overpayment are rejected without writing any financial rec
 test('VAT RPC denies Sale and anon and does not expose private purchase responses', async () => {
   await role(sale);
   await assert.rejects(rpc('rpc_create_purchase_vat', input({ vatRate: 8 })), /accounting role required/);
+  await assert.rejects(rpc('rpc_create_purchase_tax_discount', input({ vatRate: 8, discountTiming: 'after_vat' })), /accounting role required/);
   await assert.rejects(value('SELECT public.p4_purchase_response($1) AS value', [legacyId]), /permission denied/);
   await role('', 'anon');
   await assert.rejects(rpc('rpc_create_purchase_vat', input({ vatRate: 8 })), /permission denied/);
+  await assert.rejects(rpc('rpc_create_purchase_tax_discount', input({ vatRate: 8, discountTiming: 'after_vat' })), /permission denied/);
 });
 
 test('the existing purchase, payment and cancellation staging fixture remains compatible', async () => {
