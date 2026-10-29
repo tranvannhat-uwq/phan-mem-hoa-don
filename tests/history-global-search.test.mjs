@@ -14,7 +14,9 @@ test('customer search loads matching orders from the selected date window', () =
   assert.match(history, /dbSearchOrdersForHistory\(searchTerm, window\.startIso, window\.endExclusiveIso\)/);
   assert.match(service, /export async function dbSearchOrdersForHistory/);
   assert.match(service, /createSearchQuery\('customer_name'\)/);
-  assert.match(service, /\.in\('customer_id', matchingCustomerIds\)/);
+  assert.match(service, /requests\.push\(fetchCustomerOrderWindow/);
+  assert.match(service, /customerIds: matchingCustomerIds, start: startIso, end: endExclusiveIso, limit: safeLimit/);
+  assert.doesNotMatch(service, /\.in\('customer_id', matchingCustomerIds\)/);
   assert.match(service, /const applyDateWindow = request => applyHistoryOrderWindow\(request, startIso, endExclusiveIso\)/);
   assert.match(service, /function applyHistoryOrderWindow\(query, startIso = null, endExclusiveIso = null\)/);
   assert.match(service, /order_date\.gte\.\$\{startIso\}/);

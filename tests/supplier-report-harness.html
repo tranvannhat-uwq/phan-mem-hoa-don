@@ -1,6 +1,6 @@
 <!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nhập công nợ NCC · Kiểm thử</title><link rel="stylesheet" href="../style.css"><script src="../js/vendor/xlsx.js"></script><script defer src="../js/vendor/lucide.js"></script><script>window.__app_initialized=true;</script><style>body{display:block;padding:20px;overflow:auto;background:#f1f5f9}#suppliers-panel{display:block}</style></head><body><script type="module">
 import {state} from '../js/state.js';
-import {setupSupplierManagement,renderSuppliersTable,openSupplierExcelModal} from '../js/components/suppliers.js?v=20261028-inventory-product-sync-v1';
+import {setupSupplierManagement,renderSuppliersTable,openSupplierExcelModal} from '../js/components/suppliers.js?v=20261029-customer-log-fixes-v1';
 const html=new DOMParser().parseFromString(await(await fetch('../index.html')).text(),'text/html');
 document.body.append(html.getElementById('suppliers-panel'),html.getElementById('supplier-excel-modal'));
 state.currentUser={id:'synthetic-admin',role:'admin'};

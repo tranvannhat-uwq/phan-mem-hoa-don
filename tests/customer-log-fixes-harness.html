@@ -1,0 +1,32 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiểm thử sửa lỗi khách hàng và lịch sử đơn</title><link rel="stylesheet" href="../style.css">
+<style>body{display:block;overflow:auto;padding:32px;background:#f4f7fb}main{max-width:980px;margin:auto;padding:28px;background:white;border-radius:16px}h1{font-size:24px}p{margin:16px 0}button{margin:8px 8px 8px 0}output{display:block;padding:16px;margin-top:12px;background:#eff6ff;border-radius:8px;white-space:pre-wrap}.ok{color:#047857}.fail{color:#b91c1c}</style>
+</head><body><main><p>DỮ LIỆU GIẢ LẬP · KHÔNG KẾT NỐI SUPABASE</p><h1>Kiểm thử thêm khách và tìm lịch sử đơn</h1>
+<p>Chạy các hàm dịch vụ thật với phản hồi máy chủ giả lập. Kiểm tra cơ sở dữ liệu và quyền truy cập được chạy riêng bằng toàn bộ schema.</p>
+<button class="btn btn-primary" id="create">Thêm khách — Chiết khấu riêng</button><button class="btn btn-primary" id="search">Tìm đơn — 1.557 khách hàng</button>
+<button class="btn btn-secondary" id="report">Tải lịch sử cho báo cáo</button><output id="results" aria-live="polite">Sẵn sàng kiểm thử.</output></main><div id="toast-container"></div>
+<script type="module">
+import {state} from '../js/state.js';
+import {connectSupabase,dbCreateQuickCustomer,dbSearchOrdersForHistory,dbFetchCustomersOrderHistory} from '../js/services/supabase.js?v=20261029-customer-log-fixes-v1';
+const calls=[];const row={id:'QA-ORDER-001',customer_id:'qa-customer-0',customer_name:'Khách kiểm thử',created_at:'2026-10-29T01:00:00Z',order_date:'2026-10-29T01:00:00Z',status:'settled',total_payable:100,items:[]};
+const assert=(ok,message)=>{if(!ok)throw Error(message);};
+window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})},
+ from(table){const builder={};for(const name of ['select','ilike','order','limit','or'])builder[name]=()=>builder;
+   builder.in=()=>{throw Error('Không được gửi danh sách mã khách qua URL');};builder.then=resolve=>Promise.resolve({data:[row],error:null}).then(resolve);return builder;},
+ async rpc(name,args){calls.push({name,args});
+   if(name==='rpc_create_quick_customer'){
+     assert(args.p_customer.pricelistId===null,'Giá trị custom chưa được chuẩn hóa');
+     return{data:{success:true,customer:{...args.p_customer,pricelistId:null,debt:0,totalTransaction:0}},error:null};
+   }
+   assert(name==='rpc_get_customer_order_window','RPC không mong đợi');assert(args.p_customer_ids.length===1557,'Sai số lượng mã khách');
+   return{data:[row],error:null};
+ }})};
+await connectSupabase('https://qa.invalid','qa-only',false);
+state.currentUser={id:'qa-accountant',username:'qa-accountant',role:'accounting'};
+state.customers=Array.from({length:1557},(_,i)=>({id:`qa-customer-${i}`,name:'Khách kiểm thử',code:`QA-${i}`}));state.savedOrders=[];
+const output=document.getElementById('results');let lines=[];
+const run=(id,work)=>document.getElementById(id).onclick=async()=>{try{lines.push('ĐẠT · '+await work());output.className='ok';}catch(error){lines.push('LỖI · '+error.message);output.className='fail';}output.textContent=lines.join('\n');};
+run('create',async()=>{const saved=await dbCreateQuickCustomer({id:'qa-new-customer',code:'QA-NEW',name:'Khách giả lập mới',pricelistId:'custom',managedBy:'qa-accountant'});assert(saved&&saved.pricelistId===null,'Không tạo được khách');return'Thêm khách với Chiết khấu riêng thành công; số dư khởi tạo 0 đ.';});
+run('search',async()=>{const before=calls.length;const rows=await dbSearchOrdersForHistory('kiểm thử','2026-10-01T00:00:00Z','2026-11-01T00:00:00Z');assert(rows.length===1,'Kết quả bị mất hoặc trùng');const request=calls.slice(before);assert(request.length===1&&request[0].args.p_date_field==='business','Sai loại truy vấn');return'Tìm đủ kết quả bằng POST cho 1.557 mã khách; giữ bộ lọc ngày; loại trùng đơn.';});
+run('report',async()=>{const rows=await dbFetchCustomersOrderHistory(state.customers.map(c=>c.id),'2026-10-01T00:00:00Z','2026-11-01T00:00:00Z','all');assert(rows.length===1,'Thiếu kết quả báo cáo');const last=calls.at(-1);assert(last.args.p_date_field==='created'&&last.args.p_status==='all','Bộ lọc báo cáo thay đổi');return'Lịch sử báo cáo giữ ngày tạo, nhóm trạng thái và số tiền gốc.';});
+</script></body></html>

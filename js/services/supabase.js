@@ -1,17 +1,19 @@
 import { state } from '../state.js';
 import { withAuthTimeout } from '../domain/auth-timeout.js';
+import { normalizeNewCustomerPriceListId } from '../domain/customer-creation.js';
+import { fetchCustomerOrderWindow } from '../domain/customer-order-window.js';
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261028-inventory-product-sync-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261028-inventory-product-sync-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-customer-log-fixes-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-customer-log-fixes-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261028-inventory-product-sync-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261028-inventory-product-sync-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261028-inventory-product-sync-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-customer-log-fixes-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-customer-log-fixes-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-customer-log-fixes-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261028-inventory-product-sync-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-customer-log-fixes-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -1506,13 +1508,9 @@ export async function dbSearchOrdersForHistory(
     ];
 
     if (matchingCustomerIds.length > 0) {
-      requests.push(applyDateWindow(supabaseClient
-        .from(tableOrdersName)
-        .select('*')
-        .in('customer_id', matchingCustomerIds))
-        .order('order_date', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(safeLimit));
+      requests.push(fetchCustomerOrderWindow(supabaseClient.rpc.bind(supabaseClient), {
+        customerIds: matchingCustomerIds, start: startIso, end: endExclusiveIso, limit: safeLimit
+      }).then(data => ({ data, error: null })));
     }
 
     const results = await Promise.all(requests);
@@ -3337,7 +3335,7 @@ export async function dbCreateQuickCustomer(customer) {
       address: customer.address || '',
       province: customer.brandDiscounts?.province || customer.province || '',
       assignedBrand: customer.assignedBrand || 'Tất cả',
-      pricelistId: customer.pricelistId || null,
+      pricelistId: normalizeNewCustomerPriceListId(customer.pricelistId),
       managedBy: customer.managedBy || null,
       notes: customer.notes || 'Thêm nhanh từ màn hình lên đơn'
     };
@@ -5978,28 +5976,10 @@ export async function dbFetchCustomersOrderHistory(customerIds, startIso, endExc
 
   if (isCloudActive && supabaseClient) {
     try {
-      const pageSize = 1000;
-      let from = 0;
-      const allRows = [];
-      while (true) {
-        let query = supabaseClient
-          .from(tableOrdersName)
-          .select('*')
-          .in('customer_id', Array.from(idSet))
-          .gte('created_at', startIso)
-          .lt('created_at', endExclusiveIso)
-          .order('created_at', { ascending: true })
-          .range(from, from + pageSize - 1);
-        if (status === 'settled') query = query.in('status', ['settled', 'completed', 'complete', 'confirmed']);
-        else if (status === 'cancelled') query = query.in('status', ['cancelled', 'canceled']);
-        else if (status && status !== 'all') query = query.eq('status', status);
-        else query = query.in('status', ['settled', 'completed', 'complete', 'confirmed', 'partially_returned', 'returned']);
-        const { data, error } = await query;
-        if (error) throw error;
-        allRows.push(...(data || []));
-        if (!data || data.length < pageSize) break;
-        from += pageSize;
-      }
+      const allRows = await fetchCustomerOrderWindow(supabaseClient.rpc.bind(supabaseClient), {
+        customerIds: Array.from(idSet), start: startIso, end: endExclusiveIso,
+        status: status || 'all', dateField: 'created', limit: 1000, allPages: true
+      });
       return allRows.map(mapOrderRow);
     } catch (err) {
       console.warn('Loi tai lich su don hang khach hang tu Supabase, dung du lieu local:', err.message || err);
