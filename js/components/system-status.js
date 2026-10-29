@@ -1,5 +1,5 @@
 import {state} from '../state.js';
-import {dbAdminSystemStatus,reportApplicationEgress} from '../services/supabase.js?v=20261029-supplier-picker-v1';
+import {dbAdminSystemStatus,reportApplicationEgress} from '../services/supabase.js?v=20261029-purchase-advance-v1';
 import {STATUS_UPDATE_MS} from '../domain/application-egress.js';
 let owner='',data=null,lastAttempt=0,loading=false,failed=false,generation=0,timer=null;
 const actor=()=>state.currentUser?.role==='admin'?String(state.currentUser.authUserId||state.currentUser.id):'';

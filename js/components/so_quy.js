@@ -1,12 +1,14 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20261029-supplier-picker-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261029-supplier-picker-v1';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-supplier-picker-v1';
+import { renderAll } from '../main.js?v=20261029-purchase-advance-v1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261029-purchase-advance-v1';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-purchase-advance-v1';
+import { setupInputPicker } from './input-picker.js?v=20261029-purchase-advance-v1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
 let pendingReceiptIdempotencyKey = '';
+let pendingPaymentIdempotencyKey = '';
 let expandedCashbookTransactionId = '';
 let cashbookCurrentPage = 1;
 let cashbookPageSize = 20;
@@ -783,6 +785,13 @@ export function setupSoQuyPanel() {
   const receiptForm = document.getElementById('so-quy-receipt-form');
   const receiptTimeInput = document.getElementById('receipt-time');
   const receiptValueInput = document.getElementById('receipt-value');
+  setupInputPicker(document.getElementById('receipt-payer'), {
+    label: 'Danh sách khách hàng',
+    getOptions: () => (state.customers || []).map(customer => ({
+      id: customer.id, value: `${customer.name} — ${customer.code || customer.phone || customer.id}`,
+      label: customer.name, description: [customer.code, customer.phone].filter(Boolean).join(' · ')
+    }))
+  });
   setupCashbookCurrencyInput(receiptValueInput);
   
   if (addThuBtn && receiptModal) {
@@ -880,13 +889,12 @@ export function setupSoQuyPanel() {
           idempotencyKey: pendingReceiptIdempotencyKey
         };
         
-        const selectedOption = Array.from(
-          document.getElementById('receipt-payer-list')?.options || []
-        ).find(option => option.value === payer);
-        const selectedCustomerId = selectedOption?.dataset.customerId || '';
-        const customerMatches = state.customers.filter(c =>
-          String(c.name || '').trim().toLowerCase() === payer.toLowerCase()
-        );
+        const selectedCustomerId = document.getElementById('receipt-payer').dataset.pickerId || '';
+        const customerMatches = state.customers.filter(c => {
+          const label = `${c.name} — ${c.code || c.phone || c.id}`;
+          return String(c.name || '').trim().toLowerCase() === payer.toLowerCase()
+            || label.trim().toLowerCase() === payer.toLowerCase();
+        });
         let matchedCustomer = selectedCustomerId
           ? state.customers.find(c => String(c.id) === selectedCustomerId)
           : (customerMatches.length === 1 ? customerMatches[0] : null);
@@ -1012,6 +1020,7 @@ export function setupSoQuyPanel() {
   
   if (addChiBtn && paymentModal) {
     addChiBtn.addEventListener('click', () => {
+      pendingPaymentIdempotencyKey = globalThis.crypto.randomUUID();
       populatePaymentRecipientDatalist();
       // Set time default to now
       const now = new Date();
@@ -1034,81 +1043,95 @@ export function setupSoQuyPanel() {
   const hidePaymentModal = () => {
     if (paymentModal) paymentModal.classList.remove('active');
     if (paymentForm) paymentForm.reset();
+    pendingPaymentIdempotencyKey = '';
   };
   
   if (closePaymentBtn) closePaymentBtn.addEventListener('click', hidePaymentModal);
   if (cancelPaymentBtn) cancelPaymentBtn.addEventListener('click', hidePaymentModal);
 
+  let isSubmittingPayment = false;
   if (paymentForm) {
     paymentForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isSubmittingPayment) return;
+      isSubmittingPayment = true;
+      const submitBtn = paymentForm.querySelector('.cashbook-create-submit');
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        if (!pendingPaymentIdempotencyKey) pendingPaymentIdempotencyKey = globalThis.crypto.randomUUID();
       
-      const code = document.getElementById('payment-code').value.trim();
-      const time = document.getElementById('payment-time').value;
-      const category = document.getElementById('payment-category').value;
-      const recipient = document.getElementById('payment-recipient').value.trim();
-      const value = parseCashbookCurrencyInput(paymentValueInput);
-      const method = document.getElementById('payment-method').value;
-      const accounting = document.getElementById('payment-accounting').checked;
-      const note = document.getElementById('payment-note').value.trim();
-      const selectedSupplierId = document.getElementById('payment-recipient').dataset.supplierId;
-      const matchedSupplier = selectedSupplierId
-        ? (state.suppliers || []).find(supplier => String(supplier.id) === selectedSupplierId)
-        : findSupplierByInput(recipient);
-      const selectedTime = new Date(time);
-      if (Number.isNaN(selectedTime.getTime())) {
-        showToast('Vui lòng chọn ngày giờ lập phiếu chi hợp lệ.', 'danger');
-        return;
-      }
-      
-      // Auto-generate code if empty
-      let finalCode = code;
-      const txs = getCashbookTransactions();
-      if (!finalCode) {
-        let maxSeq = 0;
-        txs.forEach(t => {
-          if (t.id.startsWith('TCM')) {
-            const num = parseInt(t.id.slice(3));
-            if (!isNaN(num) && num > maxSeq) maxSeq = num;
-          }
-        });
-        finalCode = `TCM${String(maxSeq + 1).padStart(6, '0')}`;
-      } else {
-        // Verify unique code
-        if (txs.some(t => t.id.toLowerCase() === finalCode.toLowerCase())) {
-          showToast(`Mã phiếu ${finalCode} đã tồn tại! Vui lòng nhập mã khác.`, 'danger');
+        const code = document.getElementById('payment-code').value.trim();
+        const time = document.getElementById('payment-time').value;
+        const category = document.getElementById('payment-category').value;
+        const recipient = document.getElementById('payment-recipient').value.trim();
+        const value = parseCashbookCurrencyInput(paymentValueInput);
+        const method = document.getElementById('payment-method').value;
+        const accounting = document.getElementById('payment-accounting').checked;
+        const note = document.getElementById('payment-note').value.trim();
+        const selectedSupplierId = document.getElementById('payment-recipient').dataset.supplierId;
+        const matchedSupplier = selectedSupplierId
+          ? (state.suppliers || []).find(supplier => String(supplier.id) === selectedSupplierId)
+          : findSupplierByInput(recipient);
+        const selectedTime = new Date(time);
+        if (Number.isNaN(selectedTime.getTime())) {
+          showToast('Vui lòng chọn ngày giờ lập phiếu chi hợp lệ.', 'danger');
           return;
         }
-      }
       
-      const newTx = {
-        id: finalCode,
-        date: selectedTime.toISOString(),
-        type: 'chi',
-        category,
-        partner: matchedSupplier ? matchedSupplier.name : recipient,
-        supplierId: matchedSupplier ? matchedSupplier.id : null,
-        value,
-        method,
-        accounting,
-        status: 'Đã thanh toán',
-        creator: state.currentUser ? state.currentUser.displayName : 'Administrator',
-        note,
-        starred: false
-      };
+        // Auto-generate code if empty
+        let finalCode = code;
+        const txs = getCashbookTransactions();
+        if (!finalCode) {
+          let maxSeq = 0;
+          txs.forEach(t => {
+            if (t.id.startsWith('TCM')) {
+              const num = parseInt(t.id.slice(3));
+              if (!isNaN(num) && num > maxSeq) maxSeq = num;
+            }
+          });
+          finalCode = `TCM${String(maxSeq + 1).padStart(6, '0')}`;
+        } else {
+          // Verify unique code
+          if (txs.some(t => t.id.toLowerCase() === finalCode.toLowerCase())) {
+            showToast(`Mã phiếu ${finalCode} đã tồn tại! Vui lòng nhập mã khác.`, 'danger');
+            return;
+          }
+        }
       
-      const savedToCloud = await dbSaveCashbookTransaction(newTx);
-      if (!savedToCloud) {
-        showToast('Không thể lưu phiếu chi vào Sổ quỹ Cloud. Dữ liệu trên form được giữ nguyên.', 'danger');
-        return;
-      }
+        const newTx = {
+          id: finalCode,
+          date: selectedTime.toISOString(),
+          type: 'chi',
+          category,
+          partner: matchedSupplier ? matchedSupplier.name : recipient,
+          supplierId: matchedSupplier ? matchedSupplier.id : null,
+          value,
+          method,
+          accounting,
+          status: 'Đã thanh toán',
+          creator: state.currentUser ? state.currentUser.displayName : 'Administrator',
+          note,
+          starred: false,
+          idempotencyKey: pendingPaymentIdempotencyKey
+        };
+      
+        let saveError = '';
+        const savedToCloud = await dbSaveCashbookTransaction(newTx, { onError: message => { saveError = message; } });
+        if (!savedToCloud) {
+          showToast(`Không thể lưu phiếu chi: ${saveError || 'Chưa nhận được xác nhận từ Cloud.'} Dữ liệu trên form được giữ nguyên.`, 'danger');
+          return;
+        }
 
-      txs.unshift(newTx);
-      saveCashbookTransactions(txs);
+        txs.unshift(newTx);
+        saveCashbookTransactions(txs);
       
-      showToast(`Đã tạo phiếu chi ${finalCode} thành công!`, 'success');
-      hidePaymentModal();
-      renderAll();
+        showToast(`Đã tạo phiếu chi ${finalCode} thành công!`, 'success');
+        hidePaymentModal();
+        renderAll();
+      } finally {
+        isSubmittingPayment = false;
+        if (submitBtn) submitBtn.disabled = false;
+      }
     });
   }
 
@@ -1546,19 +1569,7 @@ function refreshDynamicFilters(txs) {
   }
 
   // 4. Receipt payer suggestions (danh sách khách hàng)
-  const payerList = document.getElementById('receipt-payer-list');
-  if (payerList) {
-    payerList.innerHTML = '';
-    state.customers.forEach(c => {
-      const opt = document.createElement('option');
-      const uniqueRef = c.code || c.phone || c.id;
-      opt.value = `${c.name} — ${uniqueRef}`;
-      opt.dataset.customerId = String(c.id);
-      const subText = (c.code && c.code !== c.name) ? `${c.code} ${c.phone ? `• SĐT: ${c.phone}` : ''}` : (c.phone ? `SĐT: ${c.phone}` : '');
-      opt.textContent = subText;
-      payerList.appendChild(opt);
-    });
-  }
+  document.getElementById('receipt-payer')?.dispatchEvent(new Event('picker-options-updated'));
 }
 
 function getCashbookMethodLabel(method) {

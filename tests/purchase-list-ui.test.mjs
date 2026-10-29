@@ -24,6 +24,7 @@ function harness(purchases, dataset = {}, role = 'accounting', users = [], curre
     syncPurchaseSupplierOptions() {}, attachEvents() {}, safeCreateIcons() {}
   });
   vm.runInContext(identityUtils, context);
+  vm.runInContext(source.slice(source.indexOf('function purchaseOverpayment('), source.indexOf('function purchaseDate(')), context);
   vm.runInContext(source.slice(source.indexOf('function filterPurchaseList(')).replace('export function ', 'function '), context);
   return { panel, context, render() { context.renderPurchasesPanel(panel); return panel.innerHTML; } };
 }

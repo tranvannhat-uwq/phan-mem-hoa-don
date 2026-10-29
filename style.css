@@ -6506,6 +6506,20 @@ select#invoice-pricelist-select:disabled {
 .cashbook-recipient-option small { color: #64748b; font-size: .73rem; }
 .cashbook-recipient-message { margin: 0; padding: 10px 12px; color: #64748b; font-size: .78rem; }
 
+.input-picker { position: relative; min-width: 0; display: block; }
+.input-picker-control { position: relative; }
+.input-picker .input-picker-control > input { width: 100%; padding-right: 46px; box-sizing: border-box; }
+.input-picker-toggle { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 42px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-left: 1px solid #e2e8f0; border-radius: 0 7px 7px 0; background: #f8fafc; color: #475569; cursor: pointer; }
+.input-picker-toggle:hover { background: #eef2f7; }
+.input-picker-toggle:focus-visible { outline: 2px solid #2563eb; outline-offset: -3px; }
+.input-picker-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; max-height: 230px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 8px 20px rgba(15, 23, 42, .15); }
+.input-picker-list[hidden] { display: none; }
+.input-picker .input-picker-option { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 12px; border: 0; border-bottom: 1px solid #f1f5f9; background: #fff; color: #0f172a; text-align: left; cursor: pointer; }
+.input-picker .input-picker-option:hover, .input-picker .input-picker-option.is-active { background: #eff6ff; }
+.input-picker-option strong { font-size: .83rem; font-weight: 600; }
+.input-picker-option small { color: #64748b; font-size: .73rem; }
+.input-picker-message { margin: 0; padding: 10px 12px; color: #64748b; font-size: .78rem; }
+
 .cashbook-create-value-input {
   color: #047857;
   min-height: 50px !important;
@@ -12772,6 +12786,9 @@ body.purchase-entry-modal-open { overflow: hidden; }
 #purchase-entry-modal #purchase-discount-type { width: 86px; height: 38px; }
 #purchase-entry-modal #purchase-discount-value { width: 112px; height: 38px; }
 .purchase-entry-discount-preview { flex: 0 0 auto; min-width: 90px; color: #b45309; font-size: .78rem; font-weight: 750; text-align: right; white-space: nowrap; }
+.purchase-payment-hint { flex: 1 0 100%; margin: 2px 0 0; color: #64748b; font-size: .75rem; line-height: 1.5; }
+.purchase-payment-hint strong { color: #1d4ed8; }
+.purchase-summary .purchase-overpayment { color: #1d4ed8; }
 .purchase-entry-summary { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 .purchase-entry-summary-card { display: flex; flex-direction: column; gap: 4px; min-width: 170px; padding: 10px 13px; border: 1px solid #e4eaf2; border-radius: 9px; background: #f8fafc; }
 .purchase-entry-summary-card span { color: #708096; font-size: .7rem; font-weight: 650; }

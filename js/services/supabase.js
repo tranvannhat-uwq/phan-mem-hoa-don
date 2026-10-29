@@ -6,15 +6,15 @@ import { createApplicationEgressReporter } from '../domain/application-egress.js
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-supplier-picker-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-supplier-picker-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-purchase-advance-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-purchase-advance-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-supplier-picker-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-supplier-picker-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-supplier-picker-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-purchase-advance-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-purchase-advance-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-purchase-advance-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-supplier-picker-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-purchase-advance-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -4428,7 +4428,7 @@ export async function dbDeleteBrand(name, id = null) {
 }
 
 // --- Thao tác CSDL chi tiết (Sổ quỹ & Số dư đầu kỳ) ---
-export async function dbSaveCashbookTransaction(tx) {
+export async function dbSaveCashbookTransaction(tx, { onError } = {}) {
   if (isCloudActive && supabaseClient) {
     try {
       if (tx.customerId) {
@@ -4454,10 +4454,13 @@ export async function dbSaveCashbookTransaction(tx) {
       return data || { success: true };
     } catch(err) {
       console.warn('Không thể ghi giao dịch Sổ quỹ:', err.message || err);
+      onError?.(err.message || 'Không thể kết nối Cloud.');
       return false;
     }
   }
-  showToast('Sổ quỹ chỉ được ghi khi đã kết nối và xác thực với Cloud.', 'danger');
+  const message = 'Sổ quỹ chỉ được ghi khi đã kết nối và xác thực với Cloud.';
+  onError?.(message);
+  if (!onError) showToast(message, 'danger');
   return false;
 }
 
@@ -4728,11 +4731,13 @@ export async function dbCreatePurchase(input) {
 export async function dbRecordSupplierPayment(input) {
   if (!isCloudActive || !supabaseClient) return false;
   try {
-    const { data, error } = await supabaseClient.rpc('rpc_record_supplier_payment', {
+    const amount = Number(input.amount);
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Số tiền thanh toán phải là số VNĐ nguyên dương.');
+    const { data, error } = await supabaseClient.rpc(input.purchaseId ? 'rpc_record_purchase_payment_advance' : 'rpc_record_supplier_payment', {
       p_input: {
         supplierId: input.supplierId,
         purchaseId: input.purchaseId || null,
-        amount: Number(input.amount || 0),
+        amount,
         paymentMethod: input.paymentMethod || 'cash',
         notes: input.notes || '',
         idempotencyKey: input.idempotencyKey
@@ -4742,6 +4747,10 @@ export async function dbRecordSupplierPayment(input) {
     return applyPhase4Response(data);
   } catch (err) {
     console.warn('Supplier payment RPC failed:', err.message || err);
+    if (input.purchaseId && ['PGRST202', '42883'].includes(err.code)) {
+      showToast('Cloud cần chạy migration 0134 để ghi nhận thanh toán vượt số tiền phiếu mua.', 'danger');
+      return false;
+    }
     showToast(err.message || 'Không thể ghi phiếu chi nhà cung cấp.', 'danger');
     return false;
   }

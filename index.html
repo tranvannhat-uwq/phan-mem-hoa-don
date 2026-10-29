@@ -33,15 +33,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <!-- Pinned local browser libraries; no external CDN required for login -->
-  <script defer src="js/vendor/lucide.js?v=20261029-supplier-picker-v1"></script>
+  <script defer src="js/vendor/lucide.js?v=20261029-purchase-advance-v1"></script>
   
-  <script defer src="js/vendor/xlsx.js?v=20261029-supplier-picker-v1"></script>
+  <script defer src="js/vendor/xlsx.js?v=20261029-purchase-advance-v1"></script>
   
-  <script defer src="js/vendor/supabase.js?v=20261029-supplier-picker-v1"></script>
+  <script defer src="js/vendor/supabase.js?v=20261029-purchase-advance-v1"></script>
   
-  <script defer src="js/vendor/chart.js?v=20261029-supplier-picker-v1"></script>
+  <script defer src="js/vendor/chart.js?v=20261029-purchase-advance-v1"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261029-supplier-picker-v1">
+  <link rel="stylesheet" href="style.css?v=20261029-purchase-advance-v1">
 </head>
 <body>
 
@@ -4088,8 +4088,7 @@
             <div class="cashbook-create-grid">
               <div class="form-group cashbook-create-field-full">
                 <label class="form-label" for="receipt-payer">Người nộp</label>
-                <input type="text" class="form-control" id="receipt-payer" list="receipt-payer-list" placeholder="Chọn khách hàng hoặc nhập tên người nộp" required>
-                <datalist id="receipt-payer-list"></datalist>
+                <input type="text" class="form-control" id="receipt-payer" autocomplete="off" placeholder="Chọn khách hàng hoặc nhập tên người nộp" required>
               </div>
               <div class="form-group">
                 <label class="form-label" for="receipt-value">Giá trị (đ)</label>
@@ -4617,9 +4616,9 @@
 
 
   <!-- Login can open before the full application and Auth session are ready. -->
-  <script src="js/login-entry.js?v=20261029-supplier-picker-v1"></script>
+  <script src="js/login-entry.js?v=20261029-purchase-advance-v1"></script>
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261029-supplier-picker-v1"></script>
-  <script type="module" src="js/main.js?v=20261029-supplier-picker-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261029-purchase-advance-v1"></script>
+  <script type="module" src="js/main.js?v=20261029-purchase-advance-v1"></script>
 </body>
 </html>

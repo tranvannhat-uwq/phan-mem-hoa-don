@@ -5,8 +5,8 @@ import {
   dbCancelSupplierPayment,
   dbCreatePurchase,
   dbRecordSupplierPayment
-} from '../services/supabase.js?v=20261029-supplier-picker-v1';
-import { bomGateway } from '../services/bom.js?v=20261029-supplier-picker-v1';
+} from '../services/supabase.js?v=20261029-purchase-advance-v1';
+import { bomGateway } from '../services/bom.js?v=20261029-purchase-advance-v1';
 
 let pendingPurchaseKey = '';
 let purchaseItemRowSequence = 0;
@@ -29,6 +29,10 @@ function escapeHtml(value) {
 
 function purchaseTotal(purchase) {
   return Number(purchase.totalAmount ?? purchase.totalPayable ?? 0);
+}
+
+function purchaseOverpayment(purchase) {
+  return Math.max(0, Number(purchase.paidAmount || 0) - purchaseTotal(purchase));
 }
 
 function purchaseDate(purchase) {
@@ -188,8 +192,9 @@ function purchaseDetail(purchase) {
           <div><span>Tổng mua</span><strong>${formatCurrency(purchaseTotal(purchase))}</strong></div>
           <div><span>Đã thanh toán</span><strong>${purchase.sourceReport ? 'Theo công nợ NCC' : formatCurrency(purchase.paidAmount)}</strong></div>
           <div><span>Còn phải trả</span><strong>${purchase.sourceReport ? 'Chưa phân bổ' : formatCurrency(purchase.balanceDue)}</strong></div>
+          ${!purchase.sourceReport && purchaseOverpayment(purchase) > 0 ? `<div class="purchase-overpayment"><span>Trả vượt giá trị phiếu</span><strong>${formatCurrency(purchaseOverpayment(purchase))}</strong></div>` : ''}
         </div>
-        ${!purchase.sourceReport && purchase.status === 'completed' && Number(purchase.balanceDue || 0) > 0 ? `<div class="purchase-payment-box"><input type="number" class="purchase-pay-amount" aria-label="Số tiền thanh toán" min="1" max="${Number(purchase.balanceDue)}" value="${Number(purchase.balanceDue)}"><select class="purchase-pay-method" aria-label="Phương thức thanh toán"><option value="cash">Tiền mặt</option><option value="bank">Ngân hàng</option><option value="wallet">Ví điện tử</option></select><button class="btn btn-primary btn-sm purchase-pay-btn" data-id="${escapeHtml(purchase.id)}">Tạo phiếu chi</button></div>` : ''}
+        ${!purchase.sourceReport && purchase.status === 'completed' ? `<div class="purchase-payment-box" data-balance-due="${Number(purchase.balanceDue || 0)}"><input type="number" class="purchase-pay-amount" aria-label="Số tiền thanh toán" min="1" step="1" value="${Number(purchase.balanceDue || 0)}"><select class="purchase-pay-method" aria-label="Phương thức thanh toán"><option value="cash">Tiền mặt</option><option value="bank">Ngân hàng</option><option value="wallet">Ví điện tử</option></select><button class="btn btn-primary btn-sm purchase-pay-btn" data-id="${escapeHtml(purchase.id)}">Tạo phiếu chi</button><p class="purchase-payment-hint">Có thể trả vượt số còn phải trả. Toàn bộ tiền chi được ghi vào công nợ chung của nhà cung cấp. <strong class="purchase-pay-excess" aria-live="polite"></strong></p></div>` : ''}
         ${activePayments.length ? `<div class="purchase-payment-history"><strong>Phiếu chi:</strong>${activePayments.map(payment => `<span>${formatCurrency(payment.amount)} · ${escapeHtml(payment.paymentMethod)} <button class="btn btn-danger btn-sm purchase-cancel-payment-btn" data-id="${escapeHtml(payment.id)}">Hủy phiếu chi</button></span>`).join('')}</div>` : ''}
         <div class="purchase-detail-actions">
           <button class="btn btn-secondary btn-sm purchase-print-btn" data-id="${escapeHtml(purchase.id)}">In phiếu mua</button>
@@ -235,6 +240,13 @@ function updateTotals(modal) {
   modal.querySelector('#purchase-paid-input').max = String(total);
   modal.querySelector('#purchase-entry-total').textContent = formatCurrency(total);
   modal.querySelector('#purchase-entry-debt-total').textContent = formatCurrency(Math.max(0, total - paid));
+}
+
+function updatePurchasePaymentPreview(box) {
+  const amount = Number(box.querySelector('.purchase-pay-amount').value || 0);
+  const excess = Math.max(0, amount - Number(box.dataset.balanceDue || 0));
+  box.querySelector('.purchase-pay-excess').textContent = Number.isFinite(excess) && excess > 0
+    ? `Trả vượt số còn phải trả: ${formatCurrency(excess)}.` : '';
 }
 
 function closePurchaseMaterialResults(row) {
@@ -395,6 +407,12 @@ function printPurchase(purchase) {
   if (!popup) return showToast('Trình duyệt đang chặn cửa sổ in.', 'warning');
   popup.document.write(`<!doctype html><html><head><title>${escapeHtml(purchase.code)}</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #222;padding:7px;text-align:left}.right{text-align:right}</style></head><body><h2>PHIẾU MUA HÀNG</h2><p>Mã: <b>${escapeHtml(purchase.code)}</b></p><p>Nhà cung cấp: <b>${escapeHtml(purchase.supplierName)}</b></p><p>Ngày mua: ${escapeHtml(purchaseDate(purchase))}</p><table><thead><tr><th>Mã</th><th>Tên</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${(purchase.items || []).map(item => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="right">${Number(item.quantity).toLocaleString('vi-VN')}</td><td class="right">${formatCurrency(item.unitPrice)}</td><td class="right">${formatCurrency(item.lineTotal)}</td></tr>`).join('')}</tbody></table><p class="right">Tiền hàng: ${formatCurrency(purchase.subtotalAmount ?? purchaseTotal(purchase))}</p>${!purchase.sourceReport && Number(purchase.discountAmount || 0) > 0 ? '<p class="right">Giảm giá'+(purchase.discountType === 'percent' ? ' ('+Number(purchase.discountValue || 0).toLocaleString('vi-VN')+'%)' : '')+': −'+formatCurrency(purchase.discountAmount)+'</p>' : ''}${!purchase.sourceReport ? '<p class="right">VAT ('+Number(purchase.vatRate || 0).toLocaleString('vi-VN')+'%): '+formatCurrency(purchase.vatAmount || 0)+'</p>' : ''}<h3 class="right">Tổng gồm VAT: ${formatCurrency(purchaseTotal(purchase))}</h3><p class="right">${purchase.sourceReport ? 'Lịch sử Excel · thanh toán theo NCC, chưa phân bổ từng phiếu.' : 'Đã trả: '+formatCurrency(purchase.paidAmount)+' · Còn phải trả: '+formatCurrency(purchase.balanceDue)}</p></body></html>`);
   popup.document.close();
+  if (!purchase.sourceReport && purchaseOverpayment(purchase) > 0) {
+    const advance = popup.document.createElement('p');
+    advance.className = 'right';
+    advance.textContent = `Trả vượt giá trị phiếu: ${formatCurrency(purchaseOverpayment(purchase))}. Đã ghi vào công nợ chung nhà cung cấp.`;
+    popup.document.body.appendChild(advance);
+  }
   popup.focus();
   popup.print();
 }
@@ -599,11 +617,18 @@ function attachEvents(panel, modal) {
       renderPurchasesPanel(panel);
     });
   }
+  panel.querySelectorAll('.purchase-pay-amount').forEach(input => input.addEventListener('input', () => updatePurchasePaymentPreview(input.closest('.purchase-payment-box'))));
   panel.querySelectorAll('.purchase-pay-btn').forEach(button => button.addEventListener('click', async event => {
     event.stopPropagation();
+    if (button.disabled) return;
     const purchase = state.purchases.find(item => String(item.id) === String(button.dataset.id));
     const box = button.closest('.purchase-payment-box');
     const amount = Number(box.querySelector('.purchase-pay-amount').value || 0);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      showToast('Số tiền thanh toán phải là số VNĐ nguyên dương.', 'warning');
+      box.querySelector('.purchase-pay-amount').focus();
+      return;
+    }
     const method = box.querySelector('.purchase-pay-method').value;
     const paymentKey = pendingSupplierPaymentKeys.get(purchase.id) || newKey(`supplier-payment:${purchase.id}`);
     pendingSupplierPaymentKeys.set(purchase.id, paymentKey);
@@ -612,7 +637,7 @@ function attachEvents(panel, modal) {
     button.disabled = false;
     if (result) {
       pendingSupplierPaymentKeys.delete(purchase.id);
-      showToast('Đã tạo phiếu chi và giảm công nợ nhà cung cấp.', 'success');
+      showToast(amount > Number(box.dataset.balanceDue || 0) ? 'Đã ghi đủ tiền chi, bao gồm phần trả vượt số còn phải trả.' : 'Đã tạo phiếu chi và giảm công nợ nhà cung cấp.', 'success');
       renderPurchasesPanel(panel);
     }
   }));

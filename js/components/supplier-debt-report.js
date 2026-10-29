@@ -1,7 +1,7 @@
 import {state} from '../state.js';
 import {showToast} from '../utils.js';
-import {dbSupplierDebtReport} from '../services/supabase.js?v=20261029-supplier-picker-v1';
-import {openSupplierDebtHistory} from './supplier-reports.js?v=20261029-supplier-picker-v1';
+import {dbSupplierDebtReport} from '../services/supabase.js?v=20261029-purchase-advance-v1';
+import {openSupplierDebtHistory} from './supplier-reports.js?v=20261029-purchase-advance-v1';
 import {SUPPLIER_DEBT_REPORT_COLUMNS as columns,supplierReportRange,supplierReportFilterError,supplierReportDayLabel as dayLabel,supplierReportExcelRows} from '../domain/supplier-debt-report.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>Number(v||0).toLocaleString('vi-VN');

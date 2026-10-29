@@ -17,7 +17,7 @@ const migration = fs.readFileSync(
 );
 
 test('every receipt linked to a selected customer updates customer debt', () => {
-  assert.match(receiptSubmit, /const selectedCustomerId = selectedOption\?\.dataset\.customerId/);
+  assert.match(receiptSubmit, /const selectedCustomerId = document\.getElementById\('receipt-payer'\)\.dataset\.pickerId/);
   assert.match(receiptSubmit, /let matchedCustomer = selectedCustomerId[\s\S]*customerMatches\.length === 1/);
   assert.match(receiptSubmit, /const affectsCustomerDebt = Boolean\(matchedCustomer\)/);
   assert.match(receiptSubmit, /if \(affectsCustomerDebt\) \{[\s\S]*dbRecordCustomerPayment\(/);

@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { showToast, safeCreateIcons, formatDateTime } from '../utils.js';
-import { bomGateway } from '../services/bom.js?v=20261029-supplier-picker-v1';
+import { bomGateway } from '../services/bom.js?v=20261029-purchase-advance-v1';
+import { setupInputPicker } from './input-picker.js?v=20261029-purchase-advance-v1';
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const number=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:4});
@@ -8,7 +9,6 @@ const names={raw:'Nguyên liệu',packaging:'Bao bì',semi:'Bán thành phẩm',
 const statuses={draft:'Nháp',released:'Đang áp dụng',superseded:'Đã thay thế'};
 const commonUnits=['mg','g','gam','kg','ml','l','lít','cái','chai','gói','hộp','bao','thùng','mét','cm','cuộn'];
 const unitScales={mg:{dimension:'mass',scale:.001},g:{dimension:'mass',scale:1},gam:{dimension:'mass',scale:1},kg:{dimension:'mass',scale:1000},ml:{dimension:'volume',scale:1},l:{dimension:'volume',scale:1000},lít:{dimension:'volume',scale:1000}};
-const unitSuggestions=`<datalist id="bom-unit-suggestions">${commonUnits.map(unit=>`<option value="${unit}"></option>`).join('')}</datalist>`;
 function convertedPurchaseFactor(fromUnit,toUnit,factor){
   if(fromUnit===toUnit)return Number(factor);
   const from=unitScales[fromUnit],to=unitScales[toUnit];
@@ -132,6 +132,9 @@ function openModal(title,body,onSubmit,options={}){
   const currentModal=modal;
   currentModal.innerHTML=`<div class="modal-overlay active"><div class="modal-content bom-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal-header"><h3>${esc(title)}</h3><button type="button" class="modal-close" aria-label="Đóng">&times;</button></div><form><div class="modal-body">${body}<p class="inventory-error bom-form-error" role="alert" hidden></p></div><div class="modal-footer"><button type="submit" class="btn btn-primary">Lưu</button></div></form></div></div>`;
   document.body.append(currentModal);
+  currentModal.querySelectorAll('[data-unit-picker]').forEach(input => setupInputPicker(input, {
+    label: 'Danh sách đơn vị', getOptions: () => commonUnits.map(unit => ({ value: unit }))
+  }));
   const close=()=>{currentModal.remove();if(modal===currentModal)modal=null;};
   currentModal.querySelector('.modal-close').onclick=close;
   currentModal.querySelector('.modal-overlay').onclick=event=>{if(event.target===event.currentTarget)close();};
@@ -156,10 +159,9 @@ function itemEditor(row,options={}){
     <label>Mã vật tư<input class="form-control" name="code" maxlength="60" required value="${esc(row?.code)}"></label>
     <label>Tên vật tư<input class="form-control" name="name" maxlength="120" required value="${esc(row?.name)}"></label>
     <label>Loại<select class="form-control" name="kind" ${options.kindOnly?'disabled':''}>${kindOptions}</select>${options.kindOnly?`<input type="hidden" name="kind" value="${esc(options.kindOnly)}">`:''}</label>
-    <div class="bom-grid"><label>Đơn vị gốc<input class="form-control" name="baseUnit" list="bom-unit-suggestions" maxlength="24" placeholder="gam, kg, lít, cái…" required value="${esc(row?.base_unit)}"></label>
+    <div class="bom-grid"><label>Đơn vị gốc<input class="form-control" name="baseUnit" data-unit-picker maxlength="24" placeholder="gam, kg, lít, cái…" required value="${esc(row?.base_unit)}"></label>
     <label>Đơn vị mua<input class="form-control" name="purchaseUnit" maxlength="24" placeholder="bao, thùng…" required value="${esc(row?.purchase_unit)}"></label>
     <label>1 đơn vị mua = số đơn vị gốc<input class="form-control" name="purchaseToBase" type="number" min="0.0001" step="0.0001" required value="${esc(row?.purchase_to_base??1)}"></label></div>
-    ${unitSuggestions}
     ${row?`<label><input type="checkbox" name="isActive" ${row.is_active?'checked':''}> Đang sử dụng</label>`:''}
     <small>Đổi đơn vị chỉ áp dụng khi vật tư chưa có phiếu và chưa được dùng trong BOM. Hệ số mua tự quy đổi giữa mg/g/kg hoặc ml/l; đơn vị khác cần nhập hệ số phù hợp.</small>`,async element=>{
       const fields=new FormData(element);
@@ -187,9 +189,8 @@ function unitEditor(row){
   if(!admin())return;
   const form=openModal(`Đổi đơn vị gốc · ${row.code}`,`
     <p>Vật tư <strong>${esc(row.name)}</strong> · tồn hiện tại ${number(row.quantity)} ${esc(row.base_unit)}. Chỉ đổi trước khi ghi phiếu hoặc dùng vật tư trong BOM.</p>
-    <label>Đơn vị gốc<input class="form-control" name="baseUnit" list="bom-unit-suggestions" maxlength="24" required value="${esc(row.base_unit)}" autocomplete="off"></label>
+    <label>Đơn vị gốc<input class="form-control" name="baseUnit" data-unit-picker maxlength="24" required value="${esc(row.base_unit)}" autocomplete="off"></label>
     <label>1 ${esc(row.purchase_unit)} = số đơn vị gốc<input class="form-control" name="purchaseToBase" type="number" min="0.0001" step="0.0001" required value="${esc(row.purchase_to_base)}"></label>
-    ${unitSuggestions}
     <small>Nếu đổi giữa mg/g/kg hoặc ml/l, hệ số được quy đổi tự động. Khi đổi sang đơn vị khác, nhập hệ số mới để tránh sai số tồn khi nhập mua.</small>`,async element=>{
       const fields=new FormData(element),baseUnit=String(fields.get('baseUnit')).trim(),purchaseToBase=Number(fields.get('purchaseToBase'));
       await bomGateway.saveItem({id:row.id,code:row.code,name:row.name,kind:row.kind,baseUnit,

@@ -1,8 +1,9 @@
 import { state } from '../state.js';
 import { safeCreateIcons, showToast, formatDateTime } from '../utils.js';
-import { inventoryGateway } from '../services/inventory.js?v=20261029-supplier-picker-v1';
-import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261029-supplier-picker-v1';
-import { openBomPanel, resetBomPanel } from './bom.js?v=20261029-supplier-picker-v1';
+import { inventoryGateway } from '../services/inventory.js?v=20261029-purchase-advance-v1';
+import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261029-purchase-advance-v1';
+import { openBomPanel, resetBomPanel } from './bom.js?v=20261029-purchase-advance-v1';
+import { setupInputPicker } from './input-picker.js?v=20261029-purchase-advance-v1';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const quantity = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 });
@@ -213,11 +214,10 @@ function openDocument(kind, row = null) {
   const host = document.createElement('div');
   host.id = 'inventory-document-host';
   document.body.append(host);
-  const products = availableProducts();
   host.innerHTML = `<div class="modal-overlay active"><div class="modal-content inventory-document" role="dialog" aria-modal="true" aria-label="${kinds[kind]}"><div class="modal-header"><h3>${kinds[kind]}</h3><button type="button" class="modal-close" aria-label="Đóng phiếu kho">&times;</button></div>
     <form id="inventory-document-form"><div class="modal-body"><p>${kind === 'count' ? 'Mở phiếu trước khi bắt đầu đếm SKU này. Nếu có biến động trong lúc đếm, hệ thống sẽ yêu cầu kiểm tra lại riêng SKU này trước khi lưu.' : 'Phiếu kho ghi số lượng hàng. Các khoản thanh toán được ghi riêng tại Phiếu mua hàng hoặc Sổ quỹ.'}</p>
     ${kind === 'count' ? `<strong>${escape(row.sku)} · ${escape(row.name)}</strong><p id="inventory-count-baseline" role="status">Đang lấy mốc kiểm kê…</p><p id="inventory-product-sync-note"></p><label>Tồn thực tế<input class="form-control" name="countQuantity" type="number" min="0" max="100000000" step="0.0001" value="${Number(row.quantity)}" required></label><label>Mức tồn tối thiểu<input class="form-control" name="minimumQuantity" type="number" min="0" max="100000000" step="0.0001" value="${Number(row.minimum_quantity)}" required></label>`
-      : `<div id="inventory-document-lines"></div><button type="button" class="btn btn-secondary" id="inventory-add-line">Thêm SKU</button><datalist id="inventory-product-options">${products.map(product => `<option value="${escape(product.code)} · ${escape(product.brand)}" label="${escape(product.name)}"></option>`).join('')}</datalist>`}
+      : '<div id="inventory-document-lines"></div><button type="button" class="btn btn-secondary" id="inventory-add-line">Thêm SKU</button>'}
     <label>Ghi chú<textarea class="form-control" name="note" maxlength="240" rows="2" placeholder="Lý do nhập, xuất hoặc kiểm kê"></textarea></label><p id="inventory-document-error" class="inventory-error" role="alert" hidden></p></div>
     <div class="modal-footer"><button type="submit" class="btn btn-primary" id="inventory-save-document">Lưu phiếu</button></div></form></div></div>`;
   const close = () => { if (!saving) closeDocument(); };
@@ -259,9 +259,18 @@ function addLine() {
   const lines = document.getElementById('inventory-document-lines');
   if (!lines || lines.children.length >= 50) return;
   const line = document.createElement('div'); line.className = 'inventory-document-line';
-  line.innerHTML = '<input class="form-control" list="inventory-product-options" data-inventory-product placeholder="Mã SKU · Hãng" aria-label="SKU" required><input class="form-control" data-inventory-quantity type="number" min="0.0001" max="100000000" step="0.0001" placeholder="Số lượng" aria-label="Số lượng" required><button type="button" class="btn btn-secondary" aria-label="Bỏ dòng">×</button>';
-  line.querySelector('button').addEventListener('click', () => { if (lines.children.length > 1 && !saving) line.remove(); });
+  line.innerHTML = '<input class="form-control" data-inventory-product placeholder="Mã SKU · Hãng" aria-label="SKU" required><input class="form-control" data-inventory-quantity type="number" min="0.0001" max="100000000" step="0.0001" placeholder="Số lượng" aria-label="Số lượng" required><button type="button" class="btn btn-secondary" data-inventory-remove aria-label="Bỏ dòng">×</button>';
+  line.querySelector('[data-inventory-remove]').addEventListener('click', () => { if (lines.children.length > 1 && !saving) line.remove(); });
   lines.appendChild(line);
+  setupInputPicker(line.querySelector('[data-inventory-product]'), {
+    label: 'Danh sách SKU',
+    getOptions: () => availableProducts().map(product => ({
+      id: product.id, value: `${product.code} · ${product.brand}`,
+      label: `${product.code} · ${product.brand}`, description: product.name,
+      searchText: product.displaySpecification || ''
+    })),
+    emptyText: 'Không tìm thấy SKU phù hợp. Hãy tìm bằng mã, tên hoặc hãng.'
+  });
 }
 async function saveDocument(event) {
   event.preventDefault(); if (saving || !draft || !ensureSession()) return;
@@ -273,8 +282,11 @@ async function saveDocument(event) {
     const items = draft.kind === 'count'
       ? [{ productId: draft.row.product_id, quantity: Number(data.get('countQuantity')), expectedQuantity: Number(draft.row.quantity), minimumQuantity: Number(data.get('minimumQuantity')) }]
       : [...form.querySelectorAll('.inventory-document-line')].map(line => {
-        const code = line.querySelector('[data-inventory-product]').value;
-        const product = products.find(item => `${item.code} · ${item.brand}` === code);
+        const field = line.querySelector('[data-inventory-product]');
+        const code = field.value;
+        const product = field.dataset.pickerId
+          ? products.find(item => String(item.id) === field.dataset.pickerId)
+          : products.find(item => `${item.code} · ${item.brand}` === code);
         if (!product) throw new Error('Chọn SKU hợp lệ từ danh mục.');
         return { productId: product.id, quantity: Number(line.querySelector('[data-inventory-quantity]').value) };
       });
