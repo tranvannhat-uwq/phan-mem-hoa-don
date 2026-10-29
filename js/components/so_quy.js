@@ -1,8 +1,8 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20261029-purchase-discount-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261029-purchase-discount-v1';
-import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-purchase-discount-v1';
+import { renderAll } from '../main.js?v=20261029-supplier-picker-v1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261029-supplier-picker-v1';
+import { getCanonicalCashbookId, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-supplier-picker-v1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -329,9 +329,90 @@ function findSupplierByInput(input) {
 function populatePaymentRecipientDatalist() {
   const datalist = document.getElementById('payment-recipient-list');
   if (!datalist) return;
+  if (datalist.getAttribute('role') === 'listbox') {
+    datalist.dispatchEvent(new Event('suppliers-updated'));
+    return;
+  }
   datalist.innerHTML = (state.suppliers || []).map(s => {
     return `<option value="${s.name} — ${s.code}" data-supplier-id="${s.id}">${s.phone || 'N/A'}</option>`;
   }).join('');
+}
+
+function setupPaymentRecipientPicker() {
+  const picker = document.getElementById('payment-recipient-picker');
+  const input = document.getElementById('payment-recipient');
+  const toggle = document.getElementById('payment-recipient-toggle');
+  const list = document.getElementById('payment-recipient-list');
+  if (!picker || !input || !toggle || !list || picker.dataset.bound) return;
+  picker.dataset.bound = 'true';
+  let matches = [], active = -1, showAll = false;
+  const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
+  const close = () => {
+    list.hidden = true;
+    input.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    active = -1;
+  };
+  const activate = index => {
+    active = index !== null && matches.length ? (index + matches.length) % matches.length : -1;
+    list.querySelectorAll('[role="option"]').forEach((option, i) => {
+      option.classList.toggle('is-active', i === active);
+      option.setAttribute('aria-selected', String(i === active));
+      if (i === active) option.scrollIntoView({ block: 'nearest' });
+    });
+    if (active >= 0) input.setAttribute('aria-activedescendant', `payment-recipient-option-${active}`);
+    else input.removeAttribute('aria-activedescendant');
+  };
+  const open = (all = false) => {
+    showAll = all;
+    const query = all || input.dataset.supplierId ? '' : normalize(input.value);
+    const suppliers = (state.suppliers || []).filter(supplier => supplier.isActive !== false);
+    matches = suppliers.filter(supplier => !query || normalize(`${supplier.name} ${supplier.code} ${supplier.phone || ''}`).includes(query));
+    const visible = matches.slice(0, 50);
+    list.innerHTML = visible.length ? visible.map((supplier, i) => `<button type="button" class="cashbook-recipient-option" id="payment-recipient-option-${i}" role="option" aria-selected="false" data-index="${i}" tabindex="-1"><strong>${escapeCashbookHtml(supplier.name)}</strong><small>${escapeCashbookHtml([supplier.code, supplier.phone].filter(Boolean).join(' · '))}</small></button>`).join('')
+      + (matches.length > visible.length ? '<p class="cashbook-recipient-message">Gõ tên hoặc mã để tìm thêm nhà cung cấp.</p>' : '')
+      : `<p class="cashbook-recipient-message">${suppliers.length ? 'Không tìm thấy nhà cung cấp. Bạn vẫn có thể nhập tên người nhận khác.' : 'Chưa có nhà cung cấp trong danh sách. Bạn vẫn có thể nhập tên người nhận.'}</p>`;
+    matches = visible;
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-expanded', 'true');
+    activate(null);
+  };
+  const choose = index => {
+    const supplier = matches[index];
+    if (!supplier) return;
+    input.value = [supplier.name, supplier.code].filter(Boolean).join(' — ');
+    input.dataset.supplierId = String(supplier.id);
+    input.focus();
+    close();
+  };
+  toggle.addEventListener('click', () => {
+    if (!list.hidden && showAll) return close();
+    input.focus();
+    open(true);
+  });
+  input.addEventListener('input', () => { delete input.dataset.supplierId; open(); });
+  input.addEventListener('focus', () => open());
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      if (!list.hidden) { event.preventDefault(); event.stopPropagation(); close(); }
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (list.hidden) open(true);
+      activate(active < 0 ? (event.key === 'ArrowDown' ? 0 : matches.length - 1) : active + (event.key === 'ArrowDown' ? 1 : -1));
+    } else if (event.key === 'Enter' && !list.hidden && active >= 0) {
+      event.preventDefault(); choose(active);
+    } else if (event.key === 'Tab') close();
+  });
+  list.addEventListener('click', event => {
+    const option = event.target.closest('[data-index]');
+    if (option) choose(Number(option.dataset.index));
+  });
+  list.addEventListener('suppliers-updated', () => { if (!list.hidden) open(showAll); });
+  picker.addEventListener('focusout', event => { if (!picker.contains(event.relatedTarget)) close(); });
+  document.addEventListener('pointerdown', event => { if (!picker.contains(event.target)) close(); });
+  input.form?.addEventListener('reset', () => { delete input.dataset.supplierId; close(); });
 }
 
 // Helper: load/save starting balances
@@ -926,6 +1007,7 @@ export function setupSoQuyPanel() {
   const paymentForm = document.getElementById('so-quy-payment-form');
   const paymentTimeInput = document.getElementById('payment-time');
   const paymentValueInput = document.getElementById('payment-value');
+  setupPaymentRecipientPicker();
   setupCashbookCurrencyInput(paymentValueInput);
   
   if (addChiBtn && paymentModal) {
@@ -969,7 +1051,10 @@ export function setupSoQuyPanel() {
       const method = document.getElementById('payment-method').value;
       const accounting = document.getElementById('payment-accounting').checked;
       const note = document.getElementById('payment-note').value.trim();
-      const matchedSupplier = findSupplierByInput(recipient);
+      const selectedSupplierId = document.getElementById('payment-recipient').dataset.supplierId;
+      const matchedSupplier = selectedSupplierId
+        ? (state.suppliers || []).find(supplier => String(supplier.id) === selectedSupplierId)
+        : findSupplierByInput(recipient);
       const selectedTime = new Date(time);
       if (Number.isNaN(selectedTime.getTime())) {
         showToast('Vui lòng chọn ngày giờ lập phiếu chi hợp lệ.', 'danger');

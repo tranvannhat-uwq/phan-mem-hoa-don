@@ -33,15 +33,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <!-- Pinned local browser libraries; no external CDN required for login -->
-  <script defer src="js/vendor/lucide.js?v=20261029-purchase-discount-v1"></script>
+  <script defer src="js/vendor/lucide.js?v=20261029-supplier-picker-v1"></script>
   
-  <script defer src="js/vendor/xlsx.js?v=20261029-purchase-discount-v1"></script>
+  <script defer src="js/vendor/xlsx.js?v=20261029-supplier-picker-v1"></script>
   
-  <script defer src="js/vendor/supabase.js?v=20261029-purchase-discount-v1"></script>
+  <script defer src="js/vendor/supabase.js?v=20261029-supplier-picker-v1"></script>
   
-  <script defer src="js/vendor/chart.js?v=20261029-purchase-discount-v1"></script>
+  <script defer src="js/vendor/chart.js?v=20261029-supplier-picker-v1"></script>
   <!-- Style CSS -->
-  <link rel="stylesheet" href="style.css?v=20261029-purchase-discount-v1">
+  <link rel="stylesheet" href="style.css?v=20261029-supplier-picker-v1">
 </head>
 <body>
 
@@ -4178,8 +4178,13 @@
             <div class="cashbook-create-grid">
               <div class="form-group cashbook-create-field-full">
                 <label class="form-label" for="payment-recipient">Người nhận</label>
-                <input type="text" class="form-control" id="payment-recipient" list="payment-recipient-list" placeholder="Chọn hoặc nhập tên người nhận" required>
-                <datalist id="payment-recipient-list"></datalist>
+                <div class="cashbook-recipient-picker" id="payment-recipient-picker">
+                  <div class="cashbook-recipient-control">
+                    <input type="text" class="form-control" id="payment-recipient" placeholder="Tìm nhà cung cấp hoặc nhập tên người nhận" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="payment-recipient-list" aria-expanded="false" required>
+                    <button type="button" class="cashbook-recipient-toggle" id="payment-recipient-toggle" aria-label="Mở danh sách nhà cung cấp" aria-controls="payment-recipient-list" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+                  </div>
+                  <div class="cashbook-recipient-list" id="payment-recipient-list" role="listbox" aria-label="Nhà cung cấp" hidden></div>
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label" for="payment-value">Giá trị (đ)</label>
@@ -4612,9 +4617,9 @@
 
 
   <!-- Login can open before the full application and Auth session are ready. -->
-  <script src="js/login-entry.js?v=20261029-purchase-discount-v1"></script>
+  <script src="js/login-entry.js?v=20261029-supplier-picker-v1"></script>
   <!-- App logic -->
-  <script type="module" src="js/customer-care-landing.js?v=20261029-purchase-discount-v1"></script>
-  <script type="module" src="js/main.js?v=20261029-purchase-discount-v1"></script>
+  <script type="module" src="js/customer-care-landing.js?v=20261029-supplier-picker-v1"></script>
+  <script type="module" src="js/main.js?v=20261029-supplier-picker-v1"></script>
 </body>
 </html>

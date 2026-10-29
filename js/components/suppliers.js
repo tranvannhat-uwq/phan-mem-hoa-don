@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261029-purchase-discount-v1';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261029-supplier-picker-v1';
 import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
-import { renderAll, ensurePanelCloudData } from '../main.js?v=20261029-purchase-discount-v1';
-import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261029-purchase-discount-v1';
-import { openSupplierPeriodReport } from './supplier-debt-report.js?v=20261029-purchase-discount-v1';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261029-supplier-picker-v1';
+import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261029-supplier-picker-v1';
+import { openSupplierPeriodReport } from './supplier-debt-report.js?v=20261029-supplier-picker-v1';
 
 const toNumber = supplierNumber;
 const deletingSuppliers = new Set();
@@ -145,6 +145,10 @@ export function renderSuppliersTable() {
 export function populateSupplierDatalist() {
   const datalist = document.getElementById('payment-recipient-list');
   if (!datalist) return;
+  if (datalist.getAttribute('role') === 'listbox') {
+    datalist.dispatchEvent(new Event('suppliers-updated'));
+    return;
+  }
 
   datalist.innerHTML = state.suppliers.map(s => {
     return `<option value="${escapeSupplierHtml(s.name)} — ${escapeSupplierHtml(s.code)}" data-supplier-id="${s.id}">${s.phone || 'N/A'}</option>`;

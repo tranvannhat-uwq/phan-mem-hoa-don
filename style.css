@@ -6492,6 +6492,20 @@ select#invoice-pricelist-select:disabled {
   grid-column: 1 / -1;
 }
 
+.cashbook-recipient-picker { position: relative; min-width: 0; }
+.cashbook-recipient-control { position: relative; }
+.cashbook-create-grid #payment-recipient { padding-right: 46px; }
+.cashbook-recipient-toggle { position: absolute; right: 1px; top: 1px; bottom: 1px; display: flex; align-items: center; justify-content: center; width: 42px; padding: 0; border: 0; border-left: 1px solid #e2e8f0; border-radius: 0 7px 7px 0; background: #f8fafc; color: #475569; cursor: pointer; }
+.cashbook-recipient-toggle:hover { background: #eef2f7; }
+.cashbook-recipient-toggle:focus-visible { outline: 2px solid #2563eb; outline-offset: -3px; }
+.cashbook-recipient-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 25; max-height: 240px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 8px 20px rgba(15, 23, 42, .15); }
+.cashbook-recipient-list[hidden] { display: none; }
+.cashbook-recipient-option { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid #f1f5f9; background: #fff; color: #0f172a; text-align: left; cursor: pointer; }
+.cashbook-recipient-option:hover, .cashbook-recipient-option.is-active { background: #eff6ff; }
+.cashbook-recipient-option strong { font-size: .83rem; }
+.cashbook-recipient-option small { color: #64748b; font-size: .73rem; }
+.cashbook-recipient-message { margin: 0; padding: 10px 12px; color: #64748b; font-size: .78rem; }
+
 .cashbook-create-value-input {
   color: #047857;
   min-height: 50px !important;
