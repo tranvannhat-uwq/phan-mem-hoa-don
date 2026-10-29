@@ -6,15 +6,15 @@ import { createApplicationEgressReporter } from '../domain/application-egress.js
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-system-status-v2';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-system-status-v2';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-purchase-discount-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-purchase-discount-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-system-status-v2';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-system-status-v2';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-system-status-v2';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-purchase-discount-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-purchase-discount-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-purchase-discount-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-system-status-v2';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-purchase-discount-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -2326,6 +2326,9 @@ export async function fetchCloudData(options = {}) {
             totalAmount: Number(purchase.total_amount || 0),
             totalPayable: Number(purchase.total_amount || 0),
             subtotalAmount: Number(purchase.subtotal_amount ?? purchase.total_amount ?? 0),
+            discountType: purchase.discount_type || 'amount',
+            discountValue: Number(purchase.discount_value || 0),
+            discountAmount: Number(purchase.discount_amount || 0),
             vatRate: Number(purchase.vat_rate || 0),
             vatAmount: Number(purchase.vat_amount || 0),
             paidAmount: Number(purchase.paid_amount || 0),
@@ -4643,6 +4646,9 @@ function applyCanonicalPurchase(purchase) {
     totalAmount: Number(purchase.totalAmount || 0),
     totalPayable: Number(purchase.totalAmount || 0),
     subtotalAmount: Number(purchase.subtotalAmount ?? purchase.totalAmount ?? 0),
+    discountType: purchase.discountType || 'amount',
+    discountValue: Number(purchase.discountValue || 0),
+    discountAmount: Number(purchase.discountAmount || 0),
     vatRate: Number(purchase.vatRate || 0),
     vatAmount: Number(purchase.vatAmount || 0),
     paidAmount: Number(purchase.paidAmount || 0),
@@ -4678,12 +4684,21 @@ export async function dbCreatePurchase(input) {
       || Math.abs(vatRate * 100 - Math.round(vatRate * 100)) > 1e-7) {
       throw new Error('VAT phải từ 0 đến 100%, tối đa 2 chữ số thập phân.');
     }
-    const { data, error } = await supabaseClient.rpc('rpc_create_purchase_vat', {
+    const discountType = input.discountType || 'amount';
+    const discountValue = Number(input.discountValue ?? 0);
+    if (!['percent', 'amount'].includes(discountType) || !Number.isFinite(discountValue) || discountValue < 0
+      || (discountType === 'percent' && (discountValue > 100 || Math.abs(discountValue * 100 - Math.round(discountValue * 100)) > 1e-7))
+      || (discountType === 'amount' && !Number.isInteger(discountValue))) {
+      throw new Error('Giảm giá phải là số VNĐ nguyên hoặc phần trăm từ 0 đến 100, tối đa 2 chữ số thập phân.');
+    }
+    const { data, error } = await supabaseClient.rpc('rpc_create_purchase_discount', {
       p_input: {
         supplierId: input.supplierId,
         invoiceNumber: input.invoiceNumber || '',
         purchaseDate: input.purchaseDate,
         paidAmount: Number(input.paidAmount || 0),
+        discountType,
+        discountValue,
         vatRate,
         paymentMethod: input.paymentMethod || 'cash',
         notes: input.notes || '',
@@ -4702,7 +4717,7 @@ export async function dbCreatePurchase(input) {
   } catch (err) {
     console.warn('Create purchase RPC failed:', err.message || err);
     if (['PGRST202', '42883'].includes(err.code)) {
-      showToast('Cloud cần chạy migration 0102 để tạo phiếu mua có VAT.', 'danger');
+      showToast('Cloud cần chạy migration 0133 để tạo phiếu mua có giảm giá.', 'danger');
       return false;
     }
     showToast(err.message || 'Không thể tạo phiếu mua.', 'danger');

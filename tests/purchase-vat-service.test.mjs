@@ -24,7 +24,7 @@ test('purchase service sends the entered VAT rate and keeps server amounts in st
   const h = harness({ data: result, error: null });
   await h.context.dbCreatePurchase({ supplierId: 's1', vatRate: 8.5, vatAmount: 1, totalAmount: 1,
     items: [{ code: 'VO', name: 'Vỏ', quantity: 2, unitPrice: 125000 }] });
-  assert.equal(h.calls[0][0], 'rpc_create_purchase_vat');
+  assert.equal(h.calls[0][0], 'rpc_create_purchase_discount');
   assert.equal(h.calls[0][1].p_input.vatRate, 8.5);
   assert.equal('vatAmount' in h.calls[0][1].p_input, false);
   assert.equal('totalAmount' in h.calls[0][1].p_input, false);
@@ -40,7 +40,7 @@ test('an older server produces a migration message without retrying through a VA
   const h = harness({ data: null, error: { code: 'PGRST202', message: 'Function missing' } });
   assert.equal(await h.context.dbCreatePurchase({ vatRate: 8 }), false);
   assert.equal(h.calls.length, 1);
-  assert.match(h.toasts[0], /0102/);
+  assert.match(h.toasts[0], /0133/);
   assert.equal(h.context.state.purchases.length, 0);
 });
 

@@ -45,8 +45,47 @@ before(async () => {
   legacyId = (await rpc('rpc_create_purchase', legacyInput)).purchase.id;
   await db.exec('RESET ROLE');
   await db.exec(await read('0102_purchase_vat.sql'));
+  await db.exec(await read('0133_purchase_discount.sql'));
 });
 after(async () => { await db?.close(); });
+
+test('discount migration supports percentage and VND before VAT, persistence and retries', async () => {
+  await role();
+  for (const [discountType, discountValue, discountAmount] of [['percent', 10, 25000], ['amount', 30000, 30000]]) {
+    const request = input({ discountType, discountValue, vatRate: 8, paidAmount: 100000 });
+    const result = await rpc('rpc_create_purchase_discount', request);
+    const purchase = result.purchase;
+    const total = Math.round((250000 - discountAmount) * 1.08);
+    assert.equal(purchase.discountType, discountType);
+    assert.equal(purchase.discountValue, discountValue);
+    assert.equal(purchase.discountAmount, discountAmount);
+    assert.equal(purchase.vatAmount, (250000 - discountAmount) * 0.08);
+    assert.equal(purchase.totalAmount, total);
+    assert.equal(purchase.balanceDue, total - 100000);
+    const stored = (await db.query('SELECT discount_type,discount_value,discount_amount,total_amount FROM public.purchases WHERE id=$1', [purchase.id])).rows[0];
+    assert.equal(stored.discount_type, discountType);
+    assert.equal(Number(stored.discount_amount), discountAmount);
+    assert.equal(Number(stored.total_amount), total);
+    assert.equal((await rpc('rpc_create_purchase_discount', request)).already_recorded, true);
+    await assert.rejects(rpc('rpc_create_purchase_discount', { ...request, discountValue: discountValue + 1 }), /different purchase payload/);
+    const cancelled = await value('SELECT public.rpc_cancel_purchase($1,$2) AS value', [purchase.id, 'Discount test cancellation']);
+    assert.equal(cancelled.purchase.discountAmount, discountAmount);
+    const ledger = (await db.query('SELECT amount_change FROM public.supplier_debt_transactions WHERE purchase_id=$1', [purchase.id])).rows;
+    assert.equal(ledger.reduce((sum, row) => sum + Number(row.amount_change), 0), 0);
+  }
+});
+
+test('invalid discounts raise their intended messages and create no purchases', async () => {
+  await role();
+  const count = await value('SELECT count(*) AS value FROM public.purchases');
+  for (const discountValue of [-1, 100.01, 8.001, 'NaN', '8%', true]) {
+    await assert.rejects(rpc('rpc_create_purchase_discount', input({ discountType: 'percent', discountValue })), /Giảm giá theo %/);
+  }
+  for (const discountValue of [-1, 0.5, 250001]) {
+    await assert.rejects(rpc('rpc_create_purchase_discount', input({ discountType: 'amount', discountValue })), /Giảm giá VNĐ/);
+  }
+  assert.equal(await value('SELECT count(*) AS value FROM public.purchases'), count);
+});
 
 test('old purchases and pending zero-VAT retries keep the same amounts and fingerprint', async () => {
   await role();

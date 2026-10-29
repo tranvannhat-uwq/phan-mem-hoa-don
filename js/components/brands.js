@@ -1,8 +1,8 @@
 import { state } from '../state.js';
-import { createListPagination } from './list-pagination.js?v=20261029-system-status-v2';
+import { createListPagination } from './list-pagination.js?v=20261029-purchase-discount-v1';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20261029-system-status-v2';
-import { renderAll } from '../main.js?v=20261029-system-status-v2';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20261029-purchase-discount-v1';
+import { renderAll } from '../main.js?v=20261029-purchase-discount-v1';
 
 const brandsPager = createListPagination('brands-pagination');
 

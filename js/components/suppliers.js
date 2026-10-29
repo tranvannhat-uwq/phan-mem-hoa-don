@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber } from '../utils.js';
-import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261029-system-status-v2';
+import { dbSaveSupplier, dbDeleteSupplier, dbSaveSuppliersBulk } from '../services/supabase.js?v=20261029-purchase-discount-v1';
 import { filterSupplierDirectory, supplierDirectoryTotals, supplierFilterError, supplierNumber, supplierDay, supplierDateRange } from '../domain/supplier-directory.js';
-import { renderAll, ensurePanelCloudData } from '../main.js?v=20261029-system-status-v2';
-import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261029-system-status-v2';
-import { openSupplierPeriodReport } from './supplier-debt-report.js?v=20261029-system-status-v2';
+import { renderAll, ensurePanelCloudData } from '../main.js?v=20261029-purchase-discount-v1';
+import { resetSupplierReportPreview, previewSupplierReport, processSupplierReportImport, openSupplierDebtHistory } from './supplier-reports.js?v=20261029-purchase-discount-v1';
+import { openSupplierPeriodReport } from './supplier-debt-report.js?v=20261029-purchase-discount-v1';
 
 const toNumber = supplierNumber;
 const deletingSuppliers = new Set();

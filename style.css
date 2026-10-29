@@ -12752,9 +12752,12 @@ body.purchase-entry-modal-open { overflow: hidden; }
 
 .customer-return-debt-breakdown { display: block; margin-top: 3px; color: var(--text-muted); font-size: .68rem; line-height: 1.4; white-space: nowrap; }
 .purchase-entry-tax-settings { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.purchase-entry-tax-settings span { flex: 1 1 240px; color: #708096; font-size: .75rem; }
+.purchase-entry-tax-settings > span:not(.purchase-entry-discount-preview) { flex: 1 1 240px; color: #708096; font-size: .75rem; }
 .purchase-entry-tax-settings label { color: #233a58; font-size: .8rem; font-weight: 700; }
 #purchase-entry-modal #purchase-vat-rate { width: 100px; height: 38px; }
+#purchase-entry-modal #purchase-discount-type { width: 86px; height: 38px; }
+#purchase-entry-modal #purchase-discount-value { width: 112px; height: 38px; }
+.purchase-entry-discount-preview { flex: 0 0 auto; min-width: 90px; color: #b45309; font-size: .78rem; font-weight: 750; text-align: right; white-space: nowrap; }
 .purchase-entry-summary { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 .purchase-entry-summary-card { display: flex; flex-direction: column; gap: 4px; min-width: 170px; padding: 10px 13px; border: 1px solid #e4eaf2; border-radius: 9px; background: #f8fafc; }
 .purchase-entry-summary-card span { color: #708096; font-size: .7rem; font-weight: 650; }
@@ -12796,7 +12799,7 @@ body.purchase-entry-modal-open { overflow: hidden; }
   .purchase-entry-payment-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .purchase-entry-items-heading { flex-wrap: wrap; }
   .purchase-entry-items-heading > .purchase-entry-item-actions { flex: 1 1 100%; justify-content: flex-start; margin-left: 41px; }
-  .purchase-entry-tax-settings span { flex-basis: 100%; }
+  .purchase-entry-tax-settings > span:not(.purchase-entry-discount-preview) { flex-basis: 100%; }
   .purchase-entry-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .purchase-entry-summary-card { min-width: 0; flex: 1 1 0; }
   #purchase-entry-modal .purchase-entry-footer { align-items: stretch; flex-direction: column; padding: 10px 12px; }
