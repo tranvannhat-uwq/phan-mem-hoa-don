@@ -7,7 +7,7 @@
 <button class="btn btn-secondary" id="report">Tải lịch sử cho báo cáo</button><output id="results" aria-live="polite">Sẵn sàng kiểm thử.</output></main><div id="toast-container"></div>
 <script type="module">
 import {state} from '../js/state.js';
-import {connectSupabase,dbCreateQuickCustomer,dbSearchOrdersForHistory,dbFetchCustomersOrderHistory} from '../js/services/supabase.js?v=20261029-system-status-v1';
+import {connectSupabase,dbCreateQuickCustomer,dbSearchOrdersForHistory,dbFetchCustomersOrderHistory} from '../js/services/supabase.js?v=20261029-system-status-v2';
 const calls=[];const row={id:'QA-ORDER-001',customer_id:'qa-customer-0',customer_name:'Khách kiểm thử',created_at:'2026-10-29T01:00:00Z',order_date:'2026-10-29T01:00:00Z',status:'settled',total_payable:100,items:[]};
 const assert=(ok,message)=>{if(!ok)throw Error(message);};
 window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})},

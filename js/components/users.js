@@ -1,23 +1,23 @@
 import { state } from '../state.js';
 import { withAuthTimeout } from '../domain/auth-timeout.js';
-import { createListPagination } from './list-pagination.js?v=20261029-system-status-v1';
+import { createListPagination } from './list-pagination.js?v=20261029-system-status-v2';
 import { showToast, safeCreateIcons, isSameUser, getCompanyNameById, makeSelectSearchable } from '../utils.js';
-import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261029-system-status-v1';
-import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261029-system-status-v1';
-import { renderAll, switchTab } from '../main.js?v=20261029-system-status-v1';
-import { populateManagedByDropdown } from './customers.js?v=20261029-system-status-v1';
+import { dbSaveUser, dbDeleteUser, isCloudActive, supabaseClient, fetchCloudData, clearSupabaseAuthStorage, getMaintenanceStatus, resetSupabaseEgressMetrics, resetAuthenticatedBusinessState } from '../services/supabase.js?v=20261029-system-status-v2';
+import { startRealtimeSync, stopRealtimeSync, resetRealtimeEventMetrics } from '../services/realtime.js?v=20261029-system-status-v2';
+import { renderAll, switchTab } from '../main.js?v=20261029-system-status-v2';
+import { populateManagedByDropdown } from './customers.js?v=20261029-system-status-v2';
 import {
   LOGIN_ERROR,
   classifySupabaseError,
   loginErrorMessage,
   validateProfileRows
 } from '../domain/auth-profile.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261029-system-status-v1';
-import { resetInventoryPanel } from './inventory.js?v=20261029-system-status-v1';
-import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261029-system-status-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261029-system-status-v2';
+import { resetInventoryPanel } from './inventory.js?v=20261029-system-status-v2';
+import { resetInvoiceBuilder, resetInvoiceLookupSession } from './invoice.js?v=20261029-system-status-v2';
 import {canViewDashboard} from '../domain/dashboard-access.js';
-import {clearDashboardView} from './dashboard.js?v=20261029-system-status-v1';
-import {resetSystemStatus} from './system-status.js?v=20261029-system-status-v1';
+import {clearDashboardView} from './dashboard.js?v=20261029-system-status-v2';
+import {resetSystemStatus} from './system-status.js?v=20261029-system-status-v2';
 
 const usersPager = createListPagination('users-pagination');
 
@@ -833,6 +833,7 @@ export function applyUserPermissions(user) {
   const dashboardPanel=document.getElementById('dashboard-panel');
   if(dashboardPanel)dashboardPanel.hidden=!canViewDashboard(user);
   const role = user.role;
+  if(role!=='admin')resetSystemStatus();
   const systemStatusPanel=document.getElementById('system-status-panel');
   if(systemStatusPanel)systemStatusPanel.hidden=role!=='admin';
   const activityButton = document.getElementById('btn-activity-log');
