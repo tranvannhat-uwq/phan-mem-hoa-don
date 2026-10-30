@@ -1,6 +1,6 @@
 import {state} from '../state.js';
 import {formatCurrency,showToast} from '../utils.js';
-import {dbImportSupplierDebtReport,dbSupplierDebtHistory} from '../services/supabase.js?v=20261029-purchase-manual-v1';
+import {dbImportSupplierDebtReport,dbSupplierDebtHistory} from '../services/supabase.js?v=20261030-supplier-cashbook-v1';
 import {isSupplierDebtReport,parseSupplierDebtReport,SUPPLIER_REPORT_HEADERS} from '../domain/supplier-report-import.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let reportRows=null, reportFile='', originalPreview='', historyRequest=0;

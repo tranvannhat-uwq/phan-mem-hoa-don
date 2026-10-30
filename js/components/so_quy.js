@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20261029-purchase-manual-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261029-purchase-manual-v1';
-import { getCanonicalCashbookId, getCashbookDisplayCode, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-purchase-manual-v1';
-import { setupInputPicker } from './input-picker.js?v=20261029-purchase-manual-v1';
+import { renderAll } from '../main.js?v=20261030-supplier-cashbook-v1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbReconcileSupplierCashbookPayment, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261030-supplier-cashbook-v1';
+import { getCanonicalCashbookId, getCashbookDisplayCode, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261030-supplier-cashbook-v1';
+import { setupInputPicker } from './input-picker.js?v=20261030-supplier-cashbook-v1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -316,16 +316,28 @@ function findSupplierByInput(input) {
   const raw = String(input || '').trim();
   const clean = normalizeText(raw);
   if (!clean) return null;
-  return (state.suppliers || []).find(s => {
+  const matches = (state.suppliers || []).filter(s => {
+    if (s.isActive === false) return false;
     const name = normalizeText(s.name);
     const code = normalizeText(s.code);
     return clean === name ||
-      clean === code ||
+      (code && clean === code) ||
       clean === `${name} — ${code}` ||
-      clean === `${name} - ${code}` ||
-      clean.includes(code) ||
-      clean.includes(name);
-  }) || null;
+      clean === `${name} - ${code}`;
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function getLegacySupplierPayment(transaction = {}) {
+  if (!['admin', 'accounting'].includes(state.currentUser?.role)
+      || transaction.type !== 'chi' || isCancelledStatus(transaction.status)
+      || transaction.reversalOfId || transaction.customerId || transaction.orderId || transaction.salesReturnId
+      || transaction.purchaseId || transaction.purchasePaymentId || transaction.employeeId
+      || !['', 'manual_chi'].includes(transaction.transactionType || '')
+      || !['Chi tiền nhập hàng', 'Thanh toán nhà cung cấp'].includes(transaction.category)) return null;
+  return transaction.supplierId
+    ? (state.suppliers || []).find(s => s.isActive !== false && String(s.id) === String(transaction.supplierId)) || null
+    : findSupplierByInput(transaction.partner);
 }
 
 function populatePaymentRecipientDatalist() {
@@ -1123,8 +1135,7 @@ export function setupSoQuyPanel() {
           return;
         }
 
-        txs.unshift(newTx);
-        saveCashbookTransactions(txs);
+        saveCashbookTransactions([newTx, ...getCashbookTransactions().filter(t => String(t.id) !== String(newTx.id))]);
       
         showToast(`Đã tạo phiếu chi ${getCashbookDisplayCode(newTx)} thành công!`, 'success');
         hidePaymentModal();
@@ -1583,6 +1594,7 @@ function renderCashbookInlineDetail(t) {
   const isReceipt = t.type === 'thu';
   const isCancelled = isCancelledStatus(t.status);
   const legacyCustomer = getLegacyReceiptCustomer(t);
+  const legacySupplier = getLegacySupplierPayment(t);
   const counterpartyType = t.customerId
     ? 'Khách hàng'
     : (t.supplierId ? 'Nhà cung cấp' : 'Đối tượng khác');
@@ -1628,6 +1640,7 @@ function renderCashbookInlineDetail(t) {
             <div>
               ${!isCancelled ? `<button type="button" class="btn btn-danger btn-sm js-cashbook-inline-cancel"><i data-lucide="trash-2"></i> Hủy phiếu</button>` : ''}
               ${legacyCustomer ? `<button type="button" class="btn btn-primary btn-sm js-cashbook-inline-reconcile"><i data-lucide="badge-check"></i> Ghi vào công nợ</button>` : ''}
+              ${legacySupplier ? `<button type="button" class="btn btn-primary btn-sm js-cashbook-inline-reconcile-supplier"><i data-lucide="badge-check"></i> Ghi vào công nợ NCC</button>` : ''}
             </div>
             <div>
               ${canEditCashbookTransaction(t) ? `<button type="button" class="btn btn-primary btn-sm js-cashbook-inline-edit"><i data-lucide="pencil"></i> Chỉnh sửa</button>` : ''}
@@ -1913,6 +1926,26 @@ function wireCashbookInlineDetailActions(t, tableBody) {
   const detailRow = Array.from(tableBody.querySelectorAll('.so-quy-inline-detail-row'))
     .find(row => String(row.dataset.id) === String(t.id));
   if (!detailRow) return;
+
+  const supplierReconcileBtn = detailRow.querySelector('.js-cashbook-inline-reconcile-supplier');
+  const legacySupplier = getLegacySupplierPayment(t);
+  if (supplierReconcileBtn && legacySupplier) {
+    supplierReconcileBtn.addEventListener('click', async () => {
+      const cashbookId = getCanonicalCashbookId(t);
+      if (!cashbookId) return;
+      if (!confirm(`Ghi phiếu ${getCashbookDisplayCode(t)} vào công nợ ${legacySupplier.name}? Công nợ giảm ${formatCurrency(t.value)}. Phiếu chi và số tiền đã ghi trong Sổ quỹ được giữ nguyên.`)) return;
+      supplierReconcileBtn.disabled = true;
+      try {
+        const result = await dbReconcileSupplierCashbookPayment(cashbookId, legacySupplier.id);
+        if (!result) return;
+        expandedCashbookTransactionId = '';
+        renderAll();
+        showToast(result.already_reconciled ? 'Phiếu chi này đã ghi vào công nợ NCC.' : 'Đã cập nhật công nợ NCC từ phiếu chi hiện có.', 'success');
+      } finally {
+        supplierReconcileBtn.disabled = false;
+      }
+    });
+  }
 
   detailRow.querySelector('.js-cashbook-inline-close')?.addEventListener('click', () => {
     expandedCashbookTransactionId = '';

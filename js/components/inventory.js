@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { safeCreateIcons, showToast, formatDateTime } from '../utils.js';
-import { inventoryGateway } from '../services/inventory.js?v=20261029-purchase-manual-v1';
-import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261029-purchase-manual-v1';
-import { openBomPanel, resetBomPanel } from './bom.js?v=20261029-purchase-manual-v1';
-import { setupInputPicker } from './input-picker.js?v=20261029-purchase-manual-v1';
+import { inventoryGateway } from '../services/inventory.js?v=20261030-supplier-cashbook-v1';
+import { estimateInventoryUsage, validateInventoryDocument, INVENTORY_CACHE_MS, INVENTORY_PAGE_SIZE, INVENTORY_STOCK_PAGE_SIZE } from '../domain/inventory.js?v=20261030-supplier-cashbook-v1';
+import { openBomPanel, resetBomPanel } from './bom.js?v=20261030-supplier-cashbook-v1';
+import { setupInputPicker } from './input-picker.js?v=20261030-supplier-cashbook-v1';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const quantity = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 });

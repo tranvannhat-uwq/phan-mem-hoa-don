@@ -6,15 +6,15 @@ import { createApplicationEgressReporter } from '../domain/application-egress.js
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261029-purchase-manual-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261029-purchase-manual-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261030-supplier-cashbook-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261030-supplier-cashbook-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261029-purchase-manual-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261029-purchase-manual-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261029-purchase-manual-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261030-supplier-cashbook-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261030-supplier-cashbook-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261030-supplier-cashbook-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261029-purchase-manual-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261030-supplier-cashbook-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -4438,8 +4438,14 @@ export async function dbSaveCashbookTransaction(tx, { onError } = {}) {
         throw new Error('Giao dịch công nợ phải dùng RPC nghiệp vụ riêng.');
       }
       const idempotencyKey = String(tx.idempotencyKey || `cashbook:${tx.id || ''}`).trim();
-      const { data, error } = await supabaseClient.rpc('rpc_create_cashbook_transaction', {
+      const supplierPayment = tx.type === 'chi' && tx.supplierId
+        && ['Chi tiền nhập hàng', 'Thanh toán nhà cung cấp'].includes(tx.category);
+      if (supplierPayment && (!Number.isSafeInteger(Number(tx.value)) || Number(tx.value) <= 0)) {
+        throw new Error('Số tiền thanh toán phải là số VNĐ nguyên dương.');
+      }
+      const { data, error } = await supabaseClient.rpc(supplierPayment ? 'rpc_create_supplier_cashbook_payment' : 'rpc_create_cashbook_transaction', {
         p_input: {
+          ...(supplierPayment ? { supplierId: tx.supplierId } : {}),
           idempotencyKey,
           externalReference: tx.id || '',
           transactionDate: tx.date || tx.transactionDate || new Date().toISOString(),
@@ -4452,7 +4458,16 @@ export async function dbSaveCashbookTransaction(tx, { onError } = {}) {
           note: tx.note || ''
         }
       });
-      if (error) throw error;
+      if (error) {
+        if (supplierPayment && ['PGRST202', '42883'].includes(error.code)) {
+          throw new Error('Cloud cần chạy migration 0137 để phiếu chi nhà cung cấp cập nhật công nợ. Phiếu chưa được tạo.');
+        }
+        throw error;
+      }
+      if (supplierPayment && (!data?.success || !data?.supplier || !data?.transaction?.purchasePaymentId)) {
+        throw new Error('Chưa xác nhận được phiếu chi đã ghi vào công nợ nhà cung cấp. Hãy thử lại với cùng phiếu.');
+      }
+      if (data?.supplier) applyCanonicalSupplier(data.supplier);
       if (data?.transaction) Object.assign(tx, data.transaction);
       return data || { success: true };
     } catch(err) {
@@ -5472,6 +5487,25 @@ export async function dbRecordCustomerPayment(customerId, amount, notes, payment
 
 export async function dbCancelCustomerPayment(cashbookId, _createdBy) {
   return dbCancelCashbookEntry(cashbookId, 'Hủy phiếu thu công nợ');
+}
+
+export async function dbReconcileSupplierCashbookPayment(cashbookId, supplierId) {
+  if (!isCloudActive || !supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient.rpc('rpc_reconcile_supplier_cashbook_payment', {
+      p_cashbook_id: String(cashbookId || ''), p_supplier_id: String(supplierId || '')
+    });
+    if (error) throw error;
+    if (!data?.success || !data?.supplier || !data?.transaction?.purchasePaymentId) throw new Error('Chưa xác nhận được kết quả ghi công nợ.');
+    applyCanonicalSupplier(data.supplier);
+    upsertCashbookTransactionSnapshot(data.transaction);
+    return data;
+  } catch (error) {
+    showToast(['PGRST202', '42883'].includes(error.code)
+      ? 'Cloud cần chạy migration 0137 để đối soát phiếu chi nhà cung cấp.'
+      : `Không thể ghi công nợ: ${error.message || 'Lỗi hệ thống'}`, 'danger');
+    return false;
+  }
 }
 
 export async function dbReconcileLegacyCustomerReceipt(cashbookId, customerId) {

@@ -649,3 +649,12 @@ tiền vẫn là tổng hiện tại. p4_supplier_response bổ sung cùng các 
 Giữ quyền của helper cũ; không sửa số tiền, dữ liệu giao dịch hoặc chặn
 chuyển kỳ. Kiểm thử: supplier-directory, supplier-directory-database,
 supplier-list-export và supplier-directory-harness.html.
+
+0137 bổ sung rpc_create_supplier_cashbook_payment và
+rpc_reconcile_supplier_cashbook_payment để phiếu chi tiền nhập hàng đã chọn
+NCC ghi cả thanh toán và công nợ. Đối soát phiếu cũ dùng lại chính phiếu chi,
+không làm tăng tổng chi Sổ quỹ; chỉ Admin/Kế toán, chống ghi trùng, kiểm tra
+người nhận, kỳ đóng và nghiệp vụ liên quan. Migration yêu cầu 0135 và không
+tự sửa dữ liệu cũ. Chạy migration trước khi phát hành frontend. Xem
+docs/CASHBOOK_SUPPLIER_DEBT_FIX_0137.md và
+tests/cashbook-supplier-debt-payment.test.mjs.
