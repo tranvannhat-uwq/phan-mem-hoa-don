@@ -19,7 +19,7 @@ export async function buildRetentionDatabase({maxVersion=Infinity}={}) {
   for(const name of (await readdir(dir)).filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort()) {
     const version=Number(name.slice(0,4));
     if(version>maxVersion)continue;
-    if([85,86,87,104].includes(version))continue; // separate HTTP integration and incident-only repair
+    if([85,86,87,104,139].includes(version))continue; // separate HTTP integration and incident-only repairs
     let source=(await readFile(new URL(name,dir),'utf8')).replace(/^\uFEFF/,'');
     if(version===1)source=source.replace('CREATE EXTENSION IF NOT EXISTS pgcrypto;','');
     if(version===100)source=source.slice(0,source.indexOf('-- This repair is deliberately'))+

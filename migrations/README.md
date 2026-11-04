@@ -658,3 +658,11 @@ người nhận, kỳ đóng và nghiệp vụ liên quan. Migration yêu cầu 
 tự sửa dữ liệu cũ. Chạy migration trước khi phát hành frontend. Xem
 docs/CASHBOOK_SUPPLIER_DEBT_FIX_0137.md và
 tests/cashbook-supplier-debt-payment.test.mjs.
+
+0139 sửa riêng phiếu RET3-20261022-00000022 của Đào Tiên Sinh (BG03M)
+theo xác nhận trả hàng chỉ cấn trừ công nợ, không thực chi hoàn tiền.
+Migration kiểm tra số dư và chứng từ đã đối chiếu, hủy phiếu chi tự động
+528.750 đ, lưu bút toán đảo và audit, ghi giảm nợ đúng một lần từ -422 đ
+thành -529.172 đ. Doanh số, hàng trả, chi tiết hàng và đơn gốc giữ nguyên.
+Đã áp dụng và đối soát trên production SoViet ngày 04/11/2026.
+Kiểm thử: tests/bg03m-return-credit-correction-database.test.mjs.
