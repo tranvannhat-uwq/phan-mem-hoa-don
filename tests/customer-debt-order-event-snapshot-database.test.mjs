@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test, { before, after } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
+import { buildCustomerDebtDisplayHistory } from '../js/domain/customer-debt.js';
 
 let db;
 const saleA = 'a0000000-0000-4000-8000-000000000001';
@@ -128,4 +129,37 @@ test('debt event snapshots preserve transfer-out, transfer-in and original custo
 test('debt event RPC rejects a user without access to the ledger customer', async () => {
   await as(saleA);
   await assert.rejects(snapshot('DTX-OAM-IN-order-moved-0001'), /customer debt source is unavailable/);
+});
+
+test('a folded 3%-to-zero amendment opens the matching database snapshot and preserves the original event', async () => {
+  await db.exec('RESET ROLE');
+  const original = {
+    id: 'discount-sale', customer_id: 'customer-a', customer_name: 'Buyer A',
+    status: 'settled', items: [{quantity: 2, price: 1319600}],
+    subtotal: 2639200, total_market: 2639200, discount_amount: 79176, total_payable: 2560024
+  };
+  const current = {...original, discount_amount: 0, total_payable: 2639200};
+  await db.query(`INSERT INTO public.orders(id,customer_id,subtotal,total_market,discount_amount,total_payable)
+    VALUES ('discount-sale','customer-a',2639200,2639200,0,2639200)`);
+  await db.query(`INSERT INTO public.order_amendments(id,order_id,old_data,new_data)
+    VALUES ('OAM-discount-sale-0001','discount-sale',$1,$2)`, [JSON.stringify(original), JSON.stringify(current)]);
+  await db.exec(`INSERT INTO public.customer_debt_transactions
+    (id,customer_id,order_id,transaction_type,amount,debt_change) VALUES
+    ('dtx-ord-discount-sale','customer-a','discount-sale','order',2560024,2560024),
+    ('DTX-OAM-discount-sale-0001','customer-a','discount-sale','order_amend',79176,79176)`);
+  const display = buildCustomerDebtDisplayHistory([
+    {id: 'dtx-ord-discount-sale', orderId: 'discount-sale', transactionType: 'order', type: 'charge', debtChange: 2560024},
+    {id: 'DTX-OAM-discount-sale-0001', orderId: 'discount-sale', transactionType: 'order_amend', debtChange: 79176,
+      amendsLedgerId: 'dtx-ord-discount-sale'}
+  ], 2639200);
+  await as(saleA);
+  const effective = await snapshot(display[0].orderEventLedgerId || display[0].id);
+  assert.equal(display.length, 1);
+  assert.equal(display[0].amount, 2639200);
+  assert.equal(effective.event_context, 'amendment');
+  assert.equal(Number(effective.order.total_payable), display[0].amount);
+  assert.equal(Number(effective.order.discount_amount), 0);
+  const historical = await snapshot('dtx-ord-discount-sale');
+  assert.equal(Number(historical.order.total_payable), 2560024);
+  assert.equal(Number(historical.order.discount_amount), 79176);
 });

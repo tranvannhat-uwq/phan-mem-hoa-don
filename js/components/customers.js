@@ -1,22 +1,22 @@
 import { state } from '../state.js';
-import { dbCreateQuickCustomer } from '../services/supabase.js?v=20261030-supplier-cashbook-v1';
-import { createListPagination } from './list-pagination.js?v=20261030-supplier-cashbook-v1';
+import { dbCreateQuickCustomer } from '../services/supabase.js?v=20261105-order-discount-v1';
+import { createListPagination } from './list-pagination.js?v=20261105-order-discount-v1';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261030-supplier-cashbook-v1';
-import { renderAll } from '../main.js?v=20261030-supplier-cashbook-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261030-supplier-cashbook-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261030-supplier-cashbook-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261105-order-discount-v1';
+import { renderAll } from '../main.js?v=20261105-order-discount-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261105-order-discount-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261105-order-discount-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261030-supplier-cashbook-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261030-supplier-cashbook-v1';
+} from '../domain/order-financials.js?v=20261105-order-discount-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261105-order-discount-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261030-supplier-cashbook-v1';
-import { renderDealerSupportHistory } from './dealer-support.js?v=20261030-supplier-cashbook-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261105-order-discount-v1';
+import { renderDealerSupportHistory } from './dealer-support.js?v=20261105-order-discount-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -3674,7 +3674,7 @@ async function openCustomerDebtSourceDetail(source, historyEntry, customer) {
 
   try {
     if (source.kind === 'order') {
-      const ledgerId = historyEntry.id || historyEntry.ledgerId || historyEntry.ledger_id;
+      const ledgerId = historyEntry.orderEventLedgerId || historyEntry.id || historyEntry.ledgerId || historyEntry.ledger_id;
       if (!ledgerId) throw new Error('Không xác định được giao dịch công nợ để kiểm tra chứng từ.');
       const eventSnapshot = await dbFetchCustomerDebtOrderEventSnapshot(ledgerId);
       if (!eventSnapshot?.available

@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { dbRetentionReviewOrders, getRetentionSessionScope } from '../services/supabase.js?v=20261030-supplier-cashbook-v1';
+import { dbRetentionReviewOrders, getRetentionSessionScope } from '../services/supabase.js?v=20261105-order-discount-v1';
 import { getOrderDisplayCode } from '../domain/order-display.js';
 
 const el = id => document.getElementById(`retention-review-${id}`);

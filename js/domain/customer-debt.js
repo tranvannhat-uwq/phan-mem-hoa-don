@@ -224,6 +224,9 @@ export function projectEffectiveCustomerDebtHistory(history = []) {
 
     if (target) {
       const effectiveChange = toDebtAmount(target.debtChange ?? target.debt_change) + amendmentChange;
+      // The visible row contains the amended amount. Its document link must
+      // resolve the matching amendment snapshot, not the original sale.
+      if (type === 'order_amend' && amendmentId) target.orderEventLedgerId = amendmentId;
       target.debtChange = effectiveChange;
       target.amount = Math.abs(effectiveChange);
       target.debtAfter = toDebtAmount(amendment.debtAfter ?? amendment.balance_after);

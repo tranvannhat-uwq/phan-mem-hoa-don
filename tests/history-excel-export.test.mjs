@@ -106,7 +106,8 @@ test('detailed invoice export applies section colors and shrinks columns without
   assert.match(customers, /patternType: 'solid'/);
   assert.match(customers, /HISTORY_DETAIL_EXPORT_STATUS_STYLES/);
   assert.match(customers, /XLSX\.writeFile\(workbook, fileName, \{ cellStyles: true \}\)/);
-  assert.match(read('index.html'), /xlsx-js-style@1\.2\.0\/dist\/xlsx\.bundle\.js/);
+  assert.match(read('index.html'), /src="js\/vendor\/xlsx\.js\?v=/);
+  assert.match(read('js/vendor/xlsx.js').slice(0, 100), /xlsx-js-style 1\.2\.0/);
 });
 
 test('detailed invoice export emits one repeated invoice row per product line', () => {

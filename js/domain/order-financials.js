@@ -197,6 +197,7 @@ export function getOrderFinancialBreakdown(order, salesReturns = []) {
 
   return {
     totalBeforeDiscount,
+    invoiceDiscountAmount: invoiceDiscount,
     totalDiscountAmount,
     totalAfterDiscount,
     otherFeeAmount,
