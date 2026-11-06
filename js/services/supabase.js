@@ -6,15 +6,15 @@ import { createApplicationEgressReporter } from '../domain/application-egress.js
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261105-order-discount-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261105-order-discount-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261106-customer-cache-v1';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261106-customer-cache-v1';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261105-order-discount-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261105-order-discount-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261105-order-discount-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261106-customer-cache-v1';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261106-customer-cache-v1';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261106-customer-cache-v1';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261105-order-discount-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261106-customer-cache-v1';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -245,6 +245,15 @@ function readScopedCustomerCache(scope = getCustomerCacheScope()) {
 function writeCustomerCache(customers) {
   const key = getScopedCustomerCacheKey();
   if (key) writeLocalJsonCache(key, customers);
+}
+
+export function cacheCustomersLocally() {
+  if (isCloudActive) {
+    writeCustomerCache(state.customers);
+  } else {
+    // In local mode this is the persistent copy, so write failures must surface.
+    localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  }
 }
 
 // Cloud is authoritative. This browser copy is only a bounded fallback cache and

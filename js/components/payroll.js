@@ -1,7 +1,7 @@
 import { state } from '../state.js';
-import { createListPagination } from './list-pagination.js?v=20261105-order-discount-v1';
+import { createListPagination } from './list-pagination.js?v=20261106-customer-cache-v1';
 import { formatCurrency, safeCreateIcons, showToast } from '../utils.js';
-import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20261105-order-discount-v1';
+import { dbFetchPayrollPeriod, dbSavePayrollAdjustment, dbSetPayrollPeriodLock } from '../services/supabase.js?v=20261106-customer-cache-v1';
 
 let currentPayroll = null;
 let payrollRequest = 0;

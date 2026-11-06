@@ -1,22 +1,22 @@
 import { state } from '../state.js';
-import { dbCreateQuickCustomer } from '../services/supabase.js?v=20261105-order-discount-v1';
-import { createListPagination } from './list-pagination.js?v=20261105-order-discount-v1';
+import { dbCreateQuickCustomer, cacheCustomersLocally } from '../services/supabase.js?v=20261106-customer-cache-v1';
+import { createListPagination } from './list-pagination.js?v=20261106-customer-cache-v1';
 import { showToast, formatCurrency, safeCreateIcons, formatPhoneNumber, isSameUser, getProvinceNameByCode, getManagerDisplayName, getUserDisplayName, PROVINCES, makeSelectSearchable, getCompanyIdByBrand, normalizeCompanyId, formatDateOnly } from '../utils.js';
-import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261105-order-discount-v1';
-import { renderAll } from '../main.js?v=20261105-order-discount-v1';
-import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261105-order-discount-v1';
-import { addCashbookTransaction } from './so_quy.js?v=20261105-order-discount-v1';
+import { dbSaveCustomer, dbDeleteCustomer, dbDeleteCustomersBulk, dbSaveCustomersBulk, dbImportCustomerFinancialBaselines, dbFetchCustomers, dbFetchCustomerById, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbRecordCustomerPayment, dbAdjustCustomerDebt, dbFetchCustomerOrderHistory, dbFetchCustomersOrderHistory, dbFetchRevertibleOrderAmendments, dbRevertOrderAmendment, dbFetchCustomerDebtOrderEventSnapshot, dbFetchOrdersForHistoryRange, isCloudActive } from '../services/supabase.js?v=20261106-customer-cache-v1';
+import { renderAll } from '../main.js?v=20261106-customer-cache-v1';
+import { applyActivePriceListToInvoice, resetInvoiceCustomer } from './invoice.js?v=20261106-customer-cache-v1';
+import { addCashbookTransaction } from './so_quy.js?v=20261106-customer-cache-v1';
 import {
   getOrderFinancialBreakdown,
   isSalesReturnActive,
   getSalesReturnRefundAmount
-} from '../domain/order-financials.js?v=20261105-order-discount-v1';
-import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261105-order-discount-v1';
+} from '../domain/order-financials.js?v=20261106-customer-cache-v1';
+import { buildCustomerDebtDisplayHistory, collectCustomerDebt, getCustomerDebtBusinessDate, getCustomerDebtPostingDate, getCustomerTotalPayments, withCustomerReturnDocuments } from '../domain/customer-debt.js?v=20261106-customer-cache-v1';
 import { businessDateKey, parseExcelDate } from '../domain/import-date.js';
 import { buildCustomerImportColumnMap, normalizeExcelHeader, normalizeExcelSheetName } from '../domain/customer-import-columns.js';
 import { customerDateKey, customerDaysSince, finiteCustomerNumber, normalizeCustomerSearch, queryCustomerRows } from '../domain/customer-query.js';
-import { isActiveUser } from '../domain/user-status.js?v=20261105-order-discount-v1';
-import { renderDealerSupportHistory } from './dealer-support.js?v=20261105-order-discount-v1';
+import { isActiveUser } from '../domain/user-status.js?v=20261106-customer-cache-v1';
+import { renderDealerSupportHistory } from './dealer-support.js?v=20261106-customer-cache-v1';
 
 let pendingCustomerPaymentKey = '';
 let customerDebtAdjustmentsHidden = false;
@@ -1587,6 +1587,8 @@ export async function saveCustomer() {
   };
   
   customerSaveInFlight = true;
+  const savingToCloud = isCloudActive;
+  let cloudSaveSucceeded = false;
   const submit = document.getElementById('btn-save-customer-submit');
   if (submit) { submit.disabled = true; submit.textContent = 'Đang lưu...'; }
   try {
@@ -1597,6 +1599,7 @@ export async function saveCustomer() {
       : await dbSaveCustomer(customerData);
     if (user !== state.currentUser) return;
     if (saved) {
+      cloudSaveSucceeded = savingToCloud;
       if (typeof saved === 'object') Object.assign(customerData, saved);
       const refreshedCustomer = await dbFetchCustomerById(customerId);
       if (refreshedCustomer) {
@@ -1604,9 +1607,6 @@ export async function saveCustomer() {
         Object.assign(customerData, refreshedCustomer);
       }
       if (user !== state.currentUser) return;
-      if (!isEditing) showToast('Thêm khách hàng thành công!');
-      else showToast('Cập nhật khách hàng thành công!');
-
       // Nếu cập nhật đúng khách hàng đang chọn lên đơn, cập nhật lại giao diện lên đơn
       if (state.activeCustomerId === customerId) {
         state.activeCustomerBrand = assignedBrand;
@@ -1637,14 +1637,22 @@ export async function saveCustomer() {
       const idx = state.customers.findIndex(c => c.id === customerId);
       if (idx === -1) state.customers.push(customerData);
       else Object.assign(state.customers[idx], customerData);
-      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      if (!refreshedCustomer) cacheCustomersLocally();
 
       if (document.getElementById('customer-modal')?.dataset.formSession === formSession) closeCustomerModal();
       renderAll();
+      showToast(isEditing ? 'Cập nhật khách hàng thành công!' : 'Thêm khách hàng thành công!');
     }
   } catch (error) {
-    console.error('Không thể lưu khách hàng:', error);
-    if (user === state.currentUser) showToast(error.message || 'Không thể lưu khách hàng. Vui lòng thử lại.', 'danger');
+    console.error(cloudSaveSucceeded ? 'Không thể cập nhật giao diện khách hàng:' : 'Không thể lưu khách hàng:', error);
+    if (user === state.currentUser) {
+      if (cloudSaveSucceeded) {
+        if (document.getElementById('customer-modal')?.dataset.formSession === formSession) closeCustomerModal();
+        showToast('Đã lưu khách hàng. Vui lòng tải lại trang để cập nhật giao diện.', 'warning');
+      } else {
+        showToast(error.message || 'Không thể lưu khách hàng. Vui lòng thử lại.', 'danger');
+      }
+    }
   } finally {
     customerSaveInFlight = false;
     if (submit) { submit.disabled = false; submit.textContent = submit.dataset.idleLabel || 'Lưu thông tin'; }
@@ -1665,7 +1673,7 @@ export async function deleteCustomer(index) {
         resetInvoiceCustomer();
       }
       state.customers = state.customers.filter(c => c.id !== cust.id);
-      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      cacheCustomersLocally();
       renderAll();
       showToast('Xóa khách hàng thành công!', 'warning');
     }
@@ -1754,7 +1762,7 @@ export async function handlePayDebtSubmit(e) {
     });
   }
   
-  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  cacheCustomersLocally();
   addCashbookTransaction({
       type: 'thu',
       category: 'Thu tiền khách hàng / Trả trước',
@@ -1838,7 +1846,7 @@ export async function handleCustomerDebtAdjustSubmit(event) {
     const debtInput = document.getElementById('cust-debt');
     if (debtInput) debtInput.value = Number(refreshed.debt || 0);
   }
-  localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+  cacheCustomersLocally();
   closeCustomerDebtAdjustModal();
   renderAll();
   const refreshNote = refreshedFromCloud ? '' : ' Hãy tải lại trang để đồng bộ đầy đủ lịch sử.';
@@ -4647,7 +4655,7 @@ async function processCustomerExcelImport() {
       if (!financialsSaved) return;
 
       const expectedTotals = calculateCustomerTotals(uniqueImportData);
-      localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+      cacheCustomersLocally();
       const refreshedFromCloud = await dbFetchCustomers();
       const persistedImportData = refreshedFromCloud
         ? state.customers.filter(customer => importedIds.has(customer.id))

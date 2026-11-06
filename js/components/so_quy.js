@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20261105-order-discount-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbReconcileSupplierCashbookPayment, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot } from '../services/supabase.js?v=20261105-order-discount-v1';
-import { getCanonicalCashbookId, getCashbookDisplayCode, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261105-order-discount-v1';
-import { setupInputPicker } from './input-picker.js?v=20261105-order-discount-v1';
+import { renderAll } from '../main.js?v=20261106-customer-cache-v1';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbReconcileSupplierCashbookPayment, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot, cacheCustomersLocally } from '../services/supabase.js?v=20261106-customer-cache-v1';
+import { getCanonicalCashbookId, getCashbookDisplayCode, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261106-customer-cache-v1';
+import { setupInputPicker } from './input-picker.js?v=20261106-customer-cache-v1';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];
@@ -983,7 +983,7 @@ export function setupSoQuyPanel() {
               notes: note || category,
             });
           }
-          localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+          cacheCustomersLocally();
 
           newTx.customerId = currentCustomer.id;
           newTx.debtImpact = true;

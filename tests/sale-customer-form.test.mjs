@@ -6,11 +6,14 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('../js/components/customers.js', import.meta.url), 'utf8');
 const editor = source.slice(source.indexOf('export function openCustomerModal('), source.indexOf('export async function deleteCustomer('))
   .replace(/^export /gm, '');
+const service = readFileSync(new URL('../js/services/supabase.js', import.meta.url), 'utf8');
+const cache = service.slice(service.indexOf('function writeLocalJsonCache('), service.indexOf('// Cloud is authoritative.'))
+  .replace(/^export /gm, '');
 const fields = ['cust-code', 'cust-name', 'cust-phone', 'cust-address', 'cust-notes', 'cust-province', 'cust-pricelist', 'cust-managed-by', 'cust-debt', 'cust-assigned-brand'];
 
-function harness({ role = 'sale', deferred = false } = {}) {
+function harness({ role = 'sale', deferred = false, storageFull = false } = {}) {
   const nodes = new Map();
-  const calls = { quick: [], direct: [], refresh: [], detail: [], render: 0, toasts: [] };
+  const calls = { quick: [], direct: [], refresh: [], detail: [], render: 0, toasts: [], cacheKeys: [] };
   const pending = [];
   function node(id) {
     if (!nodes.has(id)) {
@@ -27,8 +30,11 @@ function harness({ role = 'sale', deferred = false } = {}) {
   }
   const state = { currentUser: { id: 'sale-profile', username: 'sales@test.invalid', displayName: 'Kinh doanh kiểm thử', role },
     customers: [], brands: [], pricelists: [], users: [], activeCustomerId: 'draft-customer', invoiceItems: [{ id: 'draft-line', quantity: 3 }] };
-  const context = vm.createContext({ state, document: { getElementById: node }, console,
-    localStorage: { setItem() {} }, makeSelectSearchable() {}, safeCreateIcons() {},
+  const context = vm.createContext({ state, isCloudActive: true, document: { getElementById: node }, console: { ...console, warn() {} },
+    localStorage: { setItem(key) {
+      calls.cacheKeys.push(key);
+      if (storageFull) throw new DOMException('Browser storage quota exceeded', 'QuotaExceededError');
+    } }, makeSelectSearchable() {}, safeCreateIcons() {},
     generateUniqueCustomerCode: province => `KH-${province || 'DL'}-1000`,
     isSameUser: (a, b) => a === b,
     showToast: (...args) => calls.toasts.push(args),
@@ -41,7 +47,7 @@ function harness({ role = 'sale', deferred = false } = {}) {
     },
     dbSaveCustomer: async data => { calls.direct.push(data); return true; },
     dbFetchCustomerById: async id => { calls.refresh.push(id); return false; } });
-  vm.runInContext(`let customerFormSession=0; let customerSaveInFlight=false; ${editor}`, context);
+  vm.runInContext(`let customerFormSession=0; let customerSaveInFlight=false; ${cache}\n${editor}`, context);
   const run = code => vm.runInContext(code, context);
   return { state, node, calls, pending, run,
     fill() {
@@ -122,6 +128,23 @@ test('Admin/Accounting retains the profile save path and required price-list val
     assert.equal(h.node('customer-create-context').hidden, true);
     assert.equal(h.node('cust-code').readOnly, false);
   }
+});
+
+test('saving a customer edit on Cloud completes when browser storage is full', async () => {
+  const h = harness({ role: 'accounting', storageFull: true });
+  h.state.customers.push({ id: 'existing', code: 'KH-HN-1000', name: 'Tên cũ', phone: '0901234567',
+    assignedBrand: 'Tất cả', pricelistId: 'custom', brandDiscounts: { province: 'HN' } });
+  h.run('openCustomerModal(0)');
+  h.node('cust-name').value = 'Tên đã cập nhật';
+  await h.run('saveCustomer()');
+
+  assert.equal(h.calls.direct.length, 1);
+  assert.deepEqual(h.calls.cacheKeys, ['billing_system_customers__sale-profile%7Caccounting%7C']);
+  assert.equal(h.state.customers[0].name, 'Tên đã cập nhật');
+  assert.equal(h.node('customer-modal').classList.contains('active'), false);
+  assert.equal(h.node('btn-save-customer-submit').disabled, false);
+  assert.equal(h.calls.render, 1);
+  assert.deepEqual(h.calls.toasts, [['Cập nhật khách hàng thành công!']]);
 });
 
 test('a late completion does not import customer data after logout or close a newly opened form', async () => {

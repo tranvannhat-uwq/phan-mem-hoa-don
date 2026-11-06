@@ -1,8 +1,8 @@
 import { state } from '../state.js';
-import { createListPagination } from './list-pagination.js?v=20261105-order-discount-v1';
+import { createListPagination } from './list-pagination.js?v=20261106-customer-cache-v1';
 import { showToast, safeCreateIcons, getBrandById } from '../utils.js';
-import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts } from '../services/supabase.js?v=20261105-order-discount-v1';
-import { renderAll } from '../main.js?v=20261105-order-discount-v1';
+import { dbSaveBrand, dbDeleteBrand, dbRenameBrandProducts, cacheCustomersLocally } from '../services/supabase.js?v=20261106-customer-cache-v1';
+import { renderAll } from '../main.js?v=20261106-customer-cache-v1';
 
 const brandsPager = createListPagination('brands-pagination');
 
@@ -234,7 +234,7 @@ async function saveBrand() {
             delete c.brandDiscounts[oldName];
           }
         });
-        localStorage.setItem('billing_system_customers', JSON.stringify(state.customers));
+        cacheCustomersLocally();
 
         // Cập nhật Bảng giá
         (state.pricelists || []).forEach(pl => {
