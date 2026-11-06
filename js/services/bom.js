@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { isCloudActive, supabaseClient } from './supabase.js?v=20261106-customer-cache-v1';
+import { isCloudActive, supabaseClient } from './supabase.js?v=20261106-customer-cache-v2';
 
 let generation = 0;
 let session = '';

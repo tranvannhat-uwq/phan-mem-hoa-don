@@ -1,9 +1,9 @@
 import { state } from '../state.js';
 import { showToast, formatCurrency, safeCreateIcons, formatDateTime, makeSelectSearchable } from '../utils.js';
-import { renderAll } from '../main.js?v=20261106-customer-cache-v1';
-import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbReconcileSupplierCashbookPayment, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot, cacheCustomersLocally } from '../services/supabase.js?v=20261106-customer-cache-v1';
-import { getCanonicalCashbookId, getCashbookDisplayCode, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261106-customer-cache-v1';
-import { setupInputPicker } from './input-picker.js?v=20261106-customer-cache-v1';
+import { renderAll } from '../main.js?v=20261106-customer-cache-v2';
+import { dbSaveCashbookTransaction, dbSaveStartingBalances, dbRecordCustomerPayment, dbCancelCashbookEntry, dbSetCashbookStarred, dbAmendCashbookTransaction, dbReconcileLegacyCustomerReceipt, dbReconcileSupplierCashbookPayment, dbRefreshCustomerFinancialState, dbFetchCashbookTransactionById, dbLoadCashbookForRange, upsertCashbookTransactionSnapshot, cacheCustomersLocally } from '../services/supabase.js?v=20261106-customer-cache-v2';
+import { getCanonicalCashbookId, getCashbookDisplayCode, isEffectiveCashbookTransaction, purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261106-customer-cache-v2';
+import { setupInputPicker } from './input-picker.js?v=20261106-customer-cache-v2';
 
 // Seed transactions (empty to start clean)
 const seedTransactions = [];

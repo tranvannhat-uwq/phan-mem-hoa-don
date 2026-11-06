@@ -11,8 +11,9 @@ const cache = service.slice(service.indexOf('function writeLocalJsonCache('), se
   .replace(/^export /gm, '');
 const fields = ['cust-code', 'cust-name', 'cust-phone', 'cust-address', 'cust-notes', 'cust-province', 'cust-pricelist', 'cust-managed-by', 'cust-debt', 'cust-assigned-brand'];
 
-function harness({ role = 'sale', deferred = false, storageFull = false } = {}) {
+function harness({ role = 'sale', deferred = false, storageLimit = Infinity, storageEntries = [] } = {}) {
   const nodes = new Map();
+  const storage = new Map(storageEntries);
   const calls = { quick: [], direct: [], refresh: [], detail: [], render: 0, toasts: [], cacheKeys: [] };
   const pending = [];
   function node(id) {
@@ -31,10 +32,18 @@ function harness({ role = 'sale', deferred = false, storageFull = false } = {}) 
   const state = { currentUser: { id: 'sale-profile', username: 'sales@test.invalid', displayName: 'Kinh doanh kiểm thử', role },
     customers: [], brands: [], pricelists: [], users: [], activeCustomerId: 'draft-customer', invoiceItems: [{ id: 'draft-line', quantity: 3 }] };
   const context = vm.createContext({ state, isCloudActive: true, document: { getElementById: node }, console: { ...console, warn() {} },
-    localStorage: { setItem(key) {
-      calls.cacheKeys.push(key);
-      if (storageFull) throw new DOMException('Browser storage quota exceeded', 'QuotaExceededError');
-    } }, makeSelectSearchable() {}, safeCreateIcons() {},
+    localStorage: {
+      get length() { return storage.size; },
+      key: index => [...storage.keys()][index] ?? null,
+      removeItem: key => storage.delete(key),
+      setItem(key, value) {
+        calls.cacheKeys.push(key);
+        const size = [...storage.values()].reduce((sum, entry) => sum + entry.length, 0)
+          - (storage.get(key)?.length || 0) + value.length;
+        if (size > storageLimit) throw new DOMException('Browser storage quota exceeded', 'QuotaExceededError');
+        storage.set(key, value);
+      }
+    }, makeSelectSearchable() {}, safeCreateIcons() {},
     generateUniqueCustomerCode: province => `KH-${province || 'DL'}-1000`,
     isSameUser: (a, b) => a === b,
     showToast: (...args) => calls.toasts.push(args),
@@ -49,7 +58,7 @@ function harness({ role = 'sale', deferred = false, storageFull = false } = {}) 
     dbFetchCustomerById: async id => { calls.refresh.push(id); return false; } });
   vm.runInContext(`let customerFormSession=0; let customerSaveInFlight=false; ${cache}\n${editor}`, context);
   const run = code => vm.runInContext(code, context);
-  return { state, node, calls, pending, run,
+  return { state, node, calls, pending, run, storage,
     fill() {
       node('cust-name').value = 'Đại lý mới'; node('cust-phone').value = '0901234567';
       node('cust-province').value = 'HN'; node('cust-address').value = 'Địa chỉ kiểm thử';
@@ -131,7 +140,7 @@ test('Admin/Accounting retains the profile save path and required price-list val
 });
 
 test('saving a customer edit on Cloud completes when browser storage is full', async () => {
-  const h = harness({ role: 'accounting', storageFull: true });
+  const h = harness({ role: 'accounting', storageLimit: 0 });
   h.state.customers.push({ id: 'existing', code: 'KH-HN-1000', name: 'Tên cũ', phone: '0901234567',
     assignedBrand: 'Tất cả', pricelistId: 'custom', brandDiscounts: { province: 'HN' } });
   h.run('openCustomerModal(0)');
@@ -145,6 +154,31 @@ test('saving a customer edit on Cloud completes when browser storage is full', a
   assert.equal(h.node('btn-save-customer-submit').disabled, false);
   assert.equal(h.calls.render, 1);
   assert.deepEqual(h.calls.toasts, [['Cập nhật khách hàng thành công!']]);
+});
+
+test('customer cache frees quota by removing only other scoped snapshots and retries once', () => {
+  const activeKey = 'billing_system_customers__sale-profile%7Csale%7C';
+  const otherKey = 'billing_system_customers__other-profile%7Csale%7C';
+  const localKey = 'billing_system_customers';
+  const h = harness({ storageLimit: 200, storageEntries: [
+    [activeKey, '[]'], [otherKey, 'x'.repeat(170)], [localKey, '["local-only"]'],
+    ['sb-auth-token', 'session']
+  ] });
+  const customer = { id: 'updated', debt: 120000, debtHistory: [{ id: 'charge' }], returnDocuments: [{ id: 'return' }] };
+  h.state.customers.push(customer);
+  h.run('cacheCustomersLocally()');
+
+  assert.deepEqual(h.calls.cacheKeys, [activeKey, activeKey]);
+  assert.equal(h.storage.has(otherKey), false);
+  assert.equal(h.storage.get(localKey), '["local-only"]');
+  assert.equal(h.storage.get('sb-auth-token'), 'session');
+  assert.deepEqual(JSON.parse(h.storage.get(activeKey)), [{ id: 'updated', debt: 120000, debtHistory: [{ id: 'charge' }] }]);
+  assert.deepEqual(customer.returnDocuments, [{ id: 'return' }]);
+
+  const lastSnapshot = h.storage.get(activeKey);
+  customer.name = 'x'.repeat(200);
+  h.run('cacheCustomersLocally()');
+  assert.equal(h.storage.get(activeKey), lastSnapshot, 'keep the last usable snapshot when cleanup cannot free enough space');
 });
 
 test('a late completion does not import customer data after logout or close a newly opened form', async () => {

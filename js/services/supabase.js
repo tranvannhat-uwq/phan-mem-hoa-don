@@ -6,15 +6,15 @@ import { createApplicationEgressReporter } from '../domain/application-egress.js
 import { COMPANY_SUPABASE_URL, COMPANY_SUPABASE_KEY, defaultProducts } from '../config.js';
 import { showToast, updateDbStatusUI, isSameUser, getRevenueAttributes, getBrandById } from '../utils.js';
 import { rawMaterialsSeed } from '../components/goods_seed.js';
-import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261106-customer-cache-v1';
-import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261106-customer-cache-v1';
+import { normalizePriceListType, filterPriceListsForUser, canUserViewPriceList, canUserUsePriceListForCustomer } from '../domain/pricing.js?v=20261106-customer-cache-v2';
+import { isPrintOnlyPriceList } from '../domain/invoice-discount.js?v=20261106-customer-cache-v2';
 import { collectAllPages } from '../domain/pagination.js';
 import { createEgressMeter } from '../domain/egress-metrics.js';
-import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261106-customer-cache-v1';
-import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261106-customer-cache-v1';
-import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261106-customer-cache-v1';
+import { getCustomerDebtPostingDate, mergeCustomerDebtHistory } from '../domain/customer-debt.js?v=20261106-customer-cache-v2';
+import { purgeGhostCustomerReceipts } from '../domain/cashbook.js?v=20261106-customer-cache-v2';
+import { loadAuthorizedPricingCache, saveAuthorizedPricingCache } from './pricing-cache.js?v=20261106-customer-cache-v2';
 import { clearRetainedHistoryCaches, openingDebtRow } from '../domain/data-retention.js';
-import { prepareStagedRetentionBackup } from './retention-download.js?v=20261106-customer-cache-v1';
+import { prepareStagedRetentionBackup } from './retention-download.js?v=20261106-customer-cache-v2';
 
 export let supabaseClient = null;
 export let isCloudActive = false;
@@ -204,9 +204,15 @@ function readLocalJsonCache(key, fallback) {
   }
 }
 
-function writeLocalJsonCache(key, value) {
+function writeLocalJsonCache(key, value, reclaimSpace) {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    const payload = JSON.stringify(value);
+    try {
+      localStorage.setItem(key, payload);
+    } catch (error) {
+      if (error?.name !== 'QuotaExceededError' || !reclaimSpace?.()) throw error;
+      localStorage.setItem(key, payload);
+    }
     return true;
   } catch (error) {
     // Browser storage is an optional offline cache. A quota or privacy-mode
@@ -231,8 +237,10 @@ function getCustomerCacheScope() {
   return [user.authUserId || user.id || '', user.role || '', user.companyId || ''].join('|');
 }
 
+const SCOPED_CUSTOMER_CACHE_PREFIX = 'billing_system_customers__';
+
 function getScopedCustomerCacheKey(scope = getCustomerCacheScope()) {
-  return scope ? `billing_system_customers__${encodeURIComponent(scope)}` : '';
+  return scope ? `${SCOPED_CUSTOMER_CACHE_PREFIX}${encodeURIComponent(scope)}` : '';
 }
 
 function readScopedCustomerCache(scope = getCustomerCacheScope()) {
@@ -244,7 +252,21 @@ function readScopedCustomerCache(scope = getCustomerCacheScope()) {
 
 function writeCustomerCache(customers) {
   const key = getScopedCustomerCacheKey();
-  if (key) writeLocalJsonCache(key, customers);
+  if (!key) return;
+
+  // Return documents are loaded from Cloud when opening customer details.
+  const snapshot = customers.map(({ returnDocuments, ...customer }) => customer);
+  writeLocalJsonCache(key, snapshot, () => {
+    let removed = false;
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const cachedKey = localStorage.key(index);
+      if (cachedKey !== key && cachedKey?.startsWith(SCOPED_CUSTOMER_CACHE_PREFIX)) {
+        localStorage.removeItem(cachedKey);
+        removed = true;
+      }
+    }
+    return removed;
+  });
 }
 
 export function cacheCustomersLocally() {
