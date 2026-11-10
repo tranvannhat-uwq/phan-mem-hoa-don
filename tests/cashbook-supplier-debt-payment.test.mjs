@@ -128,3 +128,68 @@ test('cashbook supplier debt creation and same-voucher reconciliation are atomic
     await assert.rejects(reconcile(first.cashbook_id), /permission denied/);
   } finally { await db.close(); }
 });
+
+test('new cashbook overpayments carry forward to later purchases without rewriting older records', async () => {
+  const db = await buildRetentionDatabase({ maxVersion: 138 });
+  try {
+    const supplierId = 'advance-supplier';
+    const rpc = (name, input) => scalar(db, `SELECT ${name}($1::jsonb) AS value`, [JSON.stringify(input)]);
+    const create = input => rpc('rpc_create_supplier_cashbook_payment', input);
+    const amend = (id, value) => scalar(db, 'SELECT rpc_amend_cashbook_transaction($1,$2::jsonb) AS value', [id, JSON.stringify({ value })]);
+    const debt = () => scalar(db, 'SELECT debt::int AS value FROM suppliers WHERE id=$1', [supplierId]);
+    const input = {
+      type: 'chi', category: 'Chi tiền nhập hàng', partner: 'Advance supplier', supplierId,
+      method: 'cash', value: 10, transactionDate: '2026-11-10T07:28:00Z', idempotencyKey: 'existing-supplier-payment'
+    };
+    await asActor(db, accountingId);
+    await rpc('rpc_save_supplier', { id: supplierId, code: 'ADV', name: input.partner, openingDebt: 110 });
+    const original = await create(input);
+    const legacy = await rpc('rpc_create_cashbook_transaction', {
+      ...input, supplierId: undefined, value: 101, idempotencyKey: 'unlinked-legacy-voucher'
+    });
+    await db.exec('RESET ROLE');
+    const snapshot = () => scalar(db, `SELECT jsonb_build_object(
+      'supplier', (SELECT to_jsonb(s) FROM suppliers s WHERE id=$1),
+      'vouchers', (SELECT jsonb_agg(c ORDER BY id) FROM cashbook_transactions c),
+      'payments', (SELECT jsonb_agg(p ORDER BY id) FROM purchase_payments p),
+      'ledger', (SELECT jsonb_agg(l ORDER BY id) FROM supplier_debt_transactions l)
+    ) AS value`, [supplierId]);
+    const before = await snapshot();
+    await db.exec(await readFile(new URL('../migrations/0140_cashbook_supplier_advances.sql', import.meta.url), 'utf8'));
+    assert.deepEqual(await snapshot(), before);
+
+    await asActor(db, accountingId);
+    assert.equal((await create(input)).cashbook_id, original.cashbook_id);
+    await assert.rejects(amend(original.cashbook_id, 111), /exceeds available supplier debt/);
+    await assert.rejects(scalar(db, 'SELECT rpc_reconcile_supplier_cashbook_payment($1,$2) AS value', [legacy.cashbook_id, supplierId]), /vượt công nợ/);
+    await assert.rejects(rpc('rpc_record_supplier_payment', {
+      supplierId, amount: 101, paymentMethod: 'cash', idempotencyKey: 'unallocated-payment'
+    }), /exceeds outstanding debt/);
+
+    const advance = { ...input, value: 150, idempotencyKey: 'new-cashbook-advance' };
+    const created = await create(advance);
+    assert.equal(created.supplier.debt, -50);
+    assert.equal(created.transaction.value, 150);
+    assert.equal(Date.parse(created.transaction.date), Date.parse(input.transactionDate));
+    const retry = await create(advance);
+    assert.equal(retry.already_recorded, true);
+    assert.equal(retry.cashbook_id, created.cashbook_id);
+    assert.equal(retry.supplier.debt, -50);
+    await assert.rejects(amend(created.cashbook_id, 'NaN'), /exceeds available supplier debt/);
+    await amend(created.cashbook_id, 160);
+    assert.equal(await debt(), -60);
+
+    const buy = (amount, key) => rpc('rpc_create_purchase_tax_discount', {
+      supplierId, idempotencyKey: key, items: [{ code: 'PAINT', name: 'Paint', quantity: 1, unitPrice: amount }]
+    });
+    const firstPurchase = await buy(40, 'first-purchase-after-advance');
+    assert.equal(firstPurchase.purchase.totalAmount, 40);
+    assert.equal(await debt(), -20);
+    await buy(30, 'second-purchase-after-advance');
+    assert.equal(await debt(), 10);
+
+    await scalar(db, 'SELECT rpc_cancel_cashbook_entry($1,$2) AS value', [created.cashbook_id, 'Cancel test advance']);
+    assert.equal(await debt(), 170);
+    await assert.rejects(scalar(db, 'SELECT p140_link_supplier_cashbook_payment($1,$2,true) AS value', [legacy.cashbook_id, supplierId]), /permission denied/);
+  } finally { await db.close(); }
+});
