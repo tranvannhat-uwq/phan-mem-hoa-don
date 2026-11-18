@@ -56,15 +56,26 @@ test('zero/nominal selected SKU history survives purge without keeping unselecte
   const again=await purge(p);assert.equal(again.already_completed,true);await owner();assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM dealer_support_history')),2);
 });
 
-test('cancelled orders remain marked cancelled and a retained return cancellation updates the preserved quantity',async()=>{
+test('cancelled orders are hidden before paging and after retention while return cancellation still updates quantity',async()=>{
   const date=await dates();await select();await price(5);
   const sale=(await order(date.old,2)).order.id;
   const cancelled=(await order(date.old,3)).order.id;await call('rpc_cancel_order',[cancelled,'Synthetic cancelled allocation']);
   await owner();const item=await scalar(db,'SELECT id AS value FROM order_items WHERE order_id=$1',[sale]);await asActor(db);
   const ret=await call('rpc_record_sales_return_credit',[JSON.stringify({orderId:sale,idempotencyKey:randomUUID(),reason:'Synthetic support return',items:[{saleItemId:item,quantity:1}]})]);
-  assert.equal(Number((await history()).summary[0].remaining),1);
+  const visible=await history();
+  assert.equal(Number(visible.summary[0].remaining),1);
+  assert.equal(visible.total,1);assert.equal(visible.rows.length,1);
+  assert.ok(visible.rows.every(row=>!row.order_cancelled));
+  const page=await call('rpc_dealer_support_history',['retention-customer',0,1]);
+  assert.equal(page.total,1);assert.equal(page.rows.length,1);assert.equal(page.rows[0].order_cancelled,false);
+  const emptyPage=await call('rpc_dealer_support_history',['retention-customer',1,1]);
+  assert.equal(emptyPage.total,1);assert.deepEqual(emptyPage.rows,[]);
   const p=await prepare();await purge(p);await owner();await db.exec('SET CONSTRAINTS ALL DEFERRED');await asActor(db,adminId,1);
-  const after=await history();assert.equal(Number(after.summary[0].remaining),1);assert.equal(after.rows.filter(r=>r.order_cancelled).length,1);
+  const after=await history();assert.equal(Number(after.summary[0].remaining),1);
+  assert.equal(after.total,1);assert.equal(after.rows.length,1);assert.equal(after.rows[0].order_cancelled,false);
+  await owner();
+  assert.equal(Number(await scalar(db,'SELECT count(*) AS value FROM dealer_support_history WHERE order_cancelled')),1);
+  await asActor(db,adminId,1);
   await call('rpc_cancel_sales_return',[ret.return_id,'Synthetic retained return cancellation']);
   assert.equal(Number((await history()).summary[0].returned),0);assert.equal(Number((await history()).summary[0].remaining),2);
   await owner();assert.equal(Number(await scalar(db,"SELECT debt AS value FROM customers WHERE id='retention-customer'")),10);
